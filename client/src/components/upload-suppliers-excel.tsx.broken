@@ -1,0 +1,879 @@
+import { useState, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { FileSpreadsheet, Upload, Info, X } from "lucide-react";
+import * as XLSX from "xlsx";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Supplier } from "@shared/schema";
+
+// Define expected Excel structure
+interface ExcelSupplier {
+  name: string;
+  email: string;
+  description?: string;
+  website?: string;
+  phone?: string;
+  categories?: string[];
+}
+
+interface Props {
+  onSuppliersUploaded: (suppliers: Supplier[]) => void;
+}
+
+export function UploadSuppliersExcel({ onSuppliersUploaded }: Props) {
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
+  const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
+  const [isFormatWarningOpen, setIsFormatWarningOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      console.log("No file selected");
+      return;
+    }
+
+    console.log("File selected:", file.name);  // Debug log
+
+    // Check file extension
+    const fileExt = file.name.split('.').pop()?.toLowerCase();
+    if (fileExt !== 'xls' && fileExt !== 'xlsx') {
+      setIsFormatWarningOpen(true);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
+    }
+
+    // Close the upload dialog since we have a file now
+    setIsUploadDialogOpen(false);
+    
+    // Start processing
+    setIsUploading(true);
+    console.log("Starting file processing...");
+    
+    // Clear the input for future uploads
+    if (fileInputRef.current) {
+      // Wait a bit before clearing to ensure the file is being processed
+      setTimeout(() => {
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }, 100);
+    }
+
+    try {
+      // Function to read the Excel file with better error handling for Russian files
+      const readExcel = (file: File): Promise<XLSX.WorkBook> => {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          
+          reader.onload = (e) => {
+            try {
+              if (!e.target || !e.target.result) {
+                throw new Error("Failed to read file");
+              }
+              
+              const data = new Uint8Array(e.target.result as ArrayBuffer);
+              
+              if (!data || data.length === 0) {
+                throw new Error("File is empty");
+              }
+              
+              try {
+                // Add specific options for better Russian file support
+                const workbook = XLSX.read(data, { 
+                  type: 'array',
+                  codepage: 1251,  // Cyrillic Windows code page
+                  cellText: false,
+                  cellStyles: true,
+                  cellDates: true,
+                  cellNF: true,
+                  WTF: true  // Return all errors as warnings for better debugging
+                });
+                
+                if (!workbook || !workbook.SheetNames || workbook.SheetNames.length === 0) {
+                  throw new Error("No sheets found in the Excel file");
+                }
+                resolve(workbook);
+              } catch (xlsxError) {
+                console.error("XLSX parse error:", xlsxError);
+                // Try alternate parsing approach with different options
+                try {
+                  console.log("Trying alternate parsing method...");
+                  const workbook = XLSX.read(data, { 
+                    type: 'array',
+                    cellDates: true,
+                    cellText: true,
+                    raw: true
+                  });
+                  if (workbook && workbook.SheetNames && workbook.SheetNames.length > 0) {
+                    resolve(workbook);
+                    return;
+                  }
+                } catch (altError) {
+                  console.error("Alternative parsing also failed:", altError);
+                }
+                reject(new Error("Invalid Excel file format"));
+              }
+            } catch (error) {
+              console.error("File read error:", error);
+              reject(error);
+            }
+          };
+          
+          reader.onerror = (error) => {
+            console.error("FileReader error:", error);
+            reject(new Error("Failed to read file"));
+          };
+          
+          // Start reading the file
+          try {
+            reader.readAsArrayBuffer(file);
+          } catch (error) {
+            console.error("readAsArrayBuffer error:", error);
+            reject(new Error("Failed to read file"));
+          }
+        });
+      };
+
+      // Process the Excel file
+      const workbook = await readExcel(file);
+      
+      // Try all sheets for valid data, not just the first one
+      let worksheet: XLSX.WorkSheet | undefined;
+      let validSheetName = "";
+      
+      for (const sheetName of workbook.SheetNames) {
+        const currentSheet = workbook.Sheets[sheetName];
+        
+        if (currentSheet) {
+          // Check if this sheet has supplier-like data
+          const keys = Object.keys(currentSheet).filter(k => !k.startsWith("!"));
+          console.log(`Sheet ${sheetName} structure:`, keys);
+          
+          // If we have enough cells, this might be a valid sheet
+          if (keys.length > 10) {
+            validSheetName = sheetName;
+            worksheet = currentSheet;
+            break;
+          }
+        }
+      }
+      
+      if (!validSheetName || !worksheet) {
+        // Fallback to first sheet if no suitable sheet found
+        validSheetName = workbook.SheetNames[0];
+        worksheet = workbook.Sheets[validSheetName];
+        
+        if (!worksheet) {
+          throw new Error("Could not find any valid sheets in the Excel file");
+        }
+      }
+      
+      console.log("Using sheet:", validSheetName);
+      
+      // First, try to understand the structure of the Excel file by logging
+      console.log("Excel structure:", Object.keys(worksheet).filter(k => !k.startsWith("!")));
+      
+      // Try different parsing methods
+      let rawData: any[] = [];
+      try {
+        // Try multiple parsing approaches and use the one that yields most data
+        // TypeScript is now properly checking that worksheet is defined
+        const methodA = XLSX.utils.sheet_to_json<any>(worksheet, { header: "A" });
+        console.log("Parsed with header A:", methodA.slice(0, 2));
+        
+        const methodB = XLSX.utils.sheet_to_json<any>(worksheet, { raw: true });
+        console.log("Parsed with headers:", methodB.length > 0 ? Object.keys(methodB[0] || {}) : "No data");
+        
+        const methodC = XLSX.utils.sheet_to_json<any>(worksheet, { 
+          header: 1, 
+          raw: true,
+          defval: '' 
+        });
+        console.log("Parsed as array:", methodC.length > 0 ? methodC[0] : "No data");
+        
+        // Choose the method that gave us the most rows
+        if (methodB.length >= methodA.length && methodB.length >= methodC.length && methodB.length > 0) {
+          console.log("Using parsing method B (with headers)");
+          rawData = methodB;
+        } else if (methodA.length >= methodC.length && methodA.length > 0) {
+          console.log("Using parsing method A (with column letters)");
+          rawData = methodA;
+        } else if (methodC.length > 0) {
+          console.log("Using parsing method C (as arrays)");
+          // Convert array format to object format for consistent processing
+          rawData = methodC.map(row => {
+            if (!Array.isArray(row)) return {};
+            
+            const obj: Record<string, any> = {};
+            row.forEach((cell, index) => {
+              obj[String.fromCharCode(65 + index)] = cell; // A, B, C, etc.
+            });
+            return obj;
+          });
+        }
+      } catch (error) {
+        console.error("Error parsing Excel:", error);
+        // Fallback to a more robust method
+        rawData = [];
+        const range = XLSX.utils.decode_range(worksheet["!ref"] || "A1:Z100");
+        for (let r = range.s.r; r <= range.e.r; r++) {
+          const rowData: Record<string, any> = {};
+          for (let c = range.s.c; c <= range.e.c; c++) {
+            const cell_address = XLSX.utils.encode_cell({ r, c });
+            const cell = worksheet[cell_address];
+            if (cell && cell.v !== undefined) {
+              const header = XLSX.utils.encode_col(c);
+              rowData[header] = cell.v;
+            }
+          }
+          if (Object.keys(rowData).length > 0) {
+            rawData.push(rowData);
+          }
+        }
+        console.log("Parsed with fallback method:", rawData.slice(0, 2));
+      }
+      
+      if (rawData.length === 0) {
+        throw new Error("No data found in the Excel file");
+      }
+      
+      // Map the Excel data to supplier objects
+      // Find possible column headers
+      let headers = rawData[0];
+      let nameField = "";
+      let emailField = "";
+      let phoneField = "";
+      let websiteField = "";
+      let descriptionField = "";
+      
+      // Try to identify column headers with expanded Russian variations
+      const possibleNameFields = [
+        "name", "Name", "Имя поставщика", "Название", "Компания", "Наименование", "Контрагент", 
+        "Организация", "Фирма", "ООО", "ИП", "Поставщик", "Компания поставщика", "Клиент", 
+        "Контрагенты", "Наименование компании", "Наименование поставщика", "Юр. лицо", "Юридическое лицо",
+        "A", "1", "Supplier", "Company", "Наименование", "Организация", "имя", "название"
+      ];
+      const possibleEmailFields = [
+        "email", "Email", "E-mail", "Электронная почта", "Почта", "Эл. почта", "Email адрес", 
+        "Имейл", "Емейл", "Мыло", "Электронка", "Емайл", "Адрес эл. почты", "Адрес электронной почты", 
+        "Контактная почта", "Контактный e-mail", "E mail", "Email для заказов", "Рабочая почта",
+        "B", "2", "mail", "Mail", "эл", "электронная", "e-mail", "@"
+      ];
+      const possiblePhoneFields = [
+        "phone", "Phone", "Телефон", "Тел", "Номер телефона", "Контактный телефон", 
+        "Тел.", "Телефоны", "Мобильный", "Моб", "Моб.", "Мобильный телефон", "Раб. телефон", 
+        "Рабочий телефон", "Телефон для связи", "Контакт", "Контактный номер", "Номер для связи",
+        "C", "3", "Tel", "Mobile", "номер", "телефоны", "телефон", "phone", "контакты"
+      ];
+      const possibleWebsiteFields = [
+        "website", "Website", "Сайт", "Веб-сайт", "Web-сайт", "Интернет-сайт", 
+        "Ссылка на сайт", "Адрес сайта", "URL", "Домен", "Сайт компании", "Веб-страница", 
+        "Корпоративный сайт", "Интернет-ресурс", "Веб ресурс", "Страница компании", "Веб-адрес",
+        "D", "4", "Site", "Web", "сайт", "вебсайт", "интернет", "www", "http"
+      ];
+      const possibleDescriptionFields = [
+        "description", "Description", "Описание", "Информация", "Примечание", "О компании", 
+        "Доп. информация", "Дополнительная информация", "Комментарий", "Заметка", "Примечания", 
+        "Сфера деятельности", "Деятельность", "Специализация", "Продукция", "Товары", "Услуги", 
+        "Направления", "Профиль", "Чем занимается", "Род деятельности", "Описание деятельности",
+        "E", "5", "Info", "Comment", "Notes", "описание", "информация", "деятельность", "примечания"
+      ];
+      
+      // Get all keys from the first row
+      const allKeys = Object.keys(headers || {});
+      console.log("All keys in first row:", allKeys);
+      
+      // Process the data rows
+      let dataRows = headers && Object.keys(headers).length > 0 ? rawData.slice(1) : rawData;
+      
+      // Try to find header rows - In Russian Excel files, real data often starts after 
+      // several header rows which might have titles like "Контрагенты" or "Фильтры"
+      let startDataRowIndex = 0;
+      for (let i = 0; i < Math.min(10, rawData.length); i++) {
+        const row = rawData[i];
+        for (const key of Object.keys(row)) {
+          const value = String(row[key] || '').toLowerCase();
+          
+          // These are common header markers in Russian business Excel files
+          if (value.includes("контрагент") || 
+              value.includes("поставщик") || 
+              value.includes("фильтр") || 
+              value.includes("список") ||
+              value.includes("организаци")) {
+            startDataRowIndex = i + 1; // Data likely starts on the next row
+            console.log(`Found header row at index ${i}, data should start at ${startDataRowIndex}`);
+            break;
+          }
+          
+          // This indicates a table header row
+          if (value === "наименование" || 
+              value === "название" || 
+              value === "имя поставщика" || 
+              value === "организация" ||
+              value === "email" || 
+              value === "почта" ||
+              value === "телефон") {
+            startDataRowIndex = i + 1; // Data starts on the next row
+            console.log(`Found table header row at index ${i}, data should start at ${startDataRowIndex}`);
+            
+            // Try to identify field positions from this header row
+            for (const headerKey of Object.keys(row)) {
+              const headerVal = String(row[headerKey] || '').toLowerCase();
+              
+              if (headerVal.includes("наименование") || 
+                  headerVal.includes("название") || 
+                  headerVal.includes("организация") ||
+                  headerVal.includes("компания") ||
+                  headerVal.includes("контрагент")) {
+                nameField = headerKey;
+              } else if (headerVal.includes("email") || 
+                         headerVal.includes("почта") || 
+                         headerVal.includes("e-mail") ||
+                         headerVal.includes("электрон")) {
+                emailField = headerKey;
+              } else if (headerVal.includes("телефон") || 
+                         headerVal.includes("тел.") || 
+                         headerVal.includes("номер") ||
+                         headerVal.includes("phone")) {
+                phoneField = headerKey;
+              } else if (headerVal.includes("сайт") || 
+                         headerVal.includes("website") || 
+                         headerVal.includes("web") ||
+                         headerVal.includes("http")) {
+                websiteField = headerKey;
+              } else if (headerVal.includes("описание") || 
+                         headerVal.includes("примечан") || 
+                         headerVal.includes("информация") ||
+                         headerVal.includes("деятельность")) {
+                descriptionField = headerKey;
+              }
+            }
+            
+            break;
+          }
+        }
+      }
+      
+      // Adjust data rows based on header detection
+      dataRows = rawData.slice(startDataRowIndex);
+      console.log(`Adjusted to use ${dataRows.length} data rows starting from index ${startDataRowIndex}`);
+      
+      // Scan data rows for company identifiers to be extra sure we have the right name field
+      if (dataRows && dataRows.length > 0) {
+        // Scan a few rows to find likely company name patterns
+        for (let i = 0; i < Math.min(10, dataRows.length); i++) {
+          const row = dataRows[i];
+          for (const key of Object.keys(row)) {
+            const value = String(row[key] || '');
+            
+            // This is a typical pattern in Russian company data formats
+            if ((value.startsWith("ООО") || 
+                 value.startsWith("ЧУП") || 
+                 value.startsWith("ИП") || 
+                 value.startsWith("АО") ||
+                 value.startsWith("ЗАО") ||
+                 value.startsWith("ПАО") ||
+                 value.startsWith("Компания") ||
+                 value.startsWith("Tend")) && 
+                value.length > 3) {
+              nameField = key;
+              console.log(`Found company name pattern in data row ${i}: "${value}", using column ${key}`);
+              break;
+            }
+            
+            // Check if it's a UNP identifier (common in Russian company formats)
+            if (value === "УНП" && i + 1 < dataRows.length) {
+              // The next row might contain the company name
+              const nextRow = dataRows[i + 1];
+              if (nextRow && nextRow[key]) {
+                nameField = key;
+                console.log(`Found UNP pattern, using column ${key}`);
+                break;
+              }
+            }
+          }
+          if (nameField) break;
+        }
+      }
+      
+      // Find the matching fields in headers if not already found
+      if (!nameField || !emailField || !phoneField || !websiteField) {
+        for (const key of allKeys) {
+          const value = String(headers[key] || '').toLowerCase();
+          
+          // Using more comprehensive matches for Russian column names
+          if (!nameField && (
+              possibleNameFields.some(f => f.toLowerCase() === key.toLowerCase()) || 
+              possibleNameFields.some(f => value.includes(f.toLowerCase())) ||
+              value.includes("название") || 
+              value.includes("имя") || 
+              value.includes("наименование") || 
+              value.includes("компани") || 
+              value.includes("контрагент") ||
+              value.includes("поставщик"))) {
+            nameField = key;
+          } else if (!emailField && (
+              possibleEmailFields.some(f => f.toLowerCase() === key.toLowerCase()) ||
+              possibleEmailFields.some(f => value.includes(f.toLowerCase())) ||
+              value.includes("почта") || 
+              value.includes("email") || 
+              value.includes("e-mail") || 
+              value.includes("эл.") || 
+              value.includes("эл ") || 
+              value.includes("электрон"))) {
+            emailField = key;
+          } else if (!phoneField && (
+              possiblePhoneFields.some(f => f.toLowerCase() === key.toLowerCase()) ||
+              possiblePhoneFields.some(f => value.includes(f.toLowerCase())) ||
+              value.includes("телефон") || 
+              value.includes("тел") || 
+              value.includes("номер") || 
+              value.includes("контактн"))) {
+            phoneField = key;
+          } else if (!websiteField && (
+              possibleWebsiteFields.some(f => f.toLowerCase() === key.toLowerCase()) ||
+              possibleWebsiteFields.some(f => value.includes(f.toLowerCase())) ||
+              value.includes("сайт") || 
+              value.includes("website") || 
+              value.includes("web") || 
+              (value.includes("адрес") && value.includes("сайт")))) {
+            websiteField = key;
+          } else if (!descriptionField && (
+              possibleDescriptionFields.some(f => f.toLowerCase() === key.toLowerCase()) ||
+              possibleDescriptionFields.some(f => value.includes(f.toLowerCase())) ||
+              value.includes("описание") || 
+              value.includes("description") || 
+              value.includes("примечан") || 
+              value.includes("о компании") || 
+              value.includes("информация"))) {
+            descriptionField = key;
+          }
+        }
+      }
+      
+      console.log("Identified fields:", { nameField, emailField, phoneField, websiteField, descriptionField });
+      
+      // If we couldn't identify fields, use default positional ones
+      if (!nameField && allKeys.length > 0) nameField = allKeys[0];
+      if (!emailField && allKeys.length > 1) emailField = allKeys[1];
+      if (!phoneField && allKeys.length > 2) phoneField = allKeys[2];
+      if (!websiteField && allKeys.length > 3) websiteField = allKeys[3];
+      
+      // Helper function to extract cell value regardless of format
+      const extractCellValue = (cell: any): string => {
+        if (cell === null || cell === undefined) return '';
+        
+        // Handle different formats
+        if (typeof cell === 'object') {
+          // Excel object cell with 'v' value property
+          if (cell.v !== undefined) return String(cell.v);
+          // Excel rich text
+          if (cell.r !== undefined) return String(cell.r);
+          // Excel formatted text
+          if (cell.w !== undefined) return String(cell.w);
+          // If it has a toString method
+          if (typeof cell.toString === 'function') return cell.toString();
+          // Last resort - stringify the object
+          return JSON.stringify(cell);
+        }
+        
+        // Handle primitive types
+        return String(cell);
+      };
+      
+      // Helper to clean text by normalizing whitespace and removing control chars
+      const cleanText = (text: string): string => {
+        if (!text) return '';
+        // Remove BOM and other control characters, normalize whitespace
+        return text.replace(/[\u0000-\u001F\u007F-\u009F\uFEFF]/g, '')
+                  .replace(/\s+/g, ' ')
+                  .trim();
+      };
+      
+      // Check for Russian Excel special pattern: Company name is one row,
+      // followed by multiple UNP rows, emails, phones, etc.
+      const processedSuppliers: Supplier[] = [];
+      
+      // First pass: identify companies using special patterns
+      let currentCompanyName = '';
+      let currentEmail = '';
+      let currentPhone = '';
+      let currentWebsite = '';
+      let currentDescription = '';
+      let lastCompanyIndex = -1;
+      
+      dataRows.forEach((row, index) => {
+        // Check for company name patterns
+        for (const key of Object.keys(row)) {
+          const value = cleanText(extractCellValue(row[key]));
+          
+          // Common patterns for Russian company names
+          if ((value.startsWith('ООО') || value.startsWith('ЧУП') || value.startsWith('ИП') || value.startsWith('Tend')) && value.length > 3) {
+            // This is likely a company name
+            if (currentCompanyName && currentEmail) {
+              // Save the previous company before starting a new one
+              processedSuppliers.push({
+                id: -(Math.floor(Math.random() * 100000) + 10000 + processedSuppliers.length),
+                name: currentCompanyName,
+                email: currentEmail,
+                phone: currentPhone || '',
+                website: currentWebsite || '',
+                description: currentDescription || '',
+                categories: [],
+                responseRate: null,
+                totalRequests: null,
+                successfulMatches: null,
+                keywordStrength: null,
+                lastResponseTime: null,
+              });
+            }
+            
+            // Start a new company
+            currentCompanyName = value;
+            currentEmail = '';
+            currentPhone = '';
+            currentWebsite = '';
+            currentDescription = '';
+            lastCompanyIndex = index;
+          }
+          
+          // Check for email pattern - get it from this row or nearby rows
+          if (value.includes('@') && !currentEmail) {
+            currentEmail = value;
+          }
+          
+          // Check for website patterns
+          if ((value.startsWith('http') || value.includes('www.') || value.includes('.com') || 
+               value.includes('.ru') || value.includes('.by') || value.includes('.net') ||
+               value.includes('.org')) && !currentWebsite) {
+            currentWebsite = value;
+          }
+          
+          // Check for phone patterns (has digits and typical phone characters)
+          if ((value.includes('+') || value.includes('(') || value.includes(')') || 
+               value.match(/\d{3,}/)) && !value.includes('@') && !currentPhone) {
+            currentPhone = value;
+          }
+        }
+        
+        // If next row after company name has additional details
+        if (lastCompanyIndex !== -1 && index === lastCompanyIndex + 1) {
+          for (const key of Object.keys(row)) {
+            const value = cleanText(extractCellValue(row[key]));
+            
+            // Email commonly appears one row after company name
+            if (value.includes('@') && !currentEmail) {
+              currentEmail = value;
+            }
+            
+            // Website commonly appears on same row as email or next
+            if ((value.startsWith('http') || value.includes('www.') || value.includes('.com') || 
+                 value.includes('.ru') || value.includes('.by') || value.includes('.net') ||
+                 value.includes('.org')) && !currentWebsite) {
+              currentWebsite = value;
+            }
+            
+            // Phone commonly appears after email
+            if ((value.includes('+') || value.includes('(') || value.includes(')') || 
+                 value.match(/\d{3,}/)) && !value.includes('@') && !currentPhone) {
+              currentPhone = value;
+            }
+          }
+        }
+      });
+      
+      // Add the last company if it exists
+      if (currentCompanyName && currentEmail) {
+        processedSuppliers.push({
+          id: -(Math.floor(Math.random() * 100000) + 10000 + processedSuppliers.length),
+          name: currentCompanyName,
+          email: currentEmail,
+          phone: currentPhone || '',
+          website: currentWebsite || '',
+          description: currentDescription || '',
+          categories: [],
+          responseRate: null,
+          totalRequests: null,
+          successfulMatches: null,
+          keywordStrength: null,
+          lastResponseTime: null,
+        });
+      }
+      
+      // If we found companies with the special pattern, return them
+      if (processedSuppliers.length > 0) {
+        return processedSuppliers;
+      }
+      
+      // Otherwise, process normally row by row
+      const suppliers: Supplier[] = dataRows.map((row, index) => {
+        // Get values with fallbacks and clean them
+        let name = cleanText(extractCellValue(row[nameField]));
+        let email = cleanText(extractCellValue(row[emailField]));
+        
+        // Handle special case for Tend2-like company names from Excel
+        // This explicitly preserves the exact company name as shown in the Excel file
+        if (nameField && row[nameField] && typeof row[nameField] === 'string') {
+          const exactName = row[nameField].toString().trim();
+          if (exactName) {
+            name = exactName;
+          }
+        }
+        
+        // Try alternate columns if primary ones don't work
+        if (!name || !email) {
+          for (const key of Object.keys(row)) {
+            const value = cleanText(extractCellValue(row[key]));
+            
+            // If we don't have a name and this looks like a name
+            if (!name && !value.includes('@') && value.length > 0) {
+              name = value;
+            }
+            
+            // If we don't have an email and this looks like an email
+            if (!email && value.includes('@')) {
+              email = value;
+            }
+          }
+        }
+        
+        // Check required fields
+        if (!name || !email) {
+          console.warn(`Row ${index + 1} is missing name or email, skipping`);
+          return null;
+        }
+        
+        // Extract other fields with fallbacks
+        let phone = cleanText(extractCellValue(row[phoneField]));
+        let website = cleanText(extractCellValue(row[websiteField]));
+        let description = cleanText(extractCellValue(row[descriptionField]));
+        
+        // Generate a unique negative ID
+        const id = -(Math.floor(Math.random() * 100000) + 10000 + index);
+        
+        return {
+          id,
+          name,
+          email,
+          description: description || '',
+          website: website || '',
+          phone: phone || '',
+          categories: [],
+          responseRate: null,
+          totalRequests: null,
+          successfulMatches: null,
+          keywordStrength: null,
+          lastResponseTime: null,
+        } as Supplier;
+      }).filter(Boolean) as Supplier[];
+      
+      if (suppliers.length === 0) {
+        throw new Error("No valid supplier data found in the Excel file");
+      }
+      
+      toast({
+        title: "Suppliers uploaded",
+        description: `Successfully processed ${suppliers.length} suppliers from Excel file`,
+      });
+      
+      // Close dialog and pass suppliers to parent
+      setIsUploadDialogOpen(false);
+      onSuppliersUploaded(suppliers);
+    } catch (error) {
+      console.error("Error processing Excel file:", error);
+      
+      // More detailed error messaging based on the error type
+      let errorMessage = "Failed to process Excel file. Please check the format and try again.";
+      
+      if (error instanceof Error) {
+        console.error("Error details:", error.message);
+        console.error("Error stack:", error.stack);
+        
+        if (error.message.includes("No data found") || error.message.includes("empty")) {
+          errorMessage = "No valid supplier data found in the Excel file. Please check the format.";
+        } else if (error.message.includes("Invalid Excel")) {
+          errorMessage = "Invalid Excel file format. Please ensure it's a valid .xls or .xlsx file.";
+        } else if (error.message.includes("Failed to read")) {
+          errorMessage = "Failed to read the file. The file might be corrupted or password-protected.";
+        }
+      }
+      
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      console.log("Excel processing completed (with or without errors)");
+      setIsUploading(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  // Auto-open file dialog effect
+  const handleButtonClick = () => {
+    setIsUploadDialogOpen(true);
+    // Add a slight delay to ensure dialog is rendered first
+    setTimeout(() => {
+      if (fileInputRef.current) {
+        fileInputRef.current.click();
+      }
+    }, 100);
+  };
+  
+  return (
+    <>
+      <Button
+        variant="outline"
+        className="flex items-center gap-2"
+        onClick={handleButtonClick}
+      >
+        <FileSpreadsheet className="h-4 w-4" />
+        Загрузить список поставщиков
+      </Button>
+
+      <Dialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Загрузить список поставщиков</DialogTitle>
+            <DialogDescription>
+              Загрузите Excel файл со списком поставщиков для отправки запроса.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-lg">
+            <FileSpreadsheet className="h-8 w-8 text-muted-foreground mb-2" />
+            <p className="text-sm text-center mb-4">
+              Перетащите Excel файл сюда или нажмите кнопку ниже, чтобы выбрать файл
+            </p>
+            <div className="flex items-center gap-2">
+              <Button 
+                onClick={() => {
+                  if (fileInputRef.current) {
+                    fileInputRef.current.click();
+                  }
+                }} 
+                disabled={isUploading}
+                type="button"
+              >
+                {isUploading ? (
+                  <>
+                    <span className="animate-spin mr-2">○</span>
+                    Обработка...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4 mr-2" />
+                    Выбрать файл
+                  </>
+                )}
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => setIsInfoDialogOpen(true)}
+                className="w-9 h-9 p-0"
+                title="Информация"
+              >
+                <Info className="h-4 w-4" />
+              </Button>
+            </div>
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept=".xls,.xlsx"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+            <p className="text-xs text-muted-foreground mt-4">
+              Поддерживаемые форматы: .xls, .xlsx
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Info Dialog with Sample Format */}
+      <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Формат файла</DialogTitle>
+            <DialogDescription>
+              Excel файл должен содержать следующие столбцы:
+            </DialogDescription>
+          </DialogHeader>
+          <div className="border rounded-md p-4">
+            <div className="grid grid-cols-4 gap-2 font-semibold text-sm border-b pb-2 mb-2">
+              <div>Имя поставщика*</div>
+              <div>Email*</div>
+              <div>Телефон</div>
+              <div>Сайт</div>
+            </div>
+            <div className="grid grid-cols-4 gap-2 text-sm">
+              <div>ООО "Пример"</div>
+              <div>example@mail.ru</div>
+              <div>+7 999 123-45-67</div>
+              <div>example.ru</div>
+            </div>
+            <div className="grid grid-cols-4 gap-2 text-sm border-t mt-2 pt-2">
+              <div>ИП Иванов</div>
+              <div>ivanov@test.com</div>
+              <div>+7 999 765-43-21</div>
+              <div>ivanov-company.ru</div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-4">
+              * - обязательные поля
+            </p>
+          </div>
+          <div className="mt-4">
+            <img 
+              src="/attached_assets/image_1743875013778.png" 
+              alt="Sample Excel Format" 
+              className="w-full border rounded-md"
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Format Warning Alert */}
+      <AlertDialog open={isFormatWarningOpen} onOpenChange={setIsFormatWarningOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Неверный формат файла</AlertDialogTitle>
+            <AlertDialogDescription>
+              Загрузите файл в формате Excel (.xls или .xlsx)
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Закрыть</AlertDialogCancel>
+            <AlertDialogAction onClick={() => fileInputRef.current?.click()}>
+              Выбрать другой файл
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}

@@ -1,0 +1,105 @@
+
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Анализ соответствия</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            h1 { color: #333; }
+            h2 { color: #666; margin-top: 30px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th { background-color: #f2f2f2; }
+            .compliant { background-color: #90EE90; }
+            .partial { background-color: #FFFFE0; }
+            .non-compliant { background-color: #FFA0A0; }
+            .missing { background-color: #E0E0E0; }
+            .summary { margin: 20px 0; }
+            .summary-item { margin: 5px 0; }
+          </style>
+        </head>
+        <body>
+          <h1>Анализ соответствия технического предложения</h1>
+          
+          <div class="summary">
+            <div class="summary-item"><strong>Проект:</strong> Технический анализ 15.06.20252</div>
+            <div class="summary-item"><strong>Поставщик:</strong> 5</div>
+            <div class="summary-item"><strong>Дата анализа:</strong> 15.06.2025</div>
+          </div>
+          
+          <h2>Сводка</h2>
+          <div class="summary">
+            <div class="summary-item"><strong>Общий процент соответствия:</strong> 0.00%</div>
+            <div class="summary-item"><strong>Всего требований:</strong> 5</div>
+            <div class="summary-item"><strong>Соответствует:</strong> 0</div>
+            <div class="summary-item"><strong>Частично соответствует:</strong> 0</div>
+            <div class="summary-item"><strong>Не соответствует:</strong> 0</div>
+            <div class="summary-item"><strong>Отсутствует:</strong> 5</div>
+          </div>
+          
+          <h2>Детальный анализ</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Требование</th>
+                <th>Пункт ТЗ</th>
+                <th>Данные поставщика</th>
+                <th>Соответствие</th>
+                <th>Комментарий</th>
+              </tr>
+            </thead>
+            <tbody>
+      
+          <tr>
+            <td>Мощность двигателя не менее 100 кВт</td>
+            <td>2.1</td>
+            <td>-</td>
+            <td class="missing">Отсутствует</td>
+            <td>В техническом предложении поставщика отсутствует информация о мощности двигателя, что делает невозможным оценку соответствия требованию.</td>
+          </tr>
+        
+          <tr>
+            <td>Напряжение питания 380В ±10%</td>
+            <td>2.2</td>
+            <td>-</td>
+            <td class="missing">Отсутствует</td>
+            <td>В техническом предложении поставщика отсутствует информация о напряжении питания, соответствующая требованию пункта 2.2.</td>
+          </tr>
+        
+          <tr>
+            <td>Класс защиты IP65</td>
+            <td>3.1</td>
+            <td>-</td>
+            <td class="missing">Отсутствует</td>
+            <td>В техническом предложении поставщика отсутствует информация о классе защиты IP65.</td>
+          </tr>
+        
+          <tr>
+            <td>Температурный диапазон -40°C до +60°C</td>
+            <td>3.2</td>
+            <td>-</td>
+            <td class="missing">Отсутствует</td>
+            <td>В техническом предложении поставщика отсутствует информация о температурном диапазоне, соответствующая требованию пункта 3.2.</td>
+          </tr>
+        
+          <tr>
+            <td>Габариты не более 2000x1500x1200 мм</td>
+            <td>4.1</td>
+            <td>-</td>
+            <td class="missing">Отсутствует</td>
+            <td>В техническом предложении поставщика отсутствует информация о габаритах продукции, поэтому соответствие требованию пункта 4.1 не может быть оценено.</td>
+          </tr>
+        
+            </tbody>
+          </table>
+      
+          <h2>Рекомендации</h2>
+          <ul>
+        <li>{"Необходимо предоставить дополнительную техническую документацию"}</li></ul>
+          <h2>Выявленные пробелы</h2>
+          <ul>
+        <li>Отсутствует информация по 5 требованиям</li></ul>
+        </body>
+        </html>
+      

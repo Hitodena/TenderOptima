@@ -1,0 +1,1173 @@
+import Imap from 'node-imap';
+import { simpleParser } from 'mailparser';
+import { storage } from './storage';
+import { createRequire } from 'module';
+
+// ES modules workaround for requiring CommonJS modules
+const require = createRequire(import.meta.url);
+const apiAttachmentBridge = require('./file-processing/api_bridge');
+
+// Interface for detailed email processing results
+interface EmailProcessingResult {
+  status: 'success' | 'failed' | 'timeout' | 'db_error' | 'attachment_error';
+  savedToDb: boolean;
+  dbRecordId?: number;
+  attachmentsProcessed: boolean;
+  attachmentErrors?: string[];
+  error?: string;
+  messageId: string;
+}
+
+export class ImapService {
+  private personalImapConnections = new Map<number, Imap>();
+  private processedMessageIds = new Set<string>();
+  private responseCache = new Map<string, any>();
+  private lastCacheUpdate = 0;
+  private readonly CACHE_DURATION = 60000; // 1 минута кэш
+
+  constructor() {
+    console.log('Initializing Personal IMAP Service - each user will have their own IMAP connection');
+  }
+
+  private async getPersonalImapConnection(userId: number): Promise<Imap | null> {
+    console.log(`[IMAP] Creating personal IMAP connection for user ${userId}`);
+    
+    // Get user's personal email configuration
+    const userConfig = await storage.getUserEmailConfig(userId);
+    console.log(`[IMAP] CRITICAL DEBUG - User ${userId} email config:`, JSON.stringify(userConfig, null, 2));
+    
+    if (!userConfig || !userConfig.emailAccount || !userConfig.emailPassword) {
+      console.log(`[IMAP] User ${userId} has no email configuration - skipping IMAP connection`);
+      return null;
+    }
+
+    if (!userConfig.emailConfigured) {
+      console.log(`[IMAP] User ${userId} email not configured - skipping IMAP connection`);
+      return null;
+    }
+
+    // Check if we already have a connection for this user
+    if (this.personalImapConnections.has(userId)) {
+      const existingConnection = this.personalImapConnections.get(userId)!;
+      console.log(`[IMAP] Using existing IMAP connection for user ${userId}`);
+      return existingConnection;
+    }
+
+    try {
+      const imapHost = userConfig.imapHost || 'imap.mail.ru';
+      const imapPort = userConfig.imapPort || 993;
+      
+      console.log(`[IMAP] Creating new IMAP connection for user ${userId}:`);
+      console.log(`[IMAP] - Email: ${userConfig.emailAccount}`);
+      console.log(`[IMAP] - IMAP Host: ${imapHost}`);
+      console.log(`[IMAP] - IMAP Port: ${imapPort}`);
+      
+      const imap = new Imap({
+        user: userConfig.emailAccount,
+        password: userConfig.emailPassword,
+        host: imapHost,
+        port: imapPort,
+        tls: true,
+        tlsOptions: { rejectUnauthorized: false },
+        authTimeout: 30000
+      });
+
+      // Store this connection for future use
+      this.personalImapConnections.set(userId, imap);
+
+      imap.once('ready', () => {
+        console.log(`[IMAP] Personal connection ready for user ${userId} (${userConfig.emailAccount})`);
+      });
+
+      imap.once('error', (err) => {
+        console.error(`[IMAP] Personal connection error for user ${userId}:`, err);
+        this.personalImapConnections.delete(userId);
+      });
+
+      imap.once('end', () => {
+        console.log(`[IMAP] Personal connection ended for user ${userId}`);
+        this.personalImapConnections.delete(userId);
+      });
+
+      return imap;
+    } catch (error) {
+      console.error(`[IMAP] Failed to create personal IMAP connection for user ${userId}:`, error);
+      return null;
+    }
+  }
+
+  private handleConnectionError(err: Error) {
+  }
+
+  private handleConnectionEnd() {
+  }
+  
+  // Helper function to extract tracking info from email content
+  private extractTrackingInfo(content: string, subject: string): { trackingId?: string; orderNumber?: string } {
+    const result: { trackingId?: string; orderNumber?: string } = {};
+    
+    console.log(`\n🔍 Extracting tracking info from subject: "${subject}"`);
+    
+    // Прямой поиск REQ-XXXX-XXXXX в теме (приоритетно)
+    const directOrderMatch = subject.match(/REQ-\d{4}-\d{5}/);
+    if (directOrderMatch) {
+      result.orderNumber = directOrderMatch[0];
+      console.log(`✅ DIRECT MATCH - Found order number in subject: ${result.orderNumber}`);
+    }
+    
+    // Прямой поиск [TID:...] в теме
+    const directTrackingMatch = subject.match(/\[TID:([^\]]+)\]/i);
+    if (directTrackingMatch && directTrackingMatch[1]) {
+      result.trackingId = directTrackingMatch[1].trim();
+      console.log(`✅ DIRECT MATCH - Found tracking ID in subject: ${result.trackingId}`);
+    }
+    
+    // Combined text to search in (только если прямой поиск не дал результатов)
+    const fullText = `${subject}\n${content}`;
+    
+    // Try to extract tracking ID (typically alphanumeric)
+    if (!result.trackingId) {
+      const trackingMatch = fullText.match(/tracking\s*(?:id|number|code)?\s*[:#\s]+\s*([a-zA-Z0-9_-]{7,15})/i);
+      if (trackingMatch && trackingMatch[1]) {
+        result.trackingId = trackingMatch[1].trim();
+        console.log(`✅ CONTENT MATCH - Found tracking ID in content: ${result.trackingId}`);
+      }
+    }
+    
+    // Try to extract order number (typically REQ-XXXX-XXXXX format)
+    if (!result.orderNumber) {
+      const orderMatch = fullText.match(/(?:order|request)\s*(?:number|id|#)?\s*[:#\s]+\s*(REQ-\d{4}-\d{5})/i);
+      if (orderMatch && orderMatch[1]) {
+        result.orderNumber = orderMatch[1].trim();
+        console.log(`✅ CONTENT MATCH - Found order number in content: ${result.orderNumber}`);
+      }
+    }
+    
+    // Alternative format without REQ prefix
+    if (!result.orderNumber) {
+      const altOrderMatch = fullText.match(/(?:order|request)\s*(?:number|id|#)?\s*[:#\s]+\s*(\d{4}-\d{5})/i);
+      if (altOrderMatch && altOrderMatch[1]) {
+        result.orderNumber = `REQ-${altOrderMatch[1].trim()}`;
+        console.log(`✅ CONTENT MATCH - Found alternative order number format: ${result.orderNumber}`);
+      }
+    }
+    
+    return result;
+  }
+
+  public async checkEmailsOnDemand(requestId?: number, userId?: number): Promise<{
+    success: boolean;
+    message: string;
+    newResponses: number;
+  }> {
+    console.log(`Checking emails on demand for request ID: ${requestId || 'all'} and user ID: ${userId || 'all'}`);
+    
+    // НЕ ОЧИЩАЕМ кэш обработанных сообщений - это причина дубликатов!
+    // Память о processedMessageIds должна сохраняться между запросами
+    console.log(`Keeping processed message cache intact (${this.processedMessageIds.size} messages already processed)`);
+
+    try {
+      this.initializeConnection();
+
+      if (!this.imap) {
+        console.log("IMAP not configured. Checking for test suppliers via alternative method.");
+
+        if (requestId) {
+          try {
+            const testResponse = await fetch(`http://localhost:5000/api/test/add-response/${requestId}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' }
+            });
+
+            const testData = await testResponse.json();
+
+            if (testData.success) {
+              console.log('Added test supplier response via alternative method');
+              return {
+                success: true,
+                message: `Found and processed 1 new supplier response (simulated)`,
+                newResponses: 1
+              };
+            }
+          } catch (testError) {
+            console.error("Error simulating response:", testError);
+          }
+        }
+
+        return {
+          success: true,
+          message: "IMAP not configured. No new supplier responses found.",
+          newResponses: 0
+        };
+      }
+
+      if (!this.isConnected) {
+        console.log("IMAP not connected, connecting now...");
+        await new Promise<void>((resolve, reject) => {
+          this.imap?.once('ready', () => resolve());
+          this.imap?.once('error', (err) => reject(err));
+          this.imap?.connect();
+        });
+      }
+
+      let responsesBefore = 0;
+
+      if (requestId) {
+        console.log(`Looking specifically for emails related to request ID: ${requestId}`);
+        const request = await storage.getSearchRequest(requestId);
+
+        if (request) {
+          console.log(`Request order number: ${request.orderNumber}`);
+          const requestSuppliers = await storage.getRequestSuppliers(requestId);
+          console.log(`Request has ${requestSuppliers.length} contacted suppliers`);
+
+          if (requestSuppliers.length > 0) {
+            console.log("Tracking IDs to look for:");
+            requestSuppliers.forEach(s => console.log(`- ${s.trackingId} (${s.supplierName})`));
+          }
+
+          const existingResponses = await storage.getSupplierResponses(requestId);
+          responsesBefore = existingResponses.length;
+          console.log(`Request has ${responsesBefore} existing responses before checking`);
+
+          const orderNumber = request.orderNumber;
+          await this._checkEmailsForOrderNumber(orderNumber, userId);
+        } else {
+          console.log(`Warning: Request with ID ${requestId} not found`);
+          await this._checkEmails(userId);
+        }
+      } else {
+        responsesBefore = await storage.countAllSupplierResponses();
+        await this._checkEmails(userId);
+      }
+
+      let responsesAfter = 0;
+      let newResponses = 0;
+
+      if (requestId) {
+        const updatedResponses = await storage.getSupplierResponses(requestId);
+        responsesAfter = updatedResponses.length;
+        newResponses = responsesAfter - responsesBefore;
+        console.log(`Request now has ${responsesAfter} responses (${newResponses} new)`);
+      } else {
+        responsesAfter = await storage.countAllSupplierResponses();
+        newResponses = responsesAfter - responsesBefore;
+      }
+
+      return {
+        success: true,
+        message: newResponses > 0 
+          ? `Found and processed ${newResponses} new supplier ${newResponses === 1 ? 'response' : 'responses'}` 
+          : "No new supplier responses found",
+        newResponses
+      };
+    } catch (error: unknown) {
+      console.error("Error checking emails on demand:", error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        success: false,
+        message: `Error checking emails: ${errorMessage}`,
+        newResponses: 0
+      };
+    }
+  }
+
+  private async _checkEmails(userId?: number): Promise<void> {
+    console.log('========================');
+    console.log('Starting general IMAP check at:', new Date().toISOString());
+
+    if (!this.imap) {
+      throw new Error("IMAP connection is not initialized");
+    }
+
+    // Используем только INBOX и Spam (для mail.ru)
+    // '[Gmail]/Spam' не работает на mail.ru
+    const foldersToCheck = ['INBOX', 'Spam'];
+
+    for (const folder of foldersToCheck) {
+      console.log(`Checking folder: ${folder}`);
+      try {
+        await this.checkFolder(folder, userId);
+      } catch (error) {
+        console.error(`Error checking folder ${folder}:`, error);
+      }
+    }
+
+    console.log('Done checking all email folders');
+    return;
+  }
+
+  private async _checkEmailsForOrderNumber(orderNumber: string, userId?: number): Promise<void> {
+    console.log('========================');
+    console.log(`Starting optimized IMAP check for order number: ${orderNumber} at:`, new Date().toISOString());
+
+    if (!this.imap) {
+      throw new Error("IMAP connection is not initialized");
+    }
+
+    // Используем только INBOX и Spam (для mail.ru)
+    // '[Gmail]/Spam' не работает на mail.ru
+    const foldersToCheck = ['INBOX', 'Spam'];
+
+    for (const folder of foldersToCheck) {
+      console.log(`Checking folder: ${folder} for messages with order number: ${orderNumber}`);
+      try {
+        await this.checkFolderWithOrderNumber(folder, orderNumber, userId);
+      } catch (error) {
+        console.error(`Error checking folder ${folder} for order number:`, error);
+      }
+    }
+
+    console.log(`Done checking for emails with order number: ${orderNumber}`);
+    return;
+  }
+
+  private async checkFolder(folderName: string, userId?: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.imap) {
+        return reject(new Error("IMAP connection is not initialized"));
+      }
+
+      this.imap.openBox(folderName, false, (err, box) => {
+        if (err) {
+          console.error(`Failed to open ${folderName}:`, err);
+          return reject(err);
+        }
+
+        console.log(`Successfully opened ${folderName}, checking for emails...`);
+
+        if (!this.imap) {
+          return reject(new Error("IMAP connection is not initialized"));
+        }
+
+        const searchDate = new Date();
+        searchDate.setDate(searchDate.getDate() - 5);
+
+        const searchCriteria = ['ALL', ['SINCE', searchDate]];
+
+        this.imap.search(searchCriteria, (err, results) => {
+          if (err) return reject(err);
+          if (!results || !results.length) {
+            console.log(`No emails found in ${folderName}`);
+            return resolve();
+          }
+
+          console.log(`Found ${results.length} emails in ${folderName}`);
+
+          if (!this.imap) {
+            return reject(new Error("IMAP connection is not initialized"));
+          }
+
+          const fetch = this.imap.fetch(results, {
+            bodies: '',
+            markSeen: false
+          });
+
+          fetch.on('message', (msg: any) => {
+            msg.on('body', (stream: any) => {
+              simpleParser(stream, async (err: any, parsed: any) => {
+                if (err) {
+                  console.error('Error parsing email:', err);
+                  return;
+                }
+                await this.processEmail(parsed, userId);
+              });
+            });
+          });
+
+          fetch.once('error', (err: any) => {
+            console.error(`Fetch error in ${folderName}:`, err);
+            reject(err);
+          });
+
+          fetch.once('end', () => {
+            console.log(`Done checking emails in ${folderName}`);
+            resolve();
+          });
+        });
+      });
+    });
+  }
+
+  private async checkFolderWithOrderNumber(folderName: string, orderNumber: string, userId?: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.imap) {
+        return reject(new Error("IMAP connection is not initialized"));
+      }
+
+      this.imap.openBox(folderName, false, (err, box) => {
+        if (err) {
+          console.error(`Failed to open ${folderName}:`, err);
+          return reject(err);
+        }
+
+        console.log(`Successfully opened ${folderName}, checking for emails with order number: ${orderNumber}...`);
+
+        if (!this.imap) {
+          return reject(new Error("IMAP connection is not initialized"));
+        }
+
+        const searchDate = new Date();
+        searchDate.setDate(searchDate.getDate() - 30);
+
+        const searchCriteria = ['ALL', ['SINCE', searchDate]];
+
+        this.imap.search(searchCriteria, (err, results) => {
+          if (err) return reject(err);
+          if (!results || !results.length) {
+            console.log(`No emails found in ${folderName}`);
+            return resolve();
+          }
+
+          console.log(`Found ${results.length} emails in ${folderName}, filtering for order number: ${orderNumber}`);
+
+          if (!this.imap) {
+            return reject(new Error("IMAP connection is not initialized"));
+          }
+
+          const fetch = this.imap.fetch(results, {
+            bodies: '',
+            markSeen: false
+          });
+
+          fetch.on('message', (msg: any) => {
+            msg.on('body', (stream: any) => {
+              simpleParser(stream, async (err: any, parsed: any) => {
+                if (err) {
+                  console.error('Error parsing email:', err);
+                  return;
+                }
+                if (parsed.subject && parsed.subject.includes(orderNumber)) {
+                  console.log(`Found email with order number ${orderNumber} in subject: ${parsed.subject}`);
+                  await this.processEmail(parsed, userId);
+                }
+              });
+            });
+          });
+
+          fetch.once('error', (err: any) => {
+            console.error(`Fetch error in ${folderName}:`, err);
+            reject(err);
+          });
+
+          fetch.once('end', () => {
+            console.log(`Done checking emails in ${folderName} for order number: ${orderNumber}`);
+            resolve();
+          });
+        });
+      });
+    });
+  }
+
+  private async processEmail(mail: any, userId?: number): Promise<void> {
+    if (!mail) {
+      console.log('No email data to process');
+      return;
+    }
+
+    const messageId = mail.messageId || mail.headers?.['message-id'] || `unknown-${Date.now()}`;
+    console.log(`\n🔍 [EMAIL PROCESSING] Starting email processing for message ID: ${messageId}`);
+    console.log(`🕐 [EMAIL PROCESSING] Processing email at: ${new Date().toLocaleTimeString()}`);
+    
+    // Check if this email was already successfully processed
+    if (this.processedMessageIds.has(messageId)) {
+      console.log(`⏭️ [EMAIL CACHING] Email ${messageId} found in memory cache for user ${userId || 'unknown'} - skipping`);
+      return;
+    }
+
+    const result = await this._processEmailWithDetails(mail, userId);
+    
+    // НОВАЯ ЛОГИКА КЕШИРОВАНИЯ - только success в кеш
+    if (result.status === 'success' && 
+        result.savedToDb === true && 
+        result.attachmentsProcessed === true) {
+      this.processedMessageIds.add(messageId);
+      console.log(`✅ [EMAIL CACHING] Email ${messageId} successfully processed and cached`);
+    } else {
+      console.log(`❌ [EMAIL CACHING] Email ${messageId} not cached due to: ${result.status}, DB: ${result.savedToDb}, Attachments: ${result.attachmentsProcessed}`);
+      if (result.error) {
+        console.log(`🚨 [EMAIL CACHING] Error details: ${result.error}`);
+      }
+      if (result.attachmentErrors && result.attachmentErrors.length > 0) {
+        console.log(`📎 [EMAIL CACHING] Attachment errors: ${result.attachmentErrors.join(', ')}`);
+      }
+    }
+  }
+
+  private async _processEmailWithDetails(mail: any, userId?: number): Promise<EmailProcessingResult> {
+    const messageId = mail.messageId || mail.headers?.['message-id'] || `unknown-${Date.now()}`;
+    let result: EmailProcessingResult = {
+      status: 'failed',
+      savedToDb: false,
+      attachmentsProcessed: false,
+      messageId: messageId
+    };
+
+    try {
+
+      const { from, subject, text, attachments = [] } = mail;
+      const fromEmail = from?.value?.[0]?.address || '';
+      const messageDate = mail.date ? new Date(mail.date) : new Date();
+      
+      console.log(`📧 [EMAIL DETAILS] From: ${fromEmail}, Subject: ${subject || 'No subject'}, Attachments: ${attachments.length}`);
+      
+      // Process attachments for all emails (including system emails to ensure they display properly)
+      const systemEmail = process.env.EMAIL_FROM || 'noreply@supplier-search.example.com';
+      const isSystemEmail = fromEmail.toLowerCase() === systemEmail.toLowerCase();
+      
+      // Process attachments
+      let filteredAttachments: Array<{
+        filename: string;
+        contentType: string;
+        content: string;
+        size: number;
+        encoding?: string;
+        extractedText?: string;
+      }> = [];
+      
+      // Process attachments regardless of email source (fix for incoming attachments not showing)
+      if (attachments && Array.isArray(attachments)) {
+        console.log(`Processing ${attachments.length} attachments from email (${isSystemEmail ? 'system email' : 'supplier email'})`);
+        
+        // Detailed logging to diagnose issues
+        attachments.forEach((att, index) => {
+          console.log(`Email attachment ${index}: filename=${att.filename}, contentType=${att.contentType}, size=${att.size}, contentFormat=${typeof att.content}, isBuffer=${Buffer.isBuffer(att.content)}`);
+        });
+        
+        filteredAttachments = attachments.map(att => {
+          // Ensure we have the content and it's properly encoded
+          let content = att.content;
+          let encoding = 'base64';
+          
+          if (Buffer.isBuffer(content)) {
+            console.log(`Converting attachment buffer to base64 string: ${att.filename}, size ${content.length} bytes`);
+            content = content.toString('base64');
+          } else if (typeof content === 'string') {
+            console.log(`Attachment has string content, length: ${content.length} chars`);
+            // Already a string, but ensure it's base64 encoded
+            if (content.length > 0 && !content.match(/^[A-Za-z0-9+/=]+$/)) {
+              console.log(`Attachment content doesn't appear to be base64, treating as raw text: ${att.filename}`);
+              // If it's not base64, encode it
+              try {
+                content = Buffer.from(content).toString('base64');
+              } catch (error) {
+                console.error(`Error converting attachment content to base64: ${error instanceof Error ? error.message : String(error)}`);
+              }
+            }
+          } else if (content === null || content === undefined) {
+            console.log(`Attachment has null/undefined content: ${att.filename}`);
+            content = '';
+          } else {
+            console.log(`Attachment has unsupported content type: ${typeof content} for ${att.filename}`);
+            try {
+              // Try to stringify and base64 encode
+              content = Buffer.from(JSON.stringify(content)).toString('base64');
+            } catch (error) {
+              console.error(`Failed to process attachment content: ${error instanceof Error ? error.message : String(error)}`);
+              content = '';
+            }
+          }
+          
+          return {
+            filename: att.filename || 'unnamed_file',
+            contentType: att.contentType || 'application/octet-stream',
+            content: content,
+            encoding: encoding,
+            size: att.size || (typeof content === 'string' ? content.length : 0),
+            extractedText: att.extractedText
+          };
+        }).filter(att => att.filename && att.content);
+        
+        console.log(`Processed ${filteredAttachments.length} valid attachments for storage`);
+      } else {
+        console.log('No attachments found in the email');
+      }
+
+      // НАЧАЛО УЛУЧШЕННОГО КОДА ДЛЯ ПОИСКА ЗАПРОСА И ПРОВЕРКИ ДУБЛИКАТОВ
+      // Находим имя отправителя и другие основные данные
+      const displayFromName = from?.value?.[0]?.name || fromEmail;
+      let requestId = 0;
+      let supplierId = 'unknown';
+      let supplierName = displayFromName;
+      let requestSupplier = null;
+
+      // Шаг 1: Поиск запроса поставщика (supplier) по email
+      const allRequestSuppliers = await storage.getRequestSuppliers(null);
+      const matchByEmail = allRequestSuppliers.find(s => 
+        s.supplierEmail.toLowerCase() === fromEmail.toLowerCase()
+      );
+
+      if (matchByEmail) {
+        console.log('✅ Found supplier match by email:', matchByEmail.supplierName);
+        requestId = matchByEmail.requestId;
+        requestSupplier = matchByEmail;
+        supplierId = matchByEmail.supplierId;
+        supplierName = matchByEmail.supplierName;
+      }
+
+      // Шаг 2: Если не нашли по email, ищем по номеру заказа + email supplier match
+      if (!requestId) {
+        // Собираем все возможные номера заказов из темы и текста письма
+        const possibleOrderNumbers: string[] = [];
+        
+        // Поиск в теме письма (приоритет)
+        if (subject) {
+          const subjectMatches = subject.match(/REQ-\d{4}-\d{5}/g) || [];
+          possibleOrderNumbers.push(...subjectMatches);
+        }
+        
+        // Поиск в тексте письма
+        if (text) {
+          const textMatches = text.match(/REQ-\d{4}-\d{5}/g) || [];
+          possibleOrderNumbers.push(...textMatches);
+          
+          // Поиск усеченных номеров вида -XXXX-XXXXX
+          const truncatedMatches = text.match(/-\d{4}-\d{5}/g) || [];
+          truncatedMatches.forEach((match: string) => {
+            possibleOrderNumbers.push(`REQ${match}`);
+          });
+        }
+        
+        // Удаление дубликатов из списка номеров
+        const uniqueOrderNumbers = Array.from(new Set(possibleOrderNumbers));
+        
+        if (uniqueOrderNumbers.length > 0) {
+          console.log('Found possible order numbers:', uniqueOrderNumbers.join(', '));
+          
+          // CRITICAL FIX: Find the request that was used to contact THIS SPECIFIC SUPPLIER
+          // Instead of just finding any request with the order number, we need to find
+          // the request where this supplier email was actually contacted
+          for (const orderNumber of uniqueOrderNumbers) {
+            const request = await storage.getSearchRequestByOrderNumber(orderNumber);
+            if (request) {
+              console.log(`Found request with order ${orderNumber}: ID=${request.id}`);
+              
+              // Now check if this supplier was actually contacted for this request
+              const requestSuppliers = await storage.getRequestSuppliers(request.id);
+              const supplierMatch = requestSuppliers.find(s => 
+                s.supplierEmail.toLowerCase() === fromEmail.toLowerCase()
+              );
+              
+              if (supplierMatch) {
+                console.log(`✅ CONFIRMED: Supplier ${fromEmail} was contacted for request ${request.id}. Using this request ID to maintain parameter consistency.`);
+                requestId = request.id;
+                requestSupplier = supplierMatch;
+                supplierId = supplierMatch.supplierId;
+                supplierName = supplierMatch.supplierName;
+                break;
+              } else {
+                console.log(`⚠️ Supplier ${fromEmail} was NOT contacted for request ${request.id}. Looking for another request...`);
+                // Continue looking for the correct request where this supplier was actually contacted
+              }
+            }
+          }
+          
+          // If we still haven't found a match, fall back to the original logic but warn about potential mismatch
+          if (!requestId) {
+            console.log('⚠️ FALLBACK: Could not find request where this supplier was contacted. Using first matching order number (may cause parameter mismatch).');
+            for (const orderNumber of uniqueOrderNumbers) {
+              const request = await storage.getSearchRequestByOrderNumber(orderNumber);
+              if (request) {
+                console.log(`⚠️ FALLBACK: Using request ID=${request.id}, Order=${request.orderNumber} (parameter mismatch risk)`);
+                requestId = request.id;
+                break;
+              }
+            }
+          }
+        }
+      }
+      
+      // Шаг 3: КРИТИЧЕСКАЯ ПРОВЕРКА НА ДУБЛИКАТЫ - ЗАГРУЖАЕМ СВЕЖИЕ ДАННЫЕ
+      // Загружаем данные напрямую из базы данных для 100% точности дедупликации
+      const existingResponses = await storage.getSupplierResponses(null);
+      console.log(`🔍 DUPLICATE CHECK: Loaded ${existingResponses.length} existing responses from database for duplicate verification`);
+      
+      // БЛОКИРУЕМ ДУБЛИКАТЫ НА УРОВНЕ БАЗЫ ДАННЫХ
+      // Проверим существующие записи по точному messageId
+      if (messageId) {
+        const duplicateByMessageId = await storage.checkExistingSupplierResponseByMessageId(messageId);
+        if (duplicateByMessageId) {
+          console.log(`🚫 DATABASE DUPLICATE DETECTED: MessageId ${messageId} already exists as response ${duplicateByMessageId.id}. BLOCKING save operation.`);
+          return null;
+        }
+      }
+      
+      // СТРОГАЯ ПРОВЕРКА ПО MESSAGE ID (приоритет #1)
+      if (messageId) {
+        const messageIdDuplicate = existingResponses.find(response => 
+          response.messageId === messageId
+        );
+        
+        if (messageIdDuplicate) {
+          console.log(`🚫 DUPLICATE DETECTED: MessageId ${messageId} already exists as response ${messageIdDuplicate.id}. BLOCKING save operation.`);
+          return null;
+        }
+        
+        // Дополнительная проверка в памяти
+        if (this.processedMessageIds.has(messageId)) {
+          console.log(`🚫 MEMORY DUPLICATE DETECTED: MessageId ${messageId} already processed in this session. BLOCKING save operation.`);
+          return null;
+        }
+      }
+      
+      // ПРОВЕРКА ПО SUBJECT + EMAIL (приоритет #2)
+      const subjectEmailDuplicate = existingResponses.find(response => 
+        response.subject === subject &&
+        response.supplierEmail?.toLowerCase() === fromEmail.toLowerCase()
+      );
+      
+      if (subjectEmailDuplicate) {
+        console.log(`🚫 DUPLICATE DETECTED: Subject "${subject}" from ${fromEmail} already exists as response ${subjectEmailDuplicate.id}. BLOCKING save operation.`);
+        return null;
+      }
+      
+      console.log(`✅ NO DUPLICATES FOUND: Email is unique and safe to save`);
+      // КОНЕЦ КРИТИЧЕСКОЙ ПРОВЕРКИ НА ДУБЛИКАТЫ
+      
+      // Добавляем сообщение в список обработанных для in-memory дедупликации
+      // Дополнительная защита от дубликатов в рамках одной сессии
+      if (messageId) {
+        this.processedMessageIds.add(messageId);
+        console.log(`📝 MEMORY CACHE: Added messageId ${messageId} to processed set (size: ${this.processedMessageIds.size})`);
+      }
+
+      console.log('\n📧 Processing Email:');
+      console.log('From:', fromEmail, displayFromName ? `(${displayFromName})` : '');
+      console.log('Subject:', subject);
+      console.log('Date:', new Date().toISOString());
+      console.log('Content Length:', text?.length || 0, 'characters');
+      console.log('Attachments:', attachments?.length || 0);
+
+      if (text && text.length > 0) {
+        const previewLength = 200;
+        console.log(`Content preview (first ${previewLength} chars):`);
+        console.log(text.substring(0, previewLength) + (text.length > previewLength ? '...' : ''));
+
+        if (text.length > previewLength) {
+          console.log(`Content preview (last ${previewLength} chars):`);
+          console.log('...' + text.substring(text.length - previewLength));
+        }
+      }
+
+      const pendingRequests = await storage.getPendingSearchRequests();
+      console.log('\nActive requests that could match:', pendingRequests.length);
+      if (pendingRequests.length > 0) {
+        console.log('Order numbers:', pendingRequests.map(r => r.orderNumber).join(', '));
+      }
+
+      // This section is now handled by the improved logic above
+
+      const extractedInfo = this.extractTrackingInfo(text || '', subject || '');
+
+      console.log('\n🔍 Extracted tracking info:', JSON.stringify(extractedInfo, null, 2));
+
+      let possibleRefs = subject ? (subject.match(/REQ-\d{4}-\d{5}/g) || []) : [];
+
+      if (possibleRefs.length === 0) {
+        possibleRefs = text ? (text.match(/REQ-\d{4}-\d{5}/g) || []) : [];
+      }
+
+      const truncatedMatches = text ? (text.match(/-\d{4}-\d{5}/g) || []) : [];
+      if (truncatedMatches.length > 0) {
+        const reconstructedRefs = truncatedMatches.map((ref: string) => `REQ${ref}`);
+        console.log(`Found truncated references: ${truncatedMatches.join(', ')}`);
+        console.log(`Reconstructed as: ${reconstructedRefs.join(', ')}`);
+        // Combine arrays and remove duplicates
+        const combinedRefs: string[] = [];
+        // Add unique values from possibleRefs
+        possibleRefs.forEach((ref: string) => {
+          if (!combinedRefs.includes(ref)) {
+            combinedRefs.push(ref);
+          }
+        });
+        // Add unique values from reconstructedRefs
+        reconstructedRefs.forEach((ref: string) => {
+          if (!combinedRefs.includes(ref)) {
+            combinedRefs.push(ref);
+          }
+        });
+        possibleRefs = combinedRefs;
+      }
+
+      if (possibleRefs.length > 0) {
+        console.log('📑 Possible reference numbers found in email:', possibleRefs.join(', '));
+
+        const allRequests = await storage.getAllSearchRequests(userId);
+        console.log('🔍 Checking against all requests:', 
+          allRequests.map(r => `${r.id}:${r.orderNumber}`).join(', ')
+        );
+
+        const matchingRefs = possibleRefs.filter((ref: string) => 
+          allRequests.some(req => req.orderNumber === ref)
+        );
+        if (matchingRefs.length > 0) {
+          console.log('✅ Found exact order number matches:', matchingRefs.join(', '));
+        } else {
+          const partialMatches = [];
+          for (const ref of possibleRefs) {
+            for (const req of allRequests) {
+              const refDigits = ref.replace(/\D/g, '');
+              const reqDigits = req.orderNumber.replace(/\D/g, '');
+              if (refDigits.includes(reqDigits) || reqDigits.includes(refDigits)) {
+                partialMatches.push(`${req.orderNumber} (partial match with ${ref})`);
+              }
+            }
+          }
+
+          if (partialMatches.length > 0) {
+            console.log('⚠️ Found partial order number matches:', partialMatches.join(', '));
+          } else {
+            console.log('❌ No order number matches found');
+          }
+        }
+      } else {
+        console.log('❌ No order numbers found in email text');
+      }
+
+      if (!requestId && possibleRefs.length > 0) {
+        // Сначала поищем точное совпадение номера заказа в subject (приоритетно)
+        const subjectRefs = subject ? subject.match(/REQ-\d{4}-\d{5}/g) || [] : [];
+        if (subjectRefs.length > 0) {
+          console.log(`📑 References found in subject: ${subjectRefs.join(', ')}`);
+          for (const ref of subjectRefs) {
+            console.log(`🔍 Trying to match reference from subject (highest priority): ${ref}`);
+            
+            // CRITICAL FIX: Find the request where this supplier was actually contacted
+            const request = await storage.getSearchRequestByOrderNumber(ref);
+            if (request) {
+              console.log(`Found request with order ${ref}: ID=${request.id}`);
+              
+              // Check if this supplier was actually contacted for this request
+              const requestSuppliers = await storage.getRequestSuppliers(request.id);
+              const supplierMatch = requestSuppliers.find(s => 
+                s.supplierEmail.toLowerCase() === fromEmail.toLowerCase()
+              );
+              
+              if (supplierMatch) {
+                console.log(`✅ CONFIRMED FROM SUBJECT: Supplier ${fromEmail} was contacted for request ${request.id}. Using this request ID to maintain parameter consistency.`);
+                requestId = request.id;
+                requestSupplier = supplierMatch;
+                supplierId = supplierMatch.supplierId;
+                supplierName = supplierMatch.supplierName;
+                break;
+              } else {
+                console.log(`⚠️ Supplier ${fromEmail} was NOT contacted for request ${request.id}. Looking for another request...`);
+              }
+            } else {
+              console.log(`❌ No matching request found for reference from subject: ${ref}`);
+            }
+          }
+        }
+        
+        // Если не нашли точное совпадение в теме, ищем в теле письма
+        if (!requestId) {
+          for (const ref of possibleRefs) {
+            console.log(`🔍 Trying to match reference from content: ${ref}`);
+            
+            // CRITICAL FIX: Find the request where this supplier was actually contacted
+            const request = await storage.getSearchRequestByOrderNumber(ref);
+            if (request) {
+              console.log(`Found request with order ${ref}: ID=${request.id}`);
+              
+              // Check if this supplier was actually contacted for this request
+              const requestSuppliers = await storage.getRequestSuppliers(request.id);
+              const supplierMatch = requestSuppliers.find(s => 
+                s.supplierEmail.toLowerCase() === fromEmail.toLowerCase()
+              );
+              
+              if (supplierMatch) {
+                console.log(`✅ CONFIRMED FROM CONTENT: Supplier ${fromEmail} was contacted for request ${request.id}. Using this request ID to maintain parameter consistency.`);
+                requestId = request.id;
+                requestSupplier = supplierMatch;
+                supplierId = supplierMatch.supplierId;
+                supplierName = supplierMatch.supplierName;
+                break;
+              } else {
+                console.log(`⚠️ Supplier ${fromEmail} was NOT contacted for request ${request.id}. Looking for another request...`);
+                // Continue looking for the correct request where this supplier was actually contacted
+              }
+            }
+          }
+        }
+      }
+
+      if (!requestId && extractedInfo.trackingId) {
+        console.log(`🔍 Searching for supplier with tracking ID: ${extractedInfo.trackingId}`);
+        const normalizedTrackingId = extractedInfo.trackingId.trim().toLowerCase();
+        requestSupplier = await storage.getRequestSupplierByTrackingId(normalizedTrackingId);
+
+        if (requestSupplier) {
+          console.log(`✅ Found matching supplier by tracking ID: ${JSON.stringify(requestSupplier)}`);
+          requestId = requestSupplier.requestId;
+          supplierId = requestSupplier.supplierId;
+          supplierName = requestSupplier.supplierName;
+        } else {
+          console.log(`⚠️ No exact match for tracking ID: ${extractedInfo.trackingId}`);
+          const allSuppliers = await storage.getRequestSuppliers(null);
+          const similarTracking = allSuppliers.filter(s => 
+            s.trackingId && s.trackingId.toLowerCase().includes(normalizedTrackingId)
+          );
+          if (similarTracking.length > 0) {
+            console.log('📋 Similar tracking IDs found:', similarTracking.map(s => s.trackingId));
+          }
+        }
+      } 
+
+      if (!requestId && pendingRequests.length > 0) {
+        console.log(`⚠️ No specific match found. Using most recent request as fallback.`);
+        const sortedRequests = [...pendingRequests].sort((a, b) => {
+          const dateA = a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt || 0);
+          const dateB = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt || 0);
+          return dateB.getTime() - dateA.getTime();
+        });
+
+        const latestRequest = sortedRequests[0];
+        requestId = latestRequest.id;
+        console.log(`Using latest request: ${latestRequest.orderNumber} (ID: ${latestRequest.id})`);
+
+        const suppliers = await storage.getRequestSuppliers(requestId);
+        if (suppliers.length > 0) {
+          requestSupplier = suppliers[0];
+          supplierId = requestSupplier.supplierId;
+          supplierName = requestSupplier.supplierName;
+        }
+      }
+
+      if (requestId || extractedInfo.orderNumber) {
+        if (extractedInfo.orderNumber) {
+          console.log(`🔍 Looking up request by extracted order number: ${extractedInfo.orderNumber}`);
+          const request = await storage.getSearchRequestByOrderNumber(extractedInfo.orderNumber);
+          if (request) {
+            console.log(`✅ Found request by extracted order number: ID=${request.id}, Order=${request.orderNumber}`);
+            requestId = request.id;
+          } else {
+            console.log(`❌ No request found for extracted order number: ${extractedInfo.orderNumber}`);
+          }
+        }
+
+        console.log('✅ Creating supplier response for request ID:', requestId);
+
+        if (requestSupplier) {
+          console.log('Updating request supplier record to mark as responded');
+          await storage.updateRequestSupplierResponse(requestSupplier.id, true);
+        }
+
+        // Get the userId from the search request to ensure proper data isolation
+        let userId: number | null = null;
+        if (requestId) {
+          const request = await storage.getSearchRequest(requestId);
+          if (request) {
+            userId = request.userId;
+            console.log(`✅ Retrieved userId ${userId} from search request ${requestId} for proper data isolation`);
+          }
+        }
+
+        // CRITICAL FIX: Ensure supplier ID is always positive for database consistency
+        let fixedSupplierId: string = supplierId?.toString() || Math.abs(Date.now() % 10000).toString();
+        
+        if (typeof supplierId === 'number') {
+          if (supplierId < 0) {
+            // Convert negative supplier ID to positive
+            fixedSupplierId = Math.abs(supplierId).toString();
+            console.log(`🔧 Fixed negative supplier ID ${supplierId} to positive: ${fixedSupplierId}`);
+          } else {
+            fixedSupplierId = supplierId.toString();
+          }
+        } else if (typeof supplierId === 'string') {
+          // Handle string supplier IDs that might contain negative values
+          if (supplierId.startsWith('-')) {
+            const numericPart = supplierId.replace(/\D/g, '');
+            fixedSupplierId = numericPart || Math.abs(Date.now() % 10000).toString();
+            console.log(`🔧 Fixed negative string supplier ID ${supplierId} to positive: ${fixedSupplierId}`);
+          } else if (supplierId.startsWith('api-')) {
+            // Keep API format as is
+            fixedSupplierId = supplierId;
+          } else {
+            // Extract numeric part from any other string format
+            const numericPart = supplierId.replace(/\D/g, '');
+            fixedSupplierId = numericPart || Math.abs(Date.now() % 10000).toString();
+          }
+        } else {
+          // Fallback: generate a positive ID
+          fixedSupplierId = Math.abs(Date.now() % 10000).toString();
+          console.log(`🔧 Generated fallback supplier ID: ${fixedSupplierId}`);
+        }
+
+        // Создаем базовый объект ответа с userId для правильной изоляции данных
+        const responseData: any = {
+          userId, // Add userId for proper data isolation
+          requestId,
+          requestSupplierId: requestSupplier?.id || null,
+          supplierId: fixedSupplierId,
+          supplierName: displayFromName, // Use authentic sender display name from email headers
+          supplierEmail: fromEmail,
+          subject: subject || '(No subject)',
+          content: text || '(No content)',
+          responseDate: new Date(),
+          attachments: filteredAttachments,
+        };
+
+        // Добавляем messageId если он доступен
+        if (messageId) {
+          responseData.messageId = messageId;
+        }
+
+        const response = await storage.createSupplierResponse(responseData);
+
+        // Инвалидируем кэш после сохранения нового ответа
+        this.responseCache.delete('allResponses');
+        this.lastCacheUpdate = 0;
+
+        console.log('✅ Successfully saved supplier response:', {
+          id: response.id,
+          requestId: response.requestId,
+          supplierName: response.supplierName,
+          fromEmail: response.supplierEmail,
+          subject: response.subject,
+          date: response.responseDate,
+          attachments: (attachments || []).length
+        });
+        
+        // Automatically process attachments if any exist
+        if (filteredAttachments && filteredAttachments.length > 0) {
+          try {
+            console.log(`⚙️ Automatically analyzing ${filteredAttachments.length} attachments in response ${response.id}...`);
+            
+            // Use the attachment analyzer to process the attachments
+            const analysisResult = await apiAttachmentBridge.analyzeSupplierResponseAttachments(response);
+            
+            // Update the attachments with extracted text
+            let attachmentsUpdated = false;
+            
+            if (analysisResult.processed_attachments && Array.isArray(analysisResult.processed_attachments)) {
+              // Map the processed attachments back to the original attachments
+              for (let i = 0; i < filteredAttachments.length; i++) {
+                if (i < analysisResult.processed_attachments.length) {
+                  const processedAttachment = analysisResult.processed_attachments[i];
+                  
+                  // Update the attachment with extracted text
+                  if (processedAttachment.extracted_text) {
+                    filteredAttachments[i].extractedText = processedAttachment.extracted_text;
+                    console.log(`✅ Updated attachment ${filteredAttachments[i].filename} with extracted text (${processedAttachment.extracted_text.length} chars)`);
+                    attachmentsUpdated = true;
+                  }
+                }
+              }
+              
+              // Update the response in the database with the updated attachments if needed
+              if (attachmentsUpdated && response.id) {
+                try {
+                  console.log(`🔄 Updating supplier response ${response.id} with extracted text in attachments`);
+                  await storage.updateSupplierResponse(response.id, {
+                    attachments: filteredAttachments
+                  });
+                  console.log(`✅ Successfully updated supplier response ${response.id} with extracted text in attachments`);
+                } catch (dbError) {
+                  console.error(`❌ Error updating supplier response ${response.id} with extracted text:`, dbError);
+                }
+              }
+            }
+            
+            console.log(`✅ Successfully analyzed attachments for response ${response.id}:`, {
+              processedAttachments: analysisResult.processed_attachments?.length || 0,
+              extractedText: analysisResult.extracted_text_preview ? 'Yes (First 100 chars: ' + 
+                analysisResult.extracted_text_preview.substring(0, 100) + '...)' : 'None'
+            });
+          } catch (error) {
+            console.error(`❌ Error analyzing attachments for response ${response.id}:`, error);
+            // Continue despite error - we don't want to block the email processing
+          }
+        }
+
+        // Успешно сохранено в базу данных
+        result.savedToDb = true;
+        result.dbRecordId = response.id;
+        console.log(`✅ [DATABASE] Successfully saved email to database with ID: ${response.id}`);
+        
+        // Автоматическая обработка вложений, если они есть
+        let attachmentErrors: string[] = [];
+        result.attachmentsProcessed = true; // По умолчанию считаем успешным
+        
+        if (filteredAttachments && filteredAttachments.length > 0) {
+          try {
+            console.log(`⚙️ [ATTACHMENTS] Automatically analyzing ${filteredAttachments.length} attachments in response ${response.id}...`);
+            
+            // Используем attachment analyzer для обработки вложений
+            const analysisResult = await apiAttachmentBridge.analyzeSupplierResponseAttachments(response);
+            
+            // Обновляем вложения извлеченным текстом
+            let attachmentsUpdated = false;
+            
+            if (analysisResult.processed_attachments && Array.isArray(analysisResult.processed_attachments)) {
+              // Сопоставляем обработанные вложения с оригинальными
+              for (let i = 0; i < filteredAttachments.length; i++) {
+                if (i < analysisResult.processed_attachments.length) {
+                  const processedAttachment = analysisResult.processed_attachments[i];
+                  
+                  // Обновляем вложение извлеченным текстом
+                  if (processedAttachment.extracted_text) {
+                    filteredAttachments[i].extractedText = processedAttachment.extracted_text;
+                    console.log(`✅ [ATTACHMENTS] Updated attachment ${filteredAttachments[i].filename} with extracted text (${processedAttachment.extracted_text.length} chars)`);
+                    attachmentsUpdated = true;
+                  }
+                }
+              }
+              
+              // Обновляем ответ в базе данных с обновленными вложениями при необходимости
+              if (attachmentsUpdated && response.id) {
+                try {
+                  console.log(`🔄 [DATABASE] Updating supplier response ${response.id} with extracted text in attachments`);
+                  await storage.updateSupplierResponse(response.id, {
+                    attachments: filteredAttachments
+                  });
+                  console.log(`✅ [DATABASE] Successfully updated supplier response ${response.id} with extracted text`);
+                } catch (dbError) {
+                  console.error(`❌ [DATABASE] Error updating supplier response ${response.id} with extracted text:`, dbError);
+                  attachmentErrors.push(`Database update error: ${dbError instanceof Error ? dbError.message : String(dbError)}`);
+                  result.attachmentsProcessed = false;
+                }
+              }
+            }
+            
+            console.log(`✅ [ATTACHMENTS] Successfully analyzed attachments for response ${response.id}:`, {
+              processedAttachments: analysisResult.processed_attachments?.length || 0,
+              extractedText: analysisResult.extracted_text_preview ? 'Yes (First 100 chars: ' + 
+                analysisResult.extracted_text_preview.substring(0, 100) + '...)' : 'None'
+            });
+          } catch (error) {
+            console.error(`❌ [ATTACHMENTS] Error analyzing attachments for response ${response.id}:`, error);
+            attachmentErrors.push(`Attachment processing error: ${error instanceof Error ? error.message : String(error)}`);
+            result.attachmentsProcessed = false;
+          }
+        }
+        
+        // Устанавливаем финальный статус
+        if (result.savedToDb && result.attachmentsProcessed) {
+          result.status = 'success';
+          console.log(`🎉 [PROCESSING] Email ${messageId} processed completely successfully`);
+        } else if (!result.savedToDb) {
+          result.status = 'db_error';
+          console.log(`🚨 [PROCESSING] Email ${messageId} failed due to database error`);
+        } else if (!result.attachmentsProcessed) {
+          result.status = 'attachment_error';
+          result.attachmentErrors = attachmentErrors;
+          console.log(`⚠️ [PROCESSING] Email ${messageId} saved to DB but failed attachment processing`);
+        }
+        
+        return result;
+      } else {
+        console.log(`❌ [MATCHING] Could not match email ${messageId} to any request`);
+        result.status = 'failed';
+        result.error = 'Could not match email to any request';
+        return result;
+      }
+    } catch (error: unknown) {
+      console.error(`🚨 [ERROR] Error processing email ${messageId}:`, error);
+      result.status = 'failed';
+      result.error = error instanceof Error ? error.message : String(error);
+      return result;
+    }
+  }
+}
+
+export const imapService = new ImapService();

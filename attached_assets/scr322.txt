@@ -1,0 +1,113 @@
+//Серверная часть (пример для Next.js API route)
+//Создайте файл pages/api/generate-comparison.ts
+
+import { NextApiRequest, NextApiResponse } from 'next';
+import prisma from '@/lib/prisma';
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ message: 'Method not allowed' });
+  }
+
+  try {
+    const { supplierIds, parameters } = req.body;
+
+    // 1. Get suppliers with related data
+    const suppliers = await prisma.supplier.findMany({
+      where: { id: { in: supplierIds } },
+      include: {
+        products: true,
+        certifications: true,
+        pricingHistory: {
+          orderBy: { date: 'desc' },
+          take: 1
+        },
+        deliveryStats: true
+      }
+    });
+
+    // 2. Prepare comparison data
+    const tableData = parameters.map(param => {
+      const row: any = { parameter: param };
+      
+      suppliers.forEach(supplier => {
+        row[supplier.id] = getParameterValue(supplier, param);
+      });
+      
+      return row;
+    });
+
+    // 3. Generate CSV
+    const csv = generateCSV(tableData, suppliers);
+
+    // 4. Generate HTML table
+    const htmlTable = generateHTMLTable(tableData, suppliers);
+
+    return res.json({
+      success: true,
+      data: {
+        suppliers: suppliers.map(s => s.name),
+        parameters,
+        tableData,
+        htmlTable,
+        csv
+      }
+    });
+
+  } catch (error) {
+    console.error('Comparison error:', error);
+    return res.status(500).json({ 
+      success: false,
+      message: 'Internal server error' 
+    });
+  }
+}
+
+// Helper function to get parameter values
+function getParameterValue(supplier: any, param: string): string | number {
+  switch(param) {
+    case 'price':
+      return supplier.pricingHistory?.[0]?.price ?? 'N/A';
+    case 'delivery_time':
+      return supplier.deliveryStats?.avgDays ? `${supplier.deliveryStats.avgDays} days` : 'N/A';
+    case 'product_quality':
+      return supplier.qualityRating ?? 'Not rated';
+    case 'certifications':
+      return supplier.certifications.map((c: any) => c.name).join(', ') || 'None';
+    default:
+      return supplier[param] || 'N/A';
+  }
+}
+
+function generateCSV(data: any[], suppliers: any[]): string {
+  const headers = ['Parameter', ...suppliers.map(s => s.name)];
+  const rows = data.map(row => {
+    return [
+      row.parameter,
+      ...suppliers.map(s => row[s.id])
+    ];
+  });
+
+  return [headers, ...rows].map(row => row.join(',')).join('\n');
+}
+
+function generateHTMLTable(data: any[], suppliers: any[]): string {
+  let html = '<table class="w-full border-collapse"><thead><tr class="bg-gray-50">';
+  html += '<th class="p-3 text-left">Parameter</th>';
+  suppliers.forEach(s => {
+    html += `<th class="p-3 text-left">${s.name}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+
+  data.forEach((row, i) => {
+    html += `<tr class="${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}">`;
+    html += `<td class="p-3 font-medium">${row.parameter}</td>`;
+    suppliers.forEach(s => {
+      html += `<td class="p-3">${row[s.id]}</td>`;
+    });
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  return html;
+}

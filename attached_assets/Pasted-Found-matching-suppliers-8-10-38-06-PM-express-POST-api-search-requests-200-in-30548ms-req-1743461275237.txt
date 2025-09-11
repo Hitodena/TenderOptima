@@ -1,0 +1,230 @@
+Found matching suppliers: 8
+10:38:06 PM [express] POST /api/search-requests 200 in 30548ms :: {"request":{"id":108,"orderNumber":…
+10:43:20 PM [vite] hmr update /src/components/supplier-results.tsx, /src/index.css?v=CxGHSynt90pHD8Cx5I9w_
+Sending emails to 1 suppliers for request REQ-2503-01193
+10:44:08 PM [express] POST /api/send-email 200 in 3842ms :: {"success":true,"totalCount":1,"successCo…
+10:44:09 PM [express] GET /api/search-requests/order/REQ-2503-01193 200 in 239ms :: {"request":{"id":…
+10:44:18 PM [express] GET /api/search-requests 200 in 73ms :: [{"id":108,"orderNumber":"REQ-2503-8981…
+10:44:24 PM [express] GET /api/search-requests 304 in 73ms :: [{"id":108,"orderNumber":"REQ-2503-8981…
+10:44:27 PM [express] GET /api/search-requests 304 in 69ms :: [{"id":108,"orderNumber":"REQ-2503-8981…
+Request body: {
+  productName: 'носки',
+  productDescription: 'носки мужские оптом ',
+  quantity: 150,
+  budget: 100,
+  timeline: '60 days',
+  additionalRequirements: 'носки'
+}
+Created search request: {
+  id: 109,
+  orderNumber: 'REQ-2503-34306',
+  productName: 'носки',
+  productDescription: 'носки мужские оптом ',
+  quantity: 150,
+  budget: 100,
+  timeline: '60 days',
+  additionalRequirements: 'носки',
+  matchedSuppliers: null,
+  status: 'sent',
+  createdAt: 2025-03-31T22:44:57.028Z
+}
+Search request: {
+  id: 109,
+  orderNumber: 'REQ-2503-34306',
+  productName: 'носки',
+  productDescription: 'носки мужские оптом ',
+  quantity: 150,
+  budget: 100,
+  timeline: '60 days',
+  additionalRequirements: 'носки',
+  matchedSuppliers: null,
+  status: 'sent',
+  createdAt: 2025-03-31T22:44:57.028Z
+}
+Matching suppliers for search request: { productName: 'носки', productDescription: 'носки мужские оптом ' }
+DeepSeek API Response: Here are verified Belarusian manufacturing companies and B2B suppliers specializing in men's socks (носки мужские оптом):  
+
+### 1. **Company Name:** ОАО "Моготекс"  
+- **Description:** A leading Belarusian manufacturer of hosiery, including men's socks, women's tights, and children's socks. They produce high-quality cotton and blended socks for wholesale buyers.  
+- **Website:** [http://www.mogotex.by](http://www.mogotex.by)  
+- **Email:** info@mogotex.by  
+- **Phone:** +375 222 72-12-34  
+- **Categories:** Men's socks, women's tights, children's socks  
+
+### 2. **Company Name:** ЧУП "Белкотонпром"  
+- **Description:** Specializes in cotton and blended socks for men, women, and children. Offers bulk orders with customization options.  
+- **Website:** [http://belkottonprom.by](http://belkottonprom.by)  
+- **Email:** sales@belkottonprom.by  
+- **Phone:** +375 17 399-12-34  
+- **Categories:** Cotton socks, sports socks, thermal socks  
+
+### 3. **Company Name:** ООО "Текстильторг"  
+- **Description:** A Belarusian textile manufacturer producing men's and women's socks in bulk. They work with both domestic and international clients.  
+- **Website:** [http://textiletorg.by](http://textiletorg.by)  
+- **Email:** office@textiletorg.by  
+- **Phone:** +375 29 123-45-67  
+- **Categories:** Men's socks, wholesale hosiery, custom socks  
+
+### 4. **Company Name:** СП "Элиз-Бел" ООО  
+- **Description:** A joint venture producing high-quality socks for men, including sports and casual styles. They offer bulk orders with competitive pricing.  
+- **Website:** [http://eliz-bel.by](http://eliz-bel.by)  
+- **Email:** export@eliz-bel.by  
+- **Phone:** +375 162 52-34-56  
+- **Categories:** Men's socks, sports socks, wholesale hosiery  
+
+### 5. **Company Name:** ОАО "Сукно"  
+- **Description:** A well-established textile manufacturer in Belarus producing socks, knitwear, and other hosiery products for bulk buyers.  
+- **Website:** [http://sukno.by](http://sukno.by)  
+- **Email:** sukno@sukno.by  
+- **Phone:** +375 152 45-67-89  
+- **Categories:** Men's socks, knitwear, wholesale textiles  
+
+These companies specialize in **men's socks (носки мужские оптом)** and can accommodate bulk orders. Ensure you contact them directly for pricing and shipping details within your budget and timeline.  
+
+Would you like assistance in drafting an inquiry email in Russian for these suppliers?
+Found 8 potential supplier sections
+Extracted API suppliers: 9
+Search terms: носки носки мужские оптом  носки
+Search words: [ 'носки', 'носки', 'мужские', 'оптом', 'носки' ]
+Supplier "TechPro Solutions": score 0.00, matched terms: 
+Supplier "Global Materials Inc": score 0.00, matched terms: 
+Supplier "PackMaster Solutions": score 0.00, matched terms: 
+Supplier "SmartTech Manufacturing": score 0.00, matched terms: 
+Supplier "Tenderoptima": score 1.60, matched terms: носки, носки, носки, носки
+Supplier "Here are verified Belarusian manufacturing companies and B2B suppliers specializing in men's socks (носки мужские оптом)": score 2.90, matched terms: носки, носки, мужские, оптом, носки, носки, мужские, оптом
+Supplier "Company Name:": score 2.90, matched terms: носки, носки, мужские, оптом, носки, носки, мужские, оптом
+Supplier "Company Name:": score 2.80, matched terms: носки, носки, мужские, оптом, носки, носки, мужские, оптом
+Supplier "Company Name:": score 2.90, matched terms: носки, носки, мужские, оптом, носки, носки, мужские, оптом
+Supplier "Company Name:": score 3.00, matched terms: носки, носки, мужские, оптом, носки, носки, мужские, оптом
+Supplier "Company Name:": score 2.90, matched terms: носки, носки, мужские, оптом, носки, носки, мужские, оптом
+Supplier "men's socks (носки мужские оптом)": score 3.00, matched terms: носки, носки, мужские, оптом, носки, носки, мужские, оптом
+Supplier "Supplier Option 8": score 3.10, matched terms: носки, носки, мужские, оптом, носки, носки, мужские, оптом
+Found 9 matches out of 13 suppliers
+Matched suppliers with scores: [
+  { name: 'Supplier Option 8', score: 3.1 },
+  { name: 'Company Name:', score: 3 },
+  { name: "men's socks (носки мужские оптом)", score: 3 },
+  {
+    name: "Here are verified Belarusian manufacturing companies and B2B suppliers specializing in men's socks (носки мужские оптом)",
+    score: 2.9
+  },
+  { name: 'Company Name:', score: 2.9 },
+  { name: 'Company Name:', score: 2.9 },
+  { name: 'Company Name:', score: 2.9 },
+  { name: 'Company Name:', score: 2.8 },
+  { name: 'Tenderoptima', score: 1.6 }
+]
+Number of matched suppliers: 9
+Found matching suppliers: 9
+10:45:26 PM [express] POST /api/search-requests 200 in 30156ms :: {"request":{"id":109,"orderNumber":…
+Request body: {
+  id: 109,
+  orderNumber: 'REQ-2503-34306',
+  productName: 'носки',
+  productDescription: 'носки мужские оптом ',
+  quantity: 150,
+  budget: 100,
+  timeline: '60 days',
+  additionalRequirements: 'носки',
+  matchedSuppliers: null,
+  status: 'sent',
+  createdAt: '2025-03-31T22:44:57.028Z'
+}
+Created search request: {
+  id: 110,
+  orderNumber: 'REQ-2503-50594',
+  productName: 'носки',
+  productDescription: 'носки мужские оптом ',
+  quantity: 150,
+  budget: 100,
+  timeline: '60 days',
+  additionalRequirements: 'носки',
+  matchedSuppliers: null,
+  status: 'sent',
+  createdAt: 2025-03-31T22:45:27.355Z
+}
+Search request: {
+  id: 110,
+  orderNumber: 'REQ-2503-50594',
+  productName: 'носки',
+  productDescription: 'носки мужские оптом ',
+  quantity: 150,
+  budget: 100,
+  timeline: '60 days',
+  additionalRequirements: 'носки',
+  matchedSuppliers: null,
+  status: 'sent',
+  createdAt: 2025-03-31T22:45:27.355Z
+}
+Matching suppliers for search request: { productName: 'носки', productDescription: 'носки мужские оптом ' }
+DeepSeek API Response: Here are verified Belarusian manufacturing companies or B2B suppliers specializing in men's socks (носки мужские оптом):  
+
+### **1. Company Name:** ОАО «Моготекс»  
+- **Description:** One of the largest textile manufacturers in Belarus, specializing in hosiery, including men's socks, women's tights, and children's socks. They offer wholesale options.  
+- **Website:** [http://www.mogotex.by](http://www.mogotex.by)  
+- **Email:** [info@mogotex.by](mailto:info@mogotex.by)  
+- **Phone:** +375 222 72-36-15  
+- **Categories:** Socks, hosiery, knitwear  
+
+### **2. Company Name:** ОАО «Свiтанак»  
+- **Description:** A well-known Belarusian textile company producing high-quality men's and women's socks, underwear, and knitwear. They supply wholesale batches.  
+- **Website:** [http://www.svitanak.by](http://www.svitanak.by)  
+- **Email:** [office@svitanak.by](mailto:office@svitanak.by)  
+- **Phone:** +375 17 506-12-34  
+- **Categories:** Socks, underwear, knitwear  
+
+### **3. Company Name:** ЧУП «Белорусская трикотажная компания»  
+- **Description:** Specializes in the production of men's and women's socks, sportswear, and knitwear. Offers bulk orders for wholesale buyers.  
+- **Website:** [http://www.btk.by](http://www.btk.by)  
+- **Email:** [sales@btk.by](mailto:sales@btk.by)  
+- **Phone:** +375 17 395-45-45  
+- **Categories:** Socks, sportswear, knitwear  
+
+### **4. Company Name:** ОАО «Пинский трикотаж»  
+- **Description:** A major Belarusian manufacturer of socks, hosiery, and knitwear, supplying both domestic and international markets.  
+- **Website:** [http://www.pinsk-trikotazh.by](http://www.pinsk-trikotazh.by)  
+- **Email:** [office@pinsk-trikotazh.by](mailto:office@pinsk-trikotazh.by)  
+- **Phone:** +375 165 31-11-15  
+- **Categories:** Socks, hosiery, knitwear  
+
+### **5. Company Name:** ООО «БелКредо»  
+- **Description:** Produces high-quality men's and women's socks with various designs and materials, available for wholesale orders.  
+- **Website:** [http://belcredo.by](http://belcredo.by)  
+- **Email:** [info@belcredo.by](mailto:info@belcredo.by)  
+- **Phone:** +375 17 328-00-11  
+- **Categories:** Socks, knitwear  
+
+These companies are verified manufacturers and B2B suppliers in Belarus. Ensure to contact them directly for pricing and order details.
+Found 7 potential supplier sections
+Extracted API suppliers: 8
+Search terms: носки носки мужские оптом  носки
+Search words: [ 'носки', 'носки', 'мужские', 'оптом', 'носки' ]
+Supplier "TechPro Solutions": score 0.00, matched terms: 
+Supplier "Global Materials Inc": score 0.00, matched terms: 
+Supplier "PackMaster Solutions": score 0.00, matched terms: 
+Supplier "SmartTech Manufacturing": score 0.00, matched terms: 
+Supplier "Tenderoptima": score 1.60, matched terms: носки, носки, носки, носки
+Supplier "Here are verified Belarusian manufacturing companies or B2B suppliers specializing in men's socks (носки мужские оптом)": score 2.90, matched terms: носки, носки, мужские, оптом, носки, носки, мужские, оптом
+Supplier "1. Company Name:": score 2.90, matched terms: носки, носки, мужские, оптом, носки, носки, мужские, оптом
+Supplier "2. Company Name:": score 3.00, matched terms: носки, носки, мужские, оптом, носки, носки, мужские, оптом
+Supplier "3. Company Name:": score 2.80, matched terms: носки, носки, мужские, оптом, носки, носки, мужские, оптом
+Supplier "4. Company Name:": score 3.00, matched terms: носки, носки, мужские, оптом, носки, носки, мужские, оптом
+Supplier "5. Company Name:": score 3.00, matched terms: носки, носки, мужские, оптом, носки, носки, мужские, оптом
+Supplier "Supplier Option 7": score 3.00, matched terms: носки, носки, мужские, оптом, носки, носки, мужские, оптом
+Found 8 matches out of 12 suppliers
+Matched suppliers with scores: [
+  { name: '2. Company Name:', score: 3 },
+  { name: '4. Company Name:', score: 3 },
+  { name: '5. Company Name:', score: 3 },
+  { name: 'Supplier Option 7', score: 3 },
+  {
+    name: "Here are verified Belarusian manufacturing companies or B2B suppliers specializing in men's socks (носки мужские оптом)",
+    score: 2.9
+  },
+  { name: '1. Company Name:', score: 2.9 },
+  { name: '3. Company Name:', score: 2.8 },
+  { name: 'Tenderoptima', score: 1.6 }
+]
+Number of matched suppliers: 8
+Found matching suppliers: 8
+10:45:57 PM [express] POST /api/search-requests 200 in 30494ms :: {"request":{"id":110,"orderNumber":…

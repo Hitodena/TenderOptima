@@ -1,0 +1,14 @@
+{
+  "name": "supplier-finder-root",
+  "version": "1.0.0",
+  "description": "Root package for SupplierFinder project",
+  "scripts": {
+    "dev": "cd SupplierFinder && npm run dev",
+    "install-all": "npm install && cd SupplierFinder && npm install",
+    "build": "cd SupplierFinder && npm run build",
+    "start": "cd SupplierFinder && npm start"
+  },
+  "dependencies": {
+    "react-i18next": "^15.7.3"
+  }
+}
