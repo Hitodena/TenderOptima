@@ -175,7 +175,7 @@ router.post('/', requireAuth, async (req, res) => {
  * Функция вызова Python парсера
  */
 async function callPythonParser(query: string, elements: number, userId: string, regions: any[] = ["ru"], sources: any = {}): Promise<SearchResult[]> {
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
     console.log(`[PythonParser] Calling Python parser with query: "${query}"`);
     
     // Извлекаем регион для передачи в Python
@@ -196,10 +196,10 @@ async function callPythonParser(query: string, elements: number, userId: string,
     
     console.log(`[SupplierSearch] Using region code: ${region} for regions:`, regions);
     
-    console.log(`[PythonParser] Making HTTP request to Python microservice`);
+    console.log(`[PythonParser] Making HTTP request to FastAPI microservice on port 8080`);
     
     try {
-      const response = await fetch('http://localhost:5001/search', {
+      const response = await fetch('http://localhost:8080/search', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -213,16 +213,18 @@ async function callPythonParser(query: string, elements: number, userId: string,
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
       }
 
-      const results = await response.json();
-      console.log(`[PythonParser] Successfully received ${results.length} results from microservice`);
+      const data = await response.json();
+      const results = data.results || [];
+      console.log(`[PythonParser] Successfully received ${results.length} results from FastAPI microservice`);
       resolve(results);
       
     } catch (error) {
       console.error(`[PythonParser] HTTP request failed:`, error);
-      reject(new Error(`Failed to communicate with Python microservice: ${error.message}`));
+      reject(new Error(`Failed to communicate with Python FastAPI microservice: ${error.message}`));
     }
 
   });

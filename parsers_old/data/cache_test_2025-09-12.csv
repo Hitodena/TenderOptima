@@ -1,0 +1,4 @@
+user_id,query,domain,description,engine,position,emails,phones
+1,test,https://algimed-techno.com,"The Monocyte Activation Test (MAT) is a new method for the detection of the full range of pyrogenic substances, including bacterial endotoxins and pyrogens of ...",google,999,"['sales@algimed-techno.com', 'techno@algimed.com']","['+375291012768', '+375298931444']"
+1,test,https://minda.by,"Safe, Non-Toxic, and Easy-to-Use Mold Detection Kit The QOOMABA Mold Test Kit is designed for safe, contamination-free testing at home. About Mold - Mold Facts ...",google,999,"['library.minda@gmail.com', 'secretariat.minda@yandex.ru']",['+375173796326']
+1,test,https://www.softacom.com,"Jan 30, 2023 ... Performance testing is a testing process that allows you to test the behavior of a software product under realities.",google,999,['hello@softacom.com'],[]

@@ -1,3 +1,4 @@
+
 import asyncio
 from typing import Dict, List, Optional
 from urllib.parse import urlparse
@@ -5,7 +6,7 @@ from urllib.parse import urlparse
 from googleapiclient.errors import HttpError
 from langchain_google_community import GoogleSearchAPIWrapper
 
-from utils.logger import CustomLogger
+from ..utils.logger import CustomLogger
 
 logger = CustomLogger("GoogleParser", "GoogleParser.log", debug=False, console=True).get_logger()
 
@@ -26,8 +27,11 @@ async def parse_page(
         List[Dict[str, str]]: List of dictionaries with domain and description.
     """
     try:
-        params = {"gl": region, "hl": region, "start": start}
+        params = {"gl": region, "hl": region, "cr": f"country{region.upper()}", "start": start}
+        logger.info(f"Google search params: {params}")
+        
         batch = await asyncio.to_thread(search.results, query, 10, params)
+        logger.info(f"Google search returned {len(batch) if batch else 0} results")
 
         results = []
         for item in batch:
@@ -46,14 +50,14 @@ async def parse_page(
         return results
 
     except HttpError as e:
-        # stop on invalid argument (start > 90)
+        # stop on invalid argument (start > 90) or quota end, but continue with what we have
         if e.resp.status == 400:
-            logger.warning(f"Google CSE badRequest at start={start}, stopping pagination")
+            logger.warning(f"Google CSE badRequest at start={start}, continuing with partial results")
             return []
-        logger.error(f"HttpError at start {start} - quota end")
+        logger.warning(f"HttpError at start {start} - quota limit, continuing with partial results")
         return []
-    except Exception:
-        logger.error(f"Error parsing start {start}")
+    except Exception as e:
+        logger.warning(f"Error parsing start {start}: {str(e)[:100]}, continuing with partial results")
         return []
 
 
@@ -82,6 +86,7 @@ async def parse_google(
         logger.warning(f"Requested {elements} > {max_allowed}, limiting to {max_allowed} results.")
     to_fetch = min(elements, max_allowed)
 
+    logger.info(f"Initializing Google Search API with token: {'SET' if token else 'NOT SET'}, CSE ID: {'SET' if cust else 'NOT SET'}")
     search = GoogleSearchAPIWrapper(google_api_key=token, google_cse_id=cust)
     tasks = [parse_page(search, query, start, region) for start in range(0, to_fetch, 10)]
 

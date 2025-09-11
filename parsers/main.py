@@ -1,173 +1,176 @@
-
-#!/usr/bin/env python3
 import asyncio
+import os
 import sys
-import json
 from datetime import datetime
-from os import getenv
 from pathlib import Path
-from typing import Dict, List, Union
-from urllib.parse import urlparse
+from typing import Dict, List, Optional
 
-from aiohttp import TCPConnector
-from dotenv import load_dotenv
+import aiohttp
 
 from info_getter import get_info
 from search_manager import fetch_all
 from utils.logger import CustomLogger
-from utils.storage import get_today_cache_path, load_cache, save_to_csv, update_cache
+from utils.storage import save_to_csv
 
-# Load environment variables
-load_dotenv("./.env")
+logger = CustomLogger(
+    logger_name="SupplierFinderParser", file_path="SupplierFinderParser.log", debug=True, console=True
+).get_logger()
 
-google_custom_search_id = getenv("GOOGLE_CUSTOM_SEARCH_ENGINE_ID")
-google_search_api_token = getenv("GOOGLE_SEARCH_API_TOKEN")
-yandex_key_path = getenv("YANDEX_KEY_PATH")
-yandex_folder_id = getenv("YANDEX_FOLDER_ID")
-concurrent_tasks_limit = int(getenv("LIMIT_CONCURRENT", 100))
-connections_limit = int(getenv("LIMIT_CONNECTIONS", 500))
-output_data = getenv("OUTPUT_DATA", "data")
-
-root = Path(__file__).resolve().parent
-data_dir = root / "data"
-logger = CustomLogger("MainLogger", "MainLogger.log", debug=False, console=True).get_logger()
+# Configuration
+MAX_CONCURRENT_REQUESTS = 10
+DEFAULT_ELEMENTS = 50
+DEFAULT_REGION = "ru"
+DATA_DIR = Path(__file__).resolve().parent / "data"
 
 
-def setup(search_engines: List[str]) -> bool:
-    """
-    Validate environment and create output folders.
-    Returns False if setup fails.
-    """
-    if "yandex" in search_engines and not (yandex_folder_id or yandex_key_path):
-        logger.error("No yandex credentials, please check it in .env")
-        return False
-
-    if "google" in search_engines and not (google_custom_search_id or google_search_api_token):
-        logger.error("No google credentials, please check it in .env")
-        return False
-
-    root.joinpath(output_data).mkdir(parents=True, exist_ok=True)
-    return True
-
-
-async def parse(
+async def main_search(
     query: str,
-    user_id: str,
-    elements: int,
-    region: str,
-    search_engines: List[str],
-) -> List[Dict[str, Union[str, List[str]]]]:
+    user_id: str = "1",
+    elements: int = DEFAULT_ELEMENTS,
+    region: str = DEFAULT_REGION,
+    google_search_api: Optional[str] = None,
+    google_search_id: Optional[str] = None,
+    yandex_key_file: Optional[Path] = None,
+    yandex_folder_id: Optional[str] = None,
+) -> List[Dict]:
     """
-    Orchestrates:
-      1) Load daily cache
-      2) If cache miss -> fetch search results
-      3) Extract domains and fetch contact info
-      4) Merge contacts into results
-      5) Update cache and save output CSV
-    """
-    # Setup and validation
-    if not setup(search_engines):
-        return []
-
-    cache_file = get_today_cache_path(query, data_dir)
-    output_file = data_dir / "data.csv"
-
-    # 1) Try daily cache
-    cached = load_cache(query, cache_file, data_dir)
-    if cached:
-        logger.info(f"Cache hit for '{query}': {len(cached)} rows")
-        return cached
-
-    logger.info(f"Cache miss for '{query}', querying engines: {search_engines} with region: '{region}'")
-    raw_results = await fetch_all(
-        query=query,
-        user_id=user_id,
-        elements=elements,
-        region=region,
-        google_search_api=google_search_api_token or "",
-        google_search_id=google_custom_search_id or "",
-        yandex_key_file=Path(yandex_key_path) if yandex_key_path else Path(""),
-        yandex_folder_id=yandex_folder_id or "",
-    )
-
-    if not raw_results:
-        logger.warning(f"No search results for '{query}'")
-        return []
-
-    # 3) Extract unique domains from result links
-    domains = [item["domain"] for item in raw_results if isinstance(item.get("domain"), str)]
-    logger.info(f"Extracting contacts for {len(domains)} domains")
-
-    # 4) Try to fetch contact info for each domain
-    contacts_map = {}
-    try:
-        semaphore = asyncio.Semaphore(concurrent_tasks_limit)
-        connector = TCPConnector(limit=connections_limit)
-        contacts = await get_info(domains, semaphore, connector, region)
-        contacts_map = {urlparse(c["url"]).netloc: c for c in contacts if isinstance(c.get("url"), str)}
-        logger.info(f"Successfully extracted contacts for {len(contacts_map)} domains")
-    except Exception as e:
-        logger.warning(f"Contact extraction failed: {str(e)}. Returning results without contact info.")
-
-    # 5) Merge contacts back into search results (only include suppliers with emails)
-    enriched = []
-    for item in raw_results:
-        domain_url = item.get("domain", "")
-        if isinstance(domain_url, str):
-            domain = urlparse(domain_url).netloc
-            contact = contacts_map.get(domain)
-            
-            # Only add to results if contact info with emails is found
-            if contact and contact.get("emails"):
-                item["emails"] = contact["emails"]
-                item["phones"] = contact.get("phones", [])
-                item["dateOfSearch"] = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-                enriched.append(item)
-
-    # 6) Update cache and save CSV
-    if enriched:
-        update_cache(enriched, cache_file, data_dir, query)
-        save_to_csv(enriched, output_file)
-        logger.info(f"Saved {len(enriched)} results to {output_file} (with {len(contacts_map)} having contact info)")
-    else:
-        logger.warning(f"No results to save for query '{query}'")
-
-    return enriched
-
-
-async def main():
-    """Main entry point for command-line usage"""
-    if len(sys.argv) < 5:
-        print("Usage: python main.py <query> <elements> <user_id> <region>")
-        sys.exit(1)
-
-    query = sys.argv[1]
-    elements = int(sys.argv[2])
-    user_id = sys.argv[3]
-    # Считываем регион из 4-го аргумента - он должен быть обязательно передан
-    if len(sys.argv) <= 4:
-        logger.error("Region parameter is required but not provided")
-        sys.exit(1)
-    region = sys.argv[4]
-    logger.info(f"Using user-selected region: '{region}' for search query: '{query}'")
-
-    # Определяем доступные поисковые системы
-    search_engines = ["google"]  # По умолчанию всегда используем Google
+    Main search function that orchestrates Google and Yandex searches with contact extraction.
     
-    # Add Yandex if key file exists
-    if yandex_key_path and Path(yandex_key_path).exists():
-        search_engines.append("yandex")
-
+    Args:
+        query: Search query
+        user_id: User identifier
+        elements: Number of results to fetch
+        region: Search region
+        google_search_api: Google API key
+        google_search_id: Google Custom Search Engine ID
+        yandex_key_file: Path to Yandex service account key file
+        yandex_folder_id: Yandex Cloud folder ID
+    
+    Returns:
+        List of enriched supplier data with contact information
+    """
+    logger.info(f"Starting search for query: '{query}' with {elements} elements")
+    
+    # Validate API credentials
+    has_google = google_search_api and google_search_id
+    has_yandex = yandex_key_file and yandex_folder_id
+    
+    if not has_google and not has_yandex:
+        logger.error("No valid API credentials provided")
+        return []
+    
+    # Step 1: Search for domains using Google and/or Yandex
     try:
-        results = await parse(query, user_id, elements, region, search_engines)
+        # Ensure we have values for all parameters
+        google_api = google_search_api or ""
+        google_id = google_search_id or ""
+        yandex_key = yandex_key_file or Path("dummy")
+        yandex_folder = yandex_folder_id or ""
         
-        # Output results as JSON to stdout for Node.js to parse
-        print(json.dumps(results, ensure_ascii=False))
+        search_results = await fetch_all(
+            query=query,
+            user_id=user_id,
+            elements=elements,
+            region=region,
+            google_search_api=google_api,
+            google_search_id=google_id,
+            yandex_key_file=yandex_key,
+            yandex_folder_id=yandex_folder,
+        )
+        
+        if not search_results:
+            logger.warning("No search results found")
+            return []
+            
+        logger.info(f"Found {len(search_results)} domains from search engines")
         
     except Exception as e:
-        logger.error(f"Error in main: {e}")
-        print(json.dumps([], ensure_ascii=False))
+        logger.error(f"Search failed: {e}")
+        return []
+    
+    # Step 2: Extract contact information
+    try:
+        domains = [result["domain"] for result in search_results]
+        
+        # Setup for contact extraction
+        semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+        connector = aiohttp.TCPConnector(limit=100, ttl_dns_cache=300, use_dns_cache=True)
+        
+        # Get contact information
+        contact_results = await get_info(domains, semaphore, connector)
+        
+        logger.info(f"Extracted contacts from {len(contact_results)} domains")
+        
+    except Exception as e:
+        logger.error(f"Contact extraction failed: {e}")
+        contact_results = []
+    
+    # Step 3: Merge search results with contact information
+    enriched_results = []
+    contact_map = {result["url"]: result for result in contact_results}
+    
+    for search_result in search_results:
+        domain = search_result["domain"]
+        contact_info = contact_map.get(domain, {})
+        
+        # Only include suppliers with valid email addresses
+        emails = contact_info.get("emails", [])
+        phones = contact_info.get("phones", [])
+        
+        if emails:  # Only save suppliers with authentic email addresses
+            enriched_result = {
+                "user_id": search_result["user_id"],
+                "query": search_result["query"],
+                "domain": search_result["domain"],
+                "description": search_result["description"],
+                "engine": search_result["engine"],
+                "emails": emails,
+                "phones": phones,
+                "dateOfSearch": datetime.now().isoformat(),
+            }
+            enriched_results.append(enriched_result)
+    
+    logger.info(f"Final results: {len(enriched_results)} suppliers with authentic contact information")
+    
+    # Step 4: Save results if any found
+    if enriched_results:
+        DATA_DIR.mkdir(exist_ok=True)
+        save_to_csv(enriched_results, DATA_DIR / "results.csv")
+    
+    return enriched_results
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Example usage
+    if len(sys.argv) < 2:
+        print("Usage: python main.py 'search query' [elements] [user_id]")
+        sys.exit(1)
+    
+    query = sys.argv[1]
+    elements = int(sys.argv[2]) if len(sys.argv) > 2 else DEFAULT_ELEMENTS
+    user_id = sys.argv[3] if len(sys.argv) > 3 else "1"
+    
+    # Load environment variables for API keys
+    google_api = os.getenv("GOOGLE_SEARCH_API_KEY")
+    google_id = os.getenv("GOOGLE_SEARCH_ENGINE_ID")
+    yandex_key_path = os.getenv("YANDEX_KEY_FILE")
+    yandex_folder = os.getenv("YANDEX_FOLDER_ID")
+    
+    yandex_key_file = Path(yandex_key_path) if yandex_key_path else None
+    
+    # Run the search
+    results = asyncio.run(
+        main_search(
+            query=query,
+            user_id=user_id,
+            elements=elements,
+            google_search_api=google_api,
+            google_search_id=google_id,
+            yandex_key_file=yandex_key_file,
+            yandex_folder_id=yandex_folder,
+        )
+    )
+    
+    print(f"Search completed. Found {len(results)} suppliers with contact information.")
+    for result in results:
+        print(f"- {result['domain']}: {len(result['emails'])} emails, {len(result['phones'])} phones")
