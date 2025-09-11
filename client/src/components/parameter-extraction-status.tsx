@@ -17,6 +17,7 @@ interface ParameterExtractionStatusProps {
   supplierName?: string;
   onParametersExtracted?: (parameters: any) => void;
   forceExtract?: boolean;
+  requestParameters?: string[]; // Добавляем параметры как пропс
 }
 
 /**
@@ -30,11 +31,12 @@ export function ParameterExtractionStatus({
   supplierEmail,
   supplierName,
   onParametersExtracted,
-  forceExtract = false
+  forceExtract = false,
+  requestParameters = [] // Используем переданные параметры
 }: ParameterExtractionStatusProps) {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error' | 'no-parameters' | 'connection-error' | 'extracting'>('idle');
   const [parameters, setParameters] = useState<any>(null);
-  const [requestParametersList, setRequestParametersList] = useState<string[]>([]);
+  const [requestParametersList, setRequestParametersList] = useState<string[]>(requestParameters);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const responseIdRef = useRef<number | null>(null);
@@ -44,39 +46,13 @@ export function ParameterExtractionStatus({
   const [editedValue, setEditedValue] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
 
-  // First, load the parameters that were selected for this request
+  // Обновляем параметры когда они изменяются
   useEffect(() => {
-    const loadRequestParameters = async () => {
-      if (requestId) {
-        try {
-          const requestParams = await getRequestParameters(requestId);
-          console.log('Loaded parameters for request', requestId, ':', requestParams);
-          setRequestParametersList(requestParams);
-        } catch (error) {
-          console.error('Error loading request parameters:', error);
-          console.log('Trying to load parameters from related requests for request', requestId);
-          
-          // Try to load parameters from related requests using the fixed API endpoint
-          try {
-            const response = await apiRequest(`/api/parameters/request/${requestId}/list`, 'GET');
-            const responseData = response as { parameters?: string[] };
-            if (responseData && responseData.parameters && responseData.parameters.length > 0) {
-              console.log('Found parameters from related requests:', responseData.parameters);
-              setRequestParametersList(responseData.parameters);
-            } else {
-              console.log('No parameters found in related requests either');
-              setRequestParametersList([]);
-            }
-          } catch (relatedError) {
-            console.error('Error loading parameters from related requests:', relatedError);
-            setRequestParametersList([]);
-          }
-        }
-      }
-    };
-
-    loadRequestParameters();
-  }, [requestId]);
+    if (requestParameters && requestParameters.length > 0) {
+      setRequestParametersList(requestParameters);
+      console.log('Using cached request parameters:', requestParameters);
+    }
+  }, [requestParameters]);
 
   // This effect runs when forceExtract changes to true
   useEffect(() => {

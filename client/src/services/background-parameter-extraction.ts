@@ -5,25 +5,19 @@ import { apiRequest } from "@/lib/queryClient";
 
 /**
  * Start parameter extraction process for a specific response
+ * Теперь принимает параметры как аргумент вместо загрузки их каждый раз
  */
-const startParameterExtraction = async (responseId: number, requestId: number) => {
+const startParameterExtraction = async (
+  responseId: number, 
+  requestId: number, 
+  parameters: string[] // Принимаем параметры как аргумент
+) => {
   try {
-    // Real API call to extract parameters
     console.log(`Starting parameter extraction for response ${responseId}, request ${requestId}`);
     
-    // First load the default parameters for this request
-    let parameters: string[] = [];
-    
-    try {
-      console.log('Loading request parameters for request', requestId);
-      const response = await apiRequest<{parameters: string[]}>(`/api/parameters/${requestId}`, 'GET');
-      if (response && response.parameters) {
-        parameters = response.parameters;
-        console.log('Loaded parameters for request', requestId, ':', parameters);
-      }
-    } catch (error) {
-      console.log('No parameters found for request', requestId, 'skipping parameter extraction');
-      // Don't use fallback parameters - if no parameters were selected, skip extraction
+    // Проверяем, что у нас есть параметры
+    if (!parameters || parameters.length === 0) {
+      console.log('No parameters provided, skipping parameter extraction');
       return;
     }
     
@@ -92,14 +86,16 @@ const checkExtractionStatus = async (responseId: number) => {
 
 /**
  * Extract parameters in background for multiple responses
- * This is the main function used by the application
+ * Теперь принимает параметры как аргумент
  */
 const extractParametersInBackground = async (
   requestId: number, 
   responses: SupplierResponse[],
+  parameters: string[], // Принимаем параметры как аргумент
   progressCallback?: (completed: number, total: number) => void
 ) => {
   console.log(`Starting background parameter extraction for ${responses.length} responses in request ${requestId}`);
+  console.log(`Using cached parameters:`, parameters);
   
   let completed = 0;
   const total = responses.length;
@@ -107,7 +103,7 @@ const extractParametersInBackground = async (
   // Process responses sequentially to avoid overloading the server
   for (const response of responses) {
     try {
-      await startParameterExtraction(response.id, requestId);
+      await startParameterExtraction(response.id, requestId, parameters);
       completed++;
       
       if (progressCallback) {

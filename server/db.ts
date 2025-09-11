@@ -41,14 +41,15 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-// Optimized pool configuration for Replit environment to prevent memory overload
+// Optimized pool configuration for fast startup and better performance
 export const pool = new Pool({ 
   connectionString: process.env.DATABASE_URL,
-  max: 3, // Reduced max connections for Replit memory constraints
+  max: 5, // Increased for better performance
   min: 1, // Maintain minimum pool size
-  idleTimeoutMillis: 10000, // Faster cleanup of idle connections
-  connectionTimeoutMillis: 15000, // Increased timeout for better reliability
-  maxUses: 1000, // More frequent connection recycling
+  idleTimeoutMillis: 30000, // Longer idle timeout for better connection reuse
+  connectionTimeoutMillis: 10000, // Faster connection timeout for quick startup
+  maxUses: 2000, // Less frequent connection recycling
+  allowExitOnIdle: true, // Allow process to exit when all connections are idle
 });
 
 // Add pool error handlers for improved resilience
@@ -62,12 +63,14 @@ neonConfig.pipelineConnect = false;
 neonConfig.useSecureWebSocket = true;
 
 pool.on('connect', (client) => {
-  // Reduced logging to prevent spam - only log connection count
-  console.log(`Database pool: ${pool.totalCount} total, ${pool.idleCount} idle connections`);
+  // Minimal logging to prevent startup delays
+  if (process.env.NODE_ENV === 'development' && pool.totalCount === 1) {
+    console.log('Database connected');
+  }
 });
 
 pool.on('remove', (client) => {
-  console.log('Database connection removed from pool');
+  // Silent removal to prevent log spam
 });
 
 // Global error handler to prevent unhandled promise rejections in database operations
@@ -114,7 +117,9 @@ process.on('SIGTERM', async () => {
   process.exit(0);
 });
 
-// Test the connection on server startup with reduced logging
-testDatabaseConnection().catch(error => {
-  console.error('Initial database connection check failed:', error.message);
-});
+// Test the connection on server startup with minimal logging
+if (process.env.NODE_ENV === 'development') {
+  testDatabaseConnection().catch(error => {
+    console.error('Database connection failed:', error.message);
+  });
+}

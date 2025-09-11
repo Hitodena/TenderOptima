@@ -23,12 +23,15 @@ export function ProtectedRoute({
   }
 
   if (!user) {
+    console.log('[ProtectedRoute] User not authenticated, redirecting to /auth');
     return <Redirect to="/auth" />;
   }
 
   if (requireAdmin && user.role !== 'admin') {
+    console.log('[ProtectedRoute] User not admin, redirecting to /admin-login');
     return <Redirect to="/admin-login" />;
   }
 
+  console.log('[ProtectedRoute] User authenticated, rendering component');
   return <Component />;
 }

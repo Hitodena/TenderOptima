@@ -165,6 +165,8 @@ export default function Dashboard() {
           {/* Removed Request Dashboard title */}
         </div>
 
+        
+
         <Tabs defaultValue="active" value={tab} onValueChange={setTab}>
           <TabsList className="grid w-full grid-cols-2 mb-8">
             <TabsTrigger value="active">Активные запросы</TabsTrigger>

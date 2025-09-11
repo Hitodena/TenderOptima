@@ -173,23 +173,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     onSuccess: () => {
       // Очищаем данные авторизации из кэша
       queryClient.setQueryData(["/api/auth/me"], null);
-      // Инвалидируем все запросы, чтобы заставить их перезагрузиться
-      queryClient.invalidateQueries();
+      // Очищаем весь кэш
+      queryClient.clear();
       
       toast({
         title: "Выход выполнен",
         description: "Вы успешно вышли из системы.",
       });
+      
+      // Force immediate redirect to auth page
+      window.location.replace('/auth');
     },
     onError: (error: Error) => {
       // Даже при ошибке очищаем локальное состояние
       queryClient.setQueryData(["/api/auth/me"], null);
+      queryClient.clear();
       
       toast({
         title: "Предупреждение",
         description: "Выход выполнен локально, но могли возникнуть проблемы с сервером: " + error.message,
         variant: "destructive",
       });
+      
+      // Force redirect even on error
+      window.location.replace('/auth');
     },
   });
 

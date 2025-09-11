@@ -32,11 +32,10 @@ import cors from "cors";
 import net from "net";
 import { csrfProtection, csrfTokenMiddleware, csrfErrorHandler } from "./middleware/csrfProtection";
 
-// Выводим для отладки значения переменных
-console.log('Environment settings:');
-console.log('NODE_ENV:', process.env.NODE_ENV);
-console.log('SKIP_AUTH:', process.env.SKIP_AUTH);
-console.log('DEV_MODE:', process.env.DEV_MODE);
+// Minimal environment logging for faster startup
+if (process.env.NODE_ENV === 'development') {
+  console.log('Starting server in development mode');
+}
 
 const app = express();
 
@@ -67,10 +66,8 @@ app.use(cors({
     );
     
     if (isAllowed) {
-      console.log('Разрешаем CORS для origin:', origin);
       callback(null, true);
     } else {
-      console.log('Блокируем CORS для origin:', origin);
       callback(null, false);
     }
   },
@@ -113,51 +110,22 @@ import supplierSearchRoutes from './routes/supplier-search';
 app.use('/api/supplier-search', supplierSearchRoutes);
 console.log('[Server] Registered unified supplier search routes at /api/supplier-search');
 
-// ПЕРЕХВАТЫВАЕМ ВСЕ POST ЗАПРОСЫ ЗДЕСЬ В САМОМ НАЧАЛЕ
+// Minimal request logging for performance
 app.use((req, res, next) => {
-  if (req.method === 'POST' && req.path.includes('send-email')) {
-    console.log("⚡ СУПЕР-РАННЕЕ ЛОГИРОВАНИЕ:", req.method, req.path);
-    console.log("⚡ URL:", req.url);
-    console.log("⚡ Body suppliers:", req.body?.suppliers);
-    console.log("⚡ Body suppliers length:", req.body?.suppliers?.length);
-  }
+  // Only log critical errors, not normal requests
   next();
 });
 
+// Optimized request timing middleware
 app.use((req, res, next) => {
-  // Специальное логирование для /api/send-email
-  if (req.path === '/api/send-email' && req.method === 'POST') {
-    console.log("=== ГЛОБАЛЬНОЕ ЛОГИРОВАНИЕ: /api/send-email ===");
-    console.log("Method:", req.method);
-    console.log("Path:", req.path);
-    console.log("Headers:", req.headers);
-    console.log("Body suppliers:", req.body?.suppliers);
-    console.log("Body suppliers length:", req.body?.suppliers?.length);
-  }
-  
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
 
   res.on("finish", () => {
     const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
-      }
-
-      log(logLine);
+    // Only log slow requests (>1000ms) or errors
+    if (path.startsWith("/api") && (duration > 1000 || res.statusCode >= 400)) {
+      log(`${req.method} ${path} ${res.statusCode} in ${duration}ms`);
     }
   });
 

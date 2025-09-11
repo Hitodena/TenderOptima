@@ -162,7 +162,7 @@ async def main():
         results = await parse(query, user_id, elements, region, search_engines)
         
         # Output results as JSON to stdout for Node.js to parse
-        print(json.dumps(results, ensure_ascii=False, indent=2))
+        print(json.dumps(results, ensure_ascii=False))
         
     except Exception as e:
         logger.error(f"Error in main: {e}")

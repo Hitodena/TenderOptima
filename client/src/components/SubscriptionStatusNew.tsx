@@ -72,6 +72,10 @@ export function SubscriptionStatusNew({ className }: SubscriptionStatusProps) {
             console.log('[SubscriptionStatusNew] Subscription not found (404)');
             return { subscription: null, manager: null };
           }
+          if (response.status === 401) {
+            console.log('[SubscriptionStatusNew] Authentication required (401)');
+            return { subscription: null, manager: null };
+          }
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
 

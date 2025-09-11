@@ -104,9 +104,13 @@ export function useAuth() {
     onSuccess: () => {
       // Clear all user-related cached data
       queryClient.clear();
+      queryClient.setQueryData(["/api/auth/me"], null);
       
       // Clear any localStorage that might contain user data
       localStorage.removeItem('currentUserId');
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('tokenExpiry');
+      localStorage.removeItem('rememberMe');
       
       toast({
         title: "Выход выполнен",
@@ -118,11 +122,23 @@ export function useAuth() {
     },
     onError: (error) => {
       console.error('Logout error:', error);
+      
+      // Clear data even on error
+      queryClient.clear();
+      queryClient.setQueryData(["/api/auth/me"], null);
+      localStorage.removeItem('currentUserId');
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('tokenExpiry');
+      localStorage.removeItem('rememberMe');
+      
       toast({
         variant: "destructive",
         title: "Ошибка",
         description: "Не удалось выйти из системы",
       });
+      
+      // Force redirect even on error
+      window.location.replace('/auth');
     }
   });
 

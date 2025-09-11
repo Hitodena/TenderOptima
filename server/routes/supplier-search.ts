@@ -3,6 +3,7 @@ import { spawn } from 'child_process';
 import { db } from '../db';
 import { suppliers } from '@shared/schema';
 import { subscriptionService } from '../subscription';
+import { requireAuth } from '../middleware/requireAuth';
 
 const router = Router();
 
@@ -21,10 +22,15 @@ interface SearchResult {
  * POST /api/supplier-search
  * Unified supplier search using a dedicated Python microservice
  */
-router.post('/', async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   try {
     const { query, queries, sources, maxResults = 50, regions = ["ru"], language = "ru" } = req.body;
-    const userId = req.session?.passport?.user || req.session?.userId || 1;
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      console.log('[SupplierSearch] No authenticated user found');
+      return res.status(401).json({ error: 'Authentication required' });
+    }
     
     // Поддерживаем как старый формат (query), так и новый (queries)
     let searchQueries: string[];
@@ -190,47 +196,35 @@ async function callPythonParser(query: string, elements: number, userId: string,
     
     console.log(`[SupplierSearch] Using region code: ${region} for regions:`, regions);
     
-    const pythonProcess = spawn('python', ['parsers/main.py', query, elements.toString(), userId, region], {
-      cwd: process.cwd(),
-      stdio: ['pipe', 'pipe', 'pipe']
-    });
+    console.log(`[PythonParser] Making HTTP request to Python microservice`);
+    
+    try {
+      const response = await fetch('http://localhost:5001/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query,
+          elements,
+          user_id: userId,
+          region
+        })
+      });
 
-    let stdout = '';
-    let stderr = '';
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
-    pythonProcess.stdout.on('data', (data) => {
-      stdout += data.toString();
-    });
-
-    pythonProcess.stderr.on('data', (data) => {
-      stderr += data.toString();
-    });
-
-    pythonProcess.on('close', (code) => {
-      console.log(`[PythonParser] Process exited with code ${code}`);
+      const results = await response.json();
+      console.log(`[PythonParser] Successfully received ${results.length} results from microservice`);
+      resolve(results);
       
-      if (code !== 0) {
-        console.error(`[PythonParser] Error output:`, stderr);
-        return reject(new Error(`Python parser failed with exit code ${code}: ${stderr}`));
-      }
+    } catch (error) {
+      console.error(`[PythonParser] HTTP request failed:`, error);
+      reject(new Error(`Failed to communicate with Python microservice: ${error.message}`));
+    }
 
-      try {
-        // Парсим JSON из вывода Python скрипта
-        const results = JSON.parse(stdout);
-        console.log(`[PythonParser] Successfully parsed ${results.length} results`);
-        resolve(results);
-      } catch (parseError) {
-        const errorMessage = parseError instanceof Error ? parseError.message : 'Unknown parse error';
-        console.error(`[PythonParser] JSON parse error:`, parseError);
-        console.error(`[PythonParser] Raw output:`, stdout);
-        reject(new Error(`Failed to parse Python output as JSON: ${errorMessage}`));
-      }
-    });
-
-    pythonProcess.on('error', (error) => {
-      console.error(`[PythonParser] Process error:`, error);
-      reject(new Error(`Failed to start Python process: ${error.message}`));
-    });
   });
 }
 

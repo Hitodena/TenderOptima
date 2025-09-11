@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { verifyToken } from '../auth';
 
 // Переменные окружения для режима разработки
 const SKIP_AUTH = process.env.SKIP_AUTH === 'true';
@@ -18,6 +19,7 @@ if (process.env.NODE_ENV === 'production') {
  * Middleware для проверки аутентификации
  * Проверяет, аутентифицирован ли пользователь, прежде чем разрешить доступ к маршруту
  * Поддерживает DEV_MODE и SKIP_AUTH для режима разработки
+ * Также поддерживает Bearer token authentication
  */
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   // Check if authentication should be bypassed in development mode
@@ -34,6 +36,30 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
     // Set admin user for the request
     req.user = { id: 1, username: 'admin', role: 'admin' };
     return next();
+  }
+
+  // Check for Bearer token authentication
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7);
+    try {
+      const tokenVerification = verifyToken(token);
+      if (tokenVerification.valid) {
+        console.log('[Auth] Bearer token authentication successful for user:', tokenVerification.userId);
+        req.user = { 
+          id: tokenVerification.userId, 
+          username: undefined, // We'll need to fetch this from DB if needed
+          role: undefined // We'll need to fetch this from DB if needed
+        };
+        return next();
+      } else {
+        console.log('[Auth] Invalid Bearer token:', tokenVerification.error);
+        // Continue to check other authentication methods
+      }
+    } catch (error) {
+      console.log('[Auth] Error verifying Bearer token:', error);
+      // Continue to check other authentication methods
+    }
   }
 
   // Check if user is authenticated via session

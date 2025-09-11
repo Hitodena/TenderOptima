@@ -53,6 +53,11 @@ export function useSubscription() {
         const data: SubscriptionData = await response.json();
         setSubscription(data.subscription);
         setError(null);
+      } else if (response.status === 401) {
+        // Authentication required - this is expected for unauthenticated users
+        console.log('Subscription fetch: Authentication required');
+        setSubscription(null);
+        setError(null);
       } else {
         throw new Error('Failed to fetch subscription');
       }

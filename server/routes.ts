@@ -63,13 +63,8 @@ import { z } from "zod";
 import { SearchRequest, InsertSearchRequest, Supplier, SupplierMatch, RequestSupplier } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ - перехватываем ВСЕ POST запросы
+  // Minimal request logging for performance
   app.use((req, res, next) => {
-    if (req.method === 'POST' && req.path.includes('send-email')) {
-      console.log("🔥 КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ POST:", req.method, req.path);
-      console.log("🔥 Body suppliers:", req.body?.suppliers);
-      console.log("🔥 Body suppliers length:", req.body?.suppliers?.length);
-    }
     next();
   });
 

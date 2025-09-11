@@ -43,18 +43,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     try {
       await apiRequest("/api/auth/logout", "POST");
-      // Clear local storage
-      localStorage.removeItem("accessToken");
-      localStorage.removeItem("tokenExpiry");
-      
-      // Force a refetch to update the auth state
-      await refetch();
-      
-      return true;
     } catch (error) {
-      console.error("Logout failed:", error);
-      return false;
+      console.error("Logout request failed:", error);
     }
+    
+    // Always clear local storage and cache
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("tokenExpiry");
+    localStorage.removeItem("rememberMe");
+    
+    // Clear all cached data
+    queryClient.clear();
+    
+    // Set user data to null immediately
+    queryClient.setQueryData(["/api/auth/me"], null);
+    
+    // Force immediate redirect to auth page
+    window.location.replace('/auth');
+    
+    return true;
   };
 
   // Check if user has admin privileges

@@ -7,21 +7,14 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { execSync } from 'child_process';
-import pg from 'pg';
 import OpenAI from 'openai';
 import crypto from 'crypto';
+import { pool } from '../db'; // Используем глобальный пул подключений
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const router = Router();
-const { Pool } = pg;
-
-// Database connection using environment variables
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
-});
 
 // Initialize DeepSeek API client (only if key is available)
 let openai: OpenAI | null = null;

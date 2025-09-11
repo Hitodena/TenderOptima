@@ -271,6 +271,7 @@ export function EnhancedAuthProvider({ children }: { children: ReactNode }) {
     },
     onSuccess: () => {
       queryClient.setQueryData(["user"], null);
+      queryClient.setQueryData(["/api/auth/me"], null);
       queryClient.clear();
       
       toast({
@@ -278,12 +279,17 @@ export function EnhancedAuthProvider({ children }: { children: ReactNode }) {
         description: "Вы успешно вышли из системы",
         variant: "default",
       });
+      
+      // Force immediate redirect to auth page
+      window.location.replace('/auth');
     },
     onError: (error: any) => {
       console.error('Logout error:', error);
       
       // Even if logout fails on server, clear local data
       queryClient.setQueryData(["user"], null);
+      queryClient.setQueryData(["/api/auth/me"], null);
+      queryClient.clear();
       localStorage.removeItem('accessToken');
       localStorage.removeItem('tokenExpiry');
       localStorage.removeItem('rememberMe');
@@ -293,6 +299,9 @@ export function EnhancedAuthProvider({ children }: { children: ReactNode }) {
         description: "Вы вышли из системы (возможны проблемы с сервером)",
         variant: "default",
       });
+      
+      // Force redirect even on error
+      window.location.replace('/auth');
     },
   });
 

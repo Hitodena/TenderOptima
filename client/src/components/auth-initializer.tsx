@@ -60,12 +60,15 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
       setIsReady(true);
       
       // Если пользователь не авторизован, но есть токен, попробуем запросить данные еще раз
+      // Только если это не результат logout (проверяем, что токен не был удален недавно)
       if (!user) {
         const accessToken = localStorage.getItem('accessToken');
         if (accessToken) {
           console.log('[Auth] Есть токен, но нет пользователя. Повторный запрос данных.');
           // Инвалидируем кэш запроса пользователя, чтобы заставить его перезагрузиться
           queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+        } else {
+          console.log('[Auth] Нет токена, пользователь не авторизован');
         }
       }
     }
