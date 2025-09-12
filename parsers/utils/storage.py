@@ -3,8 +3,9 @@ from pathlib import Path
 from typing import Dict, List
 
 import pandas as pd
+from pandas.errors import EmptyDataError
 
-from utils.logger import CustomLogger
+from .logger import CustomLogger
 
 logger = CustomLogger("SavingModule", "SavingModule.log", debug=True, console=True).get_logger()
 cache_pattern = "cache_{query}_{date}.csv"  # YYYY-MM-DD

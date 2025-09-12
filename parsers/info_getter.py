@@ -8,7 +8,7 @@ from email_validator import EmailNotValidError, validate_email
 from fake_useragent import UserAgent
 from selectolax.parser import HTMLParser
 
-from utils.logger import CustomLogger
+from .utils.logger import CustomLogger
 
 logger = CustomLogger(
     "ContactInfoGetter", "ContactInfoGetter.log", debug=False, console=True

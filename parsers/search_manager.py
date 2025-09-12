@@ -3,9 +3,9 @@ from pathlib import Path
 from typing import Dict, List
 from urllib.parse import urlparse, urlunparse
 
-from parsers.google_parser import parse_google
-from parsers.yandex_parser import yandex_fetch_all
-from utils.logger import CustomLogger
+from .parsers.google_parser import parse_google
+from .parsers.yandex_parser import yandex_fetch_all
+from .utils.logger import CustomLogger
 
 # ============ Configuration ============
 

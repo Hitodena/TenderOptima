@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 from googleapiclient.errors import HttpError
 from langchain_google_community import GoogleSearchAPIWrapper
 
-from utils.logger import CustomLogger
+from ..utils.logger import CustomLogger
 
 logger = CustomLogger("GoogleParser", "GoogleParser.log", debug=False, console=True).get_logger()
 

@@ -7,10 +7,10 @@ from typing import Dict, List, Optional
 
 import aiohttp
 
-from info_getter import get_info
-from search_manager import fetch_all
-from utils.logger import CustomLogger
-from utils.storage import save_to_csv
+from .info_getter import get_info
+from .search_manager import fetch_all
+from .utils.logger import CustomLogger
+from .utils.storage import save_to_csv
 
 logger = CustomLogger(
     logger_name="SupplierFinderParser", file_path="SupplierFinderParser.log", debug=True, console=True
@@ -151,8 +151,8 @@ if __name__ == "__main__":
     user_id = sys.argv[3] if len(sys.argv) > 3 else "1"
     
     # Load environment variables for API keys
-    google_api = os.getenv("GOOGLE_SEARCH_API_KEY")
-    google_id = os.getenv("GOOGLE_SEARCH_ENGINE_ID")
+    google_api = os.getenv("GOOGLE_SEARCH_API_TOKEN")
+    google_id = os.getenv("GOOGLE_CUSTOM_SEARCH_ENGINE_ID")
     yandex_key_path = os.getenv("YANDEX_KEY_FILE")
     yandex_folder = os.getenv("YANDEX_FOLDER_ID")
     
