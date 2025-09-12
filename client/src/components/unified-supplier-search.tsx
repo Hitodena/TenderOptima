@@ -10,9 +10,10 @@ import type { Supplier } from "@shared/schema";
 
 interface UnifiedSupplierSearchProps {
   onSuppliersFound: (suppliers: Supplier[]) => void;
+  selectedRegions: string[]; // <-- Добавлено
 }
 
-export function UnifiedSupplierSearch({ onSuppliersFound }: UnifiedSupplierSearchProps) {
+export function UnifiedSupplierSearch({ onSuppliersFound, selectedRegions }: UnifiedSupplierSearchProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [elements, setElements] = useState(50);
@@ -63,7 +64,7 @@ export function UnifiedSupplierSearch({ onSuppliersFound }: UnifiedSupplierSearc
             google: useGoogleSearch
           },
           includeAds: includeAds,
-          regions: ['Россия'], // Default region
+          regions: selectedRegions, // <-- Заменено
           language: 'ru'
         }),
       });

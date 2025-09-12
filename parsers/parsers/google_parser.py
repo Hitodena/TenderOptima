@@ -26,7 +26,7 @@ async def parse_page(
         List[Dict[str, str]]: List of dictionaries with domain and description.
     """
     try:
-        params = {"gl": region, "hl": region, "start": start}
+        params = { "gl": region, "hl": region, "cr": "country" + region.upper(), "start": start, }
         batch = await asyncio.to_thread(search.results, query, 10, params)
 
         results = []
