@@ -374,11 +374,15 @@ export async function setupAuth(app: Express) {
           const [user] = await db.select().from(users).where(eq(users.username, username));
           
           if (!user) {
-            return done(null, false, { message: 'Пользователь с таким email не найден. Возможно, вам нужно зарегистрироваться' });
+            // Log detailed error for security monitoring but return generic message
+            console.log(`Login attempt failed: User not found for email: ${username}`);
+            return done(null, false, { message: 'Неверный email или пароль' });
           }
           
           if (!(await comparePasswords(password, user.password))) {
-            return done(null, false, { message: 'Неверный пароль. Если вы забыли пароль, воспользуйтесь функцией восстановления' });
+            // Log detailed error for security monitoring but return generic message
+            console.log(`Login attempt failed: Invalid password for user: ${username}`);
+            return done(null, false, { message: 'Неверный email или пароль' });
           }
           
           // Update last login time
@@ -395,7 +399,8 @@ export async function setupAuth(app: Express) {
             language: user.language || 'ru'
           });
         } catch (error) {
-          return done(error);
+          console.error('Authentication error:', error);
+          return done(null, false, { message: 'Неверный email или пароль' });
         }
       })
     );
@@ -564,7 +569,8 @@ export async function setupAuth(app: Express) {
           // Create security alert
           createFailedLoginAlert(ip, username, error);
           
-          return res.status(401).json({ error: info?.message || 'Ошибка аутентификации' });
+          // Return generic error message for security
+          return res.status(401).json({ error: 'Неверный email или пароль' });
         }
         
         console.log('Пользователь найден, пытаемся войти в систему:', user.username, user.id);

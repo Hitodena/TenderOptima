@@ -7,7 +7,7 @@ import { Request, Response } from 'express';
  */
 export const authRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 минут
-  max: 5, // максимум 5 попыток за 15 минут
+  max: 10, // максимум 5 попыток за 15 минут
   message: {
     error: 'Слишком много попыток входа. Попробуйте снова через 15 минут.',
     retryAfter: 15 * 60 // секунды до следующей попытки

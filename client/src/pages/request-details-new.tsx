@@ -191,8 +191,18 @@ export default function RequestDetails() {
     },
     onSuccess: async (data: EmailCheckResponse) => {
       if (data.newResponses > 0) {
-        // Simplified cache invalidation
+        // Force immediate data refresh by invalidating and refetching
         await queryClient.invalidateQueries({ queryKey: ['/api/search-requests', id] });
+        await queryClient.invalidateQueries({ queryKey: ['/api/supplier-responses', id] });
+        await queryClient.invalidateQueries({ queryKey: ['/api/supplier-responses-batch'] });
+        
+        // Force refetch the current request data immediately
+        try {
+          await refetch();
+          console.log('Data refetched successfully after email check');
+        } catch (refetchError) {
+          console.error('Error refetching data after email check:', refetchError);
+        }
         
         toast({
           title: "Email Check Complete",
@@ -211,12 +221,20 @@ export default function RequestDetails() {
           variant: "default"
         });
       }
+    },
+    onError: (error) => {
+      console.error('Email check failed:', error);
+      toast({
+        title: "Email Check Failed",
+        description: error instanceof Error ? error.message : "Failed to check emails",
+        variant: "destructive"
+      });
     }
   });
 
   // OPTIMIZED: Simplified auto-selection - only when switching to responses tab
   useEffect(() => {
-    if (tab === "responses" && !hasAutoSelectedFirstEmail && data?.supplierResponses?.length > 0) {
+    if (tab === "responses" && !hasAutoSelectedFirstEmail && data?.supplierResponses && data.supplierResponses.length > 0) {
       const firstResponse = data.supplierResponses[0];
       
       // Use simplified selection without automatic parameter extraction
@@ -225,7 +243,7 @@ export default function RequestDetails() {
       
       console.log("Auto-selected first email:", firstResponse.id);
     }
-  }, [tab, data?.supplierResponses, hasAutoSelectedFirstEmail]);
+  }, [tab, data?.supplierResponses, hasAutoSelectedFirstEmail, handleSupplierSelect]);
 
   // Update status mutation
   const updateStatusMutation = useMutation({
@@ -462,6 +480,10 @@ export default function RequestDetails() {
                       try {
                         setIsCompareLoading(true);
                         localStorage.setItem("compareSuppliers", JSON.stringify(selectedSupplierResponses));
+                        
+                        // Добавляем информацию о сортировке по цене за единицу без НДС
+                        localStorage.setItem("compareSortBy", "Цена за единицу без НДС");
+                        localStorage.setItem("compareSortOrder", "asc");
                         
                         if (request?.id) {
                           localStorage.setItem("compareRequestId", request.id.toString());

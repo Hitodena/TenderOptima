@@ -60,8 +60,8 @@ export default function Dashboard() {
     queryKey: ['/api/supplier-responses-batch', activeRequestIds],
     enabled: activeRequestIds.length > 0,
     staleTime: 15000,  // 15 seconds - reasonable caching
-    refetchOnWindowFocus: false,
-    refetchInterval: false,
+    refetchOnWindowFocus: true, // Рекомендуется включить для лучшего UX
+    refetchInterval: 20000, // Автоматически обновлять каждые 20 секунд
     gcTime: 60000,     // 1 minute - allow some caching
     queryFn: async () => {
       console.log("Batch loading responses for", activeRequestIds.length, "requests");

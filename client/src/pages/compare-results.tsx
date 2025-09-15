@@ -770,6 +770,22 @@ export default function CompareResultsPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showSortDropdown]);
   
+  // Auto-sort by unit cost without VAT when coming from compare button
+  useEffect(() => {
+    const storedSortBy = localStorage.getItem('compareSortBy');
+    const storedSortOrder = localStorage.getItem('compareSortOrder');
+    
+    if (storedSortBy && storedSortOrder) {
+      console.log('🔄 Applying stored sort settings:', { sortBy: storedSortBy, sortOrder: storedSortOrder });
+      setSortBy(storedSortBy);
+      setSortOrder(storedSortOrder as 'asc' | 'desc');
+      
+      // Clear the stored settings after applying them
+      localStorage.removeItem('compareSortBy');
+      localStorage.removeItem('compareSortOrder');
+    }
+  }, []);
+  
   // Function to sort suppliers based on selected parameter
   const sortSuppliers = (suppliers: any[], sortBy: string, sortOrder: 'asc' | 'desc') => {
     console.log('🔍 sortSuppliers called:', { suppliersCount: suppliers.length, sortBy, sortOrder });
