@@ -606,12 +606,12 @@ export default function RequestDetails() {
           <div className="flex flex-col justify-end">
             {/* OPTIMIZED: Parameter extraction panel - loads only when response is selected */}
             {tab === 'responses' && (
-              <Card className="border-primary/30 h-[600px] overflow-hidden">
-                <CardHeader className="bg-primary/5">
+              <Card className="border-primary/30 h-[600px] overflow-hidden flex flex-col">
+                <CardHeader className="bg-primary/5 flex-shrink-0">
                   <CardTitle>Извлеченные параметры</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
+                <CardContent className="flex-1 overflow-hidden min-h-0">
+                  <div className="space-y-3 h-full min-h-0">
                     {activeResponse ? (
                       <ParameterExtractionStatus
                         key={`parameters-${activeResponse.id}`} // Force re-render when responseId changes

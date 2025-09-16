@@ -149,7 +149,7 @@ export class AsyncEmailProcessor {
           attachments: [{
             filename: attachment.filename || 'unknown',
             contentType: attachment.contentType || 'application/octet-stream',
-            content: attachment.content,
+            content: attachment.content, // ← Передаем исходный base64 контент
             size: fileBuffer.length
           }]
         };

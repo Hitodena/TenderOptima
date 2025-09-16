@@ -513,13 +513,13 @@ export function ParameterExtractionStatus({
           </Button>
         </div>
         
-        <Card className="bg-gradient-to-br from-slate-50 to-slate-100/50 mt-3 border-slate-200 shadow-md hover:shadow-lg transition-shadow duration-300">
-          <CardContent className="p-2">
+        <Card className="bg-gradient-to-br from-slate-50 to-slate-100/50 mt-3 border-slate-200 shadow-md hover:shadow-lg transition-shadow duration-300 h-full flex flex-col">
+          <CardContent className="p-2 flex-1 flex flex-col min-h-0">
             {supplierName && (
-              <h4 className="text-sm font-semibold mb-3 text-slate-700 border-b border-slate-200 pb-1.5">{supplierName}</h4>
+              <h4 className="text-sm font-semibold mb-3 text-slate-700 border-b border-slate-200 pb-1.5 flex-shrink-0">{supplierName}</h4>
             )}
-            <div className="h-[calc(600px-100px)] pr-2 overflow-y-scroll scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
-              <div className="space-y-1.5 text-sm pb-32">
+            <div className="h-[400px] pr-2 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
+              <div className="space-y-1.5 text-sm pb-2">
                 {displayableParameters().length > 0 ? (
                   displayableParameters().map((param, index) => (
                     <div key={index} className="bg-white/50 rounded-lg p-1.5 border border-slate-200/50 hover:border-slate-300 transition-colors duration-200">

@@ -735,7 +735,7 @@ export function ResponsePanel({
                           <Button
                             variant="outline"
                             size="icon"
-                            className="h-8 w-8"
+                            className="h-8 w-8 hidden"
                             onClick={() => handleToggleFavorite(activeResponse.id)}
                           >
                             <Star 
@@ -757,7 +757,7 @@ export function ResponsePanel({
                           <Button
                             variant="outline"
                             size="icon"
-                            className="h-8 w-8"
+                            className="h-8 w-8 hidden"
                             onClick={async () => {
                               // Automatically open parameter viewer with current active response
                               
