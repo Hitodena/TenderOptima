@@ -376,9 +376,10 @@ export default function RequestDetails() {
   } = data || {};
 
   const unreadResponsesCount = supplierResponses.filter(r => !r.isRead).length;
-  const totalContacted = requestSuppliers.length;
+  // Считаем только уникальных поставщиков по email (первые запросы)
+  const uniqueContactedSuppliers = new Set(requestSuppliers.map(rs => rs.supplierEmail)).size;
   const uniqueSupplierEmails = new Set(supplierResponses.map(r => r.supplierEmail)).size;
-  const responseRate = totalContacted > 0 ? Math.round((uniqueSupplierEmails / totalContacted) * 100) : 0;
+  const responseRate = uniqueContactedSuppliers > 0 ? Math.round((uniqueSupplierEmails / uniqueContactedSuppliers) * 100) : 0;
   const formattedDate = request?.createdAt 
     ? format(new Date(request.createdAt), 'dd.MM.yyyy')
     : "Unknown date";
@@ -467,7 +468,7 @@ export default function RequestDetails() {
                   <CardContent>
                     <div className="grid grid-cols-3 gap-4 text-center">
                       <div className="p-4 bg-muted rounded-lg">
-                        <p className="text-2xl font-bold">{totalContacted}</p>
+                        <p className="text-2xl font-bold">{uniqueContactedSuppliers}</p>
                         <p className="text-sm text-muted-foreground">Отправлено запросов</p>
                       </div>
                       <div className="p-4 bg-muted rounded-lg">

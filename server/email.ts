@@ -49,7 +49,20 @@ class EmailService {
           },
           tls: {
             rejectUnauthorized: false
-          }
+          },
+          // Настройки для оптимизации отправки больших файлов
+          pool: true, // Используем пул соединений
+          maxConnections: 5, // Максимум 5 одновременных соединений
+          maxMessages: 100, // Максимум 100 сообщений на соединение
+          rateDelta: 20000, // Интервал между отправками (20 сек)
+          rateLimit: 5, // Максимум 5 сообщений в интервал
+          // Таймауты для больших файлов
+          connectionTimeout: 60000, // 60 секунд на подключение
+          greetingTimeout: 30000, // 30 секунд на приветствие
+          socketTimeout: 60000, // 60 секунд на сокет
+          // Дополнительные настройки для стабильности
+          debug: false,
+          logger: false
         });
 
         // Verify connection
@@ -129,7 +142,7 @@ class EmailService {
         actualPassword = userConfig.emailPassword;
       }
 
-      // Create personal transporter
+      // Create personal transporter with optimized settings for large files
       const transporter = nodemailer.createTransport({
         host: userConfig.smtpHost,
         port: userConfig.smtpPort,
@@ -140,7 +153,20 @@ class EmailService {
         },
         tls: {
           rejectUnauthorized: false
-        }
+        },
+        // Настройки для оптимизации отправки больших файлов
+        pool: true, // Используем пул соединений
+        maxConnections: 3, // Меньше соединений для персональных аккаунтов
+        maxMessages: 50, // Меньше сообщений на соединение
+        rateDelta: 30000, // Больший интервал для персональных аккаунтов (30 сек)
+        rateLimit: 3, // Меньше сообщений в интервал
+        // Таймауты для больших файлов
+        connectionTimeout: 60000, // 60 секунд на подключение
+        greetingTimeout: 30000, // 30 секунд на приветствие
+        socketTimeout: 60000, // 60 секунд на сокет
+        // Дополнительные настройки для стабильности
+        debug: false,
+        logger: false
       });
 
       // Verify connection

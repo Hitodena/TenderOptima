@@ -1999,7 +1999,7 @@ app.post("/api/check-emails", requireAuth, async (req, res) => {
         return res.status(403).json({ error: "У вас нет доступа к этому запросу" });
       }
 
-      // Enhanced sanitization of attachments for replies
+      // Enhanced sanitization of attachments for replies with async processing for large files
       let sanitizedAttachments: {
         filename: string;
         contentType: string;
@@ -2011,8 +2011,8 @@ app.post("/api/check-emails", requireAuth, async (req, res) => {
       if (attachments && Array.isArray(attachments) && attachments.length > 0) {
         console.log(`Reply includes ${attachments.length} attachments`);
 
-        // Process each attachment to ensure it has valid content
-        sanitizedAttachments = attachments.map(attachment => {
+        // Process attachments asynchronously to avoid blocking the main thread
+        const processAttachment = async (attachment: any) => {
           if (!attachment.filename || !attachment.contentType || !attachment.content) {
             console.warn(`Attachment in reply missing required fields, trying to fix`);
             return {
@@ -2051,7 +2051,17 @@ app.post("/api/check-emails", requireAuth, async (req, res) => {
             encoding: 'base64',
             size: typeof processedContent === 'string' ? processedContent.length : 0
           };
-        }).filter(attachment => attachment.content && attachment.content.length > 0);
+        };
+
+        // Process all attachments in parallel with Promise.allSettled to handle errors gracefully
+        const attachmentPromises = attachments.map(processAttachment);
+        const results = await Promise.allSettled(attachmentPromises);
+        
+        // Filter successful results and valid content
+        sanitizedAttachments = results
+          .filter((result): result is PromiseFulfilledResult<any> => result.status === 'fulfilled')
+          .map(result => result.value)
+          .filter(attachment => attachment.content && attachment.content.length > 0);
 
         console.log(`Processed ${sanitizedAttachments.length} valid attachments out of ${attachments.length} for reply`);
       }
@@ -2632,6 +2642,62 @@ app.post("/api/check-emails", requireAuth, async (req, res) => {
     }
   });
 
+  // Alternative download endpoint with index-based access
+  app.get("/api/attachments/:responseId/:attachmentIndex/download", requireAuth, async (req, res) => {
+    try {
+      const { responseId, attachmentIndex } = req.params;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      const index = parseInt(attachmentIndex);
+      if (isNaN(index)) {
+        return res.status(400).json({ message: "Invalid attachment index" });
+      }
+
+      console.log(`[Server] Fetching attachment at index ${index} for response ${responseId} by user ${userId}`);
+
+      // Get all attachments for this response
+      const attachments = await storage.getSupplierResponseAttachments(parseInt(responseId), userId);
+      
+      if (!attachments || attachments.length === 0) {
+        return res.status(404).json({ message: "No attachments found" });
+      }
+
+      if (index < 0 || index >= attachments.length) {
+        return res.status(404).json({ message: "Attachment index out of range" });
+      }
+
+      const attachment = attachments[index];
+      
+      // Get the full content
+      const attachmentData = await storage.getSupplierResponseAttachmentContent(
+        parseInt(responseId), 
+        attachment.filename, 
+        userId
+      );
+
+      if (!attachmentData) {
+        return res.status(404).json({ message: "Attachment content not found" });
+      }
+
+      // Set appropriate headers for file download
+      res.setHeader('Content-Type', attachmentData.contentType);
+      res.setHeader('Content-Disposition', `attachment; filename="${attachment.filename}"`);
+      res.setHeader('Content-Length', Buffer.from(attachmentData.content, 'base64').length);
+
+      // Send the file content
+      res.send(Buffer.from(attachmentData.content, 'base64'));
+      
+      console.log(`[Server] Successfully served attachment "${attachment.filename}" for response ${responseId}`);
+    } catch (error) {
+      console.error(`Error fetching attachment at index ${req.params.attachmentIndex} for response ${req.params.responseId}:`, error);
+      res.status(500).json({ message: "Failed to fetch attachment", error: String(error) });
+    }
+  });
+
   // Get full attachment content for download
   app.get("/api/attachments/:responseId/:filename", requireAuth, async (req, res) => {
     try {
@@ -2642,16 +2708,19 @@ app.post("/api/check-emails", requireAuth, async (req, res) => {
         return res.status(401).json({ message: "Authentication required" });
       }
 
-      console.log(`[Server] Fetching attachment ${filename} for response ${responseId} by user ${userId}`);
+      // Decode the filename properly
+      const decodedFilename = decodeURIComponent(filename);
+      console.log(`[Server] Fetching attachment "${decodedFilename}" for response ${responseId} by user ${userId}`);
 
       // Get the attachment content
       const attachmentData = await storage.getSupplierResponseAttachmentContent(
         parseInt(responseId), 
-        filename, 
+        decodedFilename, 
         userId
       );
 
       if (!attachmentData) {
+        console.log(`[Server] Attachment not found: "${decodedFilename}" for response ${responseId}`);
         return res.status(404).json({ message: "Attachment not found or access denied" });
       }
 
@@ -2659,8 +2728,8 @@ app.post("/api/check-emails", requireAuth, async (req, res) => {
       res.setHeader('Content-Type', attachmentData.contentType);
       
       // Fix filename encoding for Content-Disposition header
-      // Clean filename to avoid invalid characters
-      const cleanFilename = filename.replace(/[^\w\s\-\.]/g, '_');
+      // Clean filename to avoid invalid characters but preserve original name
+      const cleanFilename = decodedFilename.replace(/[<>:"/\\|?*]/g, '_');
       const encodedFilename = encodeURIComponent(cleanFilename);
       res.setHeader('Content-Disposition', `attachment; filename="${cleanFilename}"; filename*=UTF-8''${encodedFilename}`);
       res.setHeader('Content-Length', Buffer.from(attachmentData.content, 'base64').length);
@@ -2668,7 +2737,7 @@ app.post("/api/check-emails", requireAuth, async (req, res) => {
       // Send the file content
       res.send(Buffer.from(attachmentData.content, 'base64'));
       
-      console.log(`[Server] Successfully served attachment ${filename} for response ${responseId}`);
+      console.log(`[Server] Successfully served attachment "${decodedFilename}" for response ${responseId}`);
     } catch (error) {
       console.error(`Error fetching attachment ${req.params.filename} for response ${req.params.responseId}:`, error);
       res.status(500).json({ message: "Failed to fetch attachment", error: String(error) });

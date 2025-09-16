@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
@@ -41,37 +41,69 @@ export function AttachmentsList({ responseId, initialAttachments = [] }: Attachm
   // Use cached data or initial attachments
   const attachments = attachmentsData || initialAttachments;
 
-  const handleDownload = async (filename: string) => {
+  const handleDownload = async (filename: string, index?: number) => {
     try {
       setIsLoading(true);
       console.log(`[AttachmentsList] Downloading attachment ${filename} for response ${responseId}`);
       
-      // Create download URL with proper encoding
-      const encodedFilename = encodeURIComponent(filename);
-      const downloadUrl = `/api/attachments/${responseId}/${encodedFilename}`;
+      // Get authentication token
+      const accessToken = localStorage.getItem('accessToken');
       
-      console.log(`[AttachmentsList] Download URL: ${downloadUrl}`);
+      let downloadUrl: string;
       
-      // Create a temporary link element for download
+      // Use index-based download if available (more reliable)
+      if (typeof index === 'number') {
+        downloadUrl = `/api/attachments/${responseId}/${index}/download`;
+        console.log(`[AttachmentsList] Using index-based download URL: ${downloadUrl}`);
+      } else {
+        // Fallback to filename-based download
+        const encodedFilename = encodeURIComponent(filename);
+        downloadUrl = `/api/attachments/${responseId}/${encodedFilename}`;
+        console.log(`[AttachmentsList] Using filename-based download URL: ${downloadUrl}`);
+      }
+      
+      // Fetch the file with proper authentication
+      const response = await fetch(downloadUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${accessToken || ''}`,
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Download failed with status ${response.status}:`, errorText);
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      // Get the file content as blob
+      const blob = await response.blob();
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = downloadUrl;
+      link.href = url;
       link.download = filename;
-      link.target = '_blank';
       
       // Add to DOM, click, and remove
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       
+      // Clean up the URL object
+      window.URL.revokeObjectURL(url);
+      
       toast({
-        title: "Download Started",
-        description: `Downloading ${filename}...`,
+        title: "Скачивание началось",
+        description: `Файл ${filename} загружается...`,
       });
     } catch (error: any) {
       console.error('Download failed:', error);
       toast({
-        title: "Download Failed",
-        description: "Failed to download attachment. Please try again.",
+        title: "Ошибка скачивания",
+        description: "Не удалось скачать вложение. Попробуйте еще раз или обратитесь к своей организации.",
         variant: "destructive"
       });
     } finally {
@@ -125,7 +157,7 @@ export function AttachmentsList({ responseId, initialAttachments = [] }: Attachm
             variant="outline"
             size="sm"
             className="inline-flex items-center gap-2 px-3 py-2 hover:bg-primary/5 hover:border-primary/40 transition-colors"
-            onClick={() => handleDownload(attachment.filename)}
+            onClick={() => handleDownload(attachment.filename, i)}
             disabled={isLoading}
           >
             <span className="text-lg">{getFileIcon(attachment.contentType)}</span>

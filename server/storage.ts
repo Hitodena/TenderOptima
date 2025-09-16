@@ -747,7 +747,7 @@ export class DatabaseStorage implements IStorage {
       return [];
     }
     
-    // OPTIMIZED: Select only essential fields, exclude attachments completely
+    // OPTIMIZED: Select essential fields + attachment metadata only (no content)
     let query = db.select({
       id: supplierResponses.id,
       requestId: supplierResponses.requestId,
@@ -768,7 +768,7 @@ export class DatabaseStorage implements IStorage {
       isFavorite: supplierResponses.isFavorite,
       messageId: supplierResponses.messageId,
       isAnalyzed: supplierResponses.isAnalyzed
-      // НЕ включаем attachments - загружаем отдельно!
+      // НЕ включаем attachments - загружаем отдельно для быстрой загрузки
     }).from(supplierResponses);
     
     // Start with requestId filter if provided
@@ -870,7 +870,7 @@ export class DatabaseStorage implements IStorage {
 
   // Get full attachment content for download
   async getSupplierResponseAttachmentContent(responseId: number, filename: string, userId?: number): Promise<{ content: string; contentType: string } | null> {
-    console.log(`[storage] Getting attachment content ${filename} for response ${responseId}${userId ? ` for user ${userId}` : ''}`);
+    console.log(`[storage] Getting attachment content "${filename}" for response ${responseId}${userId ? ` for user ${userId}` : ''}`);
     
     const response = await db
       .select({ attachments: supplierResponses.attachments })
@@ -886,20 +886,41 @@ export class DatabaseStorage implements IStorage {
       .limit(1);
     
     if (!response || response.length === 0) {
+      console.log(`[storage] No response found for ID ${responseId}`);
       return null;
     }
     
     const attachments = response[0].attachments as any[];
     if (!attachments || !Array.isArray(attachments)) {
+      console.log(`[storage] No attachments array found for response ${responseId}`);
       return null;
     }
     
-    // Find the requested attachment
-    const attachment = attachments.find((att: any) => att.filename === filename);
+    console.log(`[storage] Found ${attachments.length} attachments, looking for "${filename}"`);
+    console.log(`[storage] Available filenames:`, attachments.map((att: any) => att.filename));
     
-    if (!attachment || !attachment.content) {
+    // Find the requested attachment with more flexible matching
+    const attachment = attachments.find((att: any) => {
+      // Exact match first
+      if (att.filename === filename) return true;
+      // Try with decoded filename
+      if (att.filename === decodeURIComponent(filename)) return true;
+      // Try case-insensitive match
+      if (att.filename?.toLowerCase() === filename.toLowerCase()) return true;
+      return false;
+    });
+    
+    if (!attachment) {
+      console.log(`[storage] Attachment "${filename}" not found in response ${responseId}`);
       return null;
     }
+    
+    if (!attachment.content) {
+      console.log(`[storage] Attachment "${filename}" has no content`);
+      return null;
+    }
+    
+    console.log(`[storage] Found attachment "${attachment.filename}" with content length: ${attachment.content.length}`);
     
     return {
       content: attachment.content,

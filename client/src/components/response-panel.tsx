@@ -294,9 +294,9 @@ export function ResponsePanel({
     }
   };
   
-  // Maximum file size - 5MB
-  const MAX_FILE_SIZE = 5 * 1024 * 1024;
-  const MAX_TOTAL_ATTACHMENT_SIZE = 10 * 1024 * 1024;
+  // Maximum file size - 25MB (increased for large presentations/documents)
+  const MAX_FILE_SIZE = 25 * 1024 * 1024;
+  const MAX_TOTAL_ATTACHMENT_SIZE = 50 * 1024 * 1024;
   
   // Format file size for display
   const formatFileSize = (bytes: number): string => {
@@ -318,6 +318,16 @@ export function ResponsePanel({
       // Check for file size limits
       let totalSize = attachments.reduce((sum, file) => sum + file.size, 0);
       let oversizedFiles = Array.from(files).filter(file => file.size > MAX_FILE_SIZE);
+      
+      // Check for large files (warn but allow)
+      const largeFiles = Array.from(files).filter(file => file.size > 10 * 1024 * 1024); // > 10MB
+      if (largeFiles.length > 0) {
+        toast({
+          title: "Большие файлы обнаружены",
+          description: `Файлы размером более 10MB могут замедлить отправку. Рекомендуется сжать файлы перед отправкой.`,
+          variant: "default",
+        });
+      }
       
       // Check if any single file is too large
       if (oversizedFiles.length > 0) {
