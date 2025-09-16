@@ -23,11 +23,13 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { Split, BarChartHorizontal, FileText, Calendar, UserPlus } from "lucide-react";
+import { Split, BarChartHorizontal, FileText, Calendar, UserPlus, RefreshCw } from "lucide-react";
 import { useAnalysisResults } from "@/hooks/use-analysis-results";
 import { ResponsePanel } from "@/components/response-panel";
 import { AddToGroupButton } from "@/components/add-to-group-button";
 import { ParameterExtractionStatus } from "@/components/parameter-extraction-status";
+import { useSocket } from "@/hooks/useSocket";
+import { useUserId } from "@/hooks/useUserId";
 import { useRequestParameters } from "@/hooks/use-request-parameters";
 
 interface RequestDetailsData {
@@ -123,6 +125,37 @@ export default function RequestDetails() {
   const [forceParameterExtraction, setForceParameterExtraction] = useState(false);
   const [isCompareLoading, setIsCompareLoading] = useState(false);
   
+  // Получаем userId для Socket.IO
+  const userId = useUserId();
+  
+  // Socket.IO подключение для real-time уведомлений
+  useSocket({
+    userId: userId || undefined,
+    onNewEmail: (data) => {
+      console.log('📧 RequestDetails: Received new email notification:', data);
+      console.log('📧 RequestDetails: Current request ID:', id);
+      console.log('📧 RequestDetails: New email request ID:', data.requestId);
+      
+      // Если новый email относится к текущему запросу, обновляем данные
+      if (data.requestId === id) {
+        console.log('🔄 RequestDetails: New email for current request, refreshing data...');
+        
+        // Показываем уведомление
+        toast({
+          title: "Новое предложение получено!",
+          description: `От ${data.supplier}: ${data.subject}`,
+        });
+        
+        // Обновляем данные
+        console.log('🔄 RequestDetails: Invalidating queries...');
+        queryClient.invalidateQueries({ queryKey: ['/api/search-requests', 'single', id] });
+        queryClient.invalidateQueries({ queryKey: ['/api/supplier-responses', id] });
+      } else {
+        console.log('📧 RequestDetails: New email for different request, ignoring');
+      }
+    }
+  });
+  
   // OPTIMIZED: Simplified auto-selection tracking
   const [hasAutoSelectedFirstEmail, setHasAutoSelectedFirstEmail] = useState(false);
   
@@ -160,9 +193,11 @@ export default function RequestDetails() {
   
   // OPTIMIZED: Load request details with minimal automatic refetching
   const { data, isLoading, error, refetch } = useQuery<RequestDetailsData>({
-    queryKey: ['/api/search-requests', id],
+    queryKey: ['/api/search-requests', 'single', id], // ✅ ИСПРАВЛЕНО: уникальный ключ для одного запроса
     queryFn: async () => {
+      console.log('🚀 REQUEST-DETAILS: Loading single request', id);
       const response = await apiRequest<RequestDetailsData>(`/api/search-requests/${id}`, 'GET');
+      console.log('🚀 REQUEST-DETAILS: Loaded request', id, 'with', response?.supplierResponses?.length || 0, 'responses');
       // Cache supplier responses for potential future use
       if (response?.supplierResponses && id) {
         queryClient.setQueryData(['/api/supplier-responses', id], response.supplierResponses);
@@ -192,7 +227,7 @@ export default function RequestDetails() {
     onSuccess: async (data: EmailCheckResponse) => {
       if (data.newResponses > 0) {
         // Force immediate data refresh by invalidating and refetching
-        await queryClient.invalidateQueries({ queryKey: ['/api/search-requests', id] });
+        await queryClient.invalidateQueries({ queryKey: ['/api/search-requests', 'single', id] });
         await queryClient.invalidateQueries({ queryKey: ['/api/supplier-responses', id] });
         await queryClient.invalidateQueries({ queryKey: ['/api/supplier-responses-batch'] });
         
@@ -253,8 +288,8 @@ export default function RequestDetails() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/search-requests', id] });
-      queryClient.invalidateQueries({ queryKey: ['/api/search-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/search-requests', 'single', id] });
+      queryClient.invalidateQueries({ queryKey: ['/api/search-requests', 'dashboard'] });
     },
   });
 
@@ -265,13 +300,13 @@ export default function RequestDetails() {
     },
     onSuccess: (_, responseId) => {
       // Optimistic update - update cache immediately
-      const currentData = queryClient.getQueryData<RequestDetailsData>(['/api/search-requests', id]);
+      const currentData = queryClient.getQueryData<RequestDetailsData>(['/api/search-requests', 'single', id]);
       if (currentData?.supplierResponses) {
         const updatedResponses = currentData.supplierResponses.map(response => 
           response.id === responseId ? { ...response, isRead: true } : response
         );
 
-        queryClient.setQueryData(['/api/search-requests', id], {
+        queryClient.setQueryData(['/api/search-requests', 'single', id], {
           ...currentData,
           supplierResponses: updatedResponses
         });
@@ -350,9 +385,9 @@ export default function RequestDetails() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center mb-8">
-          <Button variant="outline" asChild className="mr-4">
+      <div className="container mx-auto px-4 py-4">
+        <div className="flex items-center gap-4 mb-4">
+          <Button variant="outline" asChild>
             <Link href="/dashboard">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
                 <path d="M19 12H5M12 19l-7-7 7-7" />
@@ -360,17 +395,8 @@ export default function RequestDetails() {
               Назад
             </Link>
           </Button>
-          <div>
-            <h1 className="text-3xl font-bold">
-              {request?.productName || 'НОСОК'}
-            </h1>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-          <div className="md:col-span-3">
-            <Tabs value={tab} onValueChange={setTab}>
-              <TabsList>
+          <Tabs value={tab} onValueChange={setTab}>
+            <TabsList>
                 <TabsTrigger value="overview">Общее</TabsTrigger>
                 <TabsTrigger value="responses" className="relative">
                   Ответы поставщиков ({uniqueSupplierEmails})
@@ -381,10 +407,18 @@ export default function RequestDetails() {
                   )}
                 </TabsTrigger>
                 <TabsTrigger value="suppliers">Лист поставщиков</TabsTrigger>
-                <TabsTrigger value="analysis">Анализ результатов</TabsTrigger>
+                <TabsTrigger value="analysis" className="hidden">Анализ результатов</TabsTrigger>
               </TabsList>
+          </Tabs>
+          <h1 className="text-2xl font-bold">
+            {request?.productName || 'НОСОК'}
+          </h1>
+        </div>
 
-              <TabsContent value="overview" className="mt-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="md:col-span-3 h-full">
+            <Tabs value={tab} onValueChange={setTab}>
+              <TabsContent value="overview" className="mt-4">
                 <Card>
                   <CardHeader>
                     <CardTitle>{request.productName}</CardTitle>
@@ -449,7 +483,7 @@ export default function RequestDetails() {
                 </Card>
               </TabsContent>
 
-              <TabsContent value="responses" className="mt-6">
+              <TabsContent value="responses" className="mt-4">
                 <ResponsePanel
                   supplierResponses={supplierResponses}
                   selectedResponses={selectedResponses}
@@ -462,6 +496,8 @@ export default function RequestDetails() {
                       setForceParameterExtraction(true);
                     }
                   }}
+                  onCheckNewOffers={() => checkEmailsMutation.mutate()}
+                  isCheckingOffers={checkEmailsMutation.isPending}
                   onCompare={() => {
                     if (selectedResponses.length < 1) {
                       toast({
@@ -506,7 +542,7 @@ export default function RequestDetails() {
                 />
               </TabsContent>
 
-              <TabsContent value="suppliers" className="mt-6">
+              <TabsContent value="suppliers" className="mt-4">
                 <ScrollArea className="h-[600px] rounded-md border p-4">
                   <div className="space-y-4">
                     {requestSuppliers.map((supplier) => (
@@ -560,31 +596,16 @@ export default function RequestDetails() {
                 </ScrollArea>
               </TabsContent>
 
-              <TabsContent value="analysis" className="mt-6">
+              <TabsContent value="analysis" className="mt-4">
                 <AnalysisResultsTab requestId={request.id} />
               </TabsContent>
             </Tabs>
           </div>
 
-          <div>
-            <Card>
-              <CardHeader>
-                <CardTitle>Действия</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Button 
-                  className="w-full"
-                  onClick={() => checkEmailsMutation.mutate()}
-                  disabled={checkEmailsMutation.isPending}
-                >
-                  {checkEmailsMutation.isPending ? "Проверка..." : "Проверить новые предложения"}
-                </Button>
-              </CardContent>
-            </Card>
-
+          <div className="flex flex-col justify-end">
             {/* OPTIMIZED: Parameter extraction panel - loads only when response is selected */}
             {tab === 'responses' && (
-              <Card className="mt-6 border-primary/30">
+              <Card className="border-primary/30 h-[600px] overflow-hidden">
                 <CardHeader className="bg-primary/5">
                   <CardTitle>Извлеченные параметры</CardTitle>
                 </CardHeader>
@@ -592,6 +613,7 @@ export default function RequestDetails() {
                   <div className="space-y-3">
                     {activeResponse ? (
                       <ParameterExtractionStatus
+                        key={`parameters-${activeResponse.id}`} // Force re-render when responseId changes
                         requestId={request?.id || 0}
                         responseId={activeResponse.id}
                         supplierEmail={activeResponse.supplierEmail || ''}

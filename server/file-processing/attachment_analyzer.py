@@ -111,11 +111,11 @@ class AttachmentAnalyzer:
                 # Check for processing status information
                 processing_status = processed.get('processing_status', {})
                 if processing_status.get('status') == 'success':
-                    logger.info(f"✅ {filename} processed successfully using method: {processing_status.get('method', 'unknown')}")
+                    logger.info(f"Successfully processed {filename} using method: {processing_status.get('method', 'unknown')}")
                 elif processing_status.get('status') == 'partial_failure':
-                    logger.warning(f"⚠️ {filename} processed with warnings: {processing_status.get('user_message', 'unknown issue')}")
+                    logger.warning(f"Warning: {filename} processed with warnings: {processing_status.get('user_message', 'unknown issue')}")
                 else:
-                    logger.warning(f"❓ {filename} processing status unclear: {processing_status}")
+                    logger.warning(f"Warning: {filename} processing status unclear: {processing_status}")
                 
                 # Check if there was an error in processing
                 processing_status = processed.get('processing_status', {})
@@ -134,7 +134,7 @@ class AttachmentAnalyzer:
                 })
                 
             except Exception as e:
-                logger.error(f"❌ CRITICAL ERROR processing {filename}: {str(e)}")
+                logger.error(f"CRITICAL ERROR processing {filename}: {str(e)}")
                 logger.error(f"Traceback for {filename}:")
                 logger.error(traceback.format_exc())
                 

@@ -19,6 +19,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { ParameterExtractionStatus } from "@/components/parameter-extraction-status";
 import { useRequestParameters } from "@/hooks/use-request-parameters";
 import { AnalysisResultsTab } from './AnalysisResultsTab'; // Предполагается, что этот компонент вынесен
+import { RefreshCw } from "lucide-react";
 
 // Основной компонент страницы
 export default function RequestDetails() {
@@ -33,7 +34,7 @@ export default function RequestDetails() {
 
   // Основной запрос для получения всех данных страницы
   const { data, isLoading, error } = useQuery<RequestDetailsData>({
-    queryKey: ['/api/search-requests', id],
+    queryKey: ['/api/search-requests', 'single', id], // ✅ ИСПРАВЛЕНО: уникальный ключ
     queryFn: () => apiRequest(`/api/search-requests/${id}`, 'GET'),
     enabled: !!id,
   });
@@ -48,7 +49,7 @@ export default function RequestDetails() {
           description: `Получено ${response.newResponses} новых ответа. Список будет обновлен.`,
         });
         // Инвалидируем основной запрос, чтобы React Query автоматически его обновил
-        queryClient.invalidateQueries({ queryKey: ['/api/search-requests', id] });
+        queryClient.invalidateQueries({ queryKey: ['/api/search-requests', 'single', id] });
       }
       // Если новых ответов нет, можно не показывать уведомление, чтобы не мешать пользователю
     },
@@ -155,10 +156,17 @@ export default function RequestDetails() {
 
         <div className="mt-6">
           <Button 
+            variant="outline" 
+            size="icon" 
+            className="w-10 h-10"
             onClick={() => checkEmailsMutation.mutate(id)}
             disabled={checkEmailsMutation.isPending}
+            title="Проверить новые предложения"
           >
-            {checkEmailsMutation.isPending ? "Проверка..." : "Проверить новые предложения"}
+            <RefreshCw 
+              size={16} 
+              className={checkEmailsMutation.isPending ? 'animate-spin' : ''} 
+            />
           </Button>
         </div>
       </div>

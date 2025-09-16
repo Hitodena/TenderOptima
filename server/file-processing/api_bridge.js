@@ -97,8 +97,8 @@ async function analyzeBatchResponses(responses) {
  */
 function runPythonAnalyzer(inputFilePath) {
   return new Promise((resolve, reject) => {
-    // Determine Python executable (use python3 explicitly if available)
-    const pythonExecutable = 'python3';
+    // Determine Python executable (use python for Windows compatibility)
+    const pythonExecutable = 'python';
     
     // Check if file exists
     if (!fs.existsSync(ANALYZER_SCRIPT)) {

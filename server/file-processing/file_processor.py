@@ -561,30 +561,40 @@ class FileProcessor:
 
     def _process_old_word(self, file_path: str) -> str:
         """
-        Process older Word document (.doc) using docx2txt and antiword fallback
+        Process older Word document (.doc) using multiple fallback methods
         """
         logger.info(f"Processing old Word document (.doc): {file_path}")
         
-        # Try docx2txt first - it can handle many .doc files
+        # Method 1: Try docx2txt first - it can handle some .doc files
         try:
             logger.info("Trying docx2txt for .doc file")
             text = docx2txt.process(file_path)
             if text and len(text.strip()) > 10:
-                logger.info(f"✅ Successfully extracted {len(text)} characters using docx2txt")
+                logger.info(f"Successfully extracted {len(text)} characters using docx2txt")
                 return text.strip()
             else:
                 logger.warning("docx2txt returned empty or very short text")
         except Exception as e:
             logger.warning(f"docx2txt failed: {str(e)}")
         
-        # Try antiword as fallback
+        # Method 2: Try reading as binary and extracting text manually
+        try:
+            logger.info("Trying binary text extraction for .doc file")
+            text = self._extract_text_from_binary_doc(file_path)
+            if text and len(text.strip()) > 10:
+                logger.info(f"Successfully extracted {len(text)} characters using binary extraction")
+                return text.strip()
+        except Exception as e:
+            logger.warning(f"Binary extraction failed: {str(e)}")
+        
+        # Method 3: Try antiword as fallback (if available)
         try:
             logger.info("Trying antiword for .doc file")
             result = subprocess.run(['antiword', file_path], 
                                   capture_output=True, text=True, timeout=30)
             if result.returncode == 0 and result.stdout.strip():
                 text = result.stdout.strip()
-                logger.info(f"✅ Successfully extracted {len(text)} characters using antiword")
+                logger.info(f"Successfully extracted {len(text)} characters using antiword")
                 return text
             else:
                 logger.warning(f"antiword returned error code {result.returncode}")
@@ -593,8 +603,72 @@ class FileProcessor:
         except Exception as e:
             logger.warning(f"antiword failed: {str(e)}")
         
-        # If both fail, raise error
-        raise Exception("Failed to process .doc file with both docx2txt and antiword")
+        # Method 4: Try LibreOffice conversion (if available)
+        try:
+            logger.info("Trying LibreOffice conversion for .doc file")
+            return self._process_doc_with_libreoffice(file_path)
+        except Exception as e:
+            logger.warning(f"LibreOffice conversion failed: {str(e)}")
+        
+        # If all methods fail, raise error
+        raise Exception("Failed to process .doc file with all available methods")
+    
+    def _extract_text_from_binary_doc(self, file_path: str) -> str:
+        """
+        Extract text from DOC file by reading binary content and looking for text patterns
+        """
+        try:
+            with open(file_path, 'rb') as f:
+                content = f.read()
+            
+            # Look for text patterns in the binary content
+            # DOC files often contain readable text mixed with binary data
+            text_parts = []
+            
+            # Try to decode as UTF-8 with error handling
+            try:
+                decoded = content.decode('utf-8', errors='ignore')
+                # Extract readable text (letters, numbers, spaces, punctuation)
+                import re
+                readable_text = re.findall(r'[a-zA-Zа-яА-Я0-9\s\.,!?;:()\-]+', decoded)
+                if readable_text:
+                    text_parts.extend(readable_text)
+            except:
+                pass
+            
+            # Try to decode as Windows-1251 (common for Russian text)
+            try:
+                decoded = content.decode('windows-1251', errors='ignore')
+                import re
+                readable_text = re.findall(r'[a-zA-Zа-яА-Я0-9\s\.,!?;:()\-]+', decoded)
+                if readable_text:
+                    text_parts.extend(readable_text)
+            except:
+                pass
+            
+            # Try to decode as Latin-1
+            try:
+                decoded = content.decode('latin-1', errors='ignore')
+                import re
+                readable_text = re.findall(r'[a-zA-Zа-яА-Я0-9\s\.,!?;:()\-]+', decoded)
+                if readable_text:
+                    text_parts.extend(readable_text)
+            except:
+                pass
+            
+            if text_parts:
+                # Join all text parts and clean up
+                combined_text = ' '.join(text_parts)
+                # Remove excessive whitespace
+                import re
+                cleaned_text = re.sub(r'\s+', ' ', combined_text).strip()
+                return cleaned_text
+            
+            return ""
+            
+        except Exception as e:
+            logger.warning(f"Binary text extraction failed: {str(e)}")
+            return ""
 
     def _process_doc_with_libreoffice(self, file_path: str) -> str:
         """
@@ -832,7 +906,7 @@ class FileProcessor:
         # OCR как последний fallback для всех файлов (only for actual images)
         methods_to_try.append(('OCR (last resort)', self._process_image))
         
-        logger.info(f"Will try {len(methods_to_try)} methods: {[m[0] for m in methods_to_try]}")
+        logger.info(f"Will try {len(methods_to_try)} methods: {[m[0].encode('ascii', 'replace').decode('ascii') for m in methods_to_try]}")
         
         # 3. Попробовать методы по очереди
         last_error = None
@@ -854,18 +928,18 @@ class FileProcessor:
                         final_result = result
                     
                     if success:
-                        logger.info(f"✅ Successfully processed {filename} using {method_name}")
+                        logger.info(f"Successfully processed {filename} using {method_name}")
                         return final_result, {"status": "success", "method": method_name}
                         
-                logger.warning(f"❌ Method {method_name} returned empty result for {filename}")
+                logger.warning(f"Method {method_name} returned empty result for {filename}")
                 
             except Exception as e:
-                logger.warning(f"❌ Method {method_name} failed for {filename}: {e}")
+                logger.warning(f"Method {method_name} failed for {filename}: {e}")
                 last_error = e
                 continue
         
         # Все методы не сработали
-        logger.error(f"❌ All processing methods failed for {filename}")
+        logger.error(f"All processing methods failed for {filename}")
         error_info = self._create_user_friendly_error(
             last_error or Exception("All processing methods failed"), filename
         )

@@ -24,6 +24,8 @@ if (fs.existsSync(rootEnvPath)) {
 }
 
 import express, { type Request, Response, NextFunction } from "express";
+import { createServer } from "http";
+import { Server as SocketIOServer } from "socket.io";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { setupAuth } from "./auth";
@@ -31,13 +33,95 @@ import { pool } from "./db";
 import cors from "cors";
 import net from "net";
 import { csrfProtection, csrfTokenMiddleware, csrfErrorHandler } from "./middleware/csrfProtection";
+import { PersonalImapService } from "./imap-service-personal";
+import { storage } from "./storage";
 
 // Minimal environment logging for faster startup
 if (process.env.NODE_ENV === 'development') {
   console.log('Starting server in development mode');
 }
 
+// Initialize IMAP service for automatic email checking
+const personalImapService = new PersonalImapService();
+
+// Function to check emails for all users with configured email
+async function checkEmailsForAllUsers() {
+  try {
+    console.log('📧 Checking emails for all users with configured email...');
+    
+    // Get all users with email configuration
+    const usersWithEmail = await storage.getUsersWithEmailConfig();
+    console.log(`📧 Found ${usersWithEmail.length} users with configured email`);
+    
+    if (usersWithEmail.length === 0) {
+      console.log('📧 No users with configured email found');
+      return;
+    }
+    
+    // Check emails for each user using the same approach as manual check
+    for (const user of usersWithEmail) {
+      try {
+        console.log(`📧 Checking emails for user ${user.id} (${user.emailAccount})`);
+        
+        // Use the same approach as manual check - check all requests for this user
+        const result = await personalImapService.checkEmailsOnDemand(undefined, user.id);
+        
+        if (result.success) {
+          console.log(`✅ User ${user.id}: Found ${result.newResponses} new responses`);
+        } else {
+          console.log(`❌ User ${user.id}: ${result.message}`);
+        }
+      } catch (error) {
+        console.error(`❌ Error checking emails for user ${user.id}:`, error);
+      }
+    }
+    
+    console.log('📧 Email check completed for all users');
+  } catch (error) {
+    console.error('❌ Error in checkEmailsForAllUsers:', error);
+  }
+}
+
+// Function to start automatic email checking
+function startAutomaticEmailChecking() {
+  console.log('🔄 Starting automatic email checking...');
+  
+  // Check emails every 2 minutes (120000 ms)
+  const checkInterval = 2 * 60 * 1000;
+  
+  // Initial check after 30 seconds to let server fully start
+  setTimeout(async () => {
+    console.log('📧 Performing initial email check...');
+    try {
+      await checkEmailsForAllUsers();
+      console.log('✅ Initial email check completed');
+    } catch (error) {
+      console.error('❌ Initial email check failed:', error);
+    }
+  }, 30000);
+  
+  // Set up regular interval for email checking
+  setInterval(async () => {
+    console.log('📧 Performing scheduled email check...');
+    try {
+      await checkEmailsForAllUsers();
+      console.log('✅ Scheduled email check completed');
+    } catch (error) {
+      console.error('❌ Scheduled email check failed:', error);
+    }
+  }, checkInterval);
+  
+  console.log(`📧 Automatic email checking configured - checking every ${checkInterval / 1000} seconds`);
+}
+
 const app = express();
+const server = createServer(app);
+const io = new SocketIOServer(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
 
 // Устанавливаем доверие к прокси для корректной работы в Replit
 app.set('trust proxy', 1);
@@ -160,6 +244,32 @@ app.use((req, res, next) => {
     throw err;
   });
 
+  // Setup Socket.IO for real-time updates
+  io.on('connection', (socket) => {
+    console.log('🔌 Client connected to Socket.IO:', socket.id);
+    
+    // Handle user authentication for socket
+    socket.on('authenticate', (data) => {
+      console.log('🔐 Socket authentication attempt:', data);
+      if (data.userId) {
+        socket.join(`user_${data.userId}`);
+        console.log(`👤 User ${data.userId} joined their room`);
+      }
+    });
+    
+    socket.on('disconnect', () => {
+      console.log('🔌 Client disconnected from Socket.IO:', socket.id);
+    });
+    
+    // Log all events for debugging
+    socket.onAny((event, ...args) => {
+      console.log(`📡 Socket event received: ${event}`, args);
+    });
+  });
+
+  // Export io for use in other modules
+  (global as any).io = io;
+
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
@@ -232,6 +342,16 @@ app.use((req, res, next) => {
       host: "0.0.0.0",
     }, () => {
       log(`serving on port ${port}`);
+      
+      // Start automatic email checking after server is ready (if enabled)
+      const enableEmailChecking = process.env.ENABLE_EMAIL_CHECKING === 'true';
+      if (enableEmailChecking) {
+        console.log('📧 Email checking is ENABLED - starting automatic email checking...');
+        startAutomaticEmailChecking();
+      } else {
+        console.log('📧 Email checking is DISABLED - skipping automatic email checking');
+        console.log('📧 To enable email checking, set ENABLE_EMAIL_CHECKING=true in your environment');
+      }
     });
 
   } catch (error) {

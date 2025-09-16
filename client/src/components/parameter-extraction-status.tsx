@@ -62,8 +62,7 @@ export function ParameterExtractionStatus({
     }
   }, [forceExtract, responseId]);
 
-  // Check for existing extracted parameters when responseId changes
-  // and automatically start extraction if no parameters found
+  // Load pre-processed parameters when responseId changes
   useEffect(() => {
     // Only run if the responseId changes and we're not already refreshing
     if (responseId === responseIdRef.current || isRefreshing) {
@@ -73,6 +72,11 @@ export function ParameterExtractionStatus({
     // Update the ref
     responseIdRef.current = responseId;
     
+    // Reset state immediately when responseId changes
+    console.log(`[ParameterExtractionStatus] ResponseId changed to ${responseId}, resetting state`);
+    setParameters(null);
+    setStatus('loading');
+    
     // Only check if we have valid IDs
     if (!responseId || !requestId) {
       setParameters(null);
@@ -80,11 +84,13 @@ export function ParameterExtractionStatus({
       return;
     }
 
-    // Check if parameters exist in the database and automatically extract if needed
-    const loadParametersFromDatabase = async () => {
+    // Load pre-processed parameters from backend
+    const loadPreProcessedParameters = async () => {
       setStatus('loading');
       
       try {
+        console.log(`[ParameterExtractionStatus] Loading pre-processed parameters for response ${responseId}`);
+        
         // Get the request parameters first
         if (requestParametersList.length === 0) {
           console.log('Loading request parameters for request', requestId);
@@ -100,8 +106,8 @@ export function ParameterExtractionStatus({
           }
         }
         
-        // Check if parameters already exist in the database
-        console.log(`Checking for existing parameters for response ${responseId}`);
+        // Check if parameters already exist in the database (pre-processed)
+        console.log(`Checking for existing pre-processed parameters for response ${responseId}`);
         const result = await getExtractedParameters(responseId);
         
         // Check if the response has status "no_parameters_found"
@@ -149,10 +155,10 @@ export function ParameterExtractionStatus({
           }
         }
         
-        // If no parameters found, automatically start extraction
-        console.log(`No valid parameters found for response ${responseId}, starting extraction automatically`);
-        setStatus('loading');
-        tryExtractParameters();
+        // If no parameters found, show no-parameters status (no automatic extraction)
+        console.log(`No valid parameters found for response ${responseId} - parameters should be pre-processed on backend`);
+        setParameters({});
+        setStatus('no-parameters');
       } catch (error) {
         console.error('Error loading parameters from database:', error);
         // Set status to idle so the user can manually trigger extraction
@@ -160,8 +166,9 @@ export function ParameterExtractionStatus({
       }
     };
     
-    loadParametersFromDatabase();
+    loadPreProcessedParameters();
   }, [responseId, requestId, onParametersExtracted, isRefreshing]);
+
 
   // Handle case when no parameters were selected for this request
   if (requestParametersList.length === 0) {
@@ -507,16 +514,16 @@ export function ParameterExtractionStatus({
         </div>
         
         <Card className="bg-gradient-to-br from-slate-50 to-slate-100/50 mt-3 border-slate-200 shadow-md hover:shadow-lg transition-shadow duration-300">
-          <CardContent className="p-4">
+          <CardContent className="p-2">
             {supplierName && (
-              <h4 className="text-sm font-semibold mb-4 text-slate-700 border-b border-slate-200 pb-2">{supplierName}</h4>
+              <h4 className="text-sm font-semibold mb-3 text-slate-700 border-b border-slate-200 pb-1.5">{supplierName}</h4>
             )}
-            <div className="h-[240px] pr-2 overflow-y-scroll scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
-              <div className="space-y-3 text-sm">
+            <div className="h-[calc(600px-100px)] pr-2 overflow-y-scroll scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
+              <div className="space-y-1.5 text-sm pb-32">
                 {displayableParameters().length > 0 ? (
                   displayableParameters().map((param, index) => (
-                    <div key={index} className="bg-white/50 rounded-lg p-3 border border-slate-200/50 hover:border-slate-300 transition-colors duration-200">
-                      <div className="space-y-2">
+                    <div key={index} className="bg-white/50 rounded-lg p-1.5 border border-slate-200/50 hover:border-slate-300 transition-colors duration-200">
+                      <div className="space-y-1">
                         <div className="font-medium text-xs text-slate-600 uppercase tracking-wide">{param.name}</div>
                         {editingParam === param.name ? (
                           <div className="flex gap-1">

@@ -138,7 +138,12 @@ export const supplierResponses = pgTable("supplier_responses", {
   isRepliedTo: boolean("is_replied_to").default(false), // Track whether this response has been replied to
   messageId: text("message_id"), // Добавляем поле для хранения уникального идентификатора IMAP сообщения
   isFavorite: boolean("is_favorite").default(false), // Отметка ответа как избранное
-  isAnalyzed: boolean("is_analyzed").default(false) // Флаг, показывающий, что ответ был проанализирован
+  isAnalyzed: boolean("is_analyzed").default(false), // Флаг, показывающий, что ответ был проанализирован
+  // Новые поля для асинхронной обработки
+  processingStatus: text("processing_status").default("pending"), // pending, processing, completed, failed
+  processingStartedAt: timestamp("processing_started_at"),
+  processingCompletedAt: timestamp("processing_completed_at"),
+  processingError: text("processing_error")
 });
 
 // Table to store extracted parameters from supplier responses

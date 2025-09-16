@@ -51,34 +51,68 @@ def extract_text_from_pdf(file_path):
     return text
 
 def extract_text_from_doc(file_path):
-    """Extract text from DOC files using antiword"""
+    """Extract text from DOC files using docx2txt and fallback methods"""
+    import docx2txt
     import subprocess
     text = ""
     
     try:
-        # Use antiword to convert DOC to text
-        result = subprocess.run(['antiword', file_path], capture_output=True, text=True, encoding='utf-8', errors='replace')
-        if result.returncode == 0:
-            raw_text = result.stdout
-            # Add page markers - approximate based on content length
-            lines = raw_text.split('\n')
-            lines_per_page = 50  # Approximate lines per page
-            page_count = 1
-            line_count = 0
-            
-            text += f"[PAGE:{page_count}]\n"
-            for line in lines:
-                if line.strip():  # Only process non-empty lines
-                    text += line + "\n"
-                    line_count += 1
-                    
-                    # Create logical page breaks
-                    if line_count >= lines_per_page:
-                        page_count += 1
-                        text += f"\n[PAGE:{page_count}]\n"
-                        line_count = 0
-        else:
-            print(f"antiword failed with exit code {result.returncode}: {result.stderr}", file=sys.stderr)
+        # First try docx2txt (works with some DOC files)
+        try:
+            raw_text = docx2txt.process(file_path)
+            if raw_text and raw_text.strip():
+                # Add page markers - approximate based on content length
+                lines = raw_text.split('\n')
+                lines_per_page = 50  # Approximate lines per page
+                page_count = 1
+                line_count = 0
+                
+                text += f"[PAGE:{page_count}]\n"
+                for line in lines:
+                    if line.strip():  # Only process non-empty lines
+                        text += line + "\n"
+                        line_count += 1
+                        
+                        # Create logical page breaks
+                        if line_count >= lines_per_page:
+                            page_count += 1
+                            text += f"\n[PAGE:{page_count}]\n"
+                            line_count = 0
+                print(f"Successfully extracted text from DOC using docx2txt: {len(text)} chars", file=sys.stderr)
+                return text
+        except Exception as e:
+            print(f"docx2txt failed: {e}", file=sys.stderr)
+        
+        # Fallback: try antiword if available
+        try:
+            result = subprocess.run(['antiword', file_path], capture_output=True, text=True, encoding='utf-8', errors='replace')
+            if result.returncode == 0:
+                raw_text = result.stdout
+                # Add page markers - approximate based on content length
+                lines = raw_text.split('\n')
+                lines_per_page = 50  # Approximate lines per page
+                page_count = 1
+                line_count = 0
+                
+                text += f"[PAGE:{page_count}]\n"
+                for line in lines:
+                    if line.strip():  # Only process non-empty lines
+                        text += line + "\n"
+                        line_count += 1
+                        
+                        # Create logical page breaks
+                        if line_count >= lines_per_page:
+                            page_count += 1
+                            text += f"\n[PAGE:{page_count}]\n"
+                            line_count = 0
+                print(f"Successfully extracted text from DOC using antiword: {len(text)} chars", file=sys.stderr)
+                return text
+            else:
+                print(f"antiword failed with exit code {result.returncode}: {result.stderr}", file=sys.stderr)
+        except FileNotFoundError:
+            print("antiword not found, skipping fallback", file=sys.stderr)
+        except Exception as e:
+            print(f"antiword error: {e}", file=sys.stderr)
             
     except Exception as e:
         print(f"Error extracting from DOC: {e}", file=sys.stderr)

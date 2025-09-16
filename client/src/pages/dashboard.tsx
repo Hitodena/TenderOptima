@@ -26,11 +26,14 @@ export default function Dashboard() {
 
   // 1. Запрос списка всех запросов - User-specific caching for security
   const { data: searchRequests, isLoading, error, isFetching } = useQuery<SearchRequest[]>({
-    queryKey: ['/api/search-requests', user?.id],
+    queryKey: ['/api/search-requests', 'dashboard', user?.id], // ✅ ИСПРАВЛЕНО: уникальный ключ для dashboard
     enabled: !!user?.id && isActiveOrLoading,
     refetchOnMount: true,
     queryFn: async () => {
-      return apiRequest<SearchRequest[]>('/api/search-requests', 'GET');
+      console.log('🚀 DASHBOARD: Loading all search requests...');
+      const result = await apiRequest<SearchRequest[]>('/api/search-requests', 'GET');
+      console.log('🚀 DASHBOARD: Loaded', result?.length || 0, 'requests');
+      return result;
     },
     select: (data) => {
       if (!data || !Array.isArray(data)) return [];
@@ -52,29 +55,7 @@ export default function Dashboard() {
     gcTime: 60000     // 1 minute - allow some caching
   });
 
-  const activeRequestIds = searchRequests?.filter(req => req.status !== 'pending')
-    .map(req => req.id) || [];
-
-  // Use batch endpoint instead of individual calls - Balanced caching
-  const { data: batchResponsesData } = useQuery<Record<string, SupplierResponse[]>>({
-    queryKey: ['/api/supplier-responses-batch', activeRequestIds],
-    enabled: activeRequestIds.length > 0,
-    staleTime: 15000,  // 15 seconds - reasonable caching
-    refetchOnWindowFocus: true, // Рекомендуется включить для лучшего UX
-    refetchInterval: 20000, // Автоматически обновлять каждые 20 секунд
-    gcTime: 60000,     // 1 minute - allow some caching
-    queryFn: async () => {
-      console.log("Batch loading responses for", activeRequestIds.length, "requests");
-      // Используем apiRequest, который добавит токен для авторизации
-      // Поскольку сервер ожидает GET-запрос с параметрами в URL, преобразуем параметры соответствующим образом
-      return await apiRequest<Record<string, SupplierResponse[]>>('/api/supplier-responses-batch', 'GET', {
-        requestIds: JSON.stringify(activeRequestIds)
-      });
-    }
-  });
-
-  // 4. Предзагружаем данные о ответах поставщиков в кэш QueryClient
-  // Removed automatic responses prefetching effect
+  // Dashboard показывает только список запросов - ответы загружаются только при клике на конкретный запрос
 
   // Status management functions
   const completeRequest = async (requestId: number) => {
@@ -90,7 +71,7 @@ export default function Dashboard() {
 
       if (response.ok) {
         // Invalidate and refetch the search requests query
-        queryClient.invalidateQueries({ queryKey: ['/api/search-requests', user?.id] });
+        queryClient.invalidateQueries({ queryKey: ['/api/search-requests', 'dashboard', user?.id] });
         toast({
           title: "Запрос завершен",
           description: "Запрос перенесен в раздел \"Завершенные запросы\""
@@ -121,7 +102,7 @@ export default function Dashboard() {
 
       if (response.ok) {
         // Invalidate and refetch the search requests query
-        queryClient.invalidateQueries({ queryKey: ['/api/search-requests', user?.id] });
+        queryClient.invalidateQueries({ queryKey: ['/api/search-requests', 'dashboard', user?.id] });
         toast({
           title: "Запрос активирован",
           description: "Запрос перенесен в раздел \"Активные запросы\""
@@ -187,7 +168,6 @@ export default function Dashboard() {
                   <RequestCard 
                     key={request.id} 
                     request={request} 
-                    batchResponsesData={batchResponsesData || {}} 
                     tab={tab}
                     onComplete={completeRequest}
                     onActivate={activateRequest}
@@ -210,13 +190,12 @@ export default function Dashboard() {
 
 interface RequestCardProps {
   request: SearchRequest;
-  batchResponsesData: Record<string, SupplierResponse[]>;
   tab: string;
   onComplete: (requestId: number) => void;
   onActivate: (requestId: number) => void;
 }
 
-function RequestCard({ request, batchResponsesData, tab, onComplete, onActivate }: RequestCardProps) {
+function RequestCard({ request, tab, onComplete, onActivate }: RequestCardProps) {
   // Format the created date
   const formattedDate = request.createdAt 
     ? formatDistanceToNow(new Date(request.createdAt), { addSuffix: true }) 
@@ -231,10 +210,8 @@ function RequestCard({ request, batchResponsesData, tab, onComplete, onActivate 
       })
     : "Unknown date";
 
-  // Получаем ответы из кэша, которые были предзагружены в основном компоненте
-  // Это предотвращает дополнительные запросы к API
-  const responses = batchResponsesData?.[request.id] || [];
-  const responseCount = responses.length;
+  // Dashboard показывает только список запросов - количество ответов не отображается
+  // Ответы загружаются только при клике на конкретный запрос
 
   // Get status badge color - simplified to just active or completed
   const getStatusColor = (status: string) => {
@@ -264,12 +241,6 @@ function RequestCard({ request, batchResponsesData, tab, onComplete, onActivate 
         </div>
 
         <div className="flex items-center gap-3">
-          {responseCount > 0 && (
-            <div className="flex items-center">
-
-            </div>
-          )}
-
           <Button asChild size="sm">
             <Link href={`/requests/${request.id}?tab=responses`}>Смотреть</Link>
           </Button>

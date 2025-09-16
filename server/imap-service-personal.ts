@@ -576,6 +576,38 @@ export class PersonalImapService {
         result.savedToDb = true;
         result.dbRecordId = savedResponse?.id;
         console.log(`✅ [DATABASE] Successfully saved email to database with ID: ${result.dbRecordId}`);
+
+        // Отправляем уведомление через Socket.IO о новом email
+        try {
+          const io = (global as any).io;
+          if (io) {
+            io.to(`user_${userId}`).emit('newEmail', {
+              responseId: result.dbRecordId,
+              requestId: responseData.requestId,
+              supplier: responseData.supplier,
+              subject: responseData.subject,
+              orderNumber: responseData.orderNumber,
+              hasAttachments: responseData.hasAttachments,
+              timestamp: new Date().toISOString()
+            });
+            console.log(`📡 [SOCKET] Sent new email notification to user ${userId} for response ${result.dbRecordId}`);
+          }
+        } catch (socketError) {
+          console.error('❌ [SOCKET] Error sending new email notification:', socketError);
+        }
+
+        // Запускаем автоматическую обработку attachments если они есть
+        if (attachments && attachments.length > 0 && savedResponse) {
+          console.log(`🔄 Starting automatic attachment processing for response ${savedResponse.id} with ${attachments.length} attachments`);
+          try {
+            const { AsyncEmailProcessor } = await import('./async-processing/email-processor');
+            const processor = AsyncEmailProcessor.getInstance();
+            await processor.processNewEmail(savedResponse);
+            console.log(`✅ Automatic attachment processing started for response ${savedResponse.id}`);
+          } catch (error) {
+            console.error(`❌ Failed to start automatic attachment processing for response ${savedResponse.id}:`, error);
+          }
+        }
       } catch (dbError) {
         console.error(`❌ [DATABASE] Error saving supplier response:`, dbError);
         result.status = 'db_error';

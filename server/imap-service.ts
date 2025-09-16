@@ -1027,6 +1027,19 @@ export class ImapService {
           date: response.responseDate,
           attachments: (attachments || []).length
         });
+
+        // Запускаем автоматическую обработку attachments если они есть
+        if (attachments && attachments.length > 0) {
+          console.log(`🔄 Starting automatic attachment processing for response ${response.id} with ${attachments.length} attachments`);
+          try {
+            const { AsyncEmailProcessor } = await import('./async-processing/email-processor');
+            const processor = AsyncEmailProcessor.getInstance();
+            await processor.processNewEmail(response);
+            console.log(`✅ Automatic attachment processing started for response ${response.id}`);
+          } catch (error) {
+            console.error(`❌ Failed to start automatic attachment processing for response ${response.id}:`, error);
+          }
+        }
         
         // Automatically process attachments if any exist
         if (filteredAttachments && filteredAttachments.length > 0) {

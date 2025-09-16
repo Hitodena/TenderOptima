@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { emailService, sendEmail } from "./email";
 import { ImapService } from "./imap-service";
 import { personalImapService } from "./imap-service-personal";
+import { AsyncEmailProcessor } from "./async-processing/email-processor";
 import 'express-session';
 
 // Расширяем типы для Session, чтобы добавить поддержку userId
@@ -60,7 +61,7 @@ import {
 import { eq, and } from "drizzle-orm";
 import { db } from "./db";
 import { z } from "zod";
-import { SearchRequest, InsertSearchRequest, Supplier, SupplierMatch, RequestSupplier } from "@shared/schema";
+import { SearchRequest, InsertSearchRequest, Supplier, SupplierMatch, RequestSupplier, supplierResponses } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Minimal request logging for performance
@@ -145,7 +146,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const batchResults: Record<string, any[]> = {};
 
       // CRITICAL SECURITY: Pass userId to enforce data isolation
-      const allResponses = await storage.getAllSupplierResponsesForRequests(requestIds, userId);
+      const allResponses = await storage.getAllSupplierResponsesForRequestsOptimized(requestIds, userId);
 
       // Group responses by requestId
       for (const response of allResponses) {
@@ -1187,27 +1188,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       console.log(`[Server] Fetching search request ID ${id} for user ID ${userId}`);
+      const endpointStartTime = Date.now();
 
-      // Add userId to filter by user's own data
-      const request = await storage.getSearchRequest(id, userId);
+      // OPTIMIZED: Execute all database queries in parallel for better performance
+      const parallelStartTime = Date.now();
+      const [request, requestSuppliers, supplierResponses] = await Promise.all([
+        storage.getSearchRequest(id, userId),
+        storage.getRequestSuppliers(id, userId),
+        storage.getSupplierResponses(id, userId)
+      ]);
+      const parallelTime = Date.now() - parallelStartTime;
+      const totalEndpointTime = Date.now() - endpointStartTime;
+      
+      console.log(`[Server] Parallel queries took ${parallelTime}ms, total endpoint time: ${totalEndpointTime}ms`);
+
       if (!request) {
         return res.status(404).json({ message: `Request with ID ${id} not found or access denied` });
       }
 
-      // Get all suppliers contacted for this request (filtered by userId)
-      const requestSuppliers = await storage.getRequestSuppliers(id, userId);
-
-      // Get all responses for this request (filtered by userId)
-      const supplierResponses = await storage.getSupplierResponses(id, userId);
-
-      res.json({
+      // Логируем время сериализации JSON
+      const jsonStartTime = Date.now();
+      const responseData = {
         request,
         requestSuppliers,
         supplierResponses
-      });
+      };
+      const jsonTime = Date.now() - jsonStartTime;
+      const finalEndpointTime = Date.now() - endpointStartTime;
+      
+      console.log(`[Server] JSON serialization took ${jsonTime}ms, final endpoint time: ${finalEndpointTime}ms`);
+      
+      res.json(responseData);
     } catch (error) {
       console.error(`Error fetching request ${req.params.id}:`, error);
       res.status(500).json({ message: "Failed to fetch request details", error: String(error) });
+    }
+  });
+
+  // Get full attachment content by response ID and filename
+  app.get("/api/attachments/:responseId/:filename", requireAuth, async (req, res) => {
+    try {
+      const { responseId, filename } = req.params;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      console.log(`[Server] Fetching attachment ${filename} for response ${responseId} by user ${userId}`);
+
+      // Get the supplier response with full attachment content
+      const response = await db
+        .select()
+        .from(supplierResponses)
+        .where(
+          and(
+            eq(supplierResponses.id, parseInt(responseId)),
+            eq(supplierResponses.userId, userId)
+          )
+        )
+        .limit(1);
+
+      if (!response || response.length === 0) {
+        return res.status(404).json({ message: "Response not found or access denied" });
+      }
+
+      const supplierResponse = response[0];
+      const attachments = supplierResponse.attachments as any[];
+
+      // Find the requested attachment
+      const attachment = attachments.find((att: any) => att.filename === filename);
+      
+      if (!attachment || !attachment.content) {
+        return res.status(404).json({ message: "Attachment not found or has no content" });
+      }
+
+      // Set appropriate headers for file download
+      res.setHeader('Content-Type', attachment.contentType || 'application/octet-stream');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Length', Buffer.from(attachment.content, 'base64').length);
+
+      // Send the file content
+      res.send(Buffer.from(attachment.content, 'base64'));
+      
+      console.log(`[Server] Successfully served attachment ${filename} for response ${responseId}`);
+    } catch (error) {
+      console.error(`Error fetching attachment ${req.params.filename} for response ${req.params.responseId}:`, error);
+      res.status(500).json({ message: "Failed to fetch attachment", error: String(error) });
     }
   });
 
@@ -2490,12 +2557,39 @@ app.post("/api/check-emails", requireAuth, async (req, res) => {
       }
 
       const requestIds = JSON.parse(requestIdsParam) as number[];
-      const responses = await storage.getAllSupplierResponsesForRequests(requestIds, userId);
+      const responses = await storage.getAllSupplierResponsesForRequestsOptimized(requestIds, userId);
 
       res.json(responses);
     } catch (error) {
       console.error('Error fetching batch supplier responses:', error);
       res.status(500).json({ error: 'Failed to fetch supplier responses' });
+    }
+  });
+
+  // Endpoint для загрузки вложений по требованию
+  app.get("/api/attachments/:responseId/:filename", requireAuth, async (req, res) => {
+    try {
+      const { responseId, filename } = req.params;
+      const userId = req.user?.id;
+
+      const response = await storage.getSupplierResponseById(parseInt(responseId));
+      
+      if (!response || response.userId !== userId) {
+        return res.status(404).json({ error: 'Attachment not found' });
+      }
+
+      const attachment = (response.attachments as any[]).find((att: any) => att.filename === filename);
+      
+      if (!attachment || !attachment.content) {
+        return res.status(404).json({ error: 'Attachment content not found' });
+      }
+
+      res.setHeader('Content-Type', attachment.contentType);
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.send(Buffer.from(attachment.content, 'base64'));
+    } catch (error) {
+      console.error('Error fetching attachment:', error);
+      res.status(500).json({ error: 'Failed to fetch attachment' });
     }
   });
 
@@ -2514,6 +2608,307 @@ app.post("/api/check-emails", requireAuth, async (req, res) => {
     } catch (error) {
       console.error('Error fetching improvement request count:', error);
       res.status(500).json({ error: 'Failed to fetch improvement request count' });
+    }
+  });
+
+  // Get attachment metadata for a response
+  app.get("/api/supplier-responses/:responseId/attachments", requireAuth, async (req, res) => {
+    try {
+      const responseId = parseInt(req.params.responseId);
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      console.log(`[Server] Fetching attachments for response ${responseId} by user ${userId}`);
+
+      const attachments = await storage.getSupplierResponseAttachments(responseId, userId);
+      
+      res.json(attachments);
+    } catch (error) {
+      console.error(`Error fetching attachments for response ${req.params.responseId}:`, error);
+      res.status(500).json({ message: "Failed to fetch attachments", error: String(error) });
+    }
+  });
+
+  // Get full attachment content for download
+  app.get("/api/attachments/:responseId/:filename", requireAuth, async (req, res) => {
+    try {
+      const { responseId, filename } = req.params;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      console.log(`[Server] Fetching attachment ${filename} for response ${responseId} by user ${userId}`);
+
+      // Get the attachment content
+      const attachmentData = await storage.getSupplierResponseAttachmentContent(
+        parseInt(responseId), 
+        filename, 
+        userId
+      );
+
+      if (!attachmentData) {
+        return res.status(404).json({ message: "Attachment not found or access denied" });
+      }
+
+      // Set appropriate headers for file download
+      res.setHeader('Content-Type', attachmentData.contentType);
+      
+      // Fix filename encoding for Content-Disposition header
+      // Clean filename to avoid invalid characters
+      const cleanFilename = filename.replace(/[^\w\s\-\.]/g, '_');
+      const encodedFilename = encodeURIComponent(cleanFilename);
+      res.setHeader('Content-Disposition', `attachment; filename="${cleanFilename}"; filename*=UTF-8''${encodedFilename}`);
+      res.setHeader('Content-Length', Buffer.from(attachmentData.content, 'base64').length);
+
+      // Send the file content
+      res.send(Buffer.from(attachmentData.content, 'base64'));
+      
+      console.log(`[Server] Successfully served attachment ${filename} for response ${responseId}`);
+    } catch (error) {
+      console.error(`Error fetching attachment ${req.params.filename} for response ${req.params.responseId}:`, error);
+      res.status(500).json({ message: "Failed to fetch attachment", error: String(error) });
+    }
+  });
+
+  // Batch processing of attachments for all unprocessed responses
+  app.post("/api/supplier-responses/batch-process-attachments", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      console.log(`[Server] Batch processing attachments for user ${userId}`);
+
+      // Get all responses with attachments that haven't been processed
+      const unprocessedResponses = await storage.getUnprocessedSupplierResponses(userId);
+      
+      if (unprocessedResponses.length === 0) {
+        return res.json({ 
+          message: 'No unprocessed responses found',
+          processedCount: 0
+        });
+      }
+
+      console.log(`[Server] Found ${unprocessedResponses.length} unprocessed responses`);
+
+      // Process each response
+      const results = [];
+      for (const response of unprocessedResponses) {
+        try {
+          console.log(`[Server] Processing response ${response.id} with ${response.attachments?.length || 0} attachments`);
+          
+          // Get the full response with attachments
+          const fullResponse = await storage.getSupplierResponseWithAttachments(response.id, userId);
+          if (!fullResponse) {
+            console.log(`[Server] Response ${response.id} not found or access denied`);
+            continue;
+          }
+
+          // Process attachments using Python processor
+          const { spawn } = require('child_process');
+          const path = require('path');
+          const fs = require('fs');
+          const os = require('os');
+
+          // Create temp file with response data
+          const tempDir = path.join(os.tmpdir(), 'supplier-finder-attachments');
+          if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true });
+          }
+
+          const tempFilePath = path.join(tempDir, `response_${response.id}_${Date.now()}.json`);
+          fs.writeFileSync(tempFilePath, JSON.stringify(fullResponse, null, 2), 'utf8');
+
+          // Run Python processor
+          const pythonScript = path.join(__dirname, 'file-processing', 'attachment_analyzer.py');
+          const pythonProcess = spawn('python', [pythonScript, tempFilePath], {
+            cwd: __dirname,
+            stdio: ['pipe', 'pipe', 'pipe']
+          });
+
+          let output = '';
+          let errorOutput = '';
+
+          pythonProcess.stdout.on('data', (data) => {
+            output += data.toString();
+          });
+
+          pythonProcess.stderr.on('data', (data) => {
+            errorOutput += data.toString();
+          });
+
+          await new Promise((resolve, reject) => {
+            pythonProcess.on('close', async (code) => {
+              // Clean up temp file
+              try {
+                fs.unlinkSync(tempFilePath);
+              } catch (err) {
+                console.error('Error deleting temp file:', err);
+              }
+
+              if (code === 0) {
+                try {
+                  // Parse the result and update the response
+                  const result = JSON.parse(output);
+                  if (result.attachments && result.attachments.length > 0) {
+                    // Update the response with processed attachments
+                    await storage.updateSupplierResponseAttachments(response.id, result.attachments);
+                    console.log(`[Server] Successfully processed ${result.attachments.length} attachments for response ${response.id}`);
+                    results.push({ responseId: response.id, status: 'success', processedCount: result.attachments.length });
+                  } else {
+                    results.push({ responseId: response.id, status: 'no_attachments', processedCount: 0 });
+                  }
+                  resolve();
+                } catch (parseError) {
+                  console.error('Error parsing Python output:', parseError);
+                  results.push({ responseId: response.id, status: 'error', error: String(parseError) });
+                  resolve();
+                }
+              } else {
+                console.error(`Python processor failed with code ${code}:`, errorOutput);
+                results.push({ responseId: response.id, status: 'error', error: errorOutput || `Python process exited with code ${code}` });
+                resolve();
+              }
+            });
+
+            pythonProcess.on('error', (error) => {
+              console.error('Error spawning Python process:', error);
+              results.push({ responseId: response.id, status: 'error', error: String(error) });
+              resolve();
+            });
+          });
+
+        } catch (error) {
+          console.error(`Error processing response ${response.id}:`, error);
+          results.push({ responseId: response.id, status: 'error', error: String(error) });
+        }
+      }
+
+      const successCount = results.filter(r => r.status === 'success').length;
+      const totalProcessed = results.reduce((sum, r) => sum + (r.processedCount || 0), 0);
+
+      res.json({ 
+        message: 'Batch processing completed',
+        totalResponses: unprocessedResponses.length,
+        successCount,
+        totalProcessed,
+        results
+      });
+
+    } catch (error) {
+      console.error(`Error in batch processing:`, error);
+      res.status(500).json({ message: "Failed to process attachments", error: String(error) });
+    }
+  });
+
+  // Manual processing of attachments for a response
+  app.post("/api/supplier-responses/:id/process-attachments", requireAuth, async (req, res) => {
+    try {
+      const responseId = parseInt(req.params.id);
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      console.log(`[Server] Manual processing of attachments for response ${responseId} by user ${userId}`);
+
+      // Check if response exists and belongs to user
+      const response = await storage.getSupplierResponseById(responseId);
+      if (!response || response.userId !== userId) {
+        return res.status(404).json({ message: "Response not found or access denied" });
+      }
+
+      // Get the full response with attachments
+      const fullResponse = await storage.getSupplierResponseWithAttachments(responseId, userId);
+      if (!fullResponse) {
+        return res.status(404).json({ message: "Response with attachments not found" });
+      }
+
+      // Process attachments using Python processor
+      const { spawn } = require('child_process');
+      const path = require('path');
+      const fs = require('fs');
+      const os = require('os');
+
+      // Create temp file with response data
+      const tempDir = path.join(os.tmpdir(), 'supplier-finder-attachments');
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+
+      const tempFilePath = path.join(tempDir, `response_${responseId}_${Date.now()}.json`);
+      fs.writeFileSync(tempFilePath, JSON.stringify(fullResponse, null, 2), 'utf8');
+
+      // Run Python processor
+      const pythonScript = path.join(__dirname, 'file-processing', 'attachment_analyzer.py');
+      const pythonProcess = spawn('python', [pythonScript, tempFilePath], {
+        cwd: __dirname,
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+
+      let output = '';
+      let errorOutput = '';
+
+      pythonProcess.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+
+      pythonProcess.stderr.on('data', (data) => {
+        errorOutput += data.toString();
+      });
+
+      pythonProcess.on('close', async (code) => {
+        // Clean up temp file
+        try {
+          fs.unlinkSync(tempFilePath);
+        } catch (err) {
+          console.error('Error deleting temp file:', err);
+        }
+
+        if (code === 0) {
+          try {
+            // Parse the result and update the response
+            const result = JSON.parse(output);
+            if (result.attachments && result.attachments.length > 0) {
+              // Update the response with processed attachments
+              await storage.updateSupplierResponseAttachments(responseId, result.attachments);
+              console.log(`[Server] Successfully processed ${result.attachments.length} attachments for response ${responseId}`);
+            }
+            
+            res.json({ 
+              message: 'Attachments processed successfully',
+              responseId: responseId,
+              processedCount: result.attachments ? result.attachments.length : 0
+            });
+          } catch (parseError) {
+            console.error('Error parsing Python output:', parseError);
+            res.status(500).json({ message: "Failed to parse processing results", error: String(parseError) });
+          }
+        } else {
+          console.error(`Python processor failed with code ${code}:`, errorOutput);
+          res.status(500).json({ 
+            message: "Failed to process attachments", 
+            error: errorOutput || `Python process exited with code ${code}` 
+          });
+        }
+      });
+
+      pythonProcess.on('error', (error) => {
+        console.error('Error spawning Python process:', error);
+        res.status(500).json({ message: "Failed to start processing", error: String(error) });
+      });
+
+    } catch (error) {
+      console.error(`Error processing attachments for response ${req.params.id}:`, error);
+      res.status(500).json({ message: "Failed to process attachments", error: String(error) });
     }
   });
 

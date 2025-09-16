@@ -58,7 +58,7 @@ export default function CloneRequest() {
 
   // Get the original request and its suppliers
   const { data, isLoading, error } = useQuery({
-    queryKey: ["/api/search-requests", id],
+    queryKey: ["/api/search-requests", "clone", id], // ✅ ИСПРАВЛЕНО: уникальный ключ
     queryFn: async () => {
       if (!id) throw new Error("Invalid request ID");
       

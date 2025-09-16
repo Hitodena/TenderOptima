@@ -890,6 +890,18 @@ export default function CompareResultsPage() {
             
             console.log(`Sorting by ${sortBy}: ${a.name}="${aValue}" vs ${b.name}="${bValue}"`);
             
+            // Handle empty values - put them at the end
+            const aIsEmpty = !aValue || aValue.trim() === '' || aValue === 'Не указано' || aValue === '-';
+            const bIsEmpty = !bValue || bValue.trim() === '' || bValue === 'Не указано' || bValue === '-';
+            
+            if (aIsEmpty && bIsEmpty) {
+              return 0; // Both empty, maintain original order
+            } else if (aIsEmpty) {
+              return 1; // a is empty, put it at the end
+            } else if (bIsEmpty) {
+              return -1; // b is empty, put it at the end
+            }
+            
             // Parse numeric values for proper sorting
             const aNum = parseFloat(String(aValue).replace(/[^\d.,]/g, '').replace(',', '.'));
             const bNum = parseFloat(String(bValue).replace(/[^\d.,]/g, '').replace(',', '.'));
@@ -2416,7 +2428,7 @@ export default function CompareResultsPage() {
               <>
                 <Button 
                   variant="outline" 
-                  className="gap-1"
+                  className="gap-1 hidden"
                   onClick={() => saveAnalysis(true)}
                   disabled={saveAnalysisMutation.isLoading}
                 >
@@ -3022,12 +3034,12 @@ export default function CompareResultsPage() {
                                             </div>
                                             <Button
                                               size="sm"
-                                              variant="default"
+                                              variant="outline"
                                               onClick={() => {
                                                 setSupplierToSelectAsWinner(supplier);
                                                 setShowWinnerEmailModal(true);
                                               }}
-                                              className="text-xs px-3 py-1 h-auto bg-blue-600 hover:bg-blue-700 text-white"
+                                              className="text-xs px-3 py-1 h-auto"
                                             >
                                               <div className="flex items-center gap-1">
                                                 <Crown className="w-3 h-3" />
@@ -3278,7 +3290,7 @@ export default function CompareResultsPage() {
                   <CardFooter className="flex justify-between">
                     <Button 
                       variant="secondary" 
-                      className="gap-1"
+                      className="gap-1 hidden"
                       onClick={() => saveAnalysis(true)}
                       disabled={saveAnalysisMutation.isLoading}
                     >

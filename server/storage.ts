@@ -42,7 +42,7 @@ import {
   winnerSelections
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, or, inArray, count, sql, isNull } from "drizzle-orm";
+import { eq, desc, and, or, inArray, count, sql, isNull, isNotNull } from "drizzle-orm";
 import { matchingService } from "./matching-service";
 import { nanoid } from "nanoid";
 
@@ -313,66 +313,11 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async getUsersWithEmailConfig(): Promise<Array<{ id: number; emailAccount: string }>> {
-    try {
-      const usersWithEmail = await db
-        .select({
-          id: users.id,
-          emailAccount: users.emailAccount
-        })
-        .from(users)
-        .where(eq(users.emailConfigured, true));
-      return usersWithEmail;
-    } catch (error) {
-      console.error('Error getting users with email config:', error);
-      return [];
-    }
-  }
 
-  async updateUserEmailConfig(userId: number, config: any): Promise<boolean> {
-    try {
-      await db
-        .update(users)
-        .set({
-          emailAccount: config.emailAccount,
-          emailPassword: config.emailPassword,
-          smtpHost: config.smtpHost,
-          smtpPort: config.smtpPort,
-          imapHost: config.imapHost,
-          imapPort: config.imapPort,
-          emailConfigured: true
-        })
-        .where(eq(users.id, userId));
-      return true;
-    } catch (error) {
-      console.error('Error updating user email config:', error);
-      return false;
-    }
-  }
 
   // REMOVED: Duplicate function that returned hasPassword instead of actual emailPassword
   // Using the correct implementation at line 2555 instead
 
-  async resetUserEmailConfig(userId: number): Promise<boolean> {
-    try {
-      await db
-        .update(users)
-        .set({
-          emailAccount: null,
-          emailPassword: null,
-          smtpHost: 'smtp.mail.ru',
-          smtpPort: 587,
-          imapHost: 'imap.mail.ru',
-          imapPort: 993,
-          emailConfigured: false
-        })
-        .where(eq(users.id, userId));
-      return true;
-    } catch (error) {
-      console.error('Error resetting user email config:', error);
-      return false;
-    }
-  }
   
   // Supplier operations
   async getSuppliers(userId?: number): Promise<Supplier[]> {
@@ -570,11 +515,11 @@ export class DatabaseStorage implements IStorage {
     console.log(`[storage] Getting search request ID ${id}${userId ? ` for user ID ${userId}` : ''}`);
     
     // Build query conditions
-    let conditions = eq(searchRequests.id, id);
+    let conditions = userId !== undefined 
+      ? and(eq(searchRequests.id, id), eq(searchRequests.userId, userId))
+      : eq(searchRequests.id, id);
     
-    // Add userId filter if provided (for data isolation)
     if (userId !== undefined) {
-      conditions = and(conditions, eq(searchRequests.userId, userId));
       console.log(`[storage] Applying user filter for user ID ${userId}`);
     }
     
@@ -596,12 +541,9 @@ export class DatabaseStorage implements IStorage {
     console.log(`[Server] Getting search request by order number ${orderNumber} ${userId ? `for user ID ${userId}` : ''}`);
     
     // Build query conditions
-    let conditions = eq(searchRequests.orderNumber, orderNumber);
-    
-    // Add userId filter if provided (for data isolation)
-    if (userId) {
-      conditions = and(conditions, eq(searchRequests.userId, userId));
-    }
+    let conditions = userId 
+      ? and(eq(searchRequests.orderNumber, orderNumber), eq(searchRequests.userId, userId))
+      : eq(searchRequests.orderNumber, orderNumber);
     
     const [searchRequest] = await db
       .select()
@@ -643,12 +585,9 @@ export class DatabaseStorage implements IStorage {
 
   async updateSearchRequestStatus(id: number, status: string, userId?: number): Promise<SearchRequest | undefined> {
     // Build query conditions
-    let conditions = eq(searchRequests.id, id);
-    
-    // Add userId filter if provided (for data isolation)
-    if (userId) {
-      conditions = and(conditions, eq(searchRequests.userId, userId));
-    }
+    let conditions = userId 
+      ? and(eq(searchRequests.id, id), eq(searchRequests.userId, userId))
+      : eq(searchRequests.id, id);
     
     const [updatedRequest] = await db
       .update(searchRequests)
@@ -800,23 +739,37 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getSupplierResponses(requestId: number | null, userId?: number): Promise<SupplierResponse[]> {
-    console.log(`[storage] Getting supplier responses for request ${requestId}${userId ? ` for user ${userId}` : ''}`);
+    const startTime = Date.now();
+    console.log(`[storage] OPTIMIZED: Getting supplier responses for request ${requestId}${userId ? ` for user ${userId}` : ''} (WITHOUT ATTACHMENTS)`);
     
     if (requestId === null) {
       console.log(`[storage] RequestId is null, returning empty array`);
       return [];
     }
     
-    // First verify the request belongs to the user if userId is provided
-    if (userId !== undefined) {
-      const request = await this.getSearchRequest(requestId, userId);
-      if (!request) {
-        console.log(`[storage] Access denied: Request ${requestId} not found for user ${userId}`);
-        return [];
-      }
-    }
-    // Build the base query
-    let query = db.select().from(supplierResponses);
+    // OPTIMIZED: Select only essential fields, exclude attachments completely
+    let query = db.select({
+      id: supplierResponses.id,
+      requestId: supplierResponses.requestId,
+      userId: supplierResponses.userId,
+      supplierEmail: supplierResponses.supplierEmail,
+      subject: supplierResponses.subject,
+      content: supplierResponses.content,
+      responseDate: supplierResponses.responseDate,
+      isRead: supplierResponses.isRead,
+      processingStatus: supplierResponses.processingStatus,
+      processingStartedAt: supplierResponses.processingStartedAt,
+      processingCompletedAt: supplierResponses.processingCompletedAt,
+      processingError: supplierResponses.processingError,
+      supplierId: supplierResponses.supplierId,
+      supplierName: supplierResponses.supplierName,
+      requestSupplierId: supplierResponses.requestSupplierId,
+      isRepliedTo: supplierResponses.isRepliedTo,
+      isFavorite: supplierResponses.isFavorite,
+      messageId: supplierResponses.messageId,
+      isAnalyzed: supplierResponses.isAnalyzed
+      // НЕ включаем attachments - загружаем отдельно!
+    }).from(supplierResponses);
     
     // Start with requestId filter if provided
     let conditions = requestId !== null ? 
@@ -837,7 +790,212 @@ export class DatabaseStorage implements IStorage {
     }
     
     // Order by response date descending
-    return await query.orderBy(desc(supplierResponses.responseDate));
+    const dbStartTime = Date.now();
+    console.log(`[storage] Executing database query for request ${requestId}...`);
+    const results = await query.orderBy(desc(supplierResponses.responseDate));
+    const dbTime = Date.now() - dbStartTime;
+    console.log(`[storage] Database query took ${dbTime}ms for ${results.length} responses`);
+    console.log(`[storage] Query conditions: requestId=${requestId}, userId=${userId}`);
+    
+    // Add empty attachments array - будет загружаться отдельно
+    const processedResults = results.map(response => ({
+      ...response,
+      attachments: [] // Пустой массив - загружаем отдельно
+    }));
+    
+    const totalTime = Date.now() - startTime;
+    console.log(`[storage] OPTIMIZED: Returning ${results.length} responses without attachments for faster loading`);
+    console.log(`[storage] Performance: DB=${dbTime}ms, Total=${totalTime}ms`);
+    
+    // Проверяем размер данных
+    const dataSize = JSON.stringify(processedResults).length;
+    console.log(`[storage] Data size: ${(dataSize / 1024 / 1024).toFixed(2)} MB`);
+    
+    return processedResults;
+  }
+
+  // Get attachment metadata for a specific response
+  async getSupplierResponseAttachments(responseId: number, userId?: number): Promise<any[]> {
+    console.log(`[storage] OPTIMIZED: Getting attachments metadata for response ${responseId}${userId ? ` for user ${userId}` : ''}`);
+    
+    const startTime = Date.now();
+    
+    try {
+      // OPTIMIZED: Use a more efficient query with proper indexing
+      const response = await db
+        .select({ attachments: supplierResponses.attachments })
+        .from(supplierResponses)
+        .where(
+          userId 
+            ? and(
+                eq(supplierResponses.id, responseId),
+                eq(supplierResponses.userId, userId)
+              )
+            : eq(supplierResponses.id, responseId)
+        )
+        .limit(1);
+      
+      const dbTime = Date.now() - startTime;
+      console.log(`[storage] Attachments metadata query took ${dbTime}ms`);
+      
+      if (!response || response.length === 0) {
+        console.log(`[storage] No response found for ID ${responseId}`);
+        return [];
+      }
+      
+      const attachments = response[0].attachments as any[];
+      if (!attachments || !Array.isArray(attachments)) {
+        console.log(`[storage] No attachments array found for response ${responseId}`);
+        return [];
+      }
+      
+      // Return only metadata, no content - this is the key optimization
+      const metadata = attachments.map(attachment => ({
+        filename: attachment.filename,
+        contentType: attachment.contentType,
+        size: attachment.size,
+        extractedText: attachment.extractedText,
+        processingStatus: attachment.processingStatus || 'pending'
+        // НЕ включаем content - загружаем по требованию
+      }));
+
+      console.log(`[storage] OPTIMIZED: Returning ${metadata.length} attachment metadata entries (without content)`);
+      return metadata;
+    } catch (error) {
+      const dbTime = Date.now() - startTime;
+      console.error(`[storage] Error getting attachments metadata for response ${responseId} after ${dbTime}ms:`, error);
+      return [];
+    }
+  }
+
+  // Get full attachment content for download
+  async getSupplierResponseAttachmentContent(responseId: number, filename: string, userId?: number): Promise<{ content: string; contentType: string } | null> {
+    console.log(`[storage] Getting attachment content ${filename} for response ${responseId}${userId ? ` for user ${userId}` : ''}`);
+    
+    const response = await db
+      .select({ attachments: supplierResponses.attachments })
+      .from(supplierResponses)
+      .where(
+        userId 
+          ? and(
+              eq(supplierResponses.id, responseId),
+              eq(supplierResponses.userId, userId)
+            )
+          : eq(supplierResponses.id, responseId)
+      )
+      .limit(1);
+    
+    if (!response || response.length === 0) {
+      return null;
+    }
+    
+    const attachments = response[0].attachments as any[];
+    if (!attachments || !Array.isArray(attachments)) {
+      return null;
+    }
+    
+    // Find the requested attachment
+    const attachment = attachments.find((att: any) => att.filename === filename);
+    
+    if (!attachment || !attachment.content) {
+      return null;
+    }
+    
+    return {
+      content: attachment.content,
+      contentType: attachment.contentType || 'application/octet-stream'
+    };
+  }
+
+
+  // Get supplier response with full attachments
+  async getSupplierResponseWithAttachments(responseId: number, userId?: number): Promise<SupplierResponse | null> {
+    console.log(`[storage] Getting supplier response with attachments: ${responseId}${userId ? ` for user ${userId}` : ''}`);
+    
+    const response = await db
+      .select()
+      .from(supplierResponses)
+      .where(
+        userId 
+          ? and(
+              eq(supplierResponses.id, responseId),
+              eq(supplierResponses.userId, userId)
+            )
+          : eq(supplierResponses.id, responseId)
+      )
+      .limit(1);
+    
+    if (!response || response.length === 0) {
+      return null;
+    }
+    
+    const result = response[0];
+    return {
+      ...result,
+      attachments: result.attachments as any[] || [],
+      supplierId: result.supplierEmail,
+      supplierName: result.supplierName || result.supplierEmail,
+      requestSupplierId: result.requestSupplierId,
+      isRepliedTo: result.isRepliedTo || false,
+      isFavorite: result.isFavorite || false,
+      messageId: result.messageId
+    };
+  }
+
+  // Update supplier response attachments
+  async updateSupplierResponseAttachments(responseId: number, attachments: any[]): Promise<void> {
+    console.log(`[storage] Updating attachments for response ${responseId}: ${attachments.length} attachments`);
+    
+    await db
+      .update(supplierResponses)
+      .set({ 
+        attachments: attachments,
+        processingStatus: 'completed',
+        processingCompletedAt: new Date()
+      })
+      .where(eq(supplierResponses.id, responseId));
+    
+    console.log(`[storage] Successfully updated attachments for response ${responseId}`);
+  }
+
+  // Get unprocessed supplier responses (with attachments but no extractedText)
+  async getUnprocessedSupplierResponses(userId: number): Promise<SupplierResponse[]> {
+    console.log(`[storage] Getting unprocessed supplier responses for user ${userId}`);
+    
+    const responses = await db
+      .select()
+      .from(supplierResponses)
+      .where(
+        and(
+          eq(supplierResponses.userId, userId),
+          // Has attachments but no processing status or not completed
+          or(
+            isNull(supplierResponses.processingStatus),
+            eq(supplierResponses.processingStatus, 'pending'),
+            eq(supplierResponses.processingStatus, 'failed')
+          )
+        )
+      )
+      .orderBy(desc(supplierResponses.responseDate));
+    
+    // Filter responses that actually have attachments
+    const responsesWithAttachments = responses.filter(response => {
+      const attachments = response.attachments as any[];
+      return attachments && Array.isArray(attachments) && attachments.length > 0;
+    });
+    
+    console.log(`[storage] Found ${responsesWithAttachments.length} unprocessed responses with attachments`);
+    
+    return responsesWithAttachments.map(response => ({
+      ...response,
+      attachments: response.attachments as any[] || [],
+      supplierId: response.supplierEmail,
+      supplierName: response.supplierName || response.supplierEmail,
+      requestSupplierId: response.requestSupplierId,
+      isRepliedTo: response.isRepliedTo || false,
+      isFavorite: response.isFavorite || false,
+      messageId: response.messageId
+    }));
   }
   
   // Получение ответов поставщиков для нескольких запросов сразу
@@ -861,14 +1019,41 @@ export class DatabaseStorage implements IStorage {
     );
     
     const results = await db
-      .select()
+      .select({
+        id: supplierResponses.id,
+        requestId: supplierResponses.requestId,
+        userId: supplierResponses.userId,
+        supplierEmail: supplierResponses.supplierEmail,
+        subject: supplierResponses.subject,
+        content: supplierResponses.content,
+        responseDate: supplierResponses.responseDate,
+        isRead: supplierResponses.isRead,
+        processingStatus: supplierResponses.processingStatus,
+        processingStartedAt: supplierResponses.processingStartedAt,
+        processingCompletedAt: supplierResponses.processingCompletedAt,
+        processingError: supplierResponses.processingError,
+        supplierId: supplierResponses.supplierId,
+        supplierName: supplierResponses.supplierName,
+        requestSupplierId: supplierResponses.requestSupplierId,
+        isRepliedTo: supplierResponses.isRepliedTo,
+        isFavorite: supplierResponses.isFavorite,
+        messageId: supplierResponses.messageId,
+        isAnalyzed: supplierResponses.isAnalyzed
+        // НЕ включаем attachments - загружаем отдельно!
+      })
       .from(supplierResponses)
       .where(conditions)
       .orderBy(desc(supplierResponses.responseDate));
       
-    console.log(`[storage] SECURITY: Returning ${results.length} batch responses exclusively for user ID: ${userId}`);
+    // Add empty attachments array - будет загружаться отдельно
+    const processedResults = results.map(response => ({
+      ...response,
+      attachments: [] // Пустой массив - загружаем отдельно
+    }));
     
-    return results;
+    console.log(`[storage] SECURITY: Returning ${processedResults.length} batch responses exclusively for user ID: ${userId} (without attachments)`);
+    
+    return processedResults;
   }
   
   async countAllSupplierResponses(): Promise<number> {
@@ -903,12 +1088,9 @@ export class DatabaseStorage implements IStorage {
   async toggleFavoriteResponse(id: number, userId?: number): Promise<SupplierResponse | undefined> {
     try {
       // Build the query condition to ensure data isolation
-      let condition = eq(supplierResponses.id, id);
-      
-      // If userId is provided, add it to the condition
-      if (userId) {
-        condition = and(condition, eq(supplierResponses.userId, userId));
-      }
+      let condition = userId 
+        ? and(eq(supplierResponses.id, id), eq(supplierResponses.userId, userId))
+        : eq(supplierResponses.id, id);
       
       // Get the current response state with proper user filter
       const [currentResponse] = await db
@@ -1134,12 +1316,9 @@ export class DatabaseStorage implements IStorage {
 
   async getContactGroupById(id: number, userId?: number): Promise<ContactGroup | undefined> {
     // Build the query conditions
-    let conditions = eq(contactGroups.id, id);
-    
-    // If userId is provided, add it to the conditions to ensure data isolation
-    if (userId) {
-      conditions = and(conditions, eq(contactGroups.userId, userId));
-    }
+    let conditions = userId 
+      ? and(eq(contactGroups.id, id), eq(contactGroups.userId, userId))
+      : eq(contactGroups.id, id);
     
     const [group] = await db
       .select()
@@ -1149,10 +1328,9 @@ export class DatabaseStorage implements IStorage {
     if (!group) return undefined;
     
     // Count direct contact items with userId filtering if provided
-    let contactItemsCondition = eq(contactItems.groupId, id);
-    if (userId) {
-      contactItemsCondition = and(contactItemsCondition, eq(contactItems.userId, userId));
-    }
+    let contactItemsCondition = userId 
+      ? and(eq(contactItems.groupId, id), eq(contactItems.userId, userId))
+      : eq(contactItems.groupId, id);
     
     const [directContactsResult] = await db
       .select({ count: count() })
@@ -1162,10 +1340,9 @@ export class DatabaseStorage implements IStorage {
     const directContacts = directContactsResult?.count || 0;
     
     // Count suppliers in groups with userId filtering if provided
-    let supplierGroupsCondition = eq(requestSupplierGroups.contactGroupId, id);
-    if (userId) {
-      supplierGroupsCondition = and(supplierGroupsCondition, eq(requestSupplierGroups.userId, userId));
-    }
+    let supplierGroupsCondition = userId 
+      ? and(eq(requestSupplierGroups.contactGroupId, id), eq(requestSupplierGroups.userId, userId))
+      : eq(requestSupplierGroups.contactGroupId, id);
     
     const [supplierGroupsResult] = await db
       .select({ count: count() })
@@ -2060,19 +2237,6 @@ export class DatabaseStorage implements IStorage {
   }
   
   // Search request operations
-  async getSearchRequest(id: number): Promise<SearchRequest | undefined> {
-    try {
-      console.log(`[storage] Getting search request ID ${id}`);
-      const [searchRequest] = await db
-        .select()
-        .from(searchRequests)
-        .where(eq(searchRequests.id, id));
-      return searchRequest;
-    } catch (error) {
-      console.error(`[storage] Error getting search request ID ${id}:`, error);
-      return undefined;
-    }
-  }
 
   // REMOVED: Insecure method that fetches all requests without user filtering
   // This method was a security vulnerability - replaced with user-filtered version only
@@ -2565,7 +2729,7 @@ export class DatabaseStorage implements IStorage {
         .from(users)
         .where(and(
           eq(users.emailConfigured, true),
-          isNull(users.emailAccount).not()
+          isNotNull(users.emailAccount)
         ));
       
       return result.filter(user => user.emailAccount);
@@ -2729,15 +2893,6 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Helper method to generate unique order numbers
-  generateOrderNumber(): string {
-    // Format: REQ-XXXXXXXXXX (REQ prefix + 10 random characters)
-    return `REQ-${nanoid(10).toUpperCase()}`;
-  }
-
-  // Helper method to generate unique tracking IDs
-  generateTrackingId(): string {
-    return nanoid(16);
-  }
 }
 
 export const storage = new DatabaseStorage();

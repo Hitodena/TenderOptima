@@ -29,7 +29,8 @@ import {
   SlidersHorizontal,
   ArrowUpNarrowWide,
   ArrowDownNarrowWide,
-  ListFilter
+  ListFilter,
+  RefreshCw
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -45,6 +46,7 @@ import {
 import { type SupplierResponse, type RequestSupplier } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { AddToContactGroup } from "@/components/add-to-contact-group";
+import { AttachmentsList } from "@/components/attachments-list";
 // Импортируем функцию для работы с избранными ответами
 import * as SupplierResponsesAPI from "@/api/supplier-responses";
 
@@ -57,6 +59,8 @@ interface ResponsePanelProps {
   requestId?: number; // Optional request ID for parameter extraction
   onActiveResponseChange?: (responseId: number, response: SupplierResponse) => void;
   onExtractParameters?: () => void; // Callback for when "Extract Parameters" button is clicked
+  onCheckNewOffers?: () => void; // Callback for checking new offers
+  isCheckingOffers?: boolean; // Loading state for checking offers
 }
 
 export function ResponsePanel({
@@ -67,7 +71,9 @@ export function ResponsePanel({
   onCompare,
   requestId,
   onActiveResponseChange,
-  onExtractParameters
+  onExtractParameters,
+  onCheckNewOffers,
+  isCheckingOffers = false
 }: ResponsePanelProps) {
   const { toast } = useToast();
   const [isSending, setIsSending] = useState<boolean>(false);
@@ -438,20 +444,35 @@ export function ResponsePanel({
         <div className="border-r md:col-span-1 overflow-hidden">
           {/* Панель инструментов */}
           <div className="p-3 bg-muted/30 border-b">
-            {/* Сравнить и кнопки инструментов */}
-            <div className="flex items-center justify-between mb-3">
-              {/* Кнопка сравнения выбранных - центральное расположение */}
+            {/* Кнопки действий */}
+            <div className="flex items-center gap-2 mb-3">
+              {/* Кнопка проверки новых предложений */}
+              {onCheckNewOffers && (
+                <Button 
+                  variant="outline" 
+                  size="icon" 
+                  className="w-8 h-8"
+                  onClick={onCheckNewOffers}
+                  disabled={isCheckingOffers}
+                  title="Проверить новые предложения"
+                >
+                  <RefreshCw 
+                    size={14} 
+                    className={isCheckingOffers ? 'animate-spin' : ''} 
+                  />
+                </Button>
+              )}
+              
+              {/* Кнопка сравнения выбранных */}
               <Button
                 variant="default"
-                className="flex items-center gap-1 w-full justify-center"
+                className="flex items-center gap-1 flex-1 justify-center"
                 onClick={onCompare}
                 disabled={selectedResponses.length < 1}
                 size="sm"
               >
-                <BarChartHorizontal className="h-4 w-4" />
                 <span>Сравнить ({selectedResponses.length})</span>
               </Button>
-              
             </div>
             
 
@@ -774,62 +795,12 @@ export function ResponsePanel({
                 <div className="space-y-4">
                   {/* Parameter Extraction Status Card removed - now shown in the main request details layout */}
 
-                  {/* Attachments - Moved above email content */}
-                  {(() => {
-                    const attachments = (activeResponse as any).attachments || [];
-                    if (attachments.length > 0) {
-                      return (
-                        <div className="mb-4 p-3 border rounded-md bg-muted/10">
-                          <h4 className="text-sm font-medium mb-2">
-                            Вложения ({attachments.length})
-                          </h4>
-                          <div className="flex flex-wrap gap-2">
-                            {attachments.map((attachment: any, i: number) => (
-                              <a
-                                key={i}
-                                href="#"
-                                className="inline-flex items-center gap-2 px-3 py-2 border border-primary/20 rounded-lg hover:bg-primary/5 hover:border-primary/40 transition-colors"
-                                onClick={async (e) => {
-                                  e.preventDefault();
-                                  try {
-                                    // Добавляем временную метку для предотвращения кэширования
-                                    const timestamp = new Date().getTime();
-                                    const url = `/api/attachments/${activeResponse.id}/${i}/download?t=${timestamp}`;
-                                    console.log('Opening attachment URL:', url);
-                                    window.open(url, '_blank');
-                                  } catch (error: any) {
-                                    console.error('Download failed:', error);
-                                    toast({
-                                      title: "Download Failed",
-                                      description: "Failed to download attachment. Please try again.",
-                                      variant: "destructive"
-                                    });
-                                  }
-                                }}
-                              >
-                                <svg 
-                                  className="text-primary"
-                                  xmlns="http://www.w3.org/2000/svg" 
-                                  width="16" height="16" viewBox="0 0 24 24" 
-                                  fill="none" stroke="currentColor" 
-                                  strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                                >
-                                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                  <polyline points="7 10 12 15 17 10" />
-                                  <line x1="12" y1="15" x2="12" y2="3" />
-                                </svg>
-                                <div>
-                                  <span className="text-sm font-medium">{attachment.filename}</span>
-                                  <span className="text-xs text-muted-foreground ml-2">({Math.round(attachment.size/1024)}KB)</span>
-                                </div>
-                              </a>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    }
-                    return null;
-                  })()}
+                  {/* Attachments - Loaded on demand */}
+                  <AttachmentsList 
+                    key={`attachments-${activeResponse.id}`} // Force re-render when responseId changes
+                    responseId={activeResponse.id}
+                    initialAttachments={(activeResponse as any).attachments || []}
+                  />
                   
                   {/* Email content */}
                   <div className="leading-relaxed whitespace-pre-wrap" 
