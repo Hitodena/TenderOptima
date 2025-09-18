@@ -10,6 +10,7 @@ import { Loader2, Send } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { BusinessCardPreview } from "./business-card-preview";
 
 // Response schema for form validation
 const followUpSchema = z.object({
@@ -191,6 +192,9 @@ export function SupplierFollowUp({
               </FormItem>
             )}
           />
+
+          {/* Business Card Preview */}
+          <BusinessCardPreview />
 
           <div className="flex justify-end gap-2">
             <Button

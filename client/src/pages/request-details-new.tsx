@@ -385,9 +385,9 @@ export default function RequestDetails() {
     : "Unknown date";
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-4">
-        <div className="flex items-center gap-4 mb-4">
+    <div className="bg-background">
+      <div className="container mx-auto px-4 pt-1 pb-1">
+        <div className="flex items-center gap-4 mb-2">
           <Button variant="outline" asChild>
             <Link href="/dashboard">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
@@ -419,7 +419,7 @@ export default function RequestDetails() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="md:col-span-3 h-full">
             <Tabs value={tab} onValueChange={setTab}>
-              <TabsContent value="overview" className="mt-4">
+              <TabsContent value="overview" className="mt-2">
                 <Card>
                   <CardHeader>
                     <CardTitle>{request.productName}</CardTitle>
@@ -461,7 +461,7 @@ export default function RequestDetails() {
                   </CardContent>
                 </Card>
 
-                <Card className="mt-6">
+                <Card className="mt-3">
                   <CardHeader>
                     <CardTitle>Статистика</CardTitle>
                   </CardHeader>
@@ -484,7 +484,7 @@ export default function RequestDetails() {
                 </Card>
               </TabsContent>
 
-              <TabsContent value="responses" className="mt-4">
+              <TabsContent value="responses" className="mt-2">
                 <ResponsePanel
                   supplierResponses={supplierResponses}
                   selectedResponses={selectedResponses}
@@ -543,7 +543,7 @@ export default function RequestDetails() {
                 />
               </TabsContent>
 
-              <TabsContent value="suppliers" className="mt-4">
+              <TabsContent value="suppliers" className="mt-2">
                 <ScrollArea className="h-[600px] rounded-md border p-4">
                   <div className="space-y-4">
                     {requestSuppliers.map((supplier) => (
@@ -597,7 +597,7 @@ export default function RequestDetails() {
                 </ScrollArea>
               </TabsContent>
 
-              <TabsContent value="analysis" className="mt-4">
+              <TabsContent value="analysis" className="mt-2">
                 <AnalysisResultsTab requestId={request.id} />
               </TabsContent>
             </Tabs>
@@ -608,7 +608,7 @@ export default function RequestDetails() {
             {tab === 'responses' && (
               <Card className="border-primary/30 h-[600px] overflow-hidden flex flex-col">
                 <CardHeader className="bg-primary/5 flex-shrink-0">
-                  <CardTitle>Извлеченные параметры</CardTitle>
+                  <CardTitle className="font-semibold normal-case">Извлеченные параметры</CardTitle>
                 </CardHeader>
                 <CardContent className="flex-1 overflow-hidden min-h-0">
                   <div className="space-y-3 h-full min-h-0">

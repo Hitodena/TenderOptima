@@ -162,11 +162,46 @@ app.use(cors({
   maxAge: 86400, // 1 день в секундах
 }));
 
-// Дополнительные заголовки для лучшей совместимости
+// Селективные заголовки кэширования - разные правила для разных типов ресурсов
 app.use((req, res, next) => {
-  res.header('Cache-Control', 'no-store, no-cache, must-revalidate');
-  res.header('Pragma', 'no-cache');
-  res.header('Expires', '0');
+  const path = req.path;
+  const isApiRoute = path.startsWith('/api/');
+  const isAuthRoute = path.startsWith('/api/auth/');
+  const isStaticAsset = /\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$/i.test(path);
+  
+  // Для API маршрутов - НЕ кэшируем, но сохраняем сессии
+  if (isApiRoute) {
+    if (isAuthRoute) {
+      // Для аутентификации - полное отключение кэширования
+      res.header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+      res.header('Pragma', 'no-cache');
+      res.header('Expires', '0');
+    } else {
+      // Для остальных API - отключаем кэширование, но разрешаем сессии
+      res.header('Cache-Control', 'no-cache, must-revalidate, private');
+      res.header('Pragma', 'no-cache');
+      res.header('Expires', '0');
+    }
+  } else if (isStaticAsset) {
+    // Для статических ресурсов - кэшируем с хэшем
+    res.header('Cache-Control', 'public, max-age=31536000, immutable'); // 1 год
+    res.header('Last-Modified', new Date().toUTCString());
+  } else {
+    // Для HTML страниц - отключаем кэширование
+    res.header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+    res.header('Pragma', 'no-cache');
+    res.header('Expires', '0');
+  }
+  
+  // Общие заголовки безопасности
+  res.header('X-Content-Type-Options', 'nosniff');
+  res.header('X-Frame-Options', 'DENY');
+  res.header('X-XSS-Protection', '1; mode=block');
+  
+  // Заголовки для предотвращения проблем с Chrome
+  res.header('Last-Modified', new Date().toUTCString());
+  res.header('ETag', `"${Date.now()}"`);
+  
   next();
 });
 

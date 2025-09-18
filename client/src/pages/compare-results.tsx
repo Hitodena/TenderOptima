@@ -18,6 +18,7 @@ import { Download, ArrowLeft, ArrowRight, FileText, Mail, Phone, Globe, ChevronD
 import { MainNavigation } from '@/components/main-navigation';
 import { apiRequest } from '@/lib/queryClient';
 import { SupplierFollowUp } from '@/components/supplier-follow-up';
+import { BusinessCardPreview } from '@/components/business-card-preview';
 import { useAuth } from '@/hooks/use-auth';
 import { SubscriptionGuard } from '@/components/SubscriptionGuard';
 import { useSubscription } from '@/hooks/useSubscription';
@@ -192,6 +193,9 @@ ${getBusinessCardSignature()}`;
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
                   />
                 </div>
+
+                {/* Business Card Preview */}
+                <BusinessCardPreview />
 
                 <div className="flex justify-end space-x-3 pt-4">
                   <Button
@@ -404,6 +408,9 @@ ${getBusinessCardSignature()}`;
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
                   />
                 </div>
+
+                {/* Business Card Preview */}
+                <BusinessCardPreview />
 
                 <div className="flex justify-end space-x-3">
                   <Button
@@ -869,7 +876,14 @@ export default function CompareResultsPage() {
               }
               
               // Clean up the value - remove HTML tags and extract current value from improvement patterns
-              if (typeof value === 'string') {
+              if (typeof value === 'object' && value !== null) {
+                // Handle new object format with history
+                if (value.value !== undefined) {
+                  value = value.value;
+                } else if (value.displayValue !== undefined) {
+                  value = value.displayValue;
+                }
+              } else if (typeof value === 'string') {
                 // Handle improvement pattern: "new value (ранее: old value)"
                 const improvementMatch = value.match(/^(.+?)\s*\(ранее:\s*(.+?)\)$/);
                 if (improvementMatch) {
@@ -891,8 +905,8 @@ export default function CompareResultsPage() {
             console.log(`Sorting by ${sortBy}: ${a.name}="${aValue}" vs ${b.name}="${bValue}"`);
             
             // Handle empty values - put them at the end
-            const aIsEmpty = !aValue || aValue.trim() === '' || aValue === 'Не указано' || aValue === '-';
-            const bIsEmpty = !bValue || bValue.trim() === '' || bValue === 'Не указано' || bValue === '-';
+            const aIsEmpty = !aValue || aValue.trim() === '' || aValue === 'Не указано' || aValue === '-' || aValue === 'null' || aValue === 'undefined';
+            const bIsEmpty = !bValue || bValue.trim() === '' || bValue === 'Не указано' || bValue === '-' || bValue === 'null' || bValue === 'undefined';
             
             if (aIsEmpty && bIsEmpty) {
               return 0; // Both empty, maintain original order
@@ -2711,12 +2725,13 @@ export default function CompareResultsPage() {
                                           return {
                                             current: value.value || value.displayValue,
                                             previous: value.previousValue,
-                                            isUpdated: value.isUpdated || false
+                                            isUpdated: value.isUpdated || false,
+                                            history: value.history || []
                                           };
                                         }
                                       }
                                       
-                                      if (typeof value !== 'string') return { current: value, previous: null, isUpdated: false };
+                                      if (typeof value !== 'string') return { current: value, previous: null, isUpdated: false, history: [] };
                                       
                                       // Check for our new pattern: "50000 рублей (ранее: 45000 рублей)"
                                       const newPatternMatch = value.match(/^(.+?)\s*\(ранее:\s*(.+?)\)$/);
@@ -2724,7 +2739,8 @@ export default function CompareResultsPage() {
                                         return {
                                           current: newPatternMatch[1].trim(),
                                           previous: newPatternMatch[2].trim(),
-                                          isUpdated: true
+                                          isUpdated: true,
+                                          history: [newPatternMatch[2].trim()]
                                         };
                                       }
                                       
@@ -2734,15 +2750,35 @@ export default function CompareResultsPage() {
                                         return {
                                           current: htmlMatch[1].trim(),
                                           previous: htmlMatch[2].trim(),
-                                          isUpdated: true
+                                          isUpdated: true,
+                                          history: [htmlMatch[2].trim()]
                                         };
                                       }
                                       
-                                      return { current: value, previous: null, isUpdated: false };
+                                      return { current: value, previous: null, isUpdated: false, history: [] };
                                     };
                                     
-                                    const { current, previous, isUpdated } = parseImprovement(cellValue);
+                                    const { current, previous, isUpdated, history } = parseImprovement(cellValue);
                                     
+                                    // Function to render full history for financial fields
+                                    const renderFinancialHistory = (paramName: string, currentVal: string, historyArray: string[]) => {
+                                      const param = paramName.toLowerCase();
+                                      const isFinancial = param.includes('стоимость') || param.includes('цена');
+                                      
+                                      if (!isFinancial || !historyArray || historyArray.length === 0) {
+                                        return null;
+                                      }
+                                      
+                                      // Create history chain: oldest → ... → newest → current
+                                      const historyChain = [...historyArray, currentVal];
+                                      
+                                      return (
+                                        <div className="text-xs text-gray-500 mt-1 break-words">
+                                          ({historyChain.join(' → ')})
+                                        </div>
+                                      );
+                                    };
+
                                     // Determine arrow direction and color based on parameter type and improvement
                                     const getArrowDisplay = (paramName: string, currentVal: string, previousVal: string) => {
                                       if (!currentVal || !previousVal || currentVal === previousVal) return null;
@@ -2812,7 +2848,7 @@ export default function CompareResultsPage() {
                                     return (
                                       <td key={supplierIndex} className="px-3 py-4 text-sm text-gray-500 min-w-[240px] max-w-[240px] w-[240px]">
                                         <div className="flex items-start gap-2">
-                                          {previous && isUpdated && getArrowDisplay(row.parameter || row.Parameter || '', current, previous)}
+                                          {previous && isUpdated && !(row.parameter || row.Parameter || '').toLowerCase().includes('описание') && getArrowDisplay(row.parameter || row.Parameter || '', current, previous)}
                                           <div className="min-w-0 flex-1">
                                             {isEditing ? (
                                               <div className="flex flex-col gap-2">
@@ -2866,10 +2902,20 @@ export default function CompareResultsPage() {
                                                 {current}
                                               </div>
                                             )}
-                                            {previous && isUpdated && !isEditing && (
-                                              <div className="text-xs text-gray-500 mt-1 break-words">
-                                                (было: {previous})
-                                              </div>
+                                            {!isEditing && (
+                                              <>
+                                                {/* Show full history for financial fields */}
+                                                {renderFinancialHistory(row.parameter || row.Parameter || '', current, history)}
+                                                
+                                                {/* Show simple history for non-financial, non-description fields */}
+                                                {previous && isUpdated && !(row.parameter || row.Parameter || '').toLowerCase().includes('описание') && 
+                                                 !(row.parameter || row.Parameter || '').toLowerCase().includes('стоимость') && 
+                                                 !(row.parameter || row.Parameter || '').toLowerCase().includes('цена') && (
+                                                  <div className="text-xs text-gray-500 mt-1 break-words">
+                                                    (было: {previous})
+                                                  </div>
+                                                )}
+                                              </>
                                             )}
                                           </div>
                                         </div>

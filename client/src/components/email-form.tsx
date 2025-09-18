@@ -14,6 +14,7 @@ import { useLocation } from "wouter";
 import { useState, useRef, useEffect } from "react";
 import { Paperclip, X, File } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { BusinessCardPreview } from "./business-card-preview";
 
 // Format deadline to more user-friendly format
 const formatDeadline = (isoDate: string | null | undefined): string => {
@@ -697,6 +698,9 @@ ${getBusinessCardSignature()}
                 </FormItem>
               )}
             />
+
+            {/* Business Card Preview */}
+            <BusinessCardPreview />
             
             {/* File attachments */}
             <div className="space-y-4">

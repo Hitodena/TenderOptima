@@ -200,9 +200,27 @@ export default function ContactGroupsPage() {
 
       {contactGroups && contactGroups.length > 0 ? (
         <div className="space-y-2">
-          {contactGroups.map((group) => (
-            <Card key={group.id} className="shadow-sm hover:shadow transition-shadow">
-              <div className="flex items-center p-3">
+          {contactGroups.map((group) => {
+            const handleCardClick = (e: React.MouseEvent) => {
+              // Предотвращаем клик, если кликнули на кнопку или иконку
+              if ((e.target as HTMLElement).closest('button')) {
+                return;
+              }
+              
+              // Находим кнопку "Просмотр" и кликаем по ней
+              const viewButton = e.currentTarget.querySelector('a[href*="/contact-groups/"]') as HTMLAnchorElement;
+              if (viewButton) {
+                viewButton.click();
+              }
+            };
+
+            return (
+              <Card 
+                key={group.id} 
+                className="shadow-sm hover:shadow transition-all duration-200 cursor-pointer hover:bg-gray-50"
+                onClick={handleCardClick}
+              >
+                <div className="flex items-center p-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
                     <div>
@@ -220,7 +238,7 @@ export default function ContactGroupsPage() {
                 </div>
                 
                 <div className="flex items-center gap-2">
-                    <Button asChild size="sm">
+                    <Button asChild size="sm" onClick={(e) => e.stopPropagation()}>
                     <Link href={`/contact-groups/${group.id}`}>
                     Просмотр</Link>
                   </Button>
@@ -229,7 +247,8 @@ export default function ContactGroupsPage() {
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8"
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setEditingGroup(group);
                       setEditDialogOpen(true);
                     }}
@@ -239,7 +258,12 @@ export default function ContactGroupsPage() {
 
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </AlertDialogTrigger>
@@ -263,7 +287,8 @@ export default function ContactGroupsPage() {
                 </div>
               </div>
             </Card>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div className="text-center py-12 bg-muted/50 rounded-lg">

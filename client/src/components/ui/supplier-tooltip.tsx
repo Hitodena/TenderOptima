@@ -31,9 +31,32 @@ export function SupplierTooltip({ supplier, children, className = '' }: Supplier
     const triggerRect = triggerRef.current.getBoundingClientRect();
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
-    const tooltipWidth = Math.min(320, viewportWidth - 32); // Адаптивная ширина с минимальным отступом 
-    const tooltipHeight = 250; // Более точная высота tooltip
-    const margin = 12; // Отступ от края экрана
+    const tooltipWidth = Math.min(320, viewportWidth - 32);
+    const tooltipHeight = 280;
+    const margin = 16;
+
+    // Проверяем, есть ли элементы справа от trigger (например, кнопки)
+    const elementsToRight = document.elementsFromPoint(
+      triggerRect.right + 50, 
+      triggerRect.top + triggerRect.height / 2
+    );
+    const hasElementsToRight = elementsToRight.some(el => 
+      el !== triggerRef.current && 
+      !el.closest('[data-tooltip]') &&
+      el.tagName !== 'HTML' && 
+      el.tagName !== 'BODY' &&
+      el.tagName !== 'TD' && // Игнорируем ячейки таблицы
+      el.tagName !== 'TH'    // Игнорируем заголовки таблицы
+    );
+
+    // Дополнительная проверка: ищем кнопки или другие интерактивные элементы справа
+    const buttonElements = document.querySelectorAll('button, [role="button"], .btn');
+    const hasButtonsToRight = Array.from(buttonElements).some(btn => {
+      const btnRect = btn.getBoundingClientRect();
+      return btnRect.left > triggerRect.right && 
+             btnRect.top < triggerRect.bottom && 
+             btnRect.bottom > triggerRect.top;
+    });
 
     // Проверяем возможность размещения сверху
     const canPlaceTop = triggerRect.top >= tooltipHeight + margin;
@@ -44,27 +67,37 @@ export function SupplierTooltip({ supplier, children, className = '' }: Supplier
     // Проверяем возможность размещения слева
     const canPlaceLeft = triggerRect.left >= tooltipWidth + margin;
     
-    // Проверяем возможность размещения справа
-    const canPlaceRight = triggerRect.right + tooltipWidth + margin <= viewportWidth;
+    // Проверяем возможность размещения справа (с учетом элементов справа)
+    const canPlaceRight = triggerRect.right + tooltipWidth + margin <= viewportWidth && 
+                         !hasElementsToRight && !hasButtonsToRight;
 
     // Проверяем, хватает ли места по горизонтали для центрирования tooltip
     const centerX = triggerRect.left + triggerRect.width / 2;
     const canCenterHorizontally = centerX >= tooltipWidth / 2 + margin && 
                                   centerX <= viewportWidth - tooltipWidth / 2 - margin;
 
-    // Приоритет: top/bottom (если можно центрировать) > right > left > top/bottom (без центрирования)
+    // Проверяем, находимся ли мы в таблице
+    const isInTable = triggerRef.current.closest('table') !== null;
+    
+    // Приоритет: избегаем размещения справа если там есть элементы
+    // В таблице предпочитаем позиционирование слева для избежания перекрытия кнопок
+    if (isInTable && canPlaceLeft) return 'left';
     if (canPlaceTop && canCenterHorizontally) return 'top';
     if (canPlaceBottom && canCenterHorizontally) return 'bottom';
-    if (canPlaceRight) return 'right';
+    
+    // Если вертикальное позиционирование невозможно, используем горизонтальное
     if (canPlaceLeft) return 'left';
+    if (canPlaceRight) return 'right';
+    
+    // Fallback: используем вертикальное позиционирование даже без центрирования
     if (canPlaceTop) return 'top';
     if (canPlaceBottom) return 'bottom';
     
-    // Если совсем мало места, выбираем наименьшее зло
+    // Если совсем мало места, выбираем позицию с максимальным доступным пространством
     const spaceTop = triggerRect.top;
     const spaceBottom = viewportHeight - triggerRect.bottom;
     const spaceLeft = triggerRect.left;
-    const spaceRight = viewportWidth - triggerRect.right;
+    const spaceRight = (hasElementsToRight || hasButtonsToRight) ? 0 : viewportWidth - triggerRect.right;
     
     const maxSpace = Math.max(spaceTop, spaceBottom, spaceLeft, spaceRight);
     
@@ -101,6 +134,19 @@ export function SupplierTooltip({ supplier, children, className = '' }: Supplier
     setHideTimeout(timeout);
   };
 
+  // Обработчик изменения размера окна для пересчета позиции
+  useEffect(() => {
+    const handleResize = () => {
+      if (isVisible) {
+        setPosition(calculateOptimalPosition());
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [isVisible]);
+
+
   const formatWebsiteUrl = (website: string) => {
     if (!website) return '';
     return website.startsWith('http') ? website : `http://${website}`;
@@ -118,7 +164,7 @@ export function SupplierTooltip({ supplier, children, className = '' }: Supplier
   };
 
   const getPositionClasses = () => {
-    const baseClasses = "absolute z-50 w-80 max-w-sm bg-white border border-gray-200 rounded-lg shadow-lg p-4 animate-in fade-in-0 zoom-in-95 duration-200";
+    const baseClasses = "absolute z-50 w-80 max-w-sm bg-white border border-gray-200 rounded-lg shadow-xl p-4 animate-in fade-in-0 zoom-in-95 duration-200 max-h-80 overflow-y-auto";
     
     switch (position) {
       case 'top':
@@ -175,11 +221,12 @@ export function SupplierTooltip({ supplier, children, className = '' }: Supplier
       className={`relative inline-block ${className}`}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
+      data-tooltip="true"
     >
       {children}
       
       {isVisible && (
-        <div ref={tooltipRef} className={getPositionClasses()}>
+        <div ref={tooltipRef} className={getPositionClasses()} data-tooltip="true">
           {/* Стрелка */}
           <div className={getArrowClasses().container}>
             <div className={getArrowClasses().outer}></div>

@@ -524,7 +524,7 @@ export function ParameterExtractionStatus({
                   displayableParameters().map((param, index) => (
                     <div key={index} className="bg-white/50 rounded-lg p-1.5 border border-slate-200/50 hover:border-slate-300 transition-colors duration-200">
                       <div className="space-y-1">
-                        <div className="font-medium text-xs text-slate-600 uppercase tracking-wide">{param.name}</div>
+                        <div className="font-normal text-xs text-gray-500 normal-case">{param.name}</div>
                         {editingParam === param.name ? (
                           <div className="flex gap-1">
                             <Input
@@ -565,7 +565,7 @@ export function ParameterExtractionStatus({
                               onClick={() => startEditing(param.name, param.value)}
                               title="Нажмите для редактирования"
                             >
-                              <span className={`${param.value === '-' ? 'text-slate-400 italic' : 'text-slate-700 font-medium'}`}>
+                              <span className={`${param.value === '-' ? 'text-gray-400 italic' : 'text-gray-900 font-medium'}`}>
                                 {param.value === '-' ? 'Не указано' : param.value}
                               </span>
                             </div>

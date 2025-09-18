@@ -61,7 +61,10 @@ async def health_check():
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
         "google_api_configured": bool(os.getenv("GOOGLE_SEARCH_API_TOKEN")),
-        "google_cse_configured": bool(os.getenv("GOOGLE_CUSTOM_SEARCH_ENGINE_ID"))
+        "google_cse_configured": bool(os.getenv("GOOGLE_CUSTOM_SEARCH_ENGINE_ID")),
+        "yandex_api_configured": bool(os.getenv("YANDEX_KEY_PATH")),
+        "yandex_folder_configured": bool(os.getenv("YANDEX_FOLDER_ID"))
+        
     }
 
 @app.post("/search", response_model=SearchResponse)

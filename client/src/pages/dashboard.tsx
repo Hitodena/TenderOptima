@@ -226,8 +226,24 @@ function RequestCard({ request, tab, onComplete, onActivate }: RequestCardProps)
   // Simplify status display to just "active" or "completed"
   const displayStatus = request.status === "completed" ? "completed" : "active";
 
+  const handleRowClick = (e: React.MouseEvent) => {
+    // Предотвращаем клик, если кликнули на кнопку
+    if ((e.target as HTMLElement).closest('button')) {
+      return;
+    }
+    
+    // Находим кнопку "Смотреть" и кликаем по ней
+    const viewButton = e.currentTarget.querySelector('a[href*="/requests/"]') as HTMLAnchorElement;
+    if (viewButton) {
+      viewButton.click();
+    }
+  };
+
   return (
-    <div className="border border-gray-300 rounded-md overflow-hidden mb-1 hover:shadow-sm transition-shadow">
+    <div 
+      className="border border-gray-300 rounded-md overflow-hidden mb-1 hover:shadow-sm transition-all duration-200 cursor-pointer hover:bg-gray-50"
+      onClick={handleRowClick}
+    >
       <div className="flex items-center justify-between p-3 h-14">
         <div className="flex flex-col gap-1">
           <div className="font-medium ">
@@ -241,14 +257,17 @@ function RequestCard({ request, tab, onComplete, onActivate }: RequestCardProps)
         </div>
 
         <div className="flex items-center gap-3">
-          <Button asChild size="sm">
+          <Button asChild size="sm" onClick={(e) => e.stopPropagation()}>
             <Link href={`/requests/${request.id}?tab=responses`}>Смотреть</Link>
           </Button>
           
           {/* Context-specific status buttons */}
           {tab === "active" && (
             <Button
-              onClick={() => onComplete(request.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onComplete(request.id);
+              }}
               variant="outline"
               size="sm"
               className="text-gray-500 hover:text-gray-600 border-gray-300 hover:border-gray-400"
@@ -260,7 +279,10 @@ function RequestCard({ request, tab, onComplete, onActivate }: RequestCardProps)
           
           {tab === "completed" && (
             <Button
-              onClick={() => onActivate(request.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onActivate(request.id);
+              }}
               variant="outline"
               size="sm"
               className="text-gray-500 hover:text-gray-600 border-gray-300 hover:border-gray-400"

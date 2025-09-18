@@ -43,12 +43,29 @@ export async function setupVite(app: Express, server: Server) {
     appType: "custom",
   });
 
-  // Skip Vite middleware for API routes
+  // Skip Vite middleware for API routes and add selective cache headers
   app.use((req, res, next) => {
     if (req.path.startsWith('/api/')) {
       // If it's an API route, skip Vite middleware
       next();
     } else {
+      const path = req.path;
+      const isStaticAsset = /\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$/i.test(path);
+      
+      if (isStaticAsset) {
+        // Для статических ресурсов в development - кэшируем с коротким сроком
+        res.header('Cache-Control', 'public, max-age=300'); // 5 минут
+        res.header('Last-Modified', new Date().toUTCString());
+        res.header('ETag', `"dev-${Date.now()}"`);
+      } else {
+        // Для HTML и других файлов - отключаем кэширование
+        res.header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+        res.header('Pragma', 'no-cache');
+        res.header('Expires', '0');
+        res.header('Last-Modified', new Date().toUTCString());
+        res.header('ETag', `"dev-${Date.now()}"`);
+      }
+      
       // For non-API routes, use Vite middleware
       vite.middlewares(req, res, next);
     }
@@ -95,11 +112,16 @@ export function serveStatic(app: Express) {
     );
   }
 
-  // Serve static files but skip API routes
+  // Serve static files but skip API routes with proper cache headers
   app.use((req, res, next) => {
     if (req.path.startsWith('/api/')) {
       return next();
     }
+    
+    // Add cache headers for static files
+    res.header('Cache-Control', 'public, max-age=31536000'); // 1 year for assets with hash
+    res.header('Last-Modified', new Date().toUTCString());
+    
     express.static(distPath)(req, res, next);
   });
 

@@ -93,9 +93,19 @@ export async function apiRequest<T = Response>(
           dataType: typeof data,
           dataKeys: data && typeof data === 'object' ? Object.keys(data) : 'not object',
           businessCardLength: data && typeof data === 'object' && 'businessCard' in data ? (data as any).businessCard?.length || 0 : 'no businessCard field',
-          hasLogoUrl: data && typeof data === 'object' && 'logoUrl' in data ? !!(data as any).logoUrl : 'no logoUrl field'
+          hasLogoUrl: data && typeof data === 'object' && 'logoUrl' in data ? !!(data as any).logoUrl : 'no logoUrl field',
+          businessCardPreview: data && typeof data === 'object' && 'businessCard' in data ? (data as any).businessCard?.substring(0, 100) + '...' : 'no businessCard field',
+          hasNewlines: data && typeof data === 'object' && 'businessCard' in data ? (data as any).businessCard?.includes('\n') || false : 'no businessCard field',
+          newlineCount: data && typeof data === 'object' && 'businessCard' in data ? ((data as any).businessCard?.match(/\n/g) || []).length : 'no businessCard field'
         });
-        options.body = JSON.stringify(data);
+        const jsonBody = JSON.stringify(data);
+        console.log('[ApiRequest DEBUG] JSON body:', {
+          jsonLength: jsonBody.length,
+          hasNewlines: jsonBody.includes('\\n'),
+          newlineCount: (jsonBody.match(/\\n/g) || []).length,
+          jsonPreview: jsonBody.substring(0, 200) + '...'
+        });
+        options.body = jsonBody;
       } else if (data && (method === 'GET' || method === 'HEAD')) {
         // Для GET запросов с данными, конвертируем в query параметры
         const params = new URLSearchParams();

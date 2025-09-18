@@ -198,13 +198,27 @@ export async function generateFixedComparisonData(suppliers: any[], parameters: 
                     latestDate: responseDate,
                     firstDate: responseDate,
                     hasValue: true,
-                    sourceResponseId: response.id // Track which response this parameter came from
+                    sourceResponseId: response.id, // Track which response this parameter came from
+                    history: [] // Initialize history array for financial fields
                   };
                   console.log(`[FIXED COMPARISON] ✓ ACCEPTED first non-empty value for ${paramName}: "${value}" from response ${response.id}`);
                 } else {
                   // We already have a value for this parameter, check if we should update based on date
                   if (responseDate > aggregatedParams[paramName].latestDate) {
                     const previousValue = aggregatedParams[paramName].latest;
+                    
+                    // For financial fields, add to history
+                    const isFinancial = paramName.toLowerCase().includes('стоимость') || paramName.toLowerCase().includes('цена');
+                    if (isFinancial && previousValue !== value) {
+                      if (!aggregatedParams[paramName].history) {
+                        aggregatedParams[paramName].history = [];
+                      }
+                      // Add previous value to history if it's not already there
+                      if (!aggregatedParams[paramName].history.includes(previousValue)) {
+                        aggregatedParams[paramName].history.push(previousValue);
+                      }
+                    }
+                    
                     aggregatedParams[paramName].latest = value;
                     aggregatedParams[paramName].latestDate = responseDate;
                     aggregatedParams[paramName].sourceResponseId = response.id; // Update source response ID
@@ -232,18 +246,33 @@ export async function generateFixedComparisonData(suppliers: any[], parameters: 
       // Store final aggregated values for this supplier with historical context
       for (const paramName of parameters) {
         if (aggregatedParams[paramName] && aggregatedParams[paramName].hasValue) {
-          const { latest, first, sourceResponseId } = aggregatedParams[paramName];
-          // Create display value with history if values changed
+          const { latest, first, sourceResponseId, history } = aggregatedParams[paramName];
+          
+          // For financial fields, use enhanced history display
+          const isFinancial = paramName.toLowerCase().includes('стоимость') || paramName.toLowerCase().includes('цена');
+          
           let displayValue = latest;
           let exportValue = latest;
-          if (first !== latest && first !== latest) {
+          
+          if (isFinancial && history && history.length > 0) {
+            // For financial fields, create object with full history
+            displayValue = {
+              value: latest,
+              previousValue: first,
+              isUpdated: first !== latest,
+              history: history
+            };
+            exportValue = `${latest} (ранее: ${first})`;
+          } else if (first !== latest && first !== latest) {
+            // For non-financial fields, use simple history
             displayValue = `${latest} (ранее: ${first})`;
             exportValue = `${latest} (ранее: ${first})`;
           }
+          
           parameterValues[paramName][email] = displayValue;
           parameterValues[paramName][`${email}_export`] = exportValue;
           parameterValues[paramName][`${email}_sourceResponseId`] = sourceResponseId; // Store source response ID
-          console.log(`[FIXED COMPARISON] Final aggregated ${paramName} = "${displayValue}" for ${email} (source: response ${sourceResponseId})`);
+          console.log(`[FIXED COMPARISON] Final aggregated ${paramName} = "${typeof displayValue === 'object' ? JSON.stringify(displayValue) : displayValue}" for ${email} (source: response ${sourceResponseId})`);
         } else {
           parameterValues[paramName][email] = '-';
           parameterValues[paramName][`${email}_export`] = '-';

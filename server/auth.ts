@@ -292,17 +292,22 @@ export async function setupAuth(app: Express) {
     name: 'supplier_session', // Более информативное имя для куки
     proxy: true, // Доверяем прокси серверам Replit
     cookie: {
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days - увеличенный срок для удобства пользователей
       secure: false, // В Replit нужно использовать false даже для HTTPS
       sameSite: 'lax', // Более совместимая настройка для браузеров
-      httpOnly: true,
+      httpOnly: true, // Защита от XSS
       path: '/',
+      // Дополнительные настройки для стабильности сессий
+      domain: undefined, // Не ограничиваем домен для локальной разработки
     },
     store: new PgSessionStore({
       pool,
       tableName: 'session',
       createTableIfMissing: true,
       pruneSessionInterval: false, // Disable automatic pruning to prevent connection issues
+      // Дополнительные настройки для стабильности
+      conString: undefined, // Используем pool
+      ttl: 30 * 24 * 60 * 60, // 30 дней в секундах
     }),
   };
   
@@ -323,6 +328,22 @@ export async function setupAuth(app: Express) {
   
   // Настраиваем сессии и обработчик ошибок
   app.use(session(sessionSettings));
+  
+  // Middleware для сохранения сессий в API запросах
+  app.use((req, res, next) => {
+    // Для API маршрутов добавляем специальные заголовки для сохранения сессий
+    if (req.path.startsWith('/api/')) {
+      // Разрешаем кэширование сессий, но не данных
+      res.header('Cache-Control', 'no-cache, must-revalidate, private');
+      res.header('Vary', 'Cookie, Authorization');
+      
+      // Обновляем время жизни сессии при каждом запросе
+      if (req.session) {
+        req.session.touch();
+      }
+    }
+    next();
+  });
   
   // Инициализируем Passport и включаем использование сессий
   app.use(passport.initialize());
@@ -852,13 +873,21 @@ export async function setupAuth(app: Express) {
         const userId = req.session.userId;
         console.log(`[Auth] Восстанавливаем сессию пользователя ${userId} из сохраненного userId`);
         
-        // Найдем пользователя вручную
+          // Найдем пользователя вручную
         const [user] = await db.select().from(users).where(eq(users.id, userId));
         
         if (user) {
           console.log(`[Auth] Найден пользователь для восстановления:`, user.username);
           // Принудительно устанавливаем пользователя в сессии
-          req.login(user, (err) => {
+          const userForLogin = {
+            id: user.id,
+            username: user.username,
+            role: user.role,
+            businessCard: user.businessCard || undefined,
+            logoUrl: user.logoUrl || undefined,
+            language: user.language || 'ru'
+          };
+          req.login(userForLogin, (err) => {
             if (err) {
               console.error('[Auth] Ошибка при восстановлении сессии:', err);
             }
@@ -872,8 +901,8 @@ export async function setupAuth(app: Express) {
             id: user.id,
             username: user.username,
             role: user.role,
-            businessCard: user.businessCard,
-            logoUrl: user.logoUrl,
+            businessCard: user.businessCard || undefined,
+            logoUrl: user.logoUrl || undefined,
             language: user.language
           });
         }
@@ -901,16 +930,19 @@ export async function setupAuth(app: Express) {
   app.put("/api/auth/business-card", async (req, res) => {
     // Enhanced debugging for business card persistence
     console.log('[Business Card Debug] === REQUEST RECEIVED ===');
-    console.log('[Business Card Debug] Business card update request:', {
-      isAuthenticated: req.isAuthenticated(),
-      DEV_MODE,
-      userId: req.user?.id || 'не определен',
-      sessionID: req.sessionID,
-      bodyData: {
-        businessCardLength: req.body.businessCard?.length || 0,
-        hasLogoUrl: !!req.body.logoUrl
-      }
-    });
+      console.log('[Business Card Debug] Business card update request:', {
+        isAuthenticated: req.isAuthenticated(),
+        DEV_MODE,
+        userId: req.user?.id || 'не определен',
+        sessionID: req.sessionID,
+        bodyData: {
+          businessCardLength: req.body.businessCard?.length || 0,
+          hasLogoUrl: !!req.body.logoUrl,
+          businessCardPreview: req.body.businessCard ? `"${req.body.businessCard.substring(0, 100)}..."` : 'null',
+          hasNewlines: req.body.businessCard?.includes('\n') || false,
+          newlineCount: (req.body.businessCard?.match(/\n/g) || []).length
+        }
+      });
     
     if (!req.isAuthenticated() && !DEV_MODE) {
       console.log('[Business Card Debug] Authentication failed');
@@ -1139,9 +1171,13 @@ export async function saveImprovementRequest(req: any, res: any) {
 
     // Save improvement request to database
     await db.insert(improvementRequests).values({
-      supplierName,
       requestId: parseInt(requestId),
-      createdAt: new Date()
+      supplierId: supplierName,
+      supplierEmail: 'noreply@example.com', // Добавляем обязательное поле
+      supplierName: supplierName,
+      subject: 'Improvement Request',
+      message: 'Improvement request',
+      requestType: 'improvement'
     });
 
     res.json({ 

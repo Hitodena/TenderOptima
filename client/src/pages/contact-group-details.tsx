@@ -262,11 +262,10 @@ export default function ContactGroupDetailsPage() {
   const { group, contacts } = data || { group: null, contacts: [] };
 
   return (
-    <Layout title="Группа"> <h1 className="text-3xl font-bold">{group?.name}</h1>
+    <Layout title="Группа">
+      <h1 className="text-3xl font-bold">{group?.name}</h1>
       {group?.description && <p className="text-muted-foreground mt-1">{group.description}</p>}
-Контакты ({contacts?.length || 0})
-     
-      
+      <p className="text-lg font-medium mt-4">Контакты ({contacts?.length || 0})</p>
 
       <div className="mb-8">
         <div className="flex justify-between items-center mb-6">

@@ -1311,59 +1311,66 @@ export default function SendRequest() {
                                     <SupplierTooltip supplier={supplier}>
                                       <Dialog>
                                         <DialogTrigger asChild>
-                                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0 rounded-full">
+                                          <Button 
+                                            variant="ghost" 
+                                            size="sm" 
+                                            className="h-6 w-6 p-0 rounded-full hover:bg-blue-100 hover:text-blue-600 transition-colors cursor-pointer"
+                                            title="Кликните для просмотра информации о поставщике"
+                                          >
                                             <Info className="h-3 w-3" />
                                           </Button>
                                         </DialogTrigger>
-                                      <DialogContent className="max-w-md">
-                                        <DialogHeader>
-                                          <DialogTitle>Информация о поставщике</DialogTitle>
-                                        </DialogHeader>
-                                        <div className="space-y-3">
-                                          <div>
-                                            <Label className="text-sm font-medium">Название компании</Label>
-                                            <p className="text-sm">{supplier.name}</p>
-                                          </div>
-                                          {supplier.email && (
-                                            <div>
-                                              <Label className="text-sm font-medium">Email</Label>
-                                              <p className="text-sm">{supplier.email}</p>
-                                            </div>
-                                          )}
-                                          {supplier.phone && (
-                                            <div>
-                                              <Label className="text-sm font-medium">Телефон</Label>
-                                              <p className="text-sm">{supplier.phone}</p>
-                                            </div>
-                                          )}
-                                          {supplier.website && (
-                                            <div>
-                                              <Label className="text-sm font-medium">Веб-сайт</Label>
-                                              <p className="text-sm break-all">
-                                                {supplier.website.startsWith('http') ? supplier.website : `http://${supplier.website}`}
-                                              </p>
-                                            </div>
-                                          )}
-                                          {supplier.description && (
-                                            <div>
-                                              <Label className="text-sm font-medium">Описание</Label>
-                                              <p className="text-sm">{supplier.description}</p>
-                                            </div>
-                                          )}
-                                          {supplier.categories && supplier.categories.length > 0 && (
-                                            <div>
-                                              <Label className="text-sm font-medium">Категории</Label>
-                                              <div className="flex flex-wrap gap-1 mt-1">
-                                                {supplier.categories.map((category, idx) => (
-                                                  <Badge key={idx} variant="secondary" className="text-xs">
-                                                    {category}
-                                                  </Badge>
-                                                ))}
+                                        <DialogContent className="max-w-md max-h-[80vh] flex flex-col">
+                                          <DialogHeader className="flex-shrink-0">
+                                            <DialogTitle>Информация о поставщике</DialogTitle>
+                                          </DialogHeader>
+                                          <ScrollArea className="flex-1 pr-4">
+                                            <div className="space-y-3">
+                                              <div>
+                                                <Label className="text-sm font-medium">Название компании</Label>
+                                                <p className="text-sm">{supplier.name}</p>
                                               </div>
+                                              {supplier.email && (
+                                                <div>
+                                                  <Label className="text-sm font-medium">Email</Label>
+                                                  <p className="text-sm">{supplier.email}</p>
+                                                </div>
+                                              )}
+                                              {supplier.phone && (
+                                                <div>
+                                                  <Label className="text-sm font-medium">Телефон</Label>
+                                                  <p className="text-sm">{supplier.phone}</p>
+                                                </div>
+                                              )}
+                                              {supplier.website && (
+                                                <div>
+                                                  <Label className="text-sm font-medium">Веб-сайт</Label>
+                                                  <p className="text-sm break-all">
+                                                    {supplier.website.startsWith('http') ? supplier.website : `http://${supplier.website}`}
+                                                  </p>
+                                                </div>
+                                              )}
+                                              {supplier.description && (
+                                                <div>
+                                                  <Label className="text-sm font-medium">Описание</Label>
+                                                  <p className="text-sm">{supplier.description}</p>
+                                                </div>
+                                              )}
+                                              {supplier.categories && supplier.categories.length > 0 && (
+                                                <div>
+                                                  <Label className="text-sm font-medium">Категории</Label>
+                                                  <div className="flex flex-wrap gap-1 mt-1">
+                                                    {supplier.categories.map((category, idx) => (
+                                                      <Badge key={idx} variant="secondary" className="text-xs">
+                                                        {category}
+                                                      </Badge>
+                                                    ))}
+                                                  </div>
+                                                </div>
+                                              )}
                                             </div>
-                                          )}
-                                        </div>
-                                      </DialogContent>
+                                          </ScrollArea>
+                                        </DialogContent>
                                       </Dialog>
                                     </SupplierTooltip>
                                   </td>

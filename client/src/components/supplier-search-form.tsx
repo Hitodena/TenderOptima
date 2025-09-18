@@ -22,41 +22,50 @@ import { useState, useEffect } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { universalSearchService } from "@/services/universal-search";
 
-// Import the regions list from the file
-const regionsList = [
-  // Верхнеуровневые регионы
-  "Австралия и Океания", "Азия", "Африка", "Европа", "Россия", "Северный Кавказ", "Республика Крым", "Северо-Запад", "Поволжье",
-  
-  // Азия
-  "Грузия", "Израиль", "Индия", "Камбоджа", "Китай", "Объединённые Арабские Эмираты", "Таиланд", "Южная Корея", "Япония",
-  
-  // Африка
-  "Египет",
-  
-  // Европа
-  "Австрия", "Бельгия", "Болгария", "Великобритания", "Венгрия", "Германия", "Греция", "Дания", "Испания", "Италия", 
-  "Кипр", "Латвия", "Литва", "Нидерланды", "Норвегия", "Польша", "Португалия", "Румыния", "Сербия", "Словакия", 
-  "Словения", "Турция", "Финляндия", "Франция", "Хорватия", "Черногория", "Чехия", "Швейцария", "Швеция", "Эстония",
-  
-  // Россия - Дальний Восток
-  "Дальний Восток", "Амурская область", "Белогорск", "Благовещенск", "Свободный", "Тында", 
-  "Еврейская автономная область", "Забайкальский край", "Чита", "Камчатский край", "Петропавловск-Камчатский", 
-  "Магаданская область", "Магадан", "Приморский край", "Арсеньев", "Артём", "Владивосток", "Дальнегорск", 
-  "Находка", "Уссурийск", "Республика Бурятия", "Северобайкальск", "Улан-Удэ", "Республика Саха (Якутия)", 
-  "Нерюнгринский район", "Якутск", "Сахалинская область", "Южно-Сахалинск", "Хабаровский край", 
-  "Амурский район", "Амурск", "Комсомольск-на-Амуре", "Хабаровск", "Чукотский автономный округ",
-  
-  // Россия - Поволжье
-  "Кировская область", "Вятские Поляны", "Киров", "Кирово-Чепецк", "Нижегородская область", "Арзамас", 
-  "Выкса", "Дзержинск", "Кстовский район", "Кстово", "Нижний Новгород", "Павловский район", "Павлово", "Саров", 
-  "Оренбургская область", "Бузулук", "Гай", "Новотроицк", "Оренбург", "Орск", "Пензенская область", 
-  "Кузнецк", "Пенза", "Пермский край", "Березники", "Лысьва", "Пермь", "Соликамск", "Чайковский район", "Чайковский", 
-  "Республика Башкортостан", "Белебеевский район", "Белебей", "Белорецкий район", "Белорецк", "Ишимбайский район", 
-  "Ишимбай", "Кумертау", "Мелеузовский район", "Мелеуз", "Нефтекамск", "Октябрьский", "Салават", "Сибай", 
-  "Стерлитамак", "Туймазинский район", "Туймазы", "Уфа", "Учалинский район", "Учалы",
-  
-  // И другие регионы из файла...
+// Структура регионов с подрегионами
+interface Region {
+  name: string;
+  subregions?: string[];
+}
+
+const regionsData: Region[] = [
+  { name: "Австралия и Океания" },
+  { 
+    name: "Азия",
+    subregions: ["Грузия", "Израиль", "Индия", "Камбоджа", "Китай", "Объединённые Арабские Эмираты", "Таиланд", "Южная Корея", "Япония"]
+  },
+  { 
+    name: "Африка",
+    subregions: ["Египет"]
+  },
+  { 
+    name: "Европа",
+    subregions: ["Австрия", "Бельгия", "Болгария", "Великобритания", "Венгрия", "Германия", "Греция", "Дания", "Испания", "Италия", 
+      "Кипр", "Латвия", "Литва", "Нидерланды", "Норвегия", "Польша", "Португалия", "Румыния", "Сербия", "Словакия", 
+      "Словения", "Турция", "Финляндия", "Франция", "Хорватия", "Черногория", "Чехия", "Швейцария", "Швеция", "Эстония"]
+  },
+  { 
+    name: "Россия",
+    subregions: ["Северный Кавказ", "Республика Крым", "Северо-Запад", "Поволжье", "Дальний Восток", "Амурская область", "Белогорск", "Благовещенск", "Свободный", "Тында", 
+      "Еврейская автономная область", "Забайкальский край", "Чита", "Камчатский край", "Петропавловск-Камчатский", 
+      "Магаданская область", "Магадан", "Приморский край", "Арсеньев", "Артём", "Владивосток", "Дальнегорск", 
+      "Находка", "Уссурийск", "Республика Бурятия", "Северобайкальск", "Улан-Удэ", "Республика Саха (Якутия)", 
+      "Нерюнгринский район", "Якутск", "Сахалинская область", "Южно-Сахалинск", "Хабаровский край", 
+      "Амурский район", "Амурск", "Комсомольск-на-Амуре", "Хабаровск", "Чукотский автономный округ",
+      "Кировская область", "Вятские Поляны", "Киров", "Кирово-Чепецк", "Нижегородская область", "Арзамас", 
+      "Выкса", "Дзержинск", "Кстовский район", "Кстово", "Нижний Новгород", "Павловский район", "Павлово", "Саров", 
+      "Оренбургская область", "Бузулук", "Гай", "Новотроицк", "Оренбург", "Орск", "Пензенская область", 
+      "Кузнецк", "Пенза", "Пермский край", "Березники", "Лысьва", "Пермь", "Соликамск", "Чайковский район", "Чайковский", 
+      "Республика Башкортостан", "Белебеевский район", "Белебей", "Белорецкий район", "Белорецк", "Ишимбайский район", 
+      "Ишимбай", "Кумертау", "Мелеузовский район", "Мелеуз", "Нефтекамск", "Октябрьский", "Салават", "Сибай", 
+      "Стерлитамак", "Туймазинский район", "Туймазы", "Уфа", "Учалинский район", "Учалы"]
+  }
 ];
+
+// Создаем плоский список для обратной совместимости
+const regionsList = regionsData.flatMap(region => 
+  [region.name, ...(region.subregions || [])]
+);
 
 interface Props {
   onComplete: (request: SearchRequest) => void;
@@ -82,6 +91,7 @@ export function SupplierSearchForm({ onComplete }: Props) {
   const [searchProgress, setSearchProgress] = useState("");
   const [searchProgressPercent, setSearchProgressPercent] = useState(0);
   const [regionError, setRegionError] = useState("");
+  const [expandedRegions, setExpandedRegions] = useState<Set<string>>(new Set());
   
   const form = useForm({
     resolver: zodResolver(searchRequestFormSchema),
@@ -136,6 +146,17 @@ export function SupplierSearchForm({ onComplete }: Props) {
       setSelectedRegions(selectedRegions.filter(r => r !== region));
       setRegionError("");
     }
+  };
+
+  // Handle region expansion toggle
+  const toggleRegionExpansion = (regionName: string) => {
+    const newExpanded = new Set(expandedRegions);
+    if (newExpanded.has(regionName)) {
+      newExpanded.delete(regionName);
+    } else {
+      newExpanded.add(regionName);
+    }
+    setExpandedRegions(newExpanded);
   };
 
   const mutation = useMutation({
@@ -629,22 +650,64 @@ export function SupplierSearchForm({ onComplete }: Props) {
                 )}
                 
                 <ScrollArea className="h-[400px] pr-4">
-                  <div className="space-y-2">
-                    {regionsList.map((region) => (
-                      <FormItem
-                        key={region}
-                        className="flex flex-row items-start space-x-3 space-y-0 rounded-md p-2"
-                      >
-                        <FormControl>
-                          <Checkbox
-                            checked={selectedRegions.includes(region)}
-                            onCheckedChange={(checked) => handleRegionSelect(region, checked === true)}
-                          />
-                        </FormControl>
-                        <div className="space-y-1 leading-none">
-                          <FormLabel>{region}</FormLabel>
-                        </div>
-                      </FormItem>
+                  <div className="space-y-1">
+                    {regionsData.map((region) => (
+                      <div key={region.name}>
+                        {/* Основной регион */}
+                        <FormItem className="flex flex-row items-center space-x-2 space-y-0 rounded-md py-1">
+                          <FormControl>
+                            <Checkbox
+                              checked={selectedRegions.includes(region.name)}
+                              onCheckedChange={(checked) => handleRegionSelect(region.name, checked === true)}
+                            />
+                          </FormControl>
+                          <div className="flex items-center space-x-2 flex-1">
+                            <FormLabel className="text-sm cursor-pointer" onClick={() => handleRegionSelect(region.name, !selectedRegions.includes(region.name))}>
+                              {region.name}
+                            </FormLabel>
+                            {region.subregions && region.subregions.length > 0 && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-4 w-4 p-0"
+                                onClick={() => toggleRegionExpansion(region.name)}
+                              >
+                                <ChevronDown 
+                                  className={`h-3 w-3 transition-transform ${
+                                    expandedRegions.has(region.name) ? 'rotate-180' : ''
+                                  }`} 
+                                />
+                              </Button>
+                            )}
+                          </div>
+                        </FormItem>
+                        
+                        {/* Подрегионы */}
+                        {region.subregions && region.subregions.length > 0 && expandedRegions.has(region.name) && (
+                          <div className="ml-6 space-y-1">
+                            {region.subregions.map((subregion) => (
+                              <FormItem
+                                key={subregion}
+                                className="flex flex-row items-center space-x-2 space-y-0 rounded-md py-1"
+                              >
+                                <FormControl>
+                                  <Checkbox
+                                    checked={selectedRegions.includes(subregion)}
+                                    onCheckedChange={(checked) => handleRegionSelect(subregion, checked === true)}
+                                  />
+                                </FormControl>
+                                <FormLabel 
+                                  className="text-sm cursor-pointer" 
+                                  onClick={() => handleRegionSelect(subregion, !selectedRegions.includes(subregion))}
+                                >
+                                  {subregion}
+                                </FormLabel>
+                              </FormItem>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     ))}
                   </div>
                 </ScrollArea>

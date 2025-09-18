@@ -19,7 +19,7 @@ export function Layout({ children, title }: LayoutProps) {
       
       {/* Main content */}
       <main className="flex-1">
-        <div className="container mx-auto py-6">
+        <div className="container mx-auto px-4 py-8">
           {title && (
             <div className="mb-6">
               <h1 className="text-2xl font-bold">{title}</h1>

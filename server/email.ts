@@ -17,6 +17,7 @@ interface EmailOptions {
     content: Buffer | string;
     contentType?: string;
     encoding?: string;
+    cid?: string; // Content-ID для встраивания в HTML
   }>;
   headers?: Record<string, string>;
 }
@@ -310,6 +311,17 @@ async function getUserBusinessCard(userId: number): Promise<{ businessCard: stri
       logoUrl: users.logoUrl
     }).from(users).where(eq(users.id, userId));
     
+    // Отладочная информация
+    console.log('[email] getUserBusinessCard result:', {
+      userId,
+      found: !!user,
+      businessCard: user?.businessCard ? `"${user.businessCard}"` : 'null',
+      businessCardLength: user?.businessCard?.length || 0,
+      hasNewlines: user?.businessCard?.includes('\n') || false,
+      newlineCount: (user?.businessCard?.match(/\n/g) || []).length,
+      logoUrl: user?.logoUrl || 'null'
+    });
+    
     return user || { businessCard: null, logoUrl: null };
   } catch (error) {
     console.error('[email] Error fetching user business card:', error);
@@ -331,16 +343,44 @@ function formatTextBusinessCard(businessCard: string | null): string {
 function formatHtmlBusinessCard(businessCard: string | null, logoUrl: string | null): string {
   if (!businessCard && !logoUrl) return '';
   
+  // Отладочная информация
+  console.log('[email] formatHtmlBusinessCard called with:', {
+    businessCard: businessCard ? `"${businessCard}"` : 'null',
+    businessCardLength: businessCard?.length || 0,
+    hasNewlines: businessCard?.includes('\n') || false,
+    newlineCount: (businessCard?.match(/\n/g) || []).length
+  });
+  
   let htmlCard = '<div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">';
   
-  // Добавляем логотип, если он есть
+  // Добавляем логотип, если он есть - используем CID для встраивания
   if (logoUrl) {
-    htmlCard += `<div style="margin-bottom: 15px;"><img src="${logoUrl}" alt="Company Logo" style="max-width: 150px; max-height: 60px;"/></div>`;
+    const logoFilename = logoUrl.split('/').pop() || 'logo.png';
+    htmlCard += `<div style="margin-bottom: 15px;"><img src="cid:${logoFilename}" alt="Company Logo" style="max-width: 150px; max-height: 60px;"/></div>`;
   }
   
   // Добавляем текст бизнес-карточки, если он есть
   if (businessCard) {
-    htmlCard += `<div style="font-family: Arial, sans-serif; font-size: 12px; color: #666;">${businessCard}</div>`;
+    // Разбиваем текст на строки и оборачиваем каждую в <p> тег
+    const lines = businessCard
+      .replace(/\r\n/g, '\n')  // Нормализуем Windows line endings
+      .replace(/\r/g, '\n')    // Нормализуем Mac line endings
+      .split('\n')
+      .filter(line => line.trim() !== ''); // Убираем пустые строки
+    
+    console.log('[email] Formatted business card:', {
+      original: businessCard,
+      lines: lines,
+      lineCount: lines.length,
+      originalLength: businessCard.length
+    });
+    
+    // Создаем HTML с отдельными <p> тегами для каждой строки
+    const formattedBusinessCard = lines
+      .map(line => `<p style="margin: 0; padding: 0; font-family: Arial, sans-serif; font-size: 12px; color: #666; line-height: 1.4;">${line.trim()}</p>`)
+      .join('');
+    
+    htmlCard += `<div style="margin: 0; padding: 0;">${formattedBusinessCard}</div>`;
   }
   
   htmlCard += '</div>';
@@ -361,6 +401,7 @@ export const sendEmail = async (
       content: Buffer | string;
       contentType?: string;
       encoding?: string;
+      cid?: string; // Content-ID для встраивания в HTML
     }>;
     userId?: number; // ID пользователя для включения бизнес-карточки
   }
@@ -434,16 +475,68 @@ export const sendEmail = async (
     });
   }
   
-  // ОТКЛЮЧАЕМ бизнес-карточку, так как она вызывает проблемы с производительностью
-  // Вместо получения и добавления, просто создаем стандартные опции для email
+  // Восстанавливаем функциональность бизнес-карточки
+  let finalText = text;
+  let finalHtml = options?.html || text.replace(/\n/g, '<br/>');
+  let businessCardAttachments = processedAttachments || [];
+  
+  // Получаем бизнес-карточку пользователя, если userId предоставлен
+  if (options?.userId) {
+    try {
+      console.log(`[email] Fetching business card for user ${options.userId}`);
+      const { businessCard, logoUrl } = await getUserBusinessCard(options.userId);
+      
+      if (businessCard || logoUrl) {
+        console.log(`[email] Adding business card to email:`, { businessCard: !!businessCard, logoUrl: !!logoUrl });
+        
+        // Добавляем логотип как attachment, если он есть
+        if (logoUrl) {
+          try {
+            const response = await fetch(logoUrl);
+            if (response.ok) {
+              const buffer = await response.arrayBuffer();
+              const logoFilename = logoUrl.split('/').pop() || 'logo.png';
+              const contentType = response.headers.get('content-type') || 'image/png';
+              
+              businessCardAttachments.push({
+                filename: logoFilename,
+                content: Buffer.from(buffer),
+                contentType: contentType,
+                cid: logoFilename // Content-ID для встраивания в HTML
+              });
+              
+              console.log(`[email] Logo added as attachment: ${logoFilename}`);
+            }
+          } catch (logoError) {
+            console.error(`[email] Error loading logo:`, logoError);
+          }
+        }
+        
+        // Добавляем бизнес-карточку к текстовой версии
+        const textBusinessCard = formatTextBusinessCard(businessCard);
+        finalText += textBusinessCard;
+        
+        // Добавляем бизнес-карточку к HTML версии
+        const htmlBusinessCard = formatHtmlBusinessCard(businessCard, logoUrl);
+        finalHtml += htmlBusinessCard;
+        
+        console.log(`[email] Business card added successfully`);
+      } else {
+        console.log(`[email] No business card found for user ${options.userId}`);
+      }
+    } catch (error) {
+      console.error(`[email] Error processing business card for user ${options.userId}:`, error);
+      // Продолжаем отправку без бизнес-карточки
+    }
+  }
   
   const emailOptions: EmailOptions = {
     to,
     subject,
-    text: text,
-    html: options?.html || text.replace(/\n/g, '<br/>'),
+    text: finalText,
+    html: finalHtml,
     replyTo: options?.replyTo,
-    attachments: processedAttachments,
+    attachments: businessCardAttachments,
     headers: {}
   };
   
