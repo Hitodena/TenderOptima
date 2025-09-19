@@ -238,7 +238,7 @@ export function SupplierSearchForm({ onComplete }: Props) {
 
   return (
     <Form {...form}>
-      <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
+      <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
         <FormField
           control={form.control} name="productName"
           render={({ field }) => (
@@ -270,16 +270,16 @@ export function SupplierSearchForm({ onComplete }: Props) {
           )}
         />
 
-        <div className="bg-muted/50 p-4 rounded-lg space-y-3 border">
-          <h3 className="font-medium">Источники поиска</h3>
+        <div className="bg-muted/50 p-3 rounded-lg space-y-3 border">
+          <FormLabel>Источники поиска</FormLabel>
           <FormItem className="flex items-center space-x-3"><FormControl><Checkbox id="use-registry-search" checked={useRegistrySearch} onCheckedChange={(c) => setUseRegistrySearch(c === true)} /></FormControl><FormLabel htmlFor="use-registry-search" className="cursor-pointer">Поиск по реестру</FormLabel></FormItem>
           <FormItem className="flex items-center space-x-3"><FormControl><Checkbox id="search-yandex" checked={searchYandex} onCheckedChange={(c) => setSearchYandex(c === true)} /></FormControl><FormLabel htmlFor="search-yandex" className="cursor-pointer">Поиск по Yandex</FormLabel></FormItem>
           {searchYandex && (<div className="ml-6 pl-4 border-l-2"><FormItem className="flex items-center justify-between"><FormLabel className="text-sm">Включать рекламу</FormLabel><FormControl><Switch checked={includeAds} onCheckedChange={setIncludeAds} /></FormControl></FormItem></div>)}
           <FormItem className="flex items-center space-x-3"><FormControl><Checkbox id="search-google" checked={searchGoogle} onCheckedChange={(c) => setSearchGoogle(c === true)} /></FormControl><FormLabel htmlFor="search-google" className="cursor-pointer">Поиск по Google</FormLabel></FormItem>
         </div>
 
-        <div className="bg-muted/50 p-4 rounded-lg space-y-3 border">
-            <h3 className="font-medium">Регионы поиска</h3>
+        <div className="bg-muted/50 p-3 rounded-lg space-y-3 border">
+            <FormLabel>Регионы поиска</FormLabel>
             <Button type="button" variant="outline" className="w-full" onClick={() => setShowRegionDialog(true)}>
               {selectedRegions.length > 0 ? `Выбрано: ${selectedRegions.length}` : "Выбрать регионы"}
             </Button>
@@ -294,34 +294,43 @@ export function SupplierSearchForm({ onComplete }: Props) {
                 </div>
                 <ScrollArea className="h-[400px] pr-4">
                   <Accordion type="multiple" className="w-full">
-                    {filteredRegionsData.map((country) => (
-                      <AccordionItem value={country.name} key={country.name}>
-                        <div className="flex items-center space-x-2 py-1">
-                          <Checkbox 
-                            id={`c-${country.name}`} 
-                            checked={selectedRegions.some(r=>r.name===country.name)} 
-                            onCheckedChange={(c)=>handleRegionSelect(country,'country',country,c===true)} 
-                          />
-                          <label htmlFor={`c-${country.name}`} className="cursor-pointer text-sm flex-1">
-                            {country.name}
-                          </label>
-                          {country.regions.length > 0 && (
-                            <AccordionTrigger className="py-0 h-auto hover:no-underline">
-                              <span className="sr-only">Развернуть</span>
-                            </AccordionTrigger>
-                          )}
-                        </div>
-                        <AccordionContent className="pl-0 pb-0">
-                          <div className="space-y-1">
+                    {/* Топ-3 страны */}
+                    {(() => {
+                      const topCountries = ['Беларусь', 'Россия', 'Казахстан'];
+                      const topCountriesData = topCountries.map(name => 
+                        filteredRegionsData.find(country => country.name === name)
+                      ).filter(Boolean);
+                      
+                      return topCountriesData.map((country) => (
+                        <AccordionItem value={country.name} key={country.name}>
+                          <div className="flex items-center space-x-2 py-0.5">
+                            <Checkbox 
+                              id={`c-${country.name}`} 
+                              checked={selectedRegions.some(r=>r.name===country.name)} 
+                              onCheckedChange={(c)=>handleRegionSelect(country,'country',country,c===true)} 
+                            />
+                            <div className="flex items-center flex-1">
+                              <label htmlFor={`c-${country.name}`} className="cursor-pointer text-sm font-bold whitespace-nowrap">
+                                {country.name}
+                              </label>
+                              {country.regions.length > 0 && (
+                                <AccordionTrigger className="py-0 h-auto hover:no-underline ml-1">
+                                  <span className="sr-only">Развернуть</span>
+                                </AccordionTrigger>
+                              )}
+                            </div>
+                          </div>
+                        <AccordionContent className="pl-4 pb-0">
+                          <div className="space-y-0 border-l-2 border-gray-100 pl-2">
                             {country.regions.map(region => (
                               <div key={region.name}>
-                                <div className="flex items-center space-x-2 py-1">
+                                <div className="flex items-center space-x-2 py-0.5">
                                   <Checkbox 
                                     id={`r-${region.name}`} 
                                     checked={selectedRegions.some(r=>r.name===region.name)} 
                                     onCheckedChange={(c)=>handleRegionSelect(region,'region',country,c===true)} 
                                   />
-                                  <label htmlFor={`r-${region.name}`} className="cursor-pointer text-sm flex-1">
+                                  <label htmlFor={`r-${region.name}`} className="cursor-pointer text-sm flex-1 whitespace-nowrap text-gray-700">
                                     {region.name}
                                   </label>
                                   {region.cities.length > 0 && (
@@ -330,16 +339,86 @@ export function SupplierSearchForm({ onComplete }: Props) {
                                         <AccordionTrigger className="py-0 h-auto hover:no-underline">
                                           <span className="sr-only">Развернуть</span>
                                         </AccordionTrigger>
-                                        <AccordionContent className="pl-0 pb-0">
-                                          <div className="space-y-1">
+                                        <AccordionContent className="pl-4 pb-0">
+                                          <div className="space-y-0 border-l-2 border-gray-100 pl-2">
                                             {region.cities.map(city => (
-                                              <div key={city.name} className="flex items-center space-x-2 py-1">
+                                              <div key={city.name} className="flex items-center space-x-2 py-0.5">
                                                 <Checkbox 
                                                   id={`t-${city.name}`} 
                                                   checked={selectedRegions.some(r=>r.name===city.name)} 
                                                   onCheckedChange={(c)=>handleRegionSelect(city,'city',country,c===true)}
                                                 />
-                                                <label htmlFor={`t-${city.name}`} className="cursor-pointer text-sm">
+                                                <label htmlFor={`t-${city.name}`} className="cursor-pointer text-sm whitespace-nowrap text-gray-600">
+                                                  {city.name}
+                                                </label>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </AccordionContent>
+                                      </AccordionItem>
+                                    </Accordion>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                      ));
+                    })()}
+                    
+                    
+                    {/* Остальные страны */}
+                    {filteredRegionsData
+                      .filter(country => !['Беларусь', 'Россия', 'Казахстан'].includes(country.name))
+                      .map((country) => (
+                        <AccordionItem value={country.name} key={country.name}>
+                          <div className="flex items-center space-x-2 py-0.5">
+                            <Checkbox 
+                              id={`c-${country.name}`} 
+                              checked={selectedRegions.some(r=>r.name===country.name)} 
+                              onCheckedChange={(c)=>handleRegionSelect(country,'country',country,c===true)} 
+                            />
+                            <div className="flex items-center flex-1">
+                              <label htmlFor={`c-${country.name}`} className="cursor-pointer text-sm whitespace-nowrap">
+                                {country.name}
+                              </label>
+                              {country.regions.length > 0 && (
+                                <AccordionTrigger className="py-0 h-auto hover:no-underline ml-1">
+                                  <span className="sr-only">Развернуть</span>
+                                </AccordionTrigger>
+                              )}
+                            </div>
+                          </div>
+                        <AccordionContent className="pl-4 pb-0">
+                          <div className="space-y-0 border-l-2 border-gray-100 pl-2">
+                            {country.regions.map(region => (
+                              <div key={region.name}>
+                                <div className="flex items-center space-x-2 py-0.5">
+                                  <Checkbox 
+                                    id={`r-${region.name}`} 
+                                    checked={selectedRegions.some(r=>r.name===region.name)} 
+                                    onCheckedChange={(c)=>handleRegionSelect(region,'region',country,c===true)} 
+                                  />
+                                  <label htmlFor={`r-${region.name}`} className="cursor-pointer text-sm flex-1 whitespace-nowrap text-gray-700">
+                                    {region.name}
+                                  </label>
+                                  {region.cities.length > 0 && (
+                                    <Accordion type="multiple" className="w-full">
+                                      <AccordionItem value={region.name} className="border-none">
+                                        <AccordionTrigger className="py-0 h-auto hover:no-underline">
+                                          <span className="sr-only">Развернуть</span>
+                                        </AccordionTrigger>
+                                        <AccordionContent className="pl-4 pb-0">
+                                          <div className="space-y-0 border-l-2 border-gray-100 pl-2">
+                                            {region.cities.map(city => (
+                                              <div key={city.name} className="flex items-center space-x-2 py-0.5">
+                                                <Checkbox 
+                                                  id={`t-${city.name}`} 
+                                                  checked={selectedRegions.some(r=>r.name===city.name)} 
+                                                  onCheckedChange={(c)=>handleRegionSelect(city,'city',country,c===true)}
+                                                />
+                                                <label htmlFor={`t-${city.name}`} className="cursor-pointer text-sm whitespace-nowrap text-gray-600">
                                                   {city.name}
                                                 </label>
                                               </div>
@@ -363,9 +442,9 @@ export function SupplierSearchForm({ onComplete }: Props) {
             </Dialog>
         </div>
 
-        <div className="bg-muted/50 p-4 rounded-lg space-y-1 border">
+        <div className="bg-muted/50 p-3 rounded-lg space-y-1 border">
           <div className="flex items-center justify-between">
-            <h3 className="font-medium">Язык поиска</h3>
+            <FormLabel>Язык поиска</FormLabel>
             <Button type="button" variant="ghost" className="gap-2" onClick={()=>setShowLanguageDialog(true)}><span className="text-sm">{language}</span><Globe className="h-4 w-4" /></Button>
           </div>
           <Dialog open={showLanguageDialog} onOpenChange={setShowLanguageDialog}>
@@ -400,9 +479,9 @@ export function SupplierSearchPage() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-4">
       <div className="max-w-4xl mx-auto">
-        <div className="mb-8">
+        <div className="mb-4">
           <h1 className="text-3xl font-bold">Поиск поставщиков</h1>
           <p className="text-gray-600">Найдите подходящих поставщиков для ваших потребностей</p>
         </div>
