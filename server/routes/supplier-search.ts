@@ -199,17 +199,21 @@ async function callPythonParser(query: string, elements: number, userId: string,
     console.log(`[PythonParser] Making HTTP request to FastAPI microservice on port 8080`);
     
     try {
+      const requestBody = {
+        query,
+        elements,
+        user_id: userId,
+        region,
+        sources
+      };
+      console.log(`[PythonParser] Sending to Python server:`, requestBody);
+      
       const response = await fetch('http://localhost:8080/search', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          query,
-          elements,
-          user_id: userId,
-          region
-        })
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {

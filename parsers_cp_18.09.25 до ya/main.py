@@ -32,7 +32,6 @@ async def main_search(
     google_search_id: Optional[str] = None,
     yandex_key_file: Optional[Path] = None,
     yandex_folder_id: Optional[str] = None,
-    sources: dict = {},
 ) -> List[Dict]:
     """
     Main search function that orchestrates Google and Yandex searches with contact extraction.
@@ -77,7 +76,6 @@ async def main_search(
             google_search_id=google_id,
             yandex_key_file=yandex_key,
             yandex_folder_id=yandex_folder,
-            sources=sources,
         )
         
         if not search_results:
@@ -155,7 +153,7 @@ if __name__ == "__main__":
     # Load environment variables for API keys
     google_api = os.getenv("GOOGLE_SEARCH_API_TOKEN")
     google_id = os.getenv("GOOGLE_CUSTOM_SEARCH_ENGINE_ID")
-    yandex_key_path = os.getenv("YANDEX_KEY_PATH")
+    yandex_key_path = os.getenv("YANDEX_KEY_FILE")
     yandex_folder = os.getenv("YANDEX_FOLDER_ID")
     
     yandex_key_file = Path(yandex_key_path) if yandex_key_path else None

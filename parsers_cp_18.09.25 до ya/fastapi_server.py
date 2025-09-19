@@ -16,24 +16,8 @@ from dotenv import load_dotenv
 # Загружаем переменные окружения из .env в корневой папке
 project_root = Path(__file__).resolve().parent.parent
 env_path = project_root / ".env"
-print(f"DEBUG: project_root = {project_root}")
-print(f"DEBUG: env_path = {env_path}")
-print(f"DEBUG: env_path.exists() = {env_path.exists()}")
 if env_path.exists():
     load_dotenv(dotenv_path=env_path)
-    print(f"DEBUG: .env file loaded successfully")
-    # Проверяем, что загрузилось из .env
-    print(f"DEBUG: YANDEX_KEY_PATH from .env = {os.getenv('YANDEX_KEY_PATH')}")
-    print(f"DEBUG: YANDEX_FOLDER_ID from .env = {os.getenv('YANDEX_FOLDER_ID')}")
-    
-    # Принудительно устанавливаем правильные пути
-    correct_yandex_key_path = "C:\\Users\\andda\\Downloads\\SupplierFinder\\parsers\\yand_keygud.json"
-    os.environ['YANDEX_KEY_PATH'] = correct_yandex_key_path
-    os.environ['YANDEX_KEY_FILE'] = correct_yandex_key_path
-    print(f"DEBUG: Force set YANDEX_KEY_PATH = {correct_yandex_key_path}")
-    print(f"DEBUG: Force set YANDEX_KEY_FILE = {correct_yandex_key_path}")
-else:
-    print(f"DEBUG: .env file not found at {env_path}")
 
 from .main import main_search
 from .utils.logger import CustomLogger
@@ -56,7 +40,6 @@ class SearchRequest(BaseModel):
     elements: int = 10
     user_id: str = "1"
     region: str = "ru"
-    sources: dict = {}  # ← Эта строка должна быть!
 
 class SearchResponse(BaseModel):
     results: List[Dict]
@@ -90,19 +73,13 @@ async def search_endpoint(request: SearchRequest):
     Основной эндпоинт для поиска поставщиков
     """
     try:
-        logger.info(f"Received search request: query='{request.query}', elements={request.elements}, user_id={request.user_id}, region={request.region}, sources={request.sources}")
+        logger.info(f"Received search request: query='{request.query}', elements={request.elements}, user_id={request.user_id}, region={request.region}")
         
         # Загружаем переменные окружения
         google_api = os.getenv("GOOGLE_SEARCH_API_TOKEN")
         google_id = os.getenv("GOOGLE_CUSTOM_SEARCH_ENGINE_ID")
-        yandex_key_path = os.getenv("YANDEX_KEY_PATH")
+        yandex_key_path = os.getenv("YANDEX_KEY_FILE")
         yandex_folder = os.getenv("YANDEX_FOLDER_ID")
-        
-        # Отладочная информация
-        logger.info(f"All environment variables containing 'YANDEX':")
-        for key, value in os.environ.items():
-            if 'YANDEX' in key.upper():
-                logger.info(f"  {key} = {value}")
         
         # Проверяем наличие Google API ключей
         if not google_api or not google_id:
@@ -113,10 +90,7 @@ async def search_endpoint(request: SearchRequest):
             )
         
         logger.info("Google API credentials found, proceeding with search")
-        logger.info(f"Yandex folder: {yandex_folder}")
-        logger.info(f"Yandex key file exists: {Path(yandex_key_path).exists() if yandex_key_path else False}")
-        logger.info(f"Yandex key path: {yandex_key_path}")
-        logger.info(f"Yandex key file exists: {Path(yandex_key_path).exists() if yandex_key_path else False}")
+        
         # Подготавливаем параметры для Yandex (если есть)
         yandex_key_file = Path(yandex_key_path) if yandex_key_path else None
         
@@ -130,7 +104,6 @@ async def search_endpoint(request: SearchRequest):
             google_search_id=google_id,
             yandex_key_file=yandex_key_file,
             yandex_folder_id=yandex_folder,
-            sources=request.sources  # ← Добавить эту строку!
         )
         
         logger.info(f"Search completed: found {len(results)} suppliers with contact information")

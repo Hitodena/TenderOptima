@@ -28,34 +28,6 @@ def normalize_link(link: str) -> str:
     return normalized
 
 
-def get_yandex_region_code(region: str) -> int:
-    """
-    Convert region string to Yandex region code.
-    
-    Args:
-        region: Region string (e.g., 'ru', 'by', 'ua', 'kz')
-        
-    Returns:
-        Yandex region code (int)
-    """
-    region_mapping = {
-        'ru': 65,  # Россия
-        'by': 149, # Беларусь
-        'ua': 187, # Украина
-        'kz': 159, # Казахстан
-        'uz': 191, # Узбекистан
-        'kg': 118, # Кыргызстан
-        'tj': 186, # Таджикистан
-        'tm': 189, # Туркменистан
-        'am': 7,   # Армения
-        'az': 10,  # Азербайджан
-        'ge': 35,  # Грузия
-        'md': 139, # Молдова
-    }
-    
-    return region_mapping.get(region.lower(), 65)  # Default to Russia
-
-
 async def fetch_all(
     query: str,
     user_id: str,
@@ -65,7 +37,6 @@ async def fetch_all(
     google_search_id: str,
     yandex_key_file: Path,
     yandex_folder_id: str,
-    sources: dict = {},
 ) -> List[Dict]:
     """
     Unified fetcher: queries Google and Yandex in parallel,
@@ -83,36 +54,24 @@ async def fetch_all(
     Returns:
         List[Dict]: Deduplicated list of combined results.
     """
-    # Check which search sources are enabled
-    use_google = sources.get("google", True)  # default to True for backward compatibility
-    use_yandex = sources.get("yandex", False)  # default to False for backward compatibility
-    
-    logger.info(f"Search sources: google={use_google}, yandex={use_yandex}")
-    
-    # Concurrently fetch from enabled engines
-    google_task = None
-    if use_google and google_search_api and google_search_id:
-        google_task = parse_google(
-            query=query,
-            elements=elements,
-            region=region,
-            user_id=user_id,
-            token=google_search_api,
-            cust=google_search_id,
-        )
+    # Concurrently fetch from both engines
+    google_task = parse_google(
+        query=query,
+        elements=elements,
+        region=region,
+        user_id=user_id,
+        token=google_search_api,
+        cust=google_search_id,
+    )
     
     yandex_task = None
-    if use_yandex and yandex_key_file and yandex_folder_id:
-        # Convert region string to Yandex region code
-        region_code = get_yandex_region_code(region)
-        logger.info(f"Yandex search with region: {region} -> code: {region_code}")
+    if yandex_key_file and yandex_folder_id:
         yandex_task = yandex_fetch_all(
             user_id=user_id,
             query=query,
             total_results=elements,
             key_file=yandex_key_file,
             folder_id=yandex_folder_id,
-            region=region_code,
         )
 
     tasks = [task for task in [google_task, yandex_task] if task is not None]
