@@ -30,7 +30,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   }
   
   // Check for admin token in header for admin panel requests
-  const adminToken = req.headers && req.headers['x-admin-token'] || '';
+  const adminToken = req.headers && (req.headers['x-admin-token'] || req.headers['X-Admin-Token']) || '';
   if (adminToken && (adminToken === 'admin-token-123456' || adminToken === 'true')) {
     console.log('[Auth] Admin token authentication successful');
     // Set admin user for the request

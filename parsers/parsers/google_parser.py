@@ -98,6 +98,7 @@ async def parse_google(
             result = {
                 "user_id": user_id,
                 "query": query,
+                "region": region,
                 "domain": "https://" + domain,
                 "description": row["description"],
                 "engine": "google",

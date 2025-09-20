@@ -23,49 +23,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { universalSearchService } from "@/services/universal-search";
 
 // Структура регионов с подрегионами
-interface Region {
-  name: string;
-  subregions?: string[];
-}
-
-const regionsData: Region[] = [
-  { name: "Австралия и Океания" },
-  { 
-    name: "Азия",
-    subregions: ["Грузия", "Израиль", "Индия", "Камбоджа", "Китай", "Объединённые Арабские Эмираты", "Таиланд", "Южная Корея", "Япония"]
-  },
-  { 
-    name: "Африка",
-    subregions: ["Египет"]
-  },
-  { 
-    name: "Европа",
-    subregions: ["Австрия", "Бельгия", "Болгария", "Великобритания", "Венгрия", "Германия", "Греция", "Дания", "Испания", "Италия", 
-      "Кипр", "Латвия", "Литва", "Нидерланды", "Норвегия", "Польша", "Португалия", "Румыния", "Сербия", "Словакия", 
-      "Словения", "Турция", "Финляндия", "Франция", "Хорватия", "Черногория", "Чехия", "Швейцария", "Швеция", "Эстония"]
-  },
-  { 
-    name: "Россия",
-    subregions: ["Северный Кавказ", "Республика Крым", "Северо-Запад", "Поволжье", "Дальний Восток", "Амурская область", "Белогорск", "Благовещенск", "Свободный", "Тында", 
-      "Еврейская автономная область", "Забайкальский край", "Чита", "Камчатский край", "Петропавловск-Камчатский", 
-      "Магаданская область", "Магадан", "Приморский край", "Арсеньев", "Артём", "Владивосток", "Дальнегорск", 
-      "Находка", "Уссурийск", "Республика Бурятия", "Северобайкальск", "Улан-Удэ", "Республика Саха (Якутия)", 
-      "Нерюнгринский район", "Якутск", "Сахалинская область", "Южно-Сахалинск", "Хабаровский край", 
-      "Амурский район", "Амурск", "Комсомольск-на-Амуре", "Хабаровск", "Чукотский автономный округ",
-      "Кировская область", "Вятские Поляны", "Киров", "Кирово-Чепецк", "Нижегородская область", "Арзамас", 
-      "Выкса", "Дзержинск", "Кстовский район", "Кстово", "Нижний Новгород", "Павловский район", "Павлово", "Саров", 
-      "Оренбургская область", "Бузулук", "Гай", "Новотроицк", "Оренбург", "Орск", "Пензенская область", 
-      "Кузнецк", "Пенза", "Пермский край", "Березники", "Лысьва", "Пермь", "Соликамск", "Чайковский район", "Чайковский", 
-      "Республика Башкортостан", "Белебеевский район", "Белебей", "Белорецкий район", "Белорецк", "Ишимбайский район", 
-      "Ишимбай", "Кумертау", "Мелеузовский район", "Мелеуз", "Нефтекамск", "Октябрьский", "Салават", "Сибай", 
-      "Стерлитамак", "Туймазинский район", "Туймазы", "Уфа", "Учалинский район", "Учалы"]
-  }
-];
-
-// Создаем плоский список для обратной совместимости
-const regionsList = regionsData.flatMap(region => 
-  [region.name, ...(region.subregions || [])]
-);
+import { regionsData, allRegionsList, type Country, type Region, type City } from "@/data/regions";
 
 interface Props {
   onComplete: (request: SearchRequest) => void;
@@ -134,16 +92,16 @@ export function SupplierSearchForm({ onComplete }: Props) {
   };
   
   // Handle region selection with limit check
-  const handleRegionSelect = (region: string, checked: boolean) => {
+  const handleRegionSelect = (regionName: string, checked: boolean) => {
     if (checked) {
       if (selectedRegions.length >= 5) {
         setRegionError("Можно выбрать не более 5-ти регионов");
         return;
       }
-      setSelectedRegions([...selectedRegions, region]);
+      setSelectedRegions([...selectedRegions, regionName]);
       setRegionError("");
     } else {
-      setSelectedRegions(selectedRegions.filter(r => r !== region));
+      setSelectedRegions(selectedRegions.filter(r => r !== regionName));
       setRegionError("");
     }
   };
@@ -651,31 +609,31 @@ export function SupplierSearchForm({ onComplete }: Props) {
                 
                 <ScrollArea className="h-[400px] pr-4">
                   <div className="space-y-1">
-                    {regionsData.map((region) => (
-                      <div key={region.name}>
-                        {/* Основной регион */}
+                    {regionsData.map((country) => (
+                      <div key={country.name}>
+                        {/* Страна */}
                         <FormItem className="flex flex-row items-center space-x-2 space-y-0 rounded-md py-1">
                           <FormControl>
                             <Checkbox
-                              checked={selectedRegions.includes(region.name)}
-                              onCheckedChange={(checked) => handleRegionSelect(region.name, checked === true)}
+                              checked={selectedRegions.includes(country.name)}
+                              onCheckedChange={(checked) => handleRegionSelect(country.name, checked === true)}
                             />
                           </FormControl>
                           <div className="flex items-center space-x-2 flex-1">
-                            <FormLabel className="text-sm cursor-pointer" onClick={() => handleRegionSelect(region.name, !selectedRegions.includes(region.name))}>
-                              {region.name}
+                            <FormLabel className="text-sm cursor-pointer font-medium" onClick={() => handleRegionSelect(country.name, !selectedRegions.includes(country.name))}>
+                              {country.name}
                             </FormLabel>
-                            {region.subregions && region.subregions.length > 0 && (
+                            {country.regions.length > 0 && (
                               <Button
                                 type="button"
                                 variant="ghost"
                                 size="sm"
                                 className="h-4 w-4 p-0"
-                                onClick={() => toggleRegionExpansion(region.name)}
+                                onClick={() => toggleRegionExpansion(country.name)}
                               >
                                 <ChevronDown 
                                   className={`h-3 w-3 transition-transform ${
-                                    expandedRegions.has(region.name) ? 'rotate-180' : ''
+                                    expandedRegions.has(country.name) ? 'rotate-180' : ''
                                   }`} 
                                 />
                               </Button>
@@ -683,27 +641,66 @@ export function SupplierSearchForm({ onComplete }: Props) {
                           </div>
                         </FormItem>
                         
-                        {/* Подрегионы */}
-                        {region.subregions && region.subregions.length > 0 && expandedRegions.has(region.name) && (
+                        {/* Регионы страны */}
+                        {country.regions.length > 0 && expandedRegions.has(country.name) && (
                           <div className="ml-6 space-y-1">
-                            {region.subregions.map((subregion) => (
-                              <FormItem
-                                key={subregion}
-                                className="flex flex-row items-center space-x-2 space-y-0 rounded-md py-1"
-                              >
-                                <FormControl>
-                                  <Checkbox
-                                    checked={selectedRegions.includes(subregion)}
-                                    onCheckedChange={(checked) => handleRegionSelect(subregion, checked === true)}
-                                  />
-                                </FormControl>
-                                <FormLabel 
-                                  className="text-sm cursor-pointer" 
-                                  onClick={() => handleRegionSelect(subregion, !selectedRegions.includes(subregion))}
-                                >
-                                  {subregion}
-                                </FormLabel>
-                              </FormItem>
+                            {country.regions.map((region) => (
+                              <div key={region.name}>
+                                {/* Регион */}
+                                <FormItem className="flex flex-row items-center space-x-2 space-y-0 rounded-md py-1">
+                                  <FormControl>
+                                    <Checkbox
+                                      checked={selectedRegions.includes(region.name)}
+                                      onCheckedChange={(checked) => handleRegionSelect(region.name, checked === true)}
+                                    />
+                                  </FormControl>
+                                  <div className="flex items-center space-x-2 flex-1">
+                                    <FormLabel className="text-sm cursor-pointer" onClick={() => handleRegionSelect(region.name, !selectedRegions.includes(region.name))}>
+                                      {region.name}
+                                    </FormLabel>
+                                    {region.cities.length > 0 && (
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-4 w-4 p-0"
+                                        onClick={() => toggleRegionExpansion(region.name)}
+                                      >
+                                        <ChevronDown 
+                                          className={`h-3 w-3 transition-transform ${
+                                            expandedRegions.has(region.name) ? 'rotate-180' : ''
+                                          }`} 
+                                        />
+                                      </Button>
+                                    )}
+                                  </div>
+                                </FormItem>
+                                
+                                {/* Города региона */}
+                                {region.cities.length > 0 && expandedRegions.has(region.name) && (
+                                  <div className="ml-6 space-y-1">
+                                    {region.cities.map((city) => (
+                                      <FormItem
+                                        key={city.name}
+                                        className="flex flex-row items-center space-x-2 space-y-0 rounded-md py-1"
+                                      >
+                                        <FormControl>
+                                          <Checkbox
+                                            checked={selectedRegions.includes(city.name)}
+                                            onCheckedChange={(checked) => handleRegionSelect(city.name, checked === true)}
+                                          />
+                                        </FormControl>
+                                        <FormLabel 
+                                          className="text-sm cursor-pointer" 
+                                          onClick={() => handleRegionSelect(city.name, !selectedRegions.includes(city.name))}
+                                        >
+                                          {city.name}
+                                        </FormLabel>
+                                      </FormItem>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
                             ))}
                           </div>
                         )}

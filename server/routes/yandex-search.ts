@@ -4,7 +4,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
 import { db } from "../db";
-import { suppliers } from "../../shared/schema";
+import { suppliers, stagingSuppliers } from "../../shared/schema";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -151,22 +151,20 @@ router.post("/", async (req: Request, res: Response) => {
             try {
               // CRITICAL: Only save suppliers with authentic contact information
               if (result.emails.length > 0 || result.phones.length > 0) {
-                const [savedSupplier] = await db.insert(suppliers).values({
-                  name: result.company_name || new URL(result.url).hostname,
-                  description: result.description || "Найдено через реальный поиск Yandex",
-                  website: result.url,
-                  email: result.emails[0],
-                  phone: result.phones[0],
-                  categories: [keyword],
-                  responseRate: null,
-                  totalRequests: 0,
-                  successfulMatches: 0,
-                  keywordStrength: [keyword],
-                  lastResponseTime: null
+                const [savedStagingSupplier] = await db.insert(stagingSuppliers).values({
+                  sourceEngine: 'yandex',
+                  searchQuery: keyword,
+                  region: regions.join(','), // Используем регионы из запроса
+                  rawTitle: result.company_name || new URL(result.url).hostname,
+                  rawDescription: result.description || "Найдено через реальный поиск Yandex",
+                  rawUrl: result.url,
+                  rawEmails: result.emails,
+                  rawPhones: result.phones,
+                  status: 'new'
                 }).returning();
                 
-                savedSuppliers.push(savedSupplier);
-                console.log(`Saved authentic supplier: ${result.company_name} with ${result.emails.length} emails, ${result.phones.length} phones`);
+                savedSuppliers.push(savedStagingSupplier);
+                console.log(`Saved staging supplier: ${result.company_name} with ${result.emails.length} emails, ${result.phones.length} phones`);
               } else {
                 console.log(`Skipped supplier without authentic contacts: ${result.company_name}`);
               }

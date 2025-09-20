@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, varchar, real, timestamp, boolean, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, varchar, real, timestamp, boolean, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
@@ -66,15 +66,50 @@ export const suppliers = pgTable("suppliers", {
   userId: integer("user_id").references(() => users.id),
   name: text("name").notNull(),
   description: text("description").notNull(),
-  website: text("website").notNull(),
+  website: text("website").notNull().unique(),
   email: text("email").notNull(),
   phone: varchar("phone", { length: 20 }).notNull(),
   categories: text("categories").array().notNull(),
   responseRate: real("response_rate"),
   totalRequests: integer("total_requests").default(0),
   successfulMatches: integer("successful_matches").default(0),
-  keywordStrength: text("keyword_strength").array(),
-  lastResponseTime: timestamp("last_response_time")
+  verifiedResponses: integer("verified_responses").default(0),
+  unverifiedResponses: integer("unverified_responses").default(0),
+  region: text("region"),
+  lastResponseTime: timestamp("last_response_time"),
+  // Дополнительные поля для полной карточки компании
+  legalName: text("legal_name"), // Юридическое наименование
+  taxId: text("tax_id"), // ИНН/УНП
+  legalAddress: text("legal_address"), // Юридический адрес
+  bankDetails: text("bank_details"), // Банковские реквизиты
+  contactPerson: text("contact_person"), // Контактное лицо
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
+});
+
+export const stagingSuppliers = pgTable("staging_suppliers", {
+  id: serial("id").primaryKey(),
+  sourceEngine: text("source_engine").notNull(), // 'google' или 'yandex'
+  searchQuery: text("search_query").notNull(),   // Исходный поисковый запрос
+  region: text("region"),                         // Регион поиска
+  rawTitle: text("raw_title"),
+  rawDescription: text("raw_description"),
+  rawUrl: text("raw_url").notNull(),
+  rawEmails: text("raw_emails").array(),
+  rawPhones: text("raw_phones").array(),
+  status: text("status", { enum: ["new", "in_review", "approved", "rejected", "merged"] }).default("new"),
+  matchedSupplierId: integer("matched_supplier_id").references(() => suppliers.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const supplierSearchKeywords = pgTable("supplier_search_keywords", {
+  id: serial("id").primaryKey(),
+  supplierId: integer("supplier_id").notNull().references(() => suppliers.id, { onDelete: 'cascade' }),
+  keyword: text("keyword").notNull(),
+}, (table) => {
+  return {
+    supplierKeywordIdx: uniqueIndex("supplier_keyword_idx").on(table.supplierId, table.keyword),
+  };
 });
 
 export const searchRequests = pgTable("search_requests", {
@@ -139,6 +174,8 @@ export const supplierResponses = pgTable("supplier_responses", {
   messageId: text("message_id"), // Добавляем поле для хранения уникального идентификатора IMAP сообщения
   isFavorite: boolean("is_favorite").default(false), // Отметка ответа как избранное
   isAnalyzed: boolean("is_analyzed").default(false), // Флаг, показывающий, что ответ был проанализирован
+  verificationStatus: text("verification_status", { enum: ["verified", "unverified", "pending"] }).default("pending"),
+  verificationNotes: text("verification_notes"),
   // Новые поля для асинхронной обработки
   processingStatus: text("processing_status").default("pending"), // pending, processing, completed, failed
   processingStartedAt: timestamp("processing_started_at"),
@@ -611,6 +648,10 @@ export type UserRegister = z.infer<typeof userRegisterSchema>;
 export type BusinessCard = z.infer<typeof businessCardSchema>;
 export type Supplier = typeof suppliers.$inferSelect;
 export type InsertSupplier = typeof suppliers.$inferInsert;
+export type StagingSupplier = typeof stagingSuppliers.$inferSelect;
+export type InsertStagingSupplier = typeof stagingSuppliers.$inferInsert;
+export type SupplierSearchKeyword = typeof supplierSearchKeywords.$inferSelect;
+export type InsertSupplierSearchKeyword = typeof supplierSearchKeywords.$inferInsert;
 export type SearchRequest = typeof searchRequests.$inferSelect;
 export type InsertSearchRequest = typeof searchRequests.$inferInsert;
 export type RequestSupplier = typeof requestSuppliers.$inferSelect;

@@ -39,6 +39,8 @@ import { setupAuth, requireAdmin, tokenAuthMiddleware, getImprovementRequestCoun
 import { requireAuth } from "./middleware/requireAuth";
 import semanticVectorizationRoutes from "./routes/semantic-vectorization";
 import adminEmailRoutes from "./routes/admin-email";
+import adminModerationRoutes from "./routes/admin-moderation";
+import adminModerationTestRoutes from "./routes/admin-moderation-test";
 
 
 import { matchingService } from "./matching-service";
@@ -2500,6 +2502,39 @@ app.post("/api/check-emails", requireAuth, async (req, res) => {
   // Register admin email routes
   console.log('[Server] Registered admin email routes');
   app.use(adminEmailRoutes);
+  // Register admin moderation routes
+  console.log('[Server] Registered admin moderation routes');
+  app.use('/api/admin', adminModerationRoutes);
+  // Register admin moderation test routes (NO AUTH - FOR TESTING ONLY)
+  console.log('[Server] Registered admin moderation test routes');
+  app.use('/api/admin-test', adminModerationTestRoutes);
+  // Simple test endpoint for staging suppliers (NO AUTH)
+  app.get("/api/test/staging-suppliers", async (req, res) => {
+    try {
+      console.log('[Test] Fetching staging suppliers...');
+      
+      const stagingRecords = await db
+        .select()
+        .from(stagingSuppliers)
+        .where(eq(stagingSuppliers.status, 'new'))
+        .orderBy(stagingSuppliers.createdAt);
+
+      console.log(`[Test] Found ${stagingRecords.length} records`);
+
+      res.json({
+        success: true,
+        data: stagingRecords,
+        total: stagingRecords.length
+      });
+
+    } catch (error) {
+      console.error('[Test] Error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
 
   // User mode preference API endpoints
   app.get("/api/user/mode", requireAuth, async (req, res) => {

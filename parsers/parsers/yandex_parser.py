@@ -330,6 +330,7 @@ async def yandex_fetch_all(
                     {
                         "user_id": user_id,
                         "query": query,
+                        "region": str(region),  # Convert region code to string
                         "domain": "https://" + dom,
                         "description": item["description"],
                         "engine": "yandex",

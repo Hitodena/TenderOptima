@@ -51,9 +51,14 @@ router.post('/', requireAuth, async (req, res) => {
     console.log(`[SupplierSearch] Request params:`, { searchQueries, sources, maxResults, regions, language, userId });
 
     // Извлекаем регион для передачи в Python
-    let regionObject = null; // default
+    let region = "ru"; // default
     if (regions && regions.length > 0) {
-      regionObject = regions[0]; // Берем весь объект региона
+      const firstRegion = regions[0];
+      if (typeof firstRegion === 'string') {
+        region = firstRegion; // Frontend передает массив googleCode
+      } else if (firstRegion && typeof firstRegion === 'object' && firstRegion.googleCode) {
+        region = firstRegion.googleCode; // Объект с googleCode
+      }
     }
 
     console.log(`[SupplierSearch] Starting parallel search for ${searchQueries.length} queries: [${searchQueries.map(q => `"${q}"`).join(', ')}] with ${maxResults} max results each`);
@@ -77,7 +82,7 @@ router.post('/', requireAuth, async (req, res) => {
       const searchPromises = searchQueries.map(async (singleQuery, index) => {
         console.log(`[SupplierSearch] Starting search ${index + 1}/${searchQueries.length} for: "${singleQuery}"`);
         try {
-          const results = await callPythonParser(singleQuery, maxResults, userId.toString(), regionObject, sources);
+          const results = await callPythonParser(singleQuery, maxResults, userId.toString(), regions, sources);
           console.log(`[SupplierSearch] Query "${singleQuery}" returned ${results.length} results`);
           return results;
         } catch (error) {
@@ -116,7 +121,7 @@ router.post('/', requireAuth, async (req, res) => {
       const results = uniqueResults;
 
       // 3. Сохранение результатов в БД (логика осталась прежней)
-      const savedSuppliers = await saveSearchResults(results, regionObject?.googleCode || "ru");
+      const savedSuppliers = await saveSearchResults(results, region);
 
       console.log(`[SupplierSearch] Successfully found and saved ${savedSuppliers.length} suppliers`);
 
@@ -181,21 +186,27 @@ router.post('/', requireAuth, async (req, res) => {
 /**
  * Функция вызова Python парсера
  */
-async function callPythonParser(query: string, elements: number, userId: string, regionObject: any = null, sources: any = {}): Promise<SearchResult[]> {
+async function callPythonParser(query: string, elements: number, userId: string, regions: any[] = ["ru"], sources: any = {}): Promise<SearchResult[]> {
   return new Promise(async (resolve, reject) => {
     console.log(`[PythonParser] Calling Python parser with query: "${query}"`);
     
     // Извлекаем регион для передачи в Python
-    let region = "ru"; // default
-    if (regionObject) {
-      if (typeof regionObject === 'string') {
-        region = regionObject; // Обратная совместимость со старым форматом
-      } else if (regionObject && typeof regionObject === 'object' && regionObject.googleCode) {
-        region = regionObject.googleCode; // Новый формат с объектом
+    let region = null;
+    if (regions && regions.length > 0) {
+      const firstRegion = regions[0];
+      if (typeof firstRegion === 'string') {
+        region = firstRegion; // Frontend передает массив googleCode
+      } else if (firstRegion && typeof firstRegion === 'object' && firstRegion.googleCode) {
+        region = firstRegion.googleCode; // Объект с googleCode
       }
     }
     
-    console.log(`[SupplierSearch] Using region code: ${region} for region object:`, regionObject);
+    if (!region) {
+      console.error(`[SupplierSearch] No valid region provided:`, regions);
+      throw new Error('Region is required for search');
+    }
+    
+    console.log(`[SupplierSearch] Using region code: ${region} for regions:`, regions);
     
     console.log(`[PythonParser] Making HTTP request to FastAPI microservice on port 8080`);
     

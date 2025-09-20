@@ -1,5 +1,8 @@
-import type { Supplier, SearchRequest } from "@shared/schema";
+import type { Supplier, SearchRequest, SupplierSearchKeyword } from "@shared/schema";
 import OpenAI from "openai";
+import { db } from "./db";
+import { supplierSearchKeywords } from "../shared/schema";
+import { eq } from "drizzle-orm";
 
 // Simpler but more effective matching service with morphological analysis
 export class MatchingService {
@@ -168,6 +171,26 @@ export class MatchingService {
     
     return Array.from(new Set(variations)); // Убираем дубликаты и конвертируем в массив
   }
+
+  /**
+   * Получает все ключевые слова для поставщика из таблицы supplier_search_keywords
+   * @param supplierId ID поставщика
+   * @returns Массив ключевых слов
+   */
+  private async getKeywordsForSupplier(supplierId: number): Promise<string[]> {
+    try {
+      const keywords = await db
+        .select({ keyword: supplierSearchKeywords.keyword })
+        .from(supplierSearchKeywords)
+        .where(eq(supplierSearchKeywords.supplierId, supplierId));
+      
+      return keywords.map(kw => kw.keyword);
+    } catch (error) {
+      console.error(`Error fetching keywords for supplier ${supplierId}:`, error);
+      return [];
+    }
+  }
+
   async matchSuppliers(suppliers: Supplier[], searchRequest: SearchRequest) {
     // Базовая валидация входных данных
     if (!suppliers || !Array.isArray(suppliers) || !searchRequest) {
@@ -410,7 +433,7 @@ export class MatchingService {
     console.log('Expanded search words with morphology:', expandedSearchArray);
 
     // Match each supplier by looking for search words in their data
-    const matches = suppliers.map(supplier => {
+    const matches = await Promise.all(suppliers.map(async (supplier) => {
       // Combine all supplier text data for searching
       const supplierText = [
         supplier.name,
@@ -465,6 +488,38 @@ export class MatchingService {
         }
       });
 
+      // НОВОЕ ПРАВИЛО: Проверка ключевых слов из одобренных поисковых запросов
+      try {
+        const supplierKeywords = await this.getKeywordsForSupplier(supplier.id);
+        const originalQuery = searchRequest.productName.toLowerCase().trim();
+        
+        if (supplierKeywords.length > 0) {
+          console.log(`Supplier "${supplier.name}" has ${supplierKeywords.length} keywords:`, supplierKeywords);
+          
+          // Проверяем точное совпадение с исходным запросом
+          if (supplierKeywords.some(kw => kw.toLowerCase().trim() === originalQuery)) {
+            score += 2.0; // Значительный бонус за прямое совпадение с одобренным запросом
+            matchedTerms.push(`keyword:${originalQuery}`);
+            matchDetails.keywordMatch = true;
+            matchDetails.matchedKeyword = originalQuery;
+            console.log(`🎯 KEYWORD MATCH: "${originalQuery}" found in approved keywords for supplier "${supplier.name}" (+2.0 bonus)`);
+          }
+          
+          // Проверяем частичное совпадение с ключевыми словами
+          else if (supplierKeywords.some(kw => {
+            const lowerKw = kw.toLowerCase().trim();
+            return lowerKw.includes(originalQuery) || originalQuery.includes(lowerKw);
+          })) {
+            score += 1.0; // Бонус за частичное совпадение
+            matchedTerms.push(`partial-keyword:${originalQuery}`);
+            matchDetails.partialKeywordMatch = true;
+            console.log(`🔍 PARTIAL KEYWORD MATCH: "${originalQuery}" partially matches approved keywords for supplier "${supplier.name}" (+1.0 bonus)`);
+          }
+        }
+      } catch (error) {
+        console.error(`Error checking keywords for supplier ${supplier.id}:`, error);
+      }
+
       // Bonus points for suppliers with good response rates
       if (supplier.responseRate) {
         const responseBonus = supplier.responseRate > 80 ? 0.3 : 
@@ -502,7 +557,7 @@ export class MatchingService {
           ...matchDetails
         }
       };
-    });
+    }));
 
     // Filter non-matching suppliers and sort by score
     const filteredMatches = matches
