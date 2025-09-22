@@ -43,97 +43,90 @@ async def fetch_and_parse_sitemap(session: aiohttp.ClientSession, sitemap_url: s
     logger.debug(f"Parsing sitemap: {sitemap_url}")
     urls = []
     try:
-        async with session.get(sitemap_url, timeout=aiohttp.ClientTimeout(total=10)) as response:
+        async with session.get(sitemap_url, timeout=10) as response:
             if response.status != 200: return []
             root = ET.fromstring(await response.read())
             if root.tag.endswith('sitemapindex'):
-                sitemap_locs = [s.find('{*}loc').text for s in root.findall('{*}sitemap') if s.find('{*}loc') is not None]
+                sitemap_locs = [s.find('{*}loc').text for s in root.findall('{*}sitemap') if s.find('{*}loc')]
                 tasks = [fetch_and_parse_sitemap(session, loc, processed_sitemaps) for loc in sitemap_locs]
-                results = await asyncio.gather(*tasks)
-                for result in results: urls.extend(result)
+                for result in await asyncio.gather(*tasks): urls.extend(result)
             elif root.tag.endswith('urlset'):
-                urls.extend([u.find('{*}loc').text for u in root.findall('{*}url') if u.find('{*}loc') is not None])
+                urls.extend([u.find('{*}loc').text for u in root.findall('{*}url') if u.find('{*}loc')])
     except Exception as e:
         logger.error(f"Error processing sitemap {sitemap_url}: {e}")
     return urls
 
-async def crawl_for_contact_page(session: aiohttp.ClientSession, base_url: str, visited: Set[str], depth: int = 1) -> Optional[str]:
-    if depth < 0 or base_url in visited:
-        return None
-    visited.add(base_url)
-    logger.debug(f"Crawling: {base_url} at depth {depth}")
-    
+# ОБНОВЛЕННАЯ, БЫСТРАЯ ФУНКЦИЯ "УМНОГО ПАУКА"
+async def crawl_for_contact_page(session: aiohttp.ClientSession, base_url: str) -> Optional[str]:
+    """
+    "Умный" паук, который сканирует ТОЛЬКО главную страницу в поисках ссылки на контакты.
+    Он не уходит вглубь, что значительно ускоряет процесс.
+    """
+    logger.debug(f"Smart-crawling main page: {base_url}")
     try:
-        async with session.get(base_url, timeout=aiohttp.ClientTimeout(total=5)) as response:
+        async with session.get(base_url, timeout=7) as response:
             if response.status != 200: return None
             html = await response.text(errors='ignore')
-            
+
         tree = HTMLParser(html)
         main_domain = urlparse(base_url).netloc
-        
-        links_for_next_depth = []
+
         for link in tree.css('a[href]'):
             href = link.attributes.get('href', '').strip()
             if not href or href.startswith(('#', 'mailto:', 'tel:', 'javascript:')):
                 continue
-            
+
             absolute_url = urljoin(base_url, href)
-            
             if urlparse(absolute_url).netloc != main_domain:
                 continue
-                
+
             link_text = (link.text() + " " + href).lower()
             if any(keyword in link_text for keyword in CONTACT_KEYWORDS):
-                logger.info(f"Found potential contact page via crawler: {absolute_url}")
-                return absolute_url # Немедленно возвращаем, если нашли явного кандидата
-            
-            links_for_next_depth.append(absolute_url)
-
-        if depth > 0:
-            for next_url in links_for_next_depth:
-                found_url = await crawl_for_contact_page(session, next_url, visited, depth - 1)
-                if found_url:
-                    return found_url # Возвращаем первый найденный в глубине
-                        
+                try:
+                    async with session.head(absolute_url, timeout=2, allow_redirects=True) as head_response:
+                        if 200 <= head_response.status < 300:
+                            logger.info(f"Found contact page via smart crawler: {absolute_url}")
+                            return absolute_url
+                except Exception:
+                    continue
     except Exception as e:
-        logger.warning(f"Crawler failed for {base_url}: {e}")
+        logger.warning(f"Smart crawler failed for {base_url}: {e}")
     return None
 
 async def find_contact_page(session: aiohttp.ClientSession, domain: str) -> str:
+    """Основная функция поиска: sitemap -> стандартные пути -> умный паук."""
     base_url = sanitize_url(domain)
     
     # 1. Поиск через sitemap.xml
-    sitemap_url = base_url.rstrip('/') + '/sitemap.xml'
-    sitemap_urls = await fetch_and_parse_sitemap(session, sitemap_url, processed_sitemaps=set())
-    if sitemap_urls:
+    if (sitemap_urls := await fetch_and_parse_sitemap(session, base_url.rstrip('/') + '/sitemap.xml', set())):
         for url in sitemap_urls:
             if any(keyword in url.lower() for keyword in CONTACT_KEYWORDS):
                 try:
-                    async with session.head(url, timeout=aiohttp.ClientTimeout(3), allow_redirects=True) as response:
-                        if 200 <= response.status < 300:
-                            logger.info(f"Found contact page via sitemap: {response.url}")
-                            return str(response.url)
+                    async with session.head(url, timeout=3, allow_redirects=True) as r:
+                        if 200 <= r.status < 300:
+                            logger.info(f"Found contact page via sitemap: {str(r.url)}")
+                            return str(r.url)
                 except Exception: continue
 
     # 2. Проверка стандартных путей
     for path in CONTACT_PATHS:
-        url = base_url.rstrip('/') + path
         try:
-            async with session.head(url, timeout=aiohttp.ClientTimeout(3), allow_redirects=True) as response:
-                if 200 <= response.status < 300:
-                    logger.info(f"Found contact page at standard path: {url}")
-                    return str(response.url)
+            async with session.head(base_url.rstrip('/') + path, timeout=3, allow_redirects=True) as r:
+                if 200 <= r.status < 300:
+                    logger.info(f"Found contact page at standard path: {str(r.url)}")
+                    return str(r.url)
         except Exception: continue
     
-    # 3. Запуск "паука"
-    logger.debug(f"Sitemap and standard paths failed for {domain}. Starting crawler.")
-    crawled_url = await crawl_for_contact_page(session, base_url, visited=set(), depth=1)
-    if crawled_url:
+    # 3. Запуск "умного паука"
+    logger.debug(f"Sitemap/standard paths failed for {domain}. Starting smart crawler.")
+    if (crawled_url := await crawl_for_contact_page(session, base_url)):
         return crawled_url
             
     # 4. Возврат главной страницы
     logger.debug(f"No contact page found for {domain}. Defaulting to base URL.")
     return base_url
+
+# --- Остальные функции (normalize_email, extract_contacts, и т.д.) ---
 
 def normalize_email(raw: str) -> str:
     return raw.split(":", 1)[-1].strip().lower()
@@ -143,53 +136,50 @@ def extract_contacts(html: str, region: str) -> Dict[str, List[str]]:
     text = tree.text(separator=" ")
     emails, phones = set(), set()
     for link in tree.css('a[href^="mailto:"]'):
-        if (href := link.attributes.get("href")) and ":" in href:
-            if is_valid_email(email := normalize_email(href)):
-                emails.add(email)
-    for email_match in EMAIL_RE.finditer(text):
-        if is_valid_email(email := email_match.group(0)):
+        if (href := link.attributes.get("href")) and is_valid_email(email := normalize_email(href)):
+            emails.add(email)
+    for match in EMAIL_RE.finditer(text):
+        if is_valid_email(email := match.group(0)):
             emails.add(email.lower())
     for link in tree.css('a[href^="tel:"]'):
-        if not (phone := link.attributes.get("href")): continue
-        phone_raw = phone.split(":", 1)[-1]
-        try:
-            num = phonenumbers.parse(phone_raw, region.upper() if not phone_raw.startswith("+") else None)
-            if phonenumbers.is_valid_number(num):
-                phones.add(phonenumbers.format_number(num, phonenumbers.PhoneNumberFormat.E164))
-        except Exception: continue
+        if (phone := link.attributes.get("href")):
+            try:
+                num = phonenumbers.parse(phone.split(":", 1)[-1], region.upper())
+                if phonenumbers.is_valid_number(num): phones.add(phonenumbers.format_number(num, phonenumbers.PhoneNumberFormat.E164))
+            except Exception: continue
     for match in phonenumbers.PhoneNumberMatcher(text, region.upper()):
         if phonenumbers.is_valid_number(match.number):
             phones.add(phonenumbers.format_number(match.number, phonenumbers.PhoneNumberFormat.E164))
     return {"emails": sorted(emails), "phones": sorted(phones)}
 
-async def fetch_contacts(domain: str, session: aiohttp.ClientSession, semaphore: asyncio.Semaphore) -> Dict[str, Union[str, List]]:
+async def fetch_contacts(domain: str, session: aiohttp.ClientSession, semaphore: asyncio.Semaphore) -> Dict:
     async with semaphore:
         contact_url = ""
         try:
             contact_url = await find_contact_page(session, domain)
-            async with session.get(contact_url, timeout=aiohttp.ClientTimeout(total=10)) as response:
+            async with session.get(contact_url, timeout=10) as response:
                 html = await response.text(errors="ignore")
             data = extract_contacts(html, "ru")
-            return {"domain": domain, "contact_url": contact_url, **data}
+            return {"domain": domain, "url": contact_url, **data}
         except Exception as e:
-            logger.error(f"Failed to fetch or process {domain} (URL: {contact_url}): {e}")
-            return {"domain": domain, "contact_url": contact_url, "emails": [], "phones": []}
+            logger.error(f"Failed to process {domain} (URL: {contact_url}): {e}")
+            return {"domain": domain, "url": contact_url, "emails": [], "phones": []}
 
-async def get_info(domains: List[str], max_concurrent_requests: int) -> List[Dict[str, Union[str, List]]]:
+async def get_info(domains: List[str], max_concurrent_requests: int) -> List[Dict]:
     ua = UserAgent()
     headers = {"User-Agent": ua.random}
     semaphore = asyncio.Semaphore(max_concurrent_requests)
-    connector = aiohttp.TCPConnector(limit_per_host=10)
+    connector = aiohttp.TCPConnector(limit_per_host=10, ssl=False)
     
     async with aiohttp.ClientSession(connector=connector, headers=headers) as session:
         tasks = [fetch_contacts(domain, session, semaphore) for domain in domains]
         results = await asyncio.gather(*tasks)
     filtered = [r for r in results if r and (r.get("emails") or r.get("phones"))]
-    logger.info(f"Completed for {len(domains)} domains. Found info for {len(filtered)} domains.")
+    logger.info(f"Completed for {len(domains)} domains. Found contacts for {len(filtered)} of them.")
     return filtered
 
 async def main():
-    domains_to_check = ["google.com", "github.com", "sitemaps.org", "microsoft.com", "stackoverflow.com"]
+    domains_to_check = ["google.com", "github.com", "sitemaps.org", "microsoft.com", "stackoverflow.com", "nct.by"]
     max_requests = 10
     results = await get_info(domains_to_check, max_requests)
     
@@ -200,3 +190,4 @@ if __name__ == "__main__":
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(main())
+

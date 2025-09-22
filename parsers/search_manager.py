@@ -3,9 +3,9 @@ from pathlib import Path
 from typing import Dict, List
 from urllib.parse import urlparse, urlunparse
 
-from .parsers.google_parser import parse_google
-from .parsers.yandex_parser import yandex_fetch_all
-from .utils.logger import CustomLogger
+from parsers.google_parser import parse_google
+from parsers.yandex_parser import yandex_fetch_all
+from utils.logger import CustomLogger
 
 # ============ Configuration ============
 
@@ -26,6 +26,39 @@ def normalize_link(link: str) -> str:
     path = parsed.path.rstrip("/")
     normalized = urlunparse((scheme, netloc, path, "", "", ""))
     return normalized
+
+
+def build_exclusion_query(query: str, excluded_domains: List[str], search_engine: str) -> str:
+    """
+    Строит модифицированный поисковый запрос с исключениями доменов.
+    
+    Args:
+        query: Оригинальный поисковый запрос
+        excluded_domains: Список доменов для исключения
+        search_engine: Поисковая система ("google" или "yandex")
+    
+    Returns:
+        Модифицированный запрос с исключениями
+    """
+    if not excluded_domains:
+        return query
+    
+    exclusions = []
+    for domain in excluded_domains:
+        # Очищаем домен от протокола и www
+        clean_domain = domain.replace("https://", "").replace("http://", "").replace("www.", "")
+        
+        if search_engine == "google":
+            exclusions.append(f"-site:{clean_domain}")
+        elif search_engine == "yandex":
+            exclusions.append(f"-site:{clean_domain}")
+    
+    if exclusions:
+        modified_query = f"{query} {' '.join(exclusions)}"
+        logger.info(f"Modified {search_engine} query: '{query}' -> '{modified_query}'")
+        return modified_query
+    
+    return query
 
 
 def get_yandex_region_code(region) -> int:
@@ -148,6 +181,7 @@ async def fetch_all(
     yandex_key_file: Path,
     yandex_folder_id: str,
     sources: dict = {},
+    excluded_domains: List[str] = [],  # Восстанавливаем параметр стоп-листа
 ) -> List[Dict]:
     """
     Unified fetcher: queries Google and Yandex in parallel,
@@ -170,12 +204,18 @@ async def fetch_all(
     use_yandex = sources.get("yandex", False)  # default to False for backward compatibility
     
     logger.info(f"Search sources: google={use_google}, yandex={use_yandex}")
+    logger.info(f"Excluded domains: {excluded_domains}")
+    
+    # Строим модифицированные запросы с исключениями
+    google_query = build_exclusion_query(query, excluded_domains, "google") if use_google else query
+    # Отключаем исключения для Yandex - будем фильтровать после получения результатов
+    yandex_query = query  # Используем оригинальный запрос без исключений
     
     # Concurrently fetch from enabled engines
     google_task = None
     if use_google and google_search_api and google_search_id:
         google_task = parse_google(
-            query=query,
+            query=google_query,  # Используем модифицированный запрос
             elements=elements,
             region=region,
             user_id=user_id,
@@ -190,7 +230,7 @@ async def fetch_all(
         logger.info(f"Yandex search with region: {region} -> code: {region_code}")
         yandex_task = yandex_fetch_all(
             user_id=user_id,
-            query=query,
+            query=yandex_query,  # Используем модифицированный запрос
             total_results=elements,
             key_file=yandex_key_file,
             folder_id=yandex_folder_id,
@@ -222,5 +262,28 @@ async def fetch_all(
         else:
             logger.debug(f"Duplicate skipped: {link}")
 
-    logger.info(f"Deduplicated results: {len(unique_results)} unique out of {len(combined)} total")
-    return unique_results
+    # Пост-фильтрация: исключаем домены из стоп-листа
+    filtered_results: List[Dict] = []
+    excluded_count = 0
+    
+    for item in unique_results:
+        domain = item.get("domain", "")
+        # Извлекаем чистый домен для сравнения
+        clean_domain = domain.replace("https://", "").replace("http://", "").replace("www.", "").split("/")[0]
+        
+        # Проверяем, есть ли домен в стоп-листе
+        is_excluded = False
+        for excluded_domain in excluded_domains:
+            excluded_clean = excluded_domain.replace("https://", "").replace("http://", "").replace("www.", "")
+            if clean_domain == excluded_clean or clean_domain.endswith("." + excluded_clean):
+                is_excluded = True
+                excluded_count += 1
+                logger.info(f"Excluded domain from results: {domain} (matches {excluded_domain})")
+                break
+        
+        if not is_excluded:
+            filtered_results.append(item)
+    
+    logger.info(f"Post-filtering: {len(filtered_results)} results after excluding {excluded_count} domains from stop-list")
+    logger.info(f"Final results: {len(filtered_results)} unique out of {len(combined)} total")
+    return filtered_results

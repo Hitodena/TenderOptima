@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { spawn } from 'child_process';
 import { db } from '../db';
-import { suppliers, stagingSuppliers } from '@shared/schema';
+import { suppliers, stagingSuppliers, excludedDomains } from '@shared/schema';
 import { subscriptionService } from '../subscription';
 import { requireAuth } from '../middleware/requireAuth';
 
@@ -185,6 +185,17 @@ async function callPythonParser(query: string, elements: number, userId: string,
   return new Promise(async (resolve, reject) => {
     console.log(`[PythonParser] Calling Python parser with query: "${query}"`);
     
+    // Загружаем стоп-лист доменов
+    let excludedDomainsList: string[] = [];
+    try {
+      const excluded = await db.select().from(excludedDomains);
+      excludedDomainsList = excluded.map(item => item.domain);
+      console.log(`[PythonParser] Loaded ${excludedDomainsList.length} excluded domains:`, excludedDomainsList);
+    } catch (error) {
+      console.error(`[PythonParser] Failed to load excluded domains:`, error);
+      // Продолжаем без стоп-листа в случае ошибки
+    }
+    
     // Извлекаем регион для передачи в Python
     let region = "ru"; // default
     if (regionObject) {
@@ -205,7 +216,8 @@ async function callPythonParser(query: string, elements: number, userId: string,
         elements,
         user_id: userId,
         region,
-        sources
+        sources,
+        excluded_domains: excludedDomainsList // Передаем стоп-лист в Python
       };
       console.log(`[PythonParser] Sending to Python server:`, requestBody);
       

@@ -7,10 +7,10 @@ from typing import Dict, List, Optional
 
 import aiohttp
 
-from .info_getter import get_info
-from .search_manager import fetch_all
-from .utils.logger import CustomLogger
-from .utils.storage import save_to_csv
+from info_getter import get_info
+from search_manager import fetch_all
+from utils.logger import CustomLogger
+from utils.storage import save_to_csv
 
 logger = CustomLogger(
     logger_name="SupplierFinderParser", file_path="SupplierFinderParser.log", debug=True, console=True
@@ -33,6 +33,7 @@ async def main_search(
     yandex_key_file: Optional[Path] = None,
     yandex_folder_id: Optional[str] = None,
     sources: dict = {},
+    excluded_domains: List[str] = [],  # Восстанавливаем параметр стоп-листа
 ) -> List[Dict]:
     """
     Main search function that orchestrates Google and Yandex searches with contact extraction.
@@ -50,7 +51,7 @@ async def main_search(
     Returns:
         List of enriched supplier data with contact information
     """
-    logger.info(f"Starting search for query: '{query}' with {elements} elements")
+    logger.info(f"Starting search for query: '{query}' with {elements} elements, excluding {len(excluded_domains)} domains")
     
     # Validate API credentials
     has_google = google_search_api and google_search_id
@@ -78,13 +79,14 @@ async def main_search(
             yandex_key_file=yandex_key,
             yandex_folder_id=yandex_folder,
             sources=sources,
+            excluded_domains=excluded_domains,  # Передаем стоп-лист в fetch_all
         )
         
         if not search_results:
             logger.warning("No search results found")
             return []
             
-        logger.info(f"Found {len(search_results)} domains from search engines")
+        logger.info(f"Found {len(search_results)} domains from search engines (after query-level exclusions)")
         
     except Exception as e:
         logger.error(f"Search failed: {e}")

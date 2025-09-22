@@ -35,8 +35,8 @@ if env_path.exists():
 else:
     print(f"DEBUG: .env file not found at {env_path}")
 
-from .main import main_search
-from .utils.logger import CustomLogger
+from main import main_search
+from utils.logger import CustomLogger
 
 # Настройка логирования
 logger = CustomLogger(
@@ -56,7 +56,8 @@ class SearchRequest(BaseModel):
     elements: int = 10
     user_id: str = "1"
     region: str = "ru"
-    sources: dict = {}  # ← Эта строка должна быть!
+    sources: dict = {}
+    excluded_domains: List[str] = []  # Восстанавливаем поддержку стоп-листа
 
 class SearchResponse(BaseModel):
     results: List[Dict]
@@ -90,7 +91,7 @@ async def search_endpoint(request: SearchRequest):
     Основной эндпоинт для поиска поставщиков
     """
     try:
-        logger.info(f"Received search request: query='{request.query}', elements={request.elements}, user_id={request.user_id}, region={request.region}, sources={request.sources}")
+        logger.info(f"Received search request: query='{request.query}', elements={request.elements}, user_id={request.user_id}, region={request.region}, sources={request.sources}, excluded_domains={request.excluded_domains}")
         
         # Загружаем переменные окружения
         google_api = os.getenv("GOOGLE_SEARCH_API_TOKEN")
@@ -130,7 +131,8 @@ async def search_endpoint(request: SearchRequest):
             google_search_id=google_id,
             yandex_key_file=yandex_key_file,
             yandex_folder_id=yandex_folder,
-            sources=request.sources  # ← Добавить эту строку!
+            sources=request.sources,
+            excluded_domains=request.excluded_domains  # Передаем стоп-лист
         )
         
         logger.info(f"Search completed: found {len(results)} suppliers with contact information")
