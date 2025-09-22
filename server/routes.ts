@@ -41,6 +41,7 @@ import semanticVectorizationRoutes from "./routes/semantic-vectorization";
 import adminEmailRoutes from "./routes/admin-email";
 import adminModerationRoutes from "./routes/admin-moderation";
 import adminModerationTestRoutes from "./routes/admin-moderation-test";
+import adminExcludedDomainsRoutes from "./routes/admin-excluded-domains";
 
 
 import { matchingService } from "./matching-service";
@@ -2505,6 +2506,9 @@ app.post("/api/check-emails", requireAuth, async (req, res) => {
   // Register admin moderation routes
   console.log('[Server] Registered admin moderation routes');
   app.use('/api/admin', adminModerationRoutes);
+  // Register admin excluded domains routes
+  console.log('[Server] Registered admin excluded domains routes');
+  app.use('/api/admin', adminExcludedDomainsRoutes);
   // Register admin moderation test routes (NO AUTH - FOR TESTING ONLY)
   console.log('[Server] Registered admin moderation test routes');
   app.use('/api/admin-test', adminModerationTestRoutes);

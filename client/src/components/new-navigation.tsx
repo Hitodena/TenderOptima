@@ -122,8 +122,8 @@ export function NewNavigation() {
               <span className="font-medium">{t('quick_procurement')}</span>
             </Link>
 
-            {/* Admin Panel - Only show for admin users */}
-            {user?.role === 'admin' && (
+            {/* Admin Panel - Only show for admin users with localStorage check */}
+            {user?.role === 'admin' && localStorage.getItem('isAdmin') === 'true' && (
               <Link 
                 href="/admin/email"
                 className={`flex items-center h-full px-4 border-b-2 transition-colors ${

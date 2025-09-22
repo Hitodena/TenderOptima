@@ -5,13 +5,14 @@ import { useTranslation } from "@/contexts/language-context";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertTriangleIcon, ShieldIcon, UsersIcon, CreditCardIcon, CheckSquareIcon, Building2Icon } from "lucide-react";
+import { AlertTriangleIcon, ShieldIcon, UsersIcon, CreditCardIcon, CheckSquareIcon, Building2Icon, BanIcon } from "lucide-react";
 import { Redirect } from "wouter";
 
 // Lazy load admin features
 const SubscriptionsPage = React.lazy(() => import('./subscriptions-page'));
 const ModerationPage = React.lazy(() => import('./moderation-page'));
 const VerifiedListPage = React.lazy(() => import('./verified-list-page'));
+const ExcludedDomainsPage = React.lazy(() => import('./excluded-domains-page'));
 
 export default function AdminPanel() {
   const { t } = useTranslation();
@@ -115,6 +116,14 @@ export default function AdminPanel() {
                 <Building2Icon className="mr-2 h-4 w-4" />
                 Реестр поставщиков
               </Button>
+              <Button
+                variant={activeSection === 'excluded-domains' ? 'default' : 'ghost'}
+                className="w-full justify-start"
+                onClick={() => setActiveSection('excluded-domains')}
+              >
+                <BanIcon className="mr-2 h-4 w-4" />
+                Стоп-лист сайтов
+              </Button>
             </div>
           </nav>
         </div>
@@ -125,6 +134,7 @@ export default function AdminPanel() {
             {activeSection === 'subscriptions' && <SubscriptionsPage />}
             {activeSection === 'moderation' && <ModerationPage />}
             {activeSection === 'verified-list' && <VerifiedListPage />}
+            {activeSection === 'excluded-domains' && <ExcludedDomainsPage />}
           </React.Suspense>
         </div>
       </div>

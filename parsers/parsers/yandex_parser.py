@@ -277,7 +277,7 @@ async def yandex_fetch_all(
     total_results: int,
     groups_on_page: int = 100,
     docs_in_group: int = 3,
-    region: int = 65,
+    region: int = 225,
 ) -> List[Dict]:
     """
     Fetch up to `total_results` unique domains from Yandex Web Search.

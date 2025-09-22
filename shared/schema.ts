@@ -678,6 +678,18 @@ export type ExtractedParameter = typeof extractedParameters.$inferSelect;
 export type InsertExtractedParameter = typeof extractedParameters.$inferInsert;
 export type EmailTemplate = z.infer<typeof emailTemplateSchema>;
 
+// Excluded domains table for stop-list functionality
+export const excludedDomains = pgTable("excluded_domains", {
+  id: serial("id").primaryKey(),
+  domain: text("domain").notNull().unique(),
+  reason: text("reason"),
+  addedById: integer("added_by_id").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ExcludedDomain = typeof excludedDomains.$inferSelect;
+export type InsertExcludedDomain = typeof excludedDomains.$inferInsert;
+
 // Additional types for the matching system
 export interface EmailAttachment {
   filename?: string;

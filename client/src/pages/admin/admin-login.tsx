@@ -19,11 +19,14 @@ export default function AdminLogin() {
   const { loginMutation, user } = useAuth();
 
   // If user is already logged in, try to verify admin status
+  // ЗАКОММЕНТИРОВАНО: предотвращаем автоматическое перенаправление на админ-панель
+  /*
   useEffect(() => {
     if (user) {
       checkAdminStatus();
     }
   }, [user]);
+  */
 
   // Function to check admin status
   const checkAdminStatus = async () => {

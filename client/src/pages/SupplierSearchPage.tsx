@@ -36,7 +36,7 @@ export function SupplierSearchForm({ onComplete }: Props) {
   const [regionSearchTerm, setRegionSearchTerm] = useState("");
 
   const [useRegistrySearch, setUseRegistrySearch] = useState(true);
-  const [searchYandex, setSearchYandex] = useState(false);
+  const [searchYandex, setSearchYandex] = useState(true);  // Включить Yandex по умолчанию
   const [searchGoogle, setSearchGoogle] = useState(false);
   const [language, setLanguage] = useState("русский");
   const [showLanguageDialog, setShowLanguageDialog] = useState(false);

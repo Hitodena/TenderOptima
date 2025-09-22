@@ -99,7 +99,7 @@ async def main_search(
         connector = aiohttp.TCPConnector(limit=100, ttl_dns_cache=300, use_dns_cache=True)
         
         # Get contact information
-        contact_results = await get_info(domains, semaphore, connector)
+        contact_results = await get_info(domains, MAX_CONCURRENT_REQUESTS)
         
         logger.info(f"Extracted contacts from {len(contact_results)} domains")
         
@@ -109,7 +109,7 @@ async def main_search(
     
     # Step 3: Merge search results with contact information
     enriched_results = []
-    contact_map = {result["url"]: result for result in contact_results}
+    contact_map = {result["domain"]: result for result in contact_results}
     
     for search_result in search_results:
         domain = search_result["domain"]
