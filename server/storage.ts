@@ -2159,22 +2159,24 @@ export class DatabaseStorage implements IStorage {
         }
       }
       
-      // Получаем сообщения
-      let messageQuery = db
-        .select()
-        .from(requestSupplierMessages)
-        .where(eq(requestSupplierMessages.requestSupplierId, requestSupplierId));
+      // Получаем сообщения только для конкретного requestSupplierId
+      // И фильтруем по userId если он передан
+      let whereConditions = [eq(requestSupplierMessages.requestSupplierId, requestSupplierId)];
       
-      // Если userId передан, добавляем условие фильтрации по userId
-      // Но также включаем сообщения с userId = null, так как они могут быть системными
       if (userId) {
-        messageQuery = messageQuery.where(
+        // Поддерживаем legacy сообщения (с null userId) и сообщения текущего пользователя
+        whereConditions.push(
           or(
             eq(requestSupplierMessages.userId, userId),
             isNull(requestSupplierMessages.userId)
           )
         );
       }
+      
+      const messageQuery = db
+        .select()
+        .from(requestSupplierMessages)
+        .where(and(...whereConditions));
       
       const messages = await messageQuery.orderBy(desc(requestSupplierMessages.sentDate));
       

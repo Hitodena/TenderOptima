@@ -490,6 +490,36 @@ async function extractParametersFromResponse(
     // Check if response has attachments
     const hasAttachments = response.attachments && Array.isArray(response.attachments) && response.attachments.length > 0;
     
+    // Check for large attachments (>5MB)
+    const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB in bytes
+    let hasLargeFiles = false;
+    let largeFilesInfo: string[] = [];
+    
+    if (hasAttachments) {
+      console.log(`Checking ${response.attachments.length} attachments for size limits...`);
+      for (const attachment of response.attachments as any[]) {
+        const sizeInMB = (attachment.size / (1024 * 1024)).toFixed(2);
+        console.log(`Attachment: ${attachment.filename}, size: ${attachment.size} bytes (${sizeInMB} MB)`);
+        
+        if (attachment.size && attachment.size > MAX_FILE_SIZE) {
+          hasLargeFiles = true;
+          largeFilesInfo.push(`${attachment.filename} (${sizeInMB} MB)`);
+          console.log(`Large file detected: ${attachment.filename} (${sizeInMB} MB)`);
+        }
+      }
+    }
+    
+    // If there are large files, return special result indicating manual input needed
+    if (hasLargeFiles) {
+      console.log(`Large files detected: ${largeFilesInfo.join(', ')}. Manual input required.`);
+      return parameters.map(param => ({
+        name: param,
+        value: "-", // Empty value for manual input
+        source: 'manual_required',
+        confidence: 0
+      }));
+    }
+    
     // Get text from email content and clean it
     let emailContent = response.content || '';
     

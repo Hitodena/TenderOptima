@@ -30,7 +30,8 @@ import {
   ArrowUpNarrowWide,
   ArrowDownNarrowWide,
   ListFilter,
-  RefreshCw
+  RefreshCw,
+  Reply
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -49,6 +50,28 @@ import { AddToContactGroup } from "@/components/add-to-contact-group";
 import { AttachmentsList } from "@/components/attachments-list";
 // Импортируем функцию для работы с избранными ответами
 import * as SupplierResponsesAPI from "@/api/supplier-responses";
+
+// CSS стили для скрытия блока с reference
+const emailContentStyles = `
+  .email-content {
+    position: relative;
+  }
+  
+  /* Скрываем блоки с reference и tracking ID */
+  .email-content p:contains("!Request Reference:"),
+  .email-content div:contains("!Request Reference:"),
+  .email-content p:contains("Request Tracking ID:"),
+  .email-content div:contains("Request Tracking ID:"),
+  .email-content p:contains("Please include this reference"),
+  .email-content div:contains("Please include this reference") {
+    display: none !important;
+  }
+  
+  /* Альтернативный способ через JavaScript будет добавлен */
+  .email-content .reference-block {
+    display: none !important;
+  }
+`;
 
 interface ResponsePanelProps {
   supplierResponses: SupplierResponse[];
@@ -83,6 +106,9 @@ export function ResponsePanel({
   );
   const [localResponses, setLocalResponses] = useState<SupplierResponse[]>(supplierResponses);
   const [supplierResponsesState, setSupplierResponses] = useState<SupplierResponse[]>(supplierResponses);
+  const [favoriteLoadingStates, setFavoriteLoadingStates] = useState<Set<number>>(new Set());
+  const [highlightReplyForm, setHighlightReplyForm] = useState<boolean>(false);
+  const [replyButtonClicked, setReplyButtonClicked] = useState<boolean>(false);
   
   // Sorting options
   type SortField = 'date' | 'sender' | 'status' | 'favorite';
@@ -103,6 +129,43 @@ export function ResponsePanel({
   const [isParameterViewerOpen, setIsParameterViewerOpen] = useState(false);
   const [contactsToAdd, setContactsToAdd] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Inject CSS styles for hiding reference blocks
+  useEffect(() => {
+    const styleElement = document.createElement('style');
+    styleElement.textContent = emailContentStyles;
+    document.head.appendChild(styleElement);
+    
+    return () => {
+      document.head.removeChild(styleElement);
+    };
+  }, []);
+
+  // Function to hide reference blocks in email content
+  const hideReferenceBlocks = (element: HTMLElement) => {
+    if (!element) return;
+    
+    // Find and hide elements containing reference text
+    const walker = document.createTreeWalker(
+      element,
+      NodeFilter.SHOW_TEXT,
+      null
+    );
+    
+    let node;
+    while (node = walker.nextNode()) {
+      const text = node.textContent || '';
+      if (text.includes('!Request Reference:') || 
+          text.includes('Request Tracking ID:') || 
+          text.includes('Please include this reference')) {
+        const parent = node.parentElement;
+        if (parent) {
+          parent.style.display = 'none';
+          parent.classList.add('reference-block');
+        }
+      }
+    }
+  };
 
   // Update local responses when props change
   useEffect(() => {
@@ -147,10 +210,23 @@ export function ResponsePanel({
       event.stopPropagation(); // Prevent row click
     }
     
+    // Set loading state
+    setFavoriteLoadingStates(prev => new Set(prev).add(responseId));
+    
+    // Optimistic update - immediately update UI
+    setLocalResponses(prevResponses => 
+      prevResponses.map(response => 
+        response.id === responseId ? {
+          ...response,
+          isFavorite: !response.isFavorite
+        } : response
+      )
+    );
+    
     try {
       const result = await SupplierResponsesAPI.toggleSupplierResponseFavorite(responseId);
       
-      // Update local state
+      // Update with server response (in case of conflicts)
       setLocalResponses(prevResponses => 
         prevResponses.map(response => 
           response.id === responseId ? {
@@ -161,7 +237,62 @@ export function ResponsePanel({
       );
     } catch (error) {
       console.error('Error toggling favorite status:', error);
-      // Отключено уведомление об ошибке
+      
+      // Revert optimistic update on error
+      setLocalResponses(prevResponses => 
+        prevResponses.map(response => 
+          response.id === responseId ? {
+            ...response,
+            isFavorite: !response.isFavorite
+          } : response
+        )
+      );
+    } finally {
+      // Clear loading state
+      setFavoriteLoadingStates(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(responseId);
+        return newSet;
+      });
+    }
+  };
+
+  // Function to scroll to reply form
+  const scrollToReplyForm = () => {
+    const replyForm = document.querySelector('textarea[placeholder="Текст сообщения..."]') as HTMLTextAreaElement;
+    
+    if (replyForm) {
+      // Show button click animation
+      setReplyButtonClicked(true);
+      setTimeout(() => setReplyButtonClicked(false), 300);
+      
+      // Check if the form is already visible in the viewport
+      const rect = replyForm.getBoundingClientRect();
+      const isVisible = rect.top >= 0 && rect.bottom <= window.innerHeight;
+      
+      if (isVisible) {
+        // Form is already visible - show visual accent instead of scrolling
+        setHighlightReplyForm(true);
+        
+        // Focus on the textarea immediately
+        replyForm.focus();
+        
+        // Remove highlight after animation
+        setTimeout(() => {
+          setHighlightReplyForm(false);
+        }, 2000);
+      } else {
+        // Form is not visible - scroll to it
+        window.scrollTo({
+          top: document.documentElement.scrollHeight,
+          behavior: 'smooth'
+        });
+        
+        // Focus on the textarea after scrolling
+        setTimeout(() => {
+          replyForm.focus();
+        }, 500);
+      }
     }
   };
   
@@ -680,9 +811,10 @@ export function ResponsePanel({
                         size="icon"
                         className="h-6 w-6 p-0"
                         onClick={(e) => handleToggleFavorite(response.id, e)}
+                        disabled={favoriteLoadingStates.has(response.id)}
                       >
                         <Star 
-                          className={`h-4 w-4 ${response.isFavorite ? 'text-yellow-500 fill-yellow-500' : 'text-muted-foreground'}`} 
+                          className={`h-4 w-4 ${response.isFavorite ? 'text-yellow-500 fill-yellow-500' : 'text-muted-foreground'} ${favoriteLoadingStates.has(response.id) ? 'opacity-50' : ''}`} 
                         />
                       </Button>
                     </div>
@@ -737,14 +869,39 @@ export function ResponsePanel({
                             size="icon"
                             className="h-8 w-8 hidden"
                             onClick={() => handleToggleFavorite(activeResponse.id)}
+                            disabled={favoriteLoadingStates.has(activeResponse.id)}
                           >
                             <Star 
-                              className={`h-4 w-4 ${activeResponse.isFavorite ? 'text-yellow-500 fill-yellow-500' : 'text-muted-foreground'}`} 
+                              className={`h-4 w-4 ${activeResponse.isFavorite ? 'text-yellow-500 fill-yellow-500' : 'text-muted-foreground'} ${favoriteLoadingStates.has(activeResponse.id) ? 'opacity-50' : ''}`} 
                             />
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent>
                           <p>{activeResponse.isFavorite ? 'Удалить из избранного' : 'Добавить в избранное'}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className={`h-8 w-8 transition-all duration-200 ${
+                              replyButtonClicked 
+                                ? 'bg-primary/20 border-primary/50 scale-95 shadow-md' 
+                                : 'hover:bg-primary/10 hover:border-primary/30'
+                            }`}
+                            onClick={scrollToReplyForm}
+                          >
+                            <Reply className={`h-4 w-4 transition-colors duration-200 ${
+                              replyButtonClicked ? 'text-primary' : ''
+                            }`} />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Ответить на письмо</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
@@ -813,16 +970,35 @@ export function ResponsePanel({
                   />
                   
                   {/* Email content */}
-                  <div className="leading-relaxed whitespace-pre-wrap" 
+                  <div 
+                    className="leading-relaxed whitespace-pre-wrap email-content" 
                     dangerouslySetInnerHTML={{ __html: (activeResponse as any).content || '' }}
+                    ref={(el) => {
+                      if (el) {
+                        // Hide reference blocks after content is rendered
+                        setTimeout(() => hideReferenceBlocks(el), 100);
+                      }
+                    }}
                   />
                   
                   {/* Reply section */}
-                  <div className="mt-8 border-t pt-4">
-                    <h3 className="text-sm font-medium mb-3">Ответить на письмо</h3>
+                  <div className={`mt-8 border-t pt-4 transition-all duration-500 ${
+                    highlightReplyForm 
+                      ? 'bg-primary/5 border-primary/20 rounded-lg p-4 shadow-lg ring-2 ring-primary/30' 
+                      : ''
+                  }`}>
+                    <h3 className={`text-sm font-medium mb-3 transition-colors duration-300 ${
+                      highlightReplyForm ? 'text-primary font-semibold' : ''
+                    }`}>
+                      Ответить на письмо
+                    </h3>
                     <textarea 
                       rows={6}
-                      className="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      className={`w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all duration-300 ${
+                        highlightReplyForm 
+                          ? 'border-primary/50 bg-primary/5 ring-2 ring-primary/30 shadow-md' 
+                          : ''
+                      }`}
                       placeholder="Текст сообщения..."
                       value={(activeResponse as any).replyDraft || ''}
                       onChange={(e) => {

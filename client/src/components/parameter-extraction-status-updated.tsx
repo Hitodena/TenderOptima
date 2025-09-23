@@ -36,6 +36,8 @@ export function ParameterExtractionStatus({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [parameters, setParameters] = useState<Record<string, string> | null>(null);
   const [requestParametersList, setRequestParametersList] = useState<string[]>([]);
+  const [hasLargeFiles, setHasLargeFiles] = useState(false);
+  const [largeFilesInfo, setLargeFilesInfo] = useState<string[]>([]);
   
   // State for inline editing
   const [editingParam, setEditingParam] = useState<string | null>(null);
@@ -127,10 +129,34 @@ export function ParameterExtractionStatus({
       const result = await response.json();
       console.log('Parameters extracted from email body using AI:', result);
       
-      // Step 3: Apply priority rules and combine parameters
+      // Step 3: Check for large files and handle accordingly
       if (result && result.parameters) {
         let bodyParameters: Record<string, any> = {};
         let finalParameters: Record<string, string> = {};
+        
+        // Check if any parameter has source 'manual_required' (indicates large files)
+        const hasManualRequired = Array.isArray(result.parameters) 
+          ? result.parameters.some((param: any) => param.source === 'manual_required')
+          : Object.values(result.parameters).some((param: any) => param.source === 'manual_required');
+        
+        if (hasManualRequired) {
+          // Handle large files case - show manual input fields
+          setHasLargeFiles(true);
+          setLargeFilesInfo(['Файл превышает допустимый размер (5 МБ)']);
+          
+          // Create empty parameters for manual input
+          requestParametersList.forEach(paramName => {
+            finalParameters[paramName] = '-';
+          });
+          
+          setParameters(finalParameters);
+          setStatus('success');
+          
+          if (onParametersExtracted) {
+            onParametersExtracted(finalParameters);
+          }
+          return;
+        }
         
         // Process parameters from email body
         if (Array.isArray(result.parameters)) {
@@ -229,7 +255,7 @@ export function ParameterExtractionStatus({
       // Update parameters locally first
       const updatedParameters = {
         ...parameters,
-        [editingParam]: editedValue
+        [editingParam]: editedValue || '-'
       };
 
       // Save to backend
@@ -246,6 +272,8 @@ export function ParameterExtractionStatus({
       if (onParametersExtracted) {
         onParametersExtracted(updatedParameters);
       }
+      
+      console.log(`Parameter ${editingParam} saved with value: ${editedValue}`);
     } catch (error) {
       console.error('Error saving parameter:', error);
       // You could add a toast notification here
@@ -275,7 +303,9 @@ export function ParameterExtractionStatus({
         <div className="flex items-center justify-between">
           <div className="flex items-center">
             <Check size={16} className="text-green-500 mr-2" />
-            <span className="text-sm text-green-600">Извлеченные данные</span>
+            <span className="text-sm text-green-600">
+              {hasLargeFiles ? 'Ручное заполнение' : 'Извлеченные данные'}
+            </span>
           </div>
           
           {/* Refresh button */}
@@ -292,6 +322,22 @@ export function ParameterExtractionStatus({
             />
           </Button>
         </div>
+        
+        {/* Large files warning */}
+        {hasLargeFiles && (
+          <Alert className="border-orange-200 bg-orange-50">
+            <AlertCircle className="h-4 w-4 text-orange-500" />
+            <AlertDescription className="text-sm">
+              <div className="font-medium text-orange-800 mb-1">Файл превышает допустимый размер</div>
+              <div className="text-orange-700">
+                {largeFilesInfo.map((info, index) => (
+                  <div key={index} className="text-xs">{info}</div>
+                ))}
+                <div className="text-xs mt-1">Пожалуйста, заполните параметры вручную</div>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
         
         <Card className="bg-muted/30 mt-2">
           <CardContent className="p-3">
@@ -311,6 +357,7 @@ export function ParameterExtractionStatus({
                             onChange={(e) => setEditedValue(e.target.value)}
                             className="h-8 text-sm"
                             autoFocus
+                            placeholder={hasLargeFiles ? "Введите значение вручную" : ""}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
                                 saveParameter();
@@ -340,18 +387,20 @@ export function ParameterExtractionStatus({
                       ) : (
                         <div className="flex items-center justify-between group">
                           <div 
-                            className="break-words text-sm flex-1 cursor-pointer hover:bg-gray-50 p-1 rounded"
+                            className={`break-words text-sm flex-1 cursor-pointer hover:bg-gray-50 p-1 rounded ${
+                              hasLargeFiles && param.value === '-' ? 'text-gray-400 italic' : ''
+                            }`}
                             onClick={() => startEditing(param.name, param.value)}
-                            title="Нажмите для редактирования"
+                            title={hasLargeFiles ? "Нажмите для ручного ввода" : "Нажмите для редактирования"}
                           >
-                            {param.value}
+                            {hasLargeFiles && param.value === '-' ? 'Нажмите для ввода' : param.value}
                           </div>
                           <Button
                             size="sm"
                             variant="ghost"
                             onClick={() => startEditing(param.name, param.value)}
                             className="h-6 w-6 p-0 opacity-50 group-hover:opacity-100 transition-opacity ml-2"
-                            title="Редактировать"
+                            title={hasLargeFiles ? "Ввести вручную" : "Редактировать"}
                           >
                             <Edit3 size={10} />
                           </Button>

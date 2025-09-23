@@ -568,12 +568,19 @@ export class ImapService {
             }
           }
           
+          // Preserve original file size if available, don't overwrite with base64 length
+          let fileSize = att.size;
+          if (!fileSize && typeof content === 'string') {
+            // If no original size, estimate from base64 content
+            fileSize = Math.round(content.length * 0.75); // Approximate original size from base64
+          }
+          
           return {
             filename: att.filename || 'unnamed_file',
             contentType: att.contentType || 'application/octet-stream',
             content: content,
             encoding: encoding,
-            size: att.size || (typeof content === 'string' ? content.length : 0),
+            size: fileSize || 0,
             extractedText: att.extractedText
           };
         }).filter(att => att.filename && att.content);

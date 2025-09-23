@@ -52,20 +52,18 @@ export default function SupplierMessages({ supplierId, supplierName, supplierEma
   const [attachments, setAttachments] = useState<Array<File>>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Получение сообщений
+  // Получение сообщений только для конкретного поставщика
   const { data: messages, isLoading, error } = useQuery<SupplierMessage[]>({
     queryKey: ['/api/request-suppliers', supplierId, 'messages'],
-    queryFn: async () => {
-      console.log(`Загрузка сообщений для requestSupplierId=${supplierId}`);
-      try {
-        const data = await apiRequest<SupplierMessage[]>(`/api/request-suppliers/${supplierId}/messages`, 'GET');
-        console.log(`Получено ${data.length} сообщений для requestSupplierId=${supplierId}`);
-        return data;
-      } catch (error) {
-        console.error(`Ошибка при загрузке сообщений:`, error);
-        throw error;
-      }
-    },
+        queryFn: async () => {
+          try {
+            const data = await apiRequest<SupplierMessage[]>(`/api/request-suppliers/${supplierId}/messages`, 'GET');
+            return data;
+          } catch (error) {
+            console.error(`Ошибка при загрузке сообщений:`, error);
+            throw error;
+          }
+        },
     // Добавляем настройки, чтобы не кэшировать сообщения и обновлять данные
     refetchOnWindowFocus: true,
     refetchInterval: 2000, // Периодическое обновление каждые 2 секунды
@@ -238,7 +236,7 @@ export default function SupplierMessages({ supplierId, supplierName, supplierEma
         )}
       </CardHeader>
       <CardContent className="space-y-6">
-        {!messages || messages.length === 0 || !messages.some(msg => msg.requestSupplierId === supplierId) ? (
+        {!messages || messages.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <p>Нет сообщений</p>
             <p className="text-sm mt-1">Начните переписку с поставщиком</p>
@@ -246,9 +244,7 @@ export default function SupplierMessages({ supplierId, supplierName, supplierEma
         ) : (
           <div>
             <div className="space-y-4 max-h-[400px] overflow-y-auto p-2 mb-6">
-              {messages
-                .filter(msg => msg.requestSupplierId === supplierId)
-                .map((msg) => (
+              {messages.map((msg) => (
                 <div
                   key={msg.id}
                   className={`flex ${
@@ -331,7 +327,51 @@ export default function SupplierMessages({ supplierId, supplierName, supplierEma
                     )}
                     
                     {/* Display message content with full history formatting preserved */}
-                    <div className="whitespace-pre-wrap text-sm" dangerouslySetInnerHTML={{ __html: msg.content?.replace(/\n/g, '<br/>') || '' }}></div>
+                    {msg.content ? (
+                      <div 
+                        className="whitespace-pre-wrap text-sm email-content" 
+                        dangerouslySetInnerHTML={{ __html: msg.content.replace(/\n/g, '<br/>') }}
+                        ref={(el) => {
+                          if (el) {
+                            // Hide reference blocks after content is rendered
+                            setTimeout(() => {
+                              const walker = document.createTreeWalker(
+                                el,
+                                NodeFilter.SHOW_TEXT,
+                                null
+                              );
+                              
+                              let node;
+                              while (node = walker.nextNode()) {
+                                const text = node.textContent || '';
+                                if (text.includes('!Request Reference:') || 
+                                    text.includes('Request Tracking ID:') || 
+                                    text.includes('Please include this reference')) {
+                                  const parent = node.parentElement;
+                                  if (parent) {
+                                    parent.style.display = 'none';
+                                    parent.classList.add('reference-block');
+                                  }
+                                }
+                              }
+                            }, 100);
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div 
+                        className="whitespace-pre-wrap text-sm email-content" 
+                        style={{ 
+                          minHeight: '20px',
+                          border: '1px dashed #ccc',
+                          backgroundColor: '#f9f9f9',
+                          color: '#999',
+                          fontStyle: 'italic'
+                        }}
+                      >
+                        [Содержимое сообщения пустое]
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
