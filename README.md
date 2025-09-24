@@ -1,48 +1,29 @@
-# GG+YAru+sent в сравнении
+# SupplierFinder Application Setup
 
-Проект для сравнения различных подходов к поиску поставщиков с использованием:
-- Google (GG)
-- Yandex (YAru) 
-- Семантический анализ (sent)
+This repository contains scripts to set up and run the SupplierFinder application from GitHub.
 
-## Описание
+## Overview
 
-Данный проект представляет собой систему поиска и анализа поставщиков с интеграцией различных поисковых систем и алгоритмов семантического анализа.
+The setup process includes:
+1. Cloning the SupplierFinder repository from GitHub
+2. Analyzing the project structure
+3. Setting up the required database
+4. Installing all necessary dependencies
+5. Configuring environment variables
+6. Running the application
 
-## Технологии
+## Requirements
 
-- Node.js
-- TypeScript
-- React
-- FastAPI (Python)
-- PostgreSQL
-- Векторные базы данных для семантического поиска
+- Linux-based operating system
+- Python 3.6 or higher
+- Git
+- Internet access to download dependencies
 
-## Структура проекта
+## Usage
 
-- `client/` - Frontend приложение
-- `server/` - Backend API
-- `parsers/` - Парсеры для различных поисковых систем
-- `shared/` - Общие компоненты и утилиты
+### 1. Setup the Application
 
-## Установка и запуск
+Run the setup script:
 
-1. Установите зависимости:
 ```bash
-npm install
-```
-
-2. Настройте переменные окружения в `.env` файле
-
-3. Запустите проект:
-```bash
-npm run dev
-```
-
-## Функциональность
-
-- Поиск поставщиков через Google и Yandex
-- Семантический анализ документов
-- Векторизация и поиск по смыслу
-- Модерация и управление поставщиками
-- Экспорт результатов в различные форматы
+python setup.py
