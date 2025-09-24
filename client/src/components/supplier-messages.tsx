@@ -64,10 +64,9 @@ export default function SupplierMessages({ supplierId, supplierName, supplierEma
             throw error;
           }
         },
-    // Добавляем настройки, чтобы не кэшировать сообщения и обновлять данные
+    // Обновляем данные только при фокусе окна, без постоянного опроса
     refetchOnWindowFocus: true,
-    refetchInterval: 2000, // Периодическое обновление каждые 2 секунды
-    staleTime: 0, // Данные всегда считаются устаревшими
+    staleTime: 30000, // Данные считаются актуальными 30 секунд
   });
 
   // State for tracking loading and success states
@@ -206,9 +205,7 @@ export default function SupplierMessages({ supplierId, supplierName, supplierEma
           <span>Отправленные</span>
           {messages && messages.length > 0 && (
             <span className="text-sm text-muted-foreground">
-              ({messages
-                .filter(msg => msg.requestSupplierId === supplierId)
-                .filter(msg => msg.direction === 'outbound').length})
+              ({messages.filter(msg => msg.direction === 'outbound').length})
             </span>
           )}
         </CardTitle>
@@ -326,49 +323,13 @@ export default function SupplierMessages({ supplierId, supplierName, supplierEma
                       </div>
                     )}
                     
-                    {/* Display message content with full history formatting preserved */}
+                    {/* Display message content */}
                     {msg.content ? (
-                      <div 
-                        className="whitespace-pre-wrap text-sm email-content" 
-                        dangerouslySetInnerHTML={{ __html: msg.content.replace(/\n/g, '<br/>') }}
-                        ref={(el) => {
-                          if (el) {
-                            // Hide reference blocks after content is rendered
-                            setTimeout(() => {
-                              const walker = document.createTreeWalker(
-                                el,
-                                NodeFilter.SHOW_TEXT,
-                                null
-                              );
-                              
-                              let node;
-                              while (node = walker.nextNode()) {
-                                const text = node.textContent || '';
-                                if (text.includes('!Request Reference:') || 
-                                    text.includes('Request Tracking ID:') || 
-                                    text.includes('Please include this reference')) {
-                                  const parent = node.parentElement;
-                                  if (parent) {
-                                    parent.style.display = 'none';
-                                    parent.classList.add('reference-block');
-                                  }
-                                }
-                              }
-                            }, 100);
-                          }
-                        }}
-                      />
+                      <div className="whitespace-pre-wrap text-sm">
+                        {msg.content}
+                      </div>
                     ) : (
-                      <div 
-                        className="whitespace-pre-wrap text-sm email-content" 
-                        style={{ 
-                          minHeight: '20px',
-                          border: '1px dashed #ccc',
-                          backgroundColor: '#f9f9f9',
-                          color: '#999',
-                          fontStyle: 'italic'
-                        }}
-                      >
+                      <div className="text-sm text-gray-500 italic">
                         [Содержимое сообщения пустое]
                       </div>
                     )}

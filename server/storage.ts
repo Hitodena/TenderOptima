@@ -2159,24 +2159,28 @@ export class DatabaseStorage implements IStorage {
         }
       }
       
-      // Получаем сообщения только для конкретного requestSupplierId
-      // И фильтруем по userId если он передан
-      let whereConditions = [eq(requestSupplierMessages.requestSupplierId, requestSupplierId)];
+      // Получаем сообщения
+      const baseCondition = eq(requestSupplierMessages.requestSupplierId, requestSupplierId);
       
+      // Если userId передан, добавляем условие фильтрации по userId
+      // Но также включаем сообщения с userId = null, так как они могут быть системными
+      let whereCondition;
       if (userId) {
-        // Поддерживаем legacy сообщения (с null userId) и сообщения текущего пользователя
-        whereConditions.push(
+        whereCondition = and(
+          baseCondition,
           or(
             eq(requestSupplierMessages.userId, userId),
             isNull(requestSupplierMessages.userId)
           )
         );
+      } else {
+        whereCondition = baseCondition;
       }
       
       const messageQuery = db
         .select()
         .from(requestSupplierMessages)
-        .where(and(...whereConditions));
+        .where(whereCondition);
       
       const messages = await messageQuery.orderBy(desc(requestSupplierMessages.sentDate));
       
@@ -2197,7 +2201,10 @@ export class DatabaseStorage implements IStorage {
         hasContent: !!message.content,
         contentLength: message.content ? message.content.length : 0,
         hasAttachments: message.attachments && Array.isArray(message.attachments) && message.attachments.length > 0,
-        userId: message.userId || 'NULL'
+        userId: message.userId || 'NULL',
+        subject: message.subject,
+        contentPreview: message.content ? message.content.substring(0, 100) + '...' : 'empty',
+        fullContent: message.content // Полное содержимое для отладки
       });
       
       // Проверяем существование requestSupplierId

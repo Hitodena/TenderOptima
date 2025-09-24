@@ -36,7 +36,7 @@ else:
     print(f"DEBUG: .env file not found at {env_path}")
 
 from main import main_search
-from utils.logger import CustomLogger
+from parsers.utils.logger import CustomLogger
 
 # Настройка логирования
 logger = CustomLogger(

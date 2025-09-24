@@ -5,7 +5,7 @@ from urllib.parse import urlparse, urlunparse
 
 from parsers.google_parser import parse_google
 from parsers.yandex_parser import yandex_fetch_all
-from utils.logger import CustomLogger
+from parsers.utils.logger import CustomLogger
 
 # ============ Configuration ============
 
@@ -229,11 +229,11 @@ async def fetch_all(
         region_code = get_yandex_region_code(region)
         logger.info(f"Yandex search with region: {region} -> code: {region_code}")
         yandex_task = yandex_fetch_all(
+            key_file=yandex_key_file,
+            folder_id=yandex_folder_id,
             user_id=user_id,
             query=yandex_query,  # Используем модифицированный запрос
             total_results=elements,
-            key_file=yandex_key_file,
-            folder_id=yandex_folder_id,
             region=region_code,
         )
 

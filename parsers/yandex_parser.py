@@ -13,7 +13,7 @@ import yandexcloud
 from yandex.cloud.iam.v1.iam_token_service_pb2 import CreateIamTokenRequest
 from yandex.cloud.iam.v1.iam_token_service_pb2_grpc import IamTokenServiceStub
 
-from utils.logger import CustomLogger
+from parsers.utils.logger import CustomLogger
 
 # ============ Configuration ============
 API_URL_POST = "https://searchapi.api.cloud.yandex.net/v2/web/searchAsync"

@@ -25,7 +25,7 @@ from contextlib import asynccontextmanager
 # Они будут работать, так как main.py находится в корне
 from parsers.info_getter import get_info
 from parsers.search_manager import fetch_all
-from utils import storage
+from parsers.utils import storage
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -59,7 +59,7 @@ class ParseRequest(BaseModel):
     query: str
     user_id: str = "default_user"
     elements: int = 50
-    region = request.region if hasattr(request, 'region') and request.region else "ru"
+    region: str = "ru"
     search_engines: List[str] = ["google"]
 
 # --- API Эндпоинты ---
@@ -86,12 +86,17 @@ async def parse(
     elements: int,
     region: str,
     search_engines: List[str],
+    sources: dict = None,
+    excluded_domains: List[str] = None
 ) -> List[Dict]:
     """
     Основная функция парсинга с включенной логикой скрапинга контактов.
     """
     # 1. Проверка кэша в БД
-    cached_results = await storage.load_cache(query)
+    data_dir = Path("parsers/data")
+    data_dir.mkdir(exist_ok=True)
+    cache_file = storage.get_today_cache_path(query, data_dir)
+    cached_results = storage.load_cache(query, cache_file, data_dir)
     if cached_results:
         logger.info(f"Найдены результаты в кэше для '{query}'.")
         return cached_results
@@ -108,6 +113,8 @@ async def parse(
         google_search_id=google_custom_search_id,
         yandex_key_file=Path(yandex_key_path) if yandex_key_path else None,
         yandex_folder_id=yandex_folder_id,
+        sources=sources,
+        excluded_domains=excluded_domains
     )
 
     if not raw_results:
@@ -119,9 +126,7 @@ async def parse(
     # 3. Скрапинг контактов с найденных сайтов
     domains = [item.get("domain") for item in raw_results if item.get("domain")]
 
-    semaphore = asyncio.Semaphore(concurrent_tasks_limit)
-    connector = TCPConnector(limit=connections_limit)
-    contacts = await get_info(domains, semaphore, connector)
+    contacts = await get_info(domains, concurrent_tasks_limit)
     contacts_map = {urlparse(c["url"]).netloc: c for c in contacts if c}
 
     # 4. Обогащение результатов и фильтрация
@@ -143,9 +148,51 @@ async def parse(
     # 5. Сохранение обогащенных результатов в БД
     if enriched_results:
         logger.info(f"Сохраняем в кэш {len(enriched_results)} записей.")
-        await storage.update_cache(enriched_results)
+        storage.update_cache(enriched_results, cache_file, data_dir, query)
     else:
         logger.warning("После скрапинга и фильтрации не осталось ни одного результата.")
 
     logger.info(f"Возвращено {len(enriched_results)} обогащенных записей.")
     return enriched_results
+
+
+async def main_search(
+    query: str,
+    user_id: str,
+    elements: int,
+    region: str,
+    google_search_api: str,
+    google_search_id: str,
+    yandex_key_file: Path = None,
+    yandex_folder_id: str = None,
+    sources: dict = None,
+    excluded_domains: List[str] = None
+) -> List[Dict]:
+    """
+    Wrapper function for the main search functionality that matches the FastAPI server interface.
+    """
+    # Convert parameters to match the parse function
+    search_engines = []
+    
+    # Check sources parameter to determine which engines to use
+    if sources:
+        if sources.get('google', False) and google_search_api and google_search_id:
+            search_engines.append("google")
+        if sources.get('yandex', False) and yandex_key_file and yandex_folder_id:
+            search_engines.append("yandex")
+    else:
+        # Default behavior if no sources specified
+        search_engines = ["google"]
+        if yandex_key_file and yandex_folder_id:
+            search_engines.append("yandex")
+    
+    # Call the main parse function
+    return await parse(
+        query=query,
+        user_id=user_id,
+        elements=elements,
+        region=region,
+        search_engines=search_engines,
+        sources=sources,
+        excluded_domains=excluded_domains
+    )
