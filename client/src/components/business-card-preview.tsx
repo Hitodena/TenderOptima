@@ -3,12 +3,14 @@ import { useAuth } from '@/hooks/use-auth';
 
 interface BusinessCardPreviewProps {
   className?: string;
+  hidden?: boolean; // New prop to hide business card
 }
 
-export function BusinessCardPreview({ className = '' }: BusinessCardPreviewProps) {
+export function BusinessCardPreview({ className = '', hidden = false }: BusinessCardPreviewProps) {
   const { user } = useAuth();
 
-  if (!user?.businessCard && !user?.logoUrl) {
+  // Hide business card if hidden prop is true or if no data
+  if (hidden || (!user?.businessCard && !user?.logoUrl)) {
     return null;
   }
 

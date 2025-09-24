@@ -193,8 +193,8 @@ export function SupplierFollowUp({
             )}
           />
 
-          {/* Business Card Preview */}
-          <BusinessCardPreview />
+          {/* Business Card Preview - Hidden for follow-up emails */}
+          <BusinessCardPreview hidden={true} />
 
           <div className="flex justify-end gap-2">
             <Button

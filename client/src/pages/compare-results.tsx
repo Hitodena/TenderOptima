@@ -196,8 +196,8 @@ ${getBusinessCardSignature()}`;
                   />
                 </div>
 
-                {/* Business Card Preview */}
-                <BusinessCardPreview />
+                {/* Business Card Preview - Hidden for data request emails */}
+                <BusinessCardPreview hidden={true} />
 
                 <div className="flex justify-end space-x-3 pt-4">
                   <Button
@@ -411,8 +411,8 @@ ${getBusinessCardSignature()}`;
                   />
                 </div>
 
-                {/* Business Card Preview */}
-                <BusinessCardPreview />
+                {/* Business Card Preview - Hidden for improvement request emails */}
+                <BusinessCardPreview hidden={true} />
 
                 <div className="flex justify-end space-x-3">
                   <Button
@@ -706,6 +706,120 @@ interface ComparisonData {
   parameters?: string[];
   filename?: string;
   requestId?: number;  // Добавляем requestId для использования при сохранении анализа
+}
+
+const NAME_PARAMETER_KEYS = [
+  'наименование поставщика',
+  'supplier_name'
+];
+
+function normalizeText(value: any): string {
+  if (value == null) return '';
+  return String(value).trim();
+}
+
+function normalizeKey(value: any): string {
+  return normalizeText(value).toLowerCase();
+}
+
+function formatSupplierOverrideValue(value: any): string | null {
+  const formatted = normalizeText(value);
+  if (!formatted || formatted === '-' || formatted.toLowerCase() === 'не указано') {
+    return null;
+  }
+  return formatted;
+}
+
+function tryMatchRowValue(
+  row: Record<string, any>,
+  candidateKeys: Array<string | null | undefined>,
+  fallbackIndex: number
+): string | null {
+  const cleanedEntries = Object.entries(row).filter(([key]) => {
+    const normalizedKey = normalizeKey(key);
+    return normalizedKey !== 'parameter' && normalizedKey !== 'параметр';
+  });
+
+  for (const candidate of candidateKeys) {
+    if (!candidate) continue;
+    const normalizedCandidate = normalizeKey(candidate);
+    if (!normalizedCandidate) continue;
+
+    const match = cleanedEntries.find(([rowKey]) => normalizeKey(rowKey) === normalizedCandidate);
+    if (match) {
+      const overrideValue = formatSupplierOverrideValue(match[1]);
+      if (overrideValue) {
+        return overrideValue;
+      }
+    }
+  }
+
+  if (fallbackIndex >= 0 && fallbackIndex < cleanedEntries.length) {
+    const fallbackValue = formatSupplierOverrideValue(cleanedEntries[fallbackIndex][1]);
+    if (fallbackValue) {
+      return fallbackValue;
+    }
+  }
+
+  return null;
+}
+
+function enhanceSupplierNamesWithTableData(data: ComparisonData | null): ComparisonData | null {
+  if (!data || !Array.isArray(data.tableData) || !Array.isArray(data.supplierDetails)) {
+    return data;
+  }
+
+  const supplierNameRow = data.tableData.find((row) => {
+    const paramName = normalizeKey(row.parameter ?? row.Parameter);
+    return NAME_PARAMETER_KEYS.includes(paramName);
+  });
+
+  if (!supplierNameRow) {
+    console.log('[SupplierNameOverride] Supplier name row not found in table data');
+    return data;
+  }
+
+  console.log('[SupplierNameOverride] Found supplier name row', supplierNameRow);
+
+  const updatedSupplierDetails = data.supplierDetails.map((supplier, index) => {
+    const candidateKeys = [
+      supplier.name,
+      supplier.email,
+      supplier.email ? `email_${supplier.email}` : null,
+      supplier.id ? `supplier_${supplier.id}` : null,
+      supplier.id?.toString(),
+      `${index + 1}`,
+      `Поставщик ${index + 1}`,
+      `supplier ${index + 1}`
+    ];
+
+    const overrideName = tryMatchRowValue(supplierNameRow, candidateKeys, index);
+
+    if (overrideName) {
+      console.log('[SupplierNameOverride] Applied override from table row', {
+        email: supplier.email,
+        previousName: supplier.name,
+        newName: overrideName,
+        candidateKeys
+      });
+      return {
+        ...supplier,
+        name: overrideName
+      };
+    }
+
+    return supplier;
+  });
+
+  const updatedSuppliersArray = Array.isArray(data.suppliers) && data.suppliers.length === updatedSupplierDetails.length
+    ? updatedSupplierDetails.map((supplier) => supplier.name)
+    : data.suppliers;
+
+  return {
+    ...data,
+    supplierDetails: updatedSupplierDetails,
+    suppliers: updatedSuppliersArray
+  };
 }
 
 // Compare Results Page Component
@@ -1483,7 +1597,7 @@ export default function CompareResultsPage() {
           
           if (comparisonResponse && (comparisonResponse.tableData || comparisonResponse.supplierDetails)) {
             console.log("✅ Using data from fixed comparison endpoint");
-            setComparisonData(comparisonResponse);
+            setComparisonData(enhanceSupplierNamesWithTableData(comparisonResponse));
             return;
           }
           
@@ -1844,9 +1958,27 @@ export default function CompareResultsPage() {
           const response: ComparisonData = {
             tableData: tableData,
             supplierDetails: supplierGroupResponses.map((s, index) => {
-              // Упрощенный подход - используем имя и email напрямую
-              const supplierName = s.name || `Поставщик ${index + 1}`;
+              // Ищем полное наименование поставщика из извлеченных параметров
+              let supplierName = s.name || `Поставщик ${index + 1}`;
               const supplierEmail = s.email || '';
+              
+              // Ищем параметр "Наименование поставщика" в извлеченных параметрах
+              console.log(`Available parameters for ${supplierEmail}:`, s.parameters?.map((p: any) => ({ name: p.name, value: p.value })));
+              console.log(`Looking for supplier name parameter in:`, s.parameters?.map((p: any) => p.name));
+              
+              const supplierNameParam = s.parameters?.find((p: any) => 
+                p.name === 'Наименование поставщика' || 
+                p.name === 'supplier_name' ||
+                p.name === 'поставщик' ||
+                p.name === 'наименование поставщика'
+              );
+              
+              if (supplierNameParam && supplierNameParam.value && supplierNameParam.value !== '-') {
+                supplierName = supplierNameParam.value;
+                console.log(`Using extracted supplier name for ${supplierEmail}: ${supplierName}`);
+              } else {
+                console.log(`No extracted supplier name found for ${supplierEmail}, using fallback: ${supplierName}`);
+              }
               
               console.log(`Processed supplier ${index + 1}:`, {
                 id: s.id, 
@@ -1903,7 +2035,7 @@ export default function CompareResultsPage() {
             setExpandedSuppliers(initialExpandState);
           }
 
-          setComparisonData(response);
+          setComparisonData(enhanceSupplierNamesWithTableData(response));
 
         } catch (error) {
           console.error("Error generating comparison:", error);
@@ -2640,9 +2772,12 @@ export default function CompareResultsPage() {
                                 </th>
                                 {sortedSuppliers.map((supplier, index) => {
                                   // Format the supplier display name properly
-                                  const supplierName = supplier.name && supplier.name !== supplier.email
-                                    ? supplier.name
-                                    : `Поставщик ${index + 1}`;
+                                  let supplierName = supplier.name;
+                                  
+                                  // If supplier name is not available or is just email, use fallback
+                                  if (!supplierName || supplierName === supplier.email || supplierName === '-') {
+                                    supplierName = `Поставщик ${index + 1}`;
+                                  }
                                   
                                   // Create unique display name for suppliers with same name but different emails
                                   const displayName = (() => {
@@ -2650,15 +2785,15 @@ export default function CompareResultsPage() {
                                     if (sameNameSuppliers.length > 1) {
                                       // For duplicates, show shortened name + domain
                                       const emailDomain = supplier.email ? supplier.email.split('@')[1] : '';
-                                      const shortName = supplier.name.length > 25 
-                                        ? supplier.name.substring(0, 25) + '...' 
-                                        : supplier.name;
+                                      const shortName = supplierName.length > 25 
+                                        ? supplierName.substring(0, 25) + '...' 
+                                        : supplierName;
                                       return `${shortName} (${emailDomain})`;
                                     }
                                     // For unique names, truncate if too long
-                                    return supplier.name.length > 35 
-                                      ? supplier.name.substring(0, 35) + '...' 
-                                      : supplier.name;
+                                    return supplierName.length > 35 
+                                      ? supplierName.substring(0, 35) + '...' 
+                                      : supplierName;
                                   })();
                                   
                                   return (

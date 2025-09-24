@@ -982,7 +982,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const formattedSubject = `${subject} - [${cleanRequestRef}] [TID:${trackingId}]`;
 
             // Add reference footer to message for tracking
-            const referenceFooter = `\n\n!Request Reference: ${cleanRequestRef}\nRequest Tracking ID: ${trackingId}\nPlease include this reference in your reply to ensure proper tracking of your response.`;
+            // const referenceFooter = `\n\n!Request Reference: ${cleanRequestRef}\nRequest Tracking ID: ${trackingId}\nPlease include this reference in your reply to ensure proper tracking of your response.`;
 
             const fullMessage = message + referenceFooter;
 

@@ -20,6 +20,7 @@ interface EmailOptions {
     cid?: string; // Content-ID для встраивания в HTML
   }>;
   headers?: Record<string, string>;
+  hideBusinessCard?: boolean; // Скрыть визитную карточку
 }
 
 class EmailService {
@@ -83,7 +84,7 @@ class EmailService {
     }
   }
 
-  async sendEmail(options: EmailOptions & { userId?: number }): Promise<boolean> {
+  async sendEmail(options: EmailOptions & { userId?: number; hideBusinessCard?: boolean }): Promise<boolean> {
     // Check if user has personal email configuration
     if (options.userId) {
       // Clear cache for this user to ensure fresh data
@@ -198,7 +199,7 @@ class EmailService {
     }
   }
 
-  private async sendWithTransporter(transporter: nodemailer.Transporter, options: EmailOptions & { userId?: number }): Promise<boolean> {
+  private async sendWithTransporter(transporter: nodemailer.Transporter, options: EmailOptions & { userId?: number; hideBusinessCard?: boolean }): Promise<boolean> {
 
     try {
       // Проверка обязательных полей
@@ -404,6 +405,7 @@ export const sendEmail = async (
       cid?: string; // Content-ID для встраивания в HTML
     }>;
     userId?: number; // ID пользователя для включения бизнес-карточки
+    hideBusinessCard?: boolean; // Скрыть визитную карточку
   }
 ): Promise<boolean> => {
   // Process attachments to ensure proper encoding
@@ -480,8 +482,8 @@ export const sendEmail = async (
   let finalHtml = options?.html || text.replace(/\n/g, '<br/>');
   let businessCardAttachments = processedAttachments || [];
   
-  // Получаем бизнес-карточку пользователя, если userId предоставлен
-  if (options?.userId) {
+  // Получаем бизнес-карточку пользователя, если userId предоставлен и не скрыта
+  if (options?.userId && !options?.hideBusinessCard) {
     try {
       console.log(`[email] Fetching business card for user ${options.userId}`);
       const { businessCard, logoUrl } = await getUserBusinessCard(options.userId);

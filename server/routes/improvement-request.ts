@@ -26,17 +26,35 @@ export async function sendImprovementRequest(req: Request, res: Response) {
     const requestRef = `REQ-${orderNumber}`;
     const formattedSubject = `${subject} [${requestRef}] [TID:${trackingId}]`;
     
-    // Add tracking footer to message
-    const referenceFooter = `\n\n!При ответе на наш запрос не меняйте тему письма (Subject), иначе мы не сможем обработать ваш ответ!\n!Request Reference: ${requestRef}\nRequest Tracking ID: ${trackingId}\n`;
-    const fullMessage = message + referenceFooter;
+    // Add tracking footer to message BEFORE business card
+    // The footer should appear after the main content but before the business card
+    const referenceFooter = `\n**!При ответе на наш запрос не меняйте тему письма (Subject), иначе мы не сможем обработать ваш ответ!**\n!Request Reference: ${requestRef}\nRequest Tracking ID: ${trackingId}\n`;
+    
+    // Insert the footer before the business card if it exists in content
+    let fullMessage = message;
+    if (message.includes('С уважением,') || message.includes('С Уважением,')) {
+      // Find the position where business card starts and insert footer before it
+      const businessCardStart = message.lastIndexOf('С уважением,');
+      if (businessCardStart !== -1) {
+        const beforeBusinessCard = message.substring(0, businessCardStart);
+        const businessCard = message.substring(businessCardStart);
+        // Add one space before business card
+        fullMessage = beforeBusinessCard + referenceFooter + '\n' + businessCard;
+      } else {
+        fullMessage = message + referenceFooter;
+      }
+    } else {
+      fullMessage = message + referenceFooter;
+    }
 
     // Send email via Nodemailer with formatted subject and message
     const emailSent = await emailService.sendEmail({
       to: supplierEmail,
       subject: formattedSubject,
       text: fullMessage,
-      html: fullMessage.replace(/\n/g, '<br/>'),
+      html: fullMessage.replace(/\n/g, '<br/>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>'),
       userId: req.user?.id,
+      hideBusinessCard: true, // Hide business card for improvement requests
     });
 
     if (!emailSent) {

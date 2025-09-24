@@ -51,7 +51,7 @@ async function processSupplierFollowUp(
     if (!requestSupplier) {
       try {
         const newRequestSupplier = await storage.createRequestSupplier({
-          userId: userId, // Use the userId passed from the route handler
+          userId: userId || undefined, // Use the userId passed from the route handler
           requestId: requestId,
           supplierId: supplier.id.toString(),  // Преобразуем в строку, т.к. в схеме это строка
           supplierEmail: supplier.email,
@@ -79,12 +79,29 @@ async function processSupplierFollowUp(
         // Формируем полный текст сообщения с идентификаторами для отслеживания
         const requestRef = `RQ${requestId}`;
         const msgFormattedSubject = `${subject} [${requestRef}] [TID:${trackingId}]`;
-        const referenceFooter = `При ответе на наш запрос не изменяйте тему письма (Subject), иначе мы не сможем обработать ваш ответ! \n\n!Request Reference: ${requestRef}\nRequest Tracking ID: ${trackingId}\n`;
-        const msgFullContent = message + referenceFooter;
+        // Add tracking footer to message BEFORE business card
+        const referenceFooter = `\n**!При ответе на наш запрос не меняйте тему письма (Subject), иначе мы не сможем обработать ваш ответ!**\n!Request Reference: ${requestRef}\nRequest Tracking ID: ${trackingId}\n`;
+        
+        // Insert the footer before the business card if it exists in content
+        let msgFullContent = message;
+        if (message.includes('С уважением,') || message.includes('С Уважением,')) {
+          // Find the position where business card starts and insert footer before it
+          const businessCardStart = message.lastIndexOf('С уважением,');
+          if (businessCardStart !== -1) {
+            const beforeBusinessCard = message.substring(0, businessCardStart);
+            const businessCard = message.substring(businessCardStart);
+            // Add one space before business card
+            msgFullContent = beforeBusinessCard + referenceFooter + '\n' + businessCard;
+          } else {
+            msgFullContent = message + referenceFooter;
+          }
+        } else {
+          msgFullContent = message + referenceFooter;
+        }
 
         // Сохраняем сообщение в историю с полной информацией
         const savedMessage = await storage.addSupplierMessage({
-          userId: userId, // Add userId for proper data isolation
+          userId: userId || undefined, // Add userId for proper data isolation
           requestSupplierId: requestSupplierId,
           direction: "outbound", // направление: outbound вместо outgoing
           content: msgFullContent, // Используем полный текст с идентификаторами
@@ -104,16 +121,35 @@ async function processSupplierFollowUp(
     const orderNumber = searchRequest.orderNumber || '0000-00000';
     const requestRef = `REQ-${orderNumber}`;
     const formattedSubject = `${subject} [${requestRef}] [TID:${trackingId}]`;
-    const referenceFooter = `\n\n!При ответе на наш запрос не меняйте тему письма (Subject), иначе мы не сможем обработать ваш ответ!\n!Request Reference: ${requestRef}\nRequest Tracking ID: ${trackingId}\n`;
-    const fullMessage = message + referenceFooter;
+    // Add tracking footer to message BEFORE business card
+    // The footer should appear after the main content but before the business card
+    const referenceFooter = `\n**!При ответе на наш запрос не меняйте тему письма (Subject), иначе мы не сможем обработать ваш ответ!**\n!Request Reference: ${requestRef}\nRequest Tracking ID: ${trackingId}\n`;
+    
+    // Insert the footer before the business card if it exists in content
+    let fullMessage = message;
+    if (message.includes('С уважением,') || message.includes('С Уважением,')) {
+      // Find the position where business card starts and insert footer before it
+      const businessCardStart = message.lastIndexOf('С уважением,');
+      if (businessCardStart !== -1) {
+        const beforeBusinessCard = message.substring(0, businessCardStart);
+        const businessCard = message.substring(businessCardStart);
+        // Add one space before business card
+        fullMessage = beforeBusinessCard + referenceFooter + '\n' + businessCard;
+      } else {
+        fullMessage = message + referenceFooter;
+      }
+    } else {
+      fullMessage = message + referenceFooter;
+    }
 
     // Отправляем email
     const emailSuccess = await emailService.sendEmail({
       to: supplier.email,
       subject: formattedSubject,
       text: fullMessage,
-      html: fullMessage.replace(/\n/g, '<br/>'),
-      userId: userId,
+      html: fullMessage.replace(/\n/g, '<br/>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>'),
+      userId: userId || undefined,
+      hideBusinessCard: true, // Hide business card for follow-up requests
     });
 
     if (!emailSuccess) {
@@ -182,7 +218,7 @@ export async function sendFollowUp(req: Request, res: Response) {
     });
 
     // Получаем данные запроса, ОБЯЗАТЕЛЬНО с фильтром по пользователю
-    const searchRequest = await storage.getSearchRequest(requestId, userId);
+    const searchRequest = await storage.getSearchRequest(requestId, userId || undefined);
     if (!searchRequest) {
       console.error(`[follow-up] Search request with ID ${requestId} not found for user ${userId}`);
       return res.status(404).json({ message: "Search request not found" });

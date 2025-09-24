@@ -235,7 +235,7 @@ export default function SendGroupEmailPage() {
     }
     
     // Добавляем информацию о запросе в конец сообщения
-    const messageWithRef = `${message}\n\n!Request Reference: ${requestId}\nRequest Tracking ID: ${trackingId}\nPlease include this reference in your reply to ensure proper tracking of your response.`;
+    // const messageWithRef = `${message}\n\n!Request Reference: ${requestId}\nRequest Tracking ID: ${trackingId}\nPlease include this reference in your reply to ensure proper tracking of your response.`;
     
     // Формируем тему с номером запроса
     const emailSubject = `${subject} - [${requestId}] [TID:${trackingId}]`;

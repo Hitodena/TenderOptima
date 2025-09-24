@@ -122,20 +122,62 @@ export async function generateFixedComparisonData(suppliers: any[], parameters: 
         return dateB - dateA;
       });
       
-      // Use the supplier name directly from the most recent email response
-      let supplierName = email; // Fallback to email if no supplier name found
+      // Use the supplier name from responses or parameters; default to '-'
+      let supplierName = '-';
+      const emailLower = email?.trim().toLowerCase();
       
       // Find the supplier name from the most recent response first
       for (const response of sortedResponses) {
-        if (response.supplierName && response.supplierName.trim() && response.supplierName !== email) {
-          supplierName = response.supplierName;
+        if (response.supplierName && response.supplierName.trim() && response.supplierName.trim().toLowerCase() !== emailLower) {
+          supplierName = response.supplierName.trim();
           console.log(`[FIXED COMPARISON] Using supplier name "${supplierName}" from latest email response for ${email}`);
           break;
         }
       }
       
-      if (supplierName === email) {
-        console.log(`[FIXED COMPARISON] No supplier name found in responses, using email as fallback: ${email}`);
+      // Try to find full supplier name from extracted parameters
+      if (supplierName === '-') {
+        console.log(`[FIXED COMPARISON] Looking for full supplier name in extracted parameters for ${email}`);
+        
+        // Check all responses for extracted supplier name parameter
+        for (const response of sortedResponses) {
+          try {
+            const extractedParams = await storage.getExtractedParametersByResponseId(response.id, userId);
+            
+            if (extractedParams && extractedParams.parameters) {
+              console.log(`[FIXED COMPARISON] Available parameters for response ${response.id}:`, Object.keys(extractedParams.parameters));
+              console.log(`[FIXED COMPARISON] Parameter values:`, Object.entries(extractedParams.parameters));
+              
+              // Look for supplier name parameter in various formats
+              const supplierNameParam = Object.entries(extractedParams.parameters).find(([key, value]) => 
+                (key === 'Наименование поставщика' || 
+                 key === 'supplier_name' || 
+                 key === 'поставщик' || 
+                 key === 'наименование поставщика') &&
+                value && 
+                value !== '-' && 
+                value.trim() !== ''
+              );
+              
+              if (supplierNameParam && supplierNameParam[1]) {
+                supplierName = supplierNameParam[1].trim();
+                console.log(`[FIXED COMPARISON] Found full supplier name "${supplierName}" from extracted parameters for ${email}`);
+                break;
+              } else {
+                console.log(`[FIXED COMPARISON] No supplier name parameter found in response ${response.id}`);
+              }
+            } else {
+              console.log(`[FIXED COMPARISON] No extracted parameters found for response ${response.id}`);
+            }
+          } catch (error) {
+            console.log(`[FIXED COMPARISON] Error loading parameters for response ${response.id}:`, error);
+          }
+        }
+        
+      }
+      
+      if (supplierName === '-') {
+        console.log(`[FIXED COMPARISON] No supplier name found for ${email}, using placeholder '-'`);
       }
       
       // Count only responses that match the selected supplier IDs

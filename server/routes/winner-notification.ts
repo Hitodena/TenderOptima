@@ -45,6 +45,44 @@ export const sendWinnerNotification = async (req: Request, res: Response) => {
       });
     }
 
+    // Get request details for tracking identifiers
+    const requestDetails = await storage.getSearchRequest(requestId);
+    if (!requestDetails) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Request not found' 
+      });
+    }
+
+    // Generate tracking identifiers
+    const trackingId = Math.random().toString(36).substring(2, 12);
+    const orderNumber = requestDetails.orderNumber || '0000-00000';
+    const requestRef = `REQ-${orderNumber}`;
+    
+    // Format subject with tracking identifiers
+    const formattedSubject = `${subject} [${requestRef}] [TID:${trackingId}]`;
+    
+    // Add tracking footer to message content BEFORE business card
+    // The footer should appear after the main content but before the business card
+    const referenceFooter = `\n**!При ответе на наш запрос не меняйте тему письма (Subject), иначе мы не сможем обработать ваш ответ!**\n!Request Reference: ${requestRef}\nRequest Tracking ID: ${trackingId}\n`;
+    
+    // Insert the footer before the business card if it exists in content
+    let fullContent = content;
+    if (content.includes('С уважением,') || content.includes('С Уважением,')) {
+      // Find the position where business card starts and insert footer before it
+      const businessCardStart = content.lastIndexOf('С уважением,');
+      if (businessCardStart !== -1) {
+        const beforeBusinessCard = content.substring(0, businessCardStart);
+        const businessCard = content.substring(businessCardStart);
+        // Add one space before business card
+        fullContent = beforeBusinessCard + referenceFooter + '\n' + businessCard;
+      } else {
+        fullContent = content + referenceFooter;
+      }
+    } else {
+      fullContent = content + referenceFooter;
+    }
+
     // Prepare email attachments
     const emailAttachments = attachments.map(att => ({
       filename: att.filename,
@@ -55,9 +93,9 @@ export const sendWinnerNotification = async (req: Request, res: Response) => {
     // Send email notification
     const emailSent = await emailService.sendEmail({
       to: winnerEmail,
-      subject: subject,
-      text: content,
-      html: content.replace(/\n/g, '<br>'),
+      subject: formattedSubject,
+      text: fullContent,
+      html: fullContent.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>'),
       attachments: emailAttachments,
       userId: req.user.id
     });
@@ -78,8 +116,8 @@ export const sendWinnerNotification = async (req: Request, res: Response) => {
       selectedDate: new Date(),
       notificationSent: true,
       userId: req.user.id,
-      notificationSubject: subject,
-      notificationContent: content,
+      notificationSubject: formattedSubject,
+      notificationContent: fullContent,
       attachments: attachments
     });
 
