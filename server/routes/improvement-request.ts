@@ -36,6 +36,7 @@ export async function sendImprovementRequest(req: Request, res: Response) {
       subject: formattedSubject,
       text: fullMessage,
       html: fullMessage.replace(/\n/g, '<br/>'),
+      userId: req.user?.id,
     });
 
     if (!emailSent) {

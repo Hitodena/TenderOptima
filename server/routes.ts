@@ -1193,28 +1193,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`[Server] Fetching search request ID ${id} for user ID ${userId}`);
       const endpointStartTime = Date.now();
 
-      // OPTIMIZED: Execute all database queries in parallel for better performance
-      const parallelStartTime = Date.now();
-      const [request, requestSuppliers, supplierResponses] = await Promise.all([
-        storage.getSearchRequest(id, userId),
-        storage.getRequestSuppliers(id, userId),
-        storage.getSupplierResponses(id, userId)
-      ]);
-      const parallelTime = Date.now() - parallelStartTime;
-      const totalEndpointTime = Date.now() - endpointStartTime;
-      
-      console.log(`[Server] Parallel queries took ${parallelTime}ms, total endpoint time: ${totalEndpointTime}ms`);
+      // Get the search request and ensure it belongs to the user
+      const request = await storage.getSearchRequest(id, userId);
 
+      // If request not found (or doesn't belong to user), return 404
       if (!request) {
-        return res.status(404).json({ message: `Request with ID ${id} not found or access denied` });
+        return res.status(404).json({ message: `Search request with ID ${id} not found or access denied` });
       }
 
       // Логируем время сериализации JSON
       const jsonStartTime = Date.now();
       const responseData = {
         request,
-        requestSuppliers,
-        supplierResponses
+        requestSuppliers: await storage.getRequestSuppliers(id, userId),
+        supplierResponses: await storage.getSupplierResponses(id, userId)
       };
       const jsonTime = Date.now() - jsonStartTime;
       const finalEndpointTime = Date.now() - endpointStartTime;

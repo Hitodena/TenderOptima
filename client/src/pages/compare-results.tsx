@@ -86,6 +86,8 @@ ${getBusinessCardSignature()}`;
         'POST',
         {
           supplierId: String(supplier.id),
+          supplierEmail: supplier.email,
+          supplierName: supplier.name,
           requestId: requestId,
           subject: subject,
           message: message
