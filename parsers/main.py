@@ -10,7 +10,7 @@ import aiohttp
 from info_getter import get_info
 from search_manager import fetch_all
 from utils.logger import CustomLogger
-from utils.storage import save_to_csv
+from utils import storage
 
 logger = CustomLogger(
     logger_name="SupplierFinderParser", file_path="SupplierFinderParser.log", debug=True, console=True
@@ -154,7 +154,7 @@ if __name__ == "__main__":
     elements = int(sys.argv[2]) if len(sys.argv) > 2 else DEFAULT_ELEMENTS
     user_id = sys.argv[3] if len(sys.argv) > 3 else "1"
     
-    # Load environment variables for API keys
+    # Load environment variables for API keys     
     google_api = os.getenv("GOOGLE_SEARCH_API_TOKEN")
     google_id = os.getenv("GOOGLE_CUSTOM_SEARCH_ENGINE_ID")
     yandex_key_path = os.getenv("YANDEX_KEY_PATH")

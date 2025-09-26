@@ -86,6 +86,8 @@ class EmailService {
 
   async sendEmail(options: EmailOptions & { userId?: number; hideBusinessCard?: boolean }): Promise<boolean> {
     // Check if user has personal email configuration
+    console.log(`[email] DEBUG - sendEmail called with options:`, { to: options.to, subject: options.subject, userId: options.userId, hideBusinessCard: options.hideBusinessCard });
+    
     if (options.userId) {
       // Clear cache for this user to ensure fresh data
       this.personalTransporters.delete(options.userId);
@@ -199,7 +201,8 @@ class EmailService {
     }
   }
 
-  private async sendWithTransporter(transporter: nodemailer.Transporter, options: EmailOptions & { userId?: number; hideBusinessCard?: boolean }): Promise<boolean> {
+  private async sendWithTransporter(transporter: nodemailer.Transporter, options: EmailOptions & { userId?: number; hideBusinessCard?: boolean; from?: string }): Promise<boolean> {
+    console.log(`[email] sendWithTransporter called with:`, { to: options.to, subject: options.subject, userId: options.userId, hideBusinessCard: options.hideBusinessCard });
 
     try {
       // Проверка обязательных полей
@@ -215,7 +218,7 @@ class EmailService {
       console.log(`[email] Preparing to send email to ${options.to} with subject "${options.subject}"`);
       
       // Determine the correct 'from' address
-      let fromAddress = options.from || process.env.EMAIL_FROM || process.env.SMTP_USER;
+      let fromAddress = process.env.EMAIL_FROM || process.env.SMTP_USER;
       
       // If this is a personal transporter (has userId), get the user's email account
       if (options.userId && transporter !== this.transporter) {
@@ -388,6 +391,120 @@ function formatHtmlBusinessCard(businessCard: string | null, logoUrl: string | n
   return htmlCard;
 }
 
+// ПРОСТАЯ ФУНКЦИЯ ДЛЯ СТРАНИЦЫ "ОТПРАВКА ЗАПРОСОВ" - КОПИЯ ИЗ РАБОЧЕГО ЧЕКПОИНТА
+export const sendSimpleEmail = async (
+  to: string, 
+  subject: string, 
+  text: string, 
+  options?: { 
+    trackingId?: string; 
+    requestId?: number;
+    replyTo?: string;
+    html?: string;
+    attachments?: Array<{
+      filename: string;
+      content: Buffer | string;
+      contentType?: string;
+      encoding?: string;
+      cid?: string; // Content-ID для встраивания в HTML
+    }>;
+    userId?: number; // ID пользователя для включения бизнес-карточки
+  }
+): Promise<boolean> => {
+  console.log(`[email] *** sendSimpleEmail FUNCTION CALLED ***`, { to, subject, userId: options?.userId });
+  
+  // Process attachments to ensure proper encoding
+  let processedAttachments = options?.attachments;
+  
+  if (processedAttachments && processedAttachments.length > 0) {
+    console.log(`[email] Processing ${processedAttachments.length} attachments for email to ${to}`);
+    
+    // Ensure all attachments have proper encoding
+    processedAttachments = processedAttachments.map(attachment => {
+      // Skip if no content
+      if (!attachment.content) {
+        console.log(`[email] Skipping empty attachment: ${attachment.filename}`);
+        return attachment;
+      }
+      
+      // Ensure encoding is specified
+      const encoding = attachment.encoding || 'base64';
+      
+      // If content is a Buffer, keep it as is
+      if (Buffer.isBuffer(attachment.content)) {
+        console.log(`[email] Attachment ${attachment.filename} is already a Buffer`);
+        return {
+          ...attachment,
+          encoding
+        };
+      }
+      
+      // Return the attachment with the ensured encoding
+      return {
+        ...attachment,
+        encoding
+      };
+    });
+  }
+  
+  // Восстанавливаем функциональность бизнес-карточки - ПРОСТАЯ ВЕРСИЯ
+  let finalText = text;
+  let finalHtml = options?.html || text.replace(/\n/g, '<br/>');
+  let businessCardAttachments = processedAttachments || [];
+  
+  // Получаем бизнес-карточку пользователя, если userId предоставлен
+  if (options?.userId) {
+    try {
+      console.log(`[email] Fetching business card for user ${options.userId}`);
+      const { businessCard, logoUrl } = await getUserBusinessCard(options.userId);
+      
+      if (businessCard || logoUrl) {
+        console.log(`[email] Adding business card to email:`, { businessCard: !!businessCard, logoUrl: !!logoUrl });
+        
+        // Добавляем бизнес-карточку к текстовой версии - ПРОСТАЯ ЛОГИКА
+        if (businessCard) {
+          const textBusinessCard = formatTextBusinessCard(businessCard);
+          finalText += textBusinessCard;
+        }
+        
+        // Добавляем бизнес-карточку к HTML версии - ПРОСТАЯ ЛОГИКА
+        if (businessCard) {
+          const htmlBusinessCard = formatHtmlBusinessCard(businessCard, logoUrl);
+          finalHtml += htmlBusinessCard;
+        }
+        
+        console.log(`[email] Business card added successfully`);
+      } else {
+        console.log(`[email] No business card found for user ${options.userId}`);
+      }
+    } catch (error) {
+      console.error(`[email] Error processing business card for user ${options.userId}:`, error);
+      // Продолжаем отправку без бизнес-карточки
+    }
+  }
+  
+  const emailOptions: EmailOptions = {
+    to,
+    subject,
+    text: finalText,
+    html: finalHtml,
+    replyTo: options?.replyTo,
+    attachments: businessCardAttachments,
+    headers: {}
+  };
+  
+  // Add tracking headers if provided
+  if (options?.trackingId) {
+    emailOptions.headers = {
+      ...emailOptions.headers,
+      'X-Tracking-ID': options.trackingId
+    };
+  }
+  
+  console.log(`[email] CALLING emailService.sendEmail (SIMPLE) with:`, { to: emailOptions.to, subject: emailOptions.subject, userId: options?.userId });
+  return emailService.sendEmail({ ...emailOptions, userId: options?.userId });
+};
+
 export const sendEmail = async (
   to: string, 
   subject: string, 
@@ -408,6 +525,7 @@ export const sendEmail = async (
     hideBusinessCard?: boolean; // Скрыть визитную карточку
   }
 ): Promise<boolean> => {
+  console.log(`[email] *** sendEmail FUNCTION CALLED ***`, { to, subject, userId: options?.userId });
   // Process attachments to ensure proper encoding
   let processedAttachments = options?.attachments;
   
@@ -516,11 +634,54 @@ export const sendEmail = async (
         
         // Добавляем бизнес-карточку к текстовой версии
         const textBusinessCard = formatTextBusinessCard(businessCard);
-        finalText += textBusinessCard;
+        
+        // ВРЕМЕННО: Простая логика как в рабочем чекпоинте
+        // Для email с фразой о неизменении темы, добавляем визитную карточку ПОСЛЕ фразы
+        if (finalText.includes('!При ответе на наш запрос не меняйте тему письма')) {
+          // Находим позицию фразы и вставляем визитную карточку после неё
+          const phraseIndex = finalText.lastIndexOf('!При ответе на наш запрос не меняйте тему письма');
+          if (phraseIndex !== -1) {
+            // Находим конец фразы (после Request Tracking ID)
+            const endOfPhrase = finalText.indexOf('\n', phraseIndex + 200); // Ищем конец после фразы
+            if (endOfPhrase !== -1) {
+              const beforePhrase = finalText.substring(0, endOfPhrase);
+              const afterPhrase = finalText.substring(endOfPhrase);
+              finalText = beforePhrase + '\n' + textBusinessCard + afterPhrase;
+            } else {
+              finalText += '\n' + textBusinessCard;
+            }
+          } else {
+            finalText += textBusinessCard;
+          }
+        } else {
+          // Для обычных email (без фразы) добавляем визитную карточку в конец - ПРОСТАЯ ЛОГИКА
+          finalText += textBusinessCard;
+        }
         
         // Добавляем бизнес-карточку к HTML версии
         const htmlBusinessCard = formatHtmlBusinessCard(businessCard, logoUrl);
-        finalHtml += htmlBusinessCard;
+        
+        // ВРЕМЕННО: Простая логика для HTML версии
+        // Для HTML версии тоже нужно вставить визитную карточку ПОСЛЕ фразы
+        if (finalHtml.includes('!При ответе на наш запрос не меняйте тему письма')) {
+          const phraseIndex = finalHtml.lastIndexOf('!При ответе на наш запрос не меняйте тему письма');
+          if (phraseIndex !== -1) {
+            // Находим конец фразы (после Request Tracking ID)
+            const endOfPhrase = finalHtml.indexOf('<br/>', phraseIndex + 200); // Ищем конец после фразы
+            if (endOfPhrase !== -1) {
+              const beforePhrase = finalHtml.substring(0, endOfPhrase);
+              const afterPhrase = finalHtml.substring(endOfPhrase);
+              finalHtml = beforePhrase + '<br/>' + htmlBusinessCard + afterPhrase;
+            } else {
+              finalHtml += '<br/>' + htmlBusinessCard;
+            }
+          } else {
+            finalHtml += htmlBusinessCard;
+          }
+        } else {
+          // Для обычных email (без фразы) добавляем визитную карточку в конец - ПРОСТАЯ ЛОГИКА
+          finalHtml += htmlBusinessCard;
+        }
         
         console.log(`[email] Business card added successfully`);
       } else {
@@ -550,5 +711,6 @@ export const sendEmail = async (
     };
   }
   
+  console.log(`[email] CALLING emailService.sendEmail with:`, { to: emailOptions.to, subject: emailOptions.subject, userId: options?.userId });
   return emailService.sendEmail({ ...emailOptions, userId: options?.userId });
 };

@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { emailService, sendEmail } from "./email";
+import { emailService, sendEmail, sendSimpleEmail } from "./email";
 import { ImapService } from "./imap-service";
 import { personalImapService } from "./imap-service-personal";
 import { AsyncEmailProcessor } from "./async-processing/email-processor";
@@ -65,6 +65,7 @@ import { eq, and } from "drizzle-orm";
 import { db } from "./db";
 import { z } from "zod";
 import { SearchRequest, InsertSearchRequest, Supplier, SupplierMatch, RequestSupplier, supplierResponses } from "@shared/schema";
+import { pool } from "./db";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Minimal request logging for performance
@@ -282,7 +283,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Supplier response not found" });
       }
 
-      return res.json(response);
+      let content = response.content;
+
+      try {
+        const { rows } = await pool.query(
+          `SELECT content FROM response_contents WHERE response_id = $1 LIMIT 1`,
+          [responseId]
+        );
+
+        if (rows && rows.length > 0 && rows[0].content) {
+          content = rows[0].content;
+        }
+      } catch (contentError) {
+        console.error(`Error fetching HTML content for response ${responseId}:`, contentError);
+      }
+
+      return res.json({
+        ...response,
+        content
+      });
     } catch (error) {
       console.error(`Error fetching supplier response:`, error);
       res.status(500).json({ message: "Failed to fetch supplier response", error: String(error) });
@@ -982,7 +1001,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const formattedSubject = `${subject} - [${cleanRequestRef}] [TID:${trackingId}]`;
 
             // Add reference footer to message for tracking
-            // const referenceFooter = `\n\n!Request Reference: ${cleanRequestRef}\nRequest Tracking ID: ${trackingId}\nPlease include this reference in your reply to ensure proper tracking of your response.`;
+            const referenceFooter = `\n\n!Request Reference: ${cleanRequestRef}\nRequest Tracking ID: ${trackingId}\nPlease include this reference in your reply to ensure proper tracking of your response.`;
 
             const fullMessage = message + referenceFooter;
 
@@ -1003,7 +1022,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
 
             // Send the email with tracking information, sanitized attachments and business card
-            const emailSuccess = await sendEmail(
+            console.log(`[routes] *** CALLING sendSimpleEmail for ${supplier.email} ***`, { userId, trackingId });
+            const emailSuccess = await sendSimpleEmail(
               supplier.email, 
               formattedSubject, 
               fullMessage,
@@ -1015,6 +1035,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 userId: userId // Добавляем ID пользователя для включения бизнес-карточки
               }
             );
+            console.log(`[routes] *** sendEmail RETURNED ***`, { emailSuccess });
 
             console.log(`Email to ${supplier.email} ${emailSuccess ? 'succeeded' : 'failed'}`);
 

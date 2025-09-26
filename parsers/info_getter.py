@@ -13,7 +13,7 @@ from selectolax.parser import HTMLParser
 
 # Заглушка для логгера
 try:
-    from .utils.logger import CustomLogger
+    from parsers.utils.logger import CustomLogger
     logger = CustomLogger("ContactInfoGetter", "ContactInfoGetter.log", debug=False, console=True).get_logger()
 except (ImportError, ModuleNotFoundError):
     import logging

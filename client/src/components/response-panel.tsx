@@ -970,16 +970,40 @@ export function ResponsePanel({
                   />
                   
                   {/* Email content */}
-                  <div 
-                    className="leading-relaxed whitespace-pre-wrap email-content" 
-                    dangerouslySetInnerHTML={{ __html: (activeResponse as any).content || '' }}
-                    ref={(el) => {
-                      if (el) {
-                        // Hide reference blocks after content is rendered
-                        setTimeout(() => hideReferenceBlocks(el), 100);
+                  <div className="text-sm leading-relaxed">
+                    {(() => {
+                      const content = (activeResponse as any).content;
+                      if (!content || typeof content !== 'string') {
+                        return '(No content)';
                       }
-                    }}
-                  />
+                      
+                      // Check if content contains HTML tags
+                      const hasHtmlTags = /<[^>]*>/g.test(content);
+                      
+                      if (hasHtmlTags) {
+                        // If it contains HTML, render it safely
+                        return (
+                          <div 
+                            className="whitespace-pre-wrap"
+                            dangerouslySetInnerHTML={{ __html: content }}
+                            ref={(el) => {
+                              if (el) {
+                                // Hide reference blocks after content is rendered
+                                setTimeout(() => hideReferenceBlocks(el), 100);
+                              }
+                            }}
+                          />
+                        );
+                      } else {
+                        // If it's plain text, render it as text
+                        return (
+                          <div className="whitespace-pre-line">
+                            {content}
+                          </div>
+                        );
+                      }
+                    })()}
+                  </div>
                   
                   {/* Reply section */}
                   <div className={`mt-8 border-t pt-4 transition-all duration-500 ${
