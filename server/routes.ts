@@ -66,6 +66,8 @@ import { db } from "./db";
 import { z } from "zod";
 import { SearchRequest, InsertSearchRequest, Supplier, SupplierMatch, RequestSupplier, supplierResponses } from "@shared/schema";
 import { pool } from "./db";
+import { attachmentProcessor } from './services/attachment-processor';
+import { registerAttachmentManagementRoutes } from './routes/attachment-management';
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Minimal request logging for performance
@@ -2832,79 +2834,25 @@ app.post("/api/check-emails", requireAuth, async (req, res) => {
             continue;
           }
 
-          // Process attachments using Python processor
-          const { spawn } = require('child_process');
-          const path = require('path');
-          const fs = require('fs');
-          const os = require('os');
-
-          // Create temp file with response data
-          const tempDir = path.join(os.tmpdir(), 'supplier-finder-attachments');
-          if (!fs.existsSync(tempDir)) {
-            fs.mkdirSync(tempDir, { recursive: true });
+          // Process attachments using unified service
+          const attachments = fullResponse.attachments || [];
+          if (attachments.length > 0) {
+            try {
+              const processedAttachments = await attachmentProcessor.processAttachments(attachments, {
+                timeout: 60000, // 60 seconds
+              });
+              
+              // Update the response with processed attachments
+              await storage.updateSupplierResponseAttachments(response.id, processedAttachments);
+              console.log(`[Server] Successfully processed ${processedAttachments.length} attachments for response ${response.id}`);
+              results.push({ responseId: response.id, status: 'success', processedCount: processedAttachments.length });
+            } catch (error) {
+              console.error(`[Server] Error processing attachments for response ${response.id}:`, error);
+              results.push({ responseId: response.id, status: 'processing_error', error: error instanceof Error ? error.message : String(error) });
+            }
+          } else {
+            results.push({ responseId: response.id, status: 'no_attachments', processedCount: 0 });
           }
-
-          const tempFilePath = path.join(tempDir, `response_${response.id}_${Date.now()}.json`);
-          fs.writeFileSync(tempFilePath, JSON.stringify(fullResponse, null, 2), 'utf8');
-
-          // Run Python processor
-          const pythonScript = path.join(__dirname, 'file-processing', 'attachment_analyzer.py');
-          const pythonProcess = spawn('python', [pythonScript, tempFilePath], {
-            cwd: __dirname,
-            stdio: ['pipe', 'pipe', 'pipe']
-          });
-
-          let output = '';
-          let errorOutput = '';
-
-          pythonProcess.stdout.on('data', (data) => {
-            output += data.toString();
-          });
-
-          pythonProcess.stderr.on('data', (data) => {
-            errorOutput += data.toString();
-          });
-
-          await new Promise((resolve, reject) => {
-            pythonProcess.on('close', async (code) => {
-              // Clean up temp file
-              try {
-                fs.unlinkSync(tempFilePath);
-              } catch (err) {
-                console.error('Error deleting temp file:', err);
-              }
-
-              if (code === 0) {
-                try {
-                  // Parse the result and update the response
-                  const result = JSON.parse(output);
-                  if (result.attachments && result.attachments.length > 0) {
-                    // Update the response with processed attachments
-                    await storage.updateSupplierResponseAttachments(response.id, result.attachments);
-                    console.log(`[Server] Successfully processed ${result.attachments.length} attachments for response ${response.id}`);
-                    results.push({ responseId: response.id, status: 'success', processedCount: result.attachments.length });
-                  } else {
-                    results.push({ responseId: response.id, status: 'no_attachments', processedCount: 0 });
-                  }
-                  resolve();
-                } catch (parseError) {
-                  console.error('Error parsing Python output:', parseError);
-                  results.push({ responseId: response.id, status: 'error', error: String(parseError) });
-                  resolve();
-                }
-              } else {
-                console.error(`Python processor failed with code ${code}:`, errorOutput);
-                results.push({ responseId: response.id, status: 'error', error: errorOutput || `Python process exited with code ${code}` });
-                resolve();
-              }
-            });
-
-            pythonProcess.on('error', (error) => {
-              console.error('Error spawning Python process:', error);
-              results.push({ responseId: response.id, status: 'error', error: String(error) });
-              resolve();
-            });
-          });
 
         } catch (error) {
           console.error(`Error processing response ${response.id}:`, error);
@@ -2953,85 +2901,46 @@ app.post("/api/check-emails", requireAuth, async (req, res) => {
         return res.status(404).json({ message: "Response with attachments not found" });
       }
 
-      // Process attachments using Python processor
-      const { spawn } = require('child_process');
-      const path = require('path');
-      const fs = require('fs');
-      const os = require('os');
-
-      // Create temp file with response data
-      const tempDir = path.join(os.tmpdir(), 'supplier-finder-attachments');
-      if (!fs.existsSync(tempDir)) {
-        fs.mkdirSync(tempDir, { recursive: true });
-      }
-
-      const tempFilePath = path.join(tempDir, `response_${responseId}_${Date.now()}.json`);
-      fs.writeFileSync(tempFilePath, JSON.stringify(fullResponse, null, 2), 'utf8');
-
-      // Run Python processor
-      const pythonScript = path.join(__dirname, 'file-processing', 'attachment_analyzer.py');
-      const pythonProcess = spawn('python', [pythonScript, tempFilePath], {
-        cwd: __dirname,
-        stdio: ['pipe', 'pipe', 'pipe']
-      });
-
-      let output = '';
-      let errorOutput = '';
-
-      pythonProcess.stdout.on('data', (data) => {
-        output += data.toString();
-      });
-
-      pythonProcess.stderr.on('data', (data) => {
-        errorOutput += data.toString();
-      });
-
-      pythonProcess.on('close', async (code) => {
-        // Clean up temp file
+      // Process attachments using unified service
+      const attachments = fullResponse.attachments || [];
+      if (attachments.length > 0) {
         try {
-          fs.unlinkSync(tempFilePath);
-        } catch (err) {
-          console.error('Error deleting temp file:', err);
-        }
-
-        if (code === 0) {
-          try {
-            // Parse the result and update the response
-            const result = JSON.parse(output);
-            if (result.attachments && result.attachments.length > 0) {
-              // Update the response with processed attachments
-              await storage.updateSupplierResponseAttachments(responseId, result.attachments);
-              console.log(`[Server] Successfully processed ${result.attachments.length} attachments for response ${responseId}`);
-            }
-            
-            res.json({ 
-              message: 'Attachments processed successfully',
-              responseId: responseId,
-              processedCount: result.attachments ? result.attachments.length : 0
-            });
-          } catch (parseError) {
-            console.error('Error parsing Python output:', parseError);
-            res.status(500).json({ message: "Failed to parse processing results", error: String(parseError) });
-          }
-        } else {
-          console.error(`Python processor failed with code ${code}:`, errorOutput);
+          const processedAttachments = await attachmentProcessor.processAttachments(attachments, {
+            timeout: 60000, // 60 seconds
+          });
+          
+          // Update the response with processed attachments
+          await storage.updateSupplierResponseAttachments(responseId, processedAttachments);
+          console.log(`[Server] Successfully processed ${processedAttachments.length} attachments for response ${responseId}`);
+          
+          res.json({ 
+            message: 'Attachments processed successfully',
+            responseId: responseId,
+            processedCount: processedAttachments.length
+          });
+        } catch (error) {
+          console.error(`[Server] Error processing attachments for response ${responseId}:`, error);
           res.status(500).json({ 
             message: "Failed to process attachments", 
-            error: errorOutput || `Python process exited with code ${code}` 
+            error: error instanceof Error ? error.message : String(error) 
           });
         }
-      });
-
-      pythonProcess.on('error', (error) => {
-        console.error('Error spawning Python process:', error);
-        res.status(500).json({ message: "Failed to start processing", error: String(error) });
-      });
+      } else {
+        res.json({ 
+          message: 'No attachments to process',
+          responseId: responseId,
+          processedCount: 0
+        });
+      }
 
     } catch (error) {
       console.error(`Error processing attachments for response ${req.params.id}:`, error);
       res.status(500).json({ message: "Failed to process attachments", error: String(error) });
     }
   });
+
+  // Регистрируем routes для управления системой обработки вложений
+  registerAttachmentManagementRoutes(app);
 
   const httpServer = createServer(app);
 

@@ -60,6 +60,7 @@ class ParseRequest(BaseModel):
     user_id: str = "default_user"
     elements: int = 50
     region: str = "ru"
+    regions: List[str] = []  # Добавляем поддержку множественных регионов
     search_engines: List[str] = ["google"]
 
 # --- API Эндпоинты ---
@@ -78,6 +79,47 @@ async def handle_parse(request: ParseRequest):
         search_engines=request.search_engines
     )
     return {"data": results}
+
+@app.post("/search")
+async def handle_search(request: ParseRequest):
+    """Новый эндпоинт для поддержки множественных регионов"""
+    logger.info(f"Получен запрос на поиск: '{request.query}' с регионами: {request.regions}")
+    
+    # Если переданы множественные регионы, выполняем поиск для каждого
+    if request.regions and len(request.regions) > 0:
+        all_results = []
+        for region in request.regions[:5]:  # Ограничиваем максимум 5 регионами
+            logger.info(f"Поиск в регионе: {region}")
+            region_results = await parse(
+                query=request.query,
+                user_id=request.user_id,
+                elements=request.elements,
+                region=region,
+                search_engines=request.search_engines
+            )
+            all_results.extend(region_results)
+        
+        # Дедупликация результатов по домену
+        seen_domains = set()
+        unique_results = []
+        for result in all_results:
+            domain = result.get("domain", "")
+            if domain and domain not in seen_domains:
+                seen_domains.add(domain)
+                unique_results.append(result)
+        
+        logger.info(f"Найдено {len(unique_results)} уникальных результатов из {len(all_results)} общих")
+        return {"results": unique_results}
+    else:
+        # Обычный поиск с одним регионом
+        results = await parse(
+            query=request.query,
+            user_id=request.user_id,
+            elements=request.elements,
+            region=request.region,
+            search_engines=request.search_engines
+        )
+        return {"results": results}
 
 # --- Основная логика ---
 async def parse(
@@ -166,7 +208,8 @@ async def main_search(
     yandex_key_file: Path = None,
     yandex_folder_id: str = None,
     sources: dict = None,
-    excluded_domains: List[str] = None
+    excluded_domains: List[str] = None,
+    regions: List[str] = None  # Добавляем поддержку множественных регионов
 ) -> List[Dict]:
     """
     Wrapper function for the main search functionality that matches the FastAPI server interface.
@@ -186,13 +229,41 @@ async def main_search(
         if yandex_key_file and yandex_folder_id:
             search_engines.append("yandex")
     
-    # Call the main parse function
-    return await parse(
-        query=query,
-        user_id=user_id,
-        elements=elements,
-        region=region,
-        search_engines=search_engines,
-        sources=sources,
-        excluded_domains=excluded_domains
-    )
+    # Если переданы множественные регионы, выполняем поиск для каждого
+    if regions and len(regions) > 0:
+        all_results = []
+        for search_region in regions[:5]:  # Ограничиваем максимум 5 регионами
+            logger.info(f"Поиск в регионе: {search_region}")
+            region_results = await parse(
+                query=query,
+                user_id=user_id,
+                elements=elements,
+                region=search_region,
+                search_engines=search_engines,
+                sources=sources,
+                excluded_domains=excluded_domains
+            )
+            all_results.extend(region_results)
+        
+        # Дедупликация результатов по домену
+        seen_domains = set()
+        unique_results = []
+        for result in all_results:
+            domain = result.get("domain", "")
+            if domain and domain not in seen_domains:
+                seen_domains.add(domain)
+                unique_results.append(result)
+        
+        logger.info(f"Найдено {len(unique_results)} уникальных результатов из {len(all_results)} общих")
+        return unique_results
+    else:
+        # Обычный поиск с одним регионом
+        return await parse(
+            query=query,
+            user_id=user_id,
+            elements=elements,
+            region=region,
+            search_engines=search_engines,
+            sources=sources,
+            excluded_domains=excluded_domains
+        )

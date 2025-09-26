@@ -1,6 +1,7 @@
-import { spawn } from 'child_process';
 import { storage } from '../storage';
 import { SupplierResponse } from '@shared/schema';
+import { attachmentProcessor, Attachment, ProcessedAttachment } from '../services/attachment-processor';
+import { batchDatabaseService } from '../services/batch-database';
 
 export class AsyncEmailProcessor {
   private static instance: AsyncEmailProcessor;
@@ -54,14 +55,27 @@ export class AsyncEmailProcessor {
         throw new Error(`Response with ID ${responseId} not found`);
       }
 
-      // Обрабатываем вложения через Python процессор
-      const processedAttachments = await this.processAttachments(response.attachments as any[]);
-      
-      // Обновляем ответ с обработанными вложениями
-      await storage.updateSupplierResponse(responseId, {
-        attachments: processedAttachments,
-        isAnalyzed: true
+      // Обрабатываем вложения через единый сервис
+      const attachments = (response.attachments as any[]) || [];
+      const processedAttachments = await attachmentProcessor.processAttachments(attachments, {
+        timeout: 60000, // 60 секунд
+        maxFileSize: 50 * 1024 * 1024, // 50MB
+        retryCount: 3
       });
+      
+      // Используем batch обновление для оптимизации
+      const batchResult = await batchDatabaseService.batchUpdateResponses([{
+        responseId: responseId,
+        attachments: processedAttachments,
+        isAnalyzed: true,
+        processingStatus: 'completed',
+        processingCompletedAt: new Date()
+      }]);
+      
+      if (batchResult.failed > 0) {
+        console.error(`[AsyncEmailProcessor] Batch update failed for response ${responseId}:`, batchResult.errors);
+        throw new Error(`Failed to update response ${responseId}: ${batchResult.errors[0]?.error}`);
+      }
 
       // Обновляем статус на 'completed'
       await this.updateProcessingStatus(responseId, 'completed', null, null, new Date());
@@ -86,145 +100,6 @@ export class AsyncEmailProcessor {
     }
   }
 
-  /**
-   * Обрабатывает вложения через Python процессор
-   */
-  private async processAttachments(attachments: any[]): Promise<any[]> {
-    if (!attachments || attachments.length === 0) {
-      return attachments;
-    }
-
-    const processedAttachments = [];
-
-    for (const attachment of attachments) {
-      try {
-        if (attachment.content && attachment.contentType) {
-          // Обрабатываем через Python процессор
-          const extractedText = await this.callPythonProcessor(attachment);
-          
-          processedAttachments.push({
-            ...attachment,
-            extractedText: extractedText,
-            processedAt: new Date().toISOString()
-          });
-        } else {
-          processedAttachments.push(attachment);
-        }
-      } catch (error) {
-        console.error(`[AsyncEmailProcessor] Ошибка обработки вложения ${attachment.filename}:`, error);
-        processedAttachments.push({
-          ...attachment,
-          processingError: error instanceof Error ? error.message : String(error)
-        });
-      }
-    }
-
-    return processedAttachments;
-  }
-
-  /**
-   * Вызывает Python процессор для извлечения текста
-   */
-  private async callPythonProcessor(attachment: any): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const fs = require('fs');
-      const path = require('path');
-      const os = require('os');
-      
-      // Create temporary file with attachment data
-      const tempDir = path.join(os.tmpdir(), 'supplier-finder-attachments');
-      if (!fs.existsSync(tempDir)) {
-        fs.mkdirSync(tempDir, { recursive: true });
-      }
-      
-      const tempFilePath = path.join(tempDir, `attachment_${Date.now()}_${attachment.filename || 'unknown'}`);
-      
-      try {
-        // Write base64 content to temporary file
-        const fileBuffer = Buffer.from(attachment.content, 'base64');
-        fs.writeFileSync(tempFilePath, fileBuffer);
-        
-        // Create input data for Python processor
-        const inputData = {
-          attachments: [{
-            filename: attachment.filename || 'unknown',
-            contentType: attachment.contentType || 'application/octet-stream',
-            content: attachment.content, // ← Передаем исходный base64 контент
-            size: fileBuffer.length
-          }]
-        };
-        
-        const inputFilePath = path.join(tempDir, `input_${Date.now()}.json`);
-        fs.writeFileSync(inputFilePath, JSON.stringify(inputData, null, 2), 'utf8');
-        
-        // Call Python processor with input file
-        const pythonProcess = spawn('python', [
-          'server/file-processing/file_processor.py',
-          inputFilePath
-        ]);
-
-        let output = '';
-        let errorOutput = '';
-
-        pythonProcess.stdout.on('data', (data) => {
-          output += data.toString();
-        });
-
-        pythonProcess.stderr.on('data', (data) => {
-          errorOutput += data.toString();
-        });
-
-        pythonProcess.on('close', (code) => {
-          // Clean up temporary files
-          try {
-            fs.unlinkSync(tempFilePath);
-            fs.unlinkSync(inputFilePath);
-          } catch (cleanupError) {
-            console.error('Error cleaning up temp files:', cleanupError);
-          }
-          
-          if (code === 0) {
-            try {
-              const result = JSON.parse(output);
-              if (result.attachments && result.attachments.length > 0) {
-                resolve(result.attachments[0].extractedText || '');
-              } else {
-                resolve('');
-              }
-            } catch (parseError) {
-              resolve(output.trim());
-            }
-          } else {
-            reject(new Error(`Python processor failed with code ${code}: ${errorOutput}`));
-          }
-        });
-
-        pythonProcess.on('error', (error) => {
-          // Clean up temporary files
-          try {
-            fs.unlinkSync(tempFilePath);
-            fs.unlinkSync(inputFilePath);
-          } catch (cleanupError) {
-            console.error('Error cleaning up temp files:', cleanupError);
-          }
-          
-          reject(new Error(`Failed to start Python processor: ${error.message}`));
-        });
-        
-      } catch (error) {
-        // Clean up temporary files
-        try {
-          if (fs.existsSync(tempFilePath)) {
-            fs.unlinkSync(tempFilePath);
-          }
-        } catch (cleanupError) {
-          console.error('Error cleaning up temp files:', cleanupError);
-        }
-        
-        reject(error);
-      }
-    });
-  }
 
   /**
    * Обновляет статус обработки в БД

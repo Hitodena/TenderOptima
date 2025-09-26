@@ -50,10 +50,17 @@ router.post('/', requireAuth, async (req, res) => {
     
     console.log(`[SupplierSearch] Request params:`, { searchQueries, sources, maxResults, regions, language, userId });
 
-    // Извлекаем регион для передачи в Python
-    let regionObject = null; // default
+    // Валидация регионов - максимум 5 регионов
+    if (regions && regions.length > 5) {
+      return res.status(400).json({ error: 'Maximum 5 regions allowed' });
+    }
+
+    // Извлекаем регионы для передачи в Python
+    let regionObjects = []; // default
     if (regions && regions.length > 0) {
-      regionObject = regions[0]; // Берем весь объект региона
+      regionObjects = regions.slice(0, 5); // Берем максимум 5 регионов
+    } else {
+      regionObjects = [{ googleCode: "ru" }]; // Default to Russia
     }
 
     console.log(`[SupplierSearch] Starting parallel search for ${searchQueries.length} queries: [${searchQueries.map(q => `"${q}"`).join(', ')}] with ${maxResults} max results each`);
@@ -69,29 +76,37 @@ router.post('/', requireAuth, async (req, res) => {
     }
     console.log(`[SupplierSearch] Subscription active for user ${userId} - performing search`);
 
-    // 2. Параллельный вызов Python парсера для каждого ключевого слова
+    // 2. Параллельный вызов Python парсера для каждого ключевого слова и каждого региона
     try {
-      console.log(`[SupplierSearch] Starting parallel searches for ${searchQueries.length} queries`);
+      console.log(`[SupplierSearch] Starting parallel searches for ${searchQueries.length} queries across ${regionObjects.length} regions`);
       
-      // Создаем массив промисов для параллельного выполнения
-      const searchPromises = searchQueries.map(async (singleQuery, index) => {
-        console.log(`[SupplierSearch] Starting search ${index + 1}/${searchQueries.length} for: "${singleQuery}"`);
-        try {
-          const results = await callPythonParser(singleQuery, maxResults, userId.toString(), regionObject, sources);
-          console.log(`[SupplierSearch] Query "${singleQuery}" returned ${results.length} results`);
-          return results;
-        } catch (error) {
-          console.error(`[SupplierSearch] Query "${singleQuery}" failed:`, error);
-          return []; // Возвращаем пустой массив вместо падения всего процесса
+      // Создаем массив промисов для параллельного выполнения (запросы × регионы)
+      const searchPromises = [];
+      
+      for (const singleQuery of searchQueries) {
+        for (const regionObject of regionObjects) {
+          searchPromises.push(
+            (async () => {
+              console.log(`[SupplierSearch] Starting search for: "${singleQuery}" in region: ${regionObject.googleCode || regionObject}`);
+              try {
+                const results = await callPythonParser(singleQuery, maxResults, userId.toString(), regionObject, sources);
+                console.log(`[SupplierSearch] Query "${singleQuery}" in region ${regionObject.googleCode || regionObject} returned ${results.length} results`);
+                return results;
+              } catch (error) {
+                console.error(`[SupplierSearch] Query "${singleQuery}" in region ${regionObject.googleCode || regionObject} failed:`, error);
+                return []; // Возвращаем пустой массив вместо падения всего процесса
+              }
+            })()
+          );
         }
-      });
+      }
       
       // Ждем завершения всех поисков параллельно
       const allSearchResults = await Promise.all(searchPromises);
       
       // Объединяем все результаты в один массив
       const allSuppliers = allSearchResults.flat().filter(Boolean);
-      console.log(`[SupplierSearch] Combined ${allSuppliers.length} total results from all queries`);
+      console.log(`[SupplierSearch] Combined ${allSuppliers.length} total results from all queries and regions`);
       
       // Дедупликация по домену
       const uniqueSuppliersMap = new Map<string, SearchResult>();
@@ -116,7 +131,7 @@ router.post('/', requireAuth, async (req, res) => {
       const results = uniqueResults;
 
       // 3. Сохранение результатов в БД (логика осталась прежней)
-      const savedSuppliers = await saveSearchResults(results, regionObject?.googleCode || "ru");
+      const savedSuppliers = await saveSearchResults(results, regionObjects[0]?.googleCode || "ru");
 
       console.log(`[SupplierSearch] Successfully found and saved ${savedSuppliers.length} suppliers`);
 
@@ -153,6 +168,8 @@ router.post('/', requireAuth, async (req, res) => {
         // Дополнительная статистика по многоключевому поиску
         parallelSearchStats: {
           totalQueriesProcessed: searchQueries.length,
+          totalRegionsProcessed: regionObjects.length,
+          totalSearchesPerformed: searchQueries.length * regionObjects.length,
           totalResultsBeforeDedup: allSuppliers.length,
           uniqueResultsAfterDedup: savedSuppliers.length,
           deduplicationReduction: allSuppliers.length - savedSuppliers.length
@@ -211,11 +228,17 @@ async function callPythonParser(query: string, elements: number, userId: string,
     console.log(`[PythonParser] Making HTTP request to FastAPI microservice on port 8080`);
     
     try {
+      // Извлекаем коды регионов для передачи в Python
+      const regionCodes = regionObject ? 
+        (Array.isArray(regionObject) ? regionObject.map(r => r.googleCode || r) : [regionObject.googleCode || regionObject]) :
+        ["ru"];
+      
       const requestBody = {
         query,
         elements,
         user_id: userId,
-        region,
+        region: regionCodes[0], // Основной регион для обратной совместимости
+        regions: regionCodes, // Множественные регионы
         sources,
         excluded_domains: excludedDomainsList // Передаем стоп-лист в Python
       };

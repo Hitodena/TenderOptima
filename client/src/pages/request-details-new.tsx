@@ -132,13 +132,13 @@ export default function RequestDetails() {
   useSocket({
     userId: userId || undefined,
     onNewEmail: (data) => {
-      console.log('📧 RequestDetails: Received new email notification:', data);
-      console.log('📧 RequestDetails: Current request ID:', id);
-      console.log('📧 RequestDetails: New email request ID:', data.requestId);
+      console.log('🔔 RequestDetails: Received new email notification:', data);
+      console.log('🔔 RequestDetails: Current request ID:', id);
+      console.log('🔔 RequestDetails: New email request ID:', data.requestId);
       
       // Если новый email относится к текущему запросу, обновляем данные
       if (data.requestId === id) {
-        console.log('🔄 RequestDetails: New email for current request, refreshing data...');
+        console.log('✅ RequestDetails: New email for current request, refreshing data...');
         
         // Показываем уведомление
         toast({
@@ -147,11 +147,11 @@ export default function RequestDetails() {
         });
         
         // Обновляем данные
-        console.log('🔄 RequestDetails: Invalidating queries...');
+        console.log('✅ RequestDetails: Invalidating queries...');
         queryClient.invalidateQueries({ queryKey: ['/api/search-requests', 'single', id] });
         queryClient.invalidateQueries({ queryKey: ['/api/supplier-responses', id] });
       } else {
-        console.log('📧 RequestDetails: New email for different request, ignoring');
+        console.log('🔔 RequestDetails: New email for different request, ignoring');
       }
     }
   });
@@ -195,9 +195,9 @@ export default function RequestDetails() {
   const { data, isLoading, error, refetch } = useQuery<RequestDetailsData>({
     queryKey: ['/api/search-requests', 'single', id], // ✅ ИСПРАВЛЕНО: уникальный ключ для одного запроса
     queryFn: async () => {
-      console.log('🚀 REQUEST-DETAILS: Loading single request', id);
+      console.log('🔍 REQUEST-DETAILS: Loading single request', id);
       const response = await apiRequest<RequestDetailsData>(`/api/search-requests/${id}`, 'GET');
-      console.log('🚀 REQUEST-DETAILS: Loaded request', id, 'with', response?.supplierResponses?.length || 0, 'responses');
+      console.log('🔍 REQUEST-DETAILS: Loaded request', id, 'with', response?.supplierResponses?.length || 0, 'responses');
       // Cache supplier responses for potential future use
       if (response?.supplierResponses && id) {
         queryClient.setQueryData(['/api/supplier-responses', id], response.supplierResponses);
@@ -412,7 +412,7 @@ export default function RequestDetails() {
               </TabsList>
           </Tabs>
           <h1 className="text-2xl font-bold">
-            {request?.productName || 'НОСОК'}
+            {request?.productName || 'НЕСОК'}
           </h1>
         </div>
 
