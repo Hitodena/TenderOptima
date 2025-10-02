@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { X } from "lucide-react";
+import { useLocation } from "wouter";
 
 interface SubscriptionData {
   id: number;
@@ -23,6 +24,13 @@ interface SubscriptionResponse {
 }
 
 export function SubscriptionAlerts() {
+  const [location] = useLocation();
+  
+  // Hide alerts on auth page and admin panel
+  if (location === '/auth' || location.startsWith('/admpanel') || location.startsWith('/admin-login')) {
+    return null;
+  }
+  
   const [dismissedAlerts, setDismissedAlerts] = useState<{
     days: number;
     requests: number;

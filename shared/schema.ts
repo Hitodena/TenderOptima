@@ -89,6 +89,8 @@ export const suppliers = pgTable("suppliers", {
 
 export const stagingSuppliers = pgTable("staging_suppliers", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id), // Связь с пользователем
+  searchSessionId: text("search_session_id"), // Уникальный идентификатор сессии поиска
   sourceEngine: text("source_engine").notNull(), // 'google' или 'yandex'
   searchQuery: text("search_query").notNull(),   // Исходный поисковый запрос
   region: text("region"),                         // Регион поиска
@@ -116,6 +118,7 @@ export const searchRequests = pgTable("search_requests", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id),
   orderNumber: text("order_number").notNull().unique(), // Unique identifier for the request
+  searchSessionId: text("search_session_id"), // Уникальный идентификатор сессии поиска
   productName: text("product_name").notNull(),
   productDescription: text("product_description").notNull(),
   quantity: integer("quantity"), // Optional field no longer used in UI

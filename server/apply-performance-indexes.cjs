@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 // Загружаем переменные окружения
-require('dotenv').config({ path: path.join(__dirname, '..', 'env.dev') });
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,

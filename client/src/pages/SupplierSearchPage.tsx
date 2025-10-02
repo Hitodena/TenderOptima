@@ -210,7 +210,7 @@ export function SupplierSearchForm({ onComplete }: Props) {
           <FormLabel>Источники поиска</FormLabel>
           <FormItem className="flex items-center space-x-3"><FormControl><Checkbox id="use-registry-search" checked={useRegistrySearch} onCheckedChange={(c) => setUseRegistrySearch(c === true)} /></FormControl><FormLabel htmlFor="use-registry-search" className="cursor-pointer">Поиск по реестру</FormLabel></FormItem>
           <FormItem className="flex items-center space-x-3"><FormControl><Checkbox id="search-yandex" checked={searchYandex} onCheckedChange={(c) => setSearchYandex(c === true)} /></FormControl><FormLabel htmlFor="search-yandex" className="cursor-pointer">Поиск по Yandex</FormLabel></FormItem>
-          {searchYandex && (<div className="ml-6 pl-4 border-l-2"><FormItem className="flex items-center justify-between"><FormLabel className="text-sm">Включать рекламу</FormLabel><FormControl><Switch checked={includeAds} onCheckedChange={setIncludeAds} /></FormControl></FormItem></div>)}
+          {searchYandex && (<div className="ml-6 pl-4 border-l-2 hidden"><FormItem className="flex items-center justify-between"><FormLabel className="text-sm">Включать рекламу</FormLabel><FormControl><Switch checked={includeAds} onCheckedChange={setIncludeAds} /></FormControl></FormItem></div>)}
           <FormItem className="flex items-center space-x-3"><FormControl><Checkbox id="search-google" checked={searchGoogle} onCheckedChange={(c) => setSearchGoogle(c === true)} /></FormControl><FormLabel htmlFor="search-google" className="cursor-pointer">Поиск по Google</FormLabel></FormItem>
         </div>
 
@@ -378,7 +378,7 @@ export function SupplierSearchForm({ onComplete }: Props) {
             </Dialog>
         </div>
 
-        <div className="bg-muted/50 p-3 rounded-lg space-y-1 border">
+        <div className="bg-muted/50 p-3 rounded-lg space-y-1 border hidden">
           <div className="flex items-center justify-between">
             <FormLabel>Язык поиска</FormLabel>
             <Button type="button" variant="ghost" className="gap-2" onClick={()=>setShowLanguageDialog(true)}><span className="text-sm">{language}</span><Globe className="h-4 w-4" /></Button>
@@ -408,8 +408,11 @@ export function SupplierSearchPage() {
   const [, navigate] = useLocation();
   const handleSearchComplete = (request: SearchRequest) => {
     if (request.matchedSuppliers && request.matchedSuppliers.length > 0) {
+      console.log("Search completed, matchedSuppliers sample:", request.matchedSuppliers[0]);
+      console.log("Email format in matchedSuppliers:", (request.matchedSuppliers[0] as any)?.email, Array.isArray((request.matchedSuppliers[0] as any)?.email));
       localStorage.setItem('sendRequestSuppliers', JSON.stringify(request.matchedSuppliers));
       localStorage.setItem('sendRequestId', request.id.toString());
+      localStorage.setItem('searchQuery', request.productName || '');
       navigate(`/send-request?requestId=${request.id}&orderNumber=${request.orderNumber}`);
     }
   };

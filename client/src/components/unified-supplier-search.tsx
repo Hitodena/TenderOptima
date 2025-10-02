@@ -185,7 +185,7 @@ export function UnifiedSupplierSearch({ onSuppliersFound, selectedRegions }: Uni
               </Label>
             </div>
 
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-3 hidden">
               <Checkbox
                 id="include-ads"
                 checked={includeAds}

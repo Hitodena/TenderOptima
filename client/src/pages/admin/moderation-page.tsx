@@ -10,6 +10,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Pagination } from "@/components/ui/pagination";
 import SupplierStats from "@/components/SupplierStats";
 import ResponseHistoryModal from "@/components/ResponseHistoryModal";
 import RegionSelector from "@/components/RegionSelector";
@@ -21,7 +23,8 @@ import {
   AlertCircleIcon,
   MessageSquareIcon,
   PlusCircleIcon,
-  X
+  X,
+  BanIcon
 } from "lucide-react";
 
 /**
@@ -94,6 +97,15 @@ export default function ModerationPage() {
   const [isEditingMode, setIsEditingMode] = useState(false);
   const [editingSupplierId, setEditingSupplierId] = useState<number | null>(null);
   const [initialFormData, setInitialFormData] = useState<any>(null);
+  
+  // Состояние для модального окна стоп-листа
+  const [stopListDialog, setStopListDialog] = useState(false);
+  const [stopListSupplier, setStopListSupplier] = useState<StagingSupplier | null>(null);
+  const [stopListReason, setStopListReason] = useState('');
+  const [stopListCustomReason, setStopListCustomReason] = useState('');
+  
+  // Состояние для пагинации
+  const [currentPage, setCurrentPage] = useState(1);
   const [searchForm, setSearchForm] = useState({
     website: "",
     taxId: ""
@@ -114,11 +126,21 @@ export default function ModerationPage() {
   });
 
   // Загрузка данных
-  const { data: stagingSuppliers, isLoading, error } = useQuery<StagingSupplier[]>({
-    queryKey: ["staging-suppliers"],
+  const { data: stagingSuppliers, isLoading, error } = useQuery<{
+    data: StagingSupplier[];
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+      hasNext: boolean;
+      hasPrev: boolean;
+    };
+  }>({
+    queryKey: ["staging-suppliers", currentPage],
     queryFn: async () => {
       const adminToken = localStorage.getItem('adminToken') || 'admin-token-123456';
-      const response = await fetch('/api/admin/staging-suppliers', {
+      const response = await fetch(`/api/admin/staging-suppliers?page=${currentPage}&limit=30`, {
         headers: {
           'X-Admin-Token': adminToken,
           'Content-Type': 'application/json'
@@ -131,7 +153,7 @@ export default function ModerationPage() {
       }
 
       const result = await response.json();
-      return result.data || [];
+      return result;
     },
     refetchOnWindowFocus: true,
     staleTime: 30000 // 30 секунд
@@ -325,6 +347,50 @@ export default function ModerationPage() {
     }
   });
 
+  // Мутация для добавления в стоп-лист
+  const addToStopListMutation = useMutation({
+    mutationFn: async ({ domain, reason }: { domain: string; reason: string }) => {
+      const adminToken = localStorage.getItem('adminToken') || 'admin-token-123456';
+      const response = await fetch('/api/admin/excluded-domains', {
+        method: 'POST',
+        headers: {
+          'X-Admin-Token': adminToken,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ domain, reason }),
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        throw new Error(errorData || `Ошибка добавления в стоп-лист: ${response.status}`);
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Добавлено в стоп-лист",
+        description: "Домен успешно добавлен в стоп-лист",
+      });
+      setStopListDialog(false);
+      setStopListSupplier(null);
+      setStopListReason('');
+      setStopListCustomReason('');
+      // Также отклоняем поставщика после добавления в стоп-лист
+      if (stopListSupplier) {
+        rejectMutation.mutate(stopListSupplier.id);
+      }
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Ошибка добавления в стоп-лист",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  });
+
   // Мутация для обновления поставщика
   const updateSupplierMutation = useMutation({
     mutationFn: async ({ supplierId, supplierData }: { supplierId: number; supplierData: any }) => {
@@ -451,8 +517,15 @@ export default function ModerationPage() {
     }
   }, [formDialog, initialFormData]);
 
+  // Функция для смены страницы
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
   // Обработчики действий
   const handleApprove = async (stagingId: number) => {
+    if (processingIds.has(stagingId)) return; // Предотвращаем множественные нажатия
+    
     setProcessingIds(prev => new Set(prev).add(stagingId));
     try {
       await approveMutation.mutateAsync(stagingId);
@@ -466,6 +539,8 @@ export default function ModerationPage() {
   };
 
   const handleReject = async (stagingId: number) => {
+    if (processingIds.has(stagingId)) return; // Предотвращаем множественные нажатия
+    
     setProcessingIds(prev => new Set(prev).add(stagingId));
     try {
       await rejectMutation.mutateAsync(stagingId);
@@ -479,6 +554,8 @@ export default function ModerationPage() {
   };
 
   const handleMerge = async (stagingId: number, existingSupplierId: number) => {
+    if (processingIds.has(stagingId)) return; // Предотвращаем множественные нажатия
+    
     setProcessingIds(prev => new Set(prev).add(stagingId));
     try {
       await mergeMutation.mutateAsync({ stagingId, existingSupplierId });
@@ -489,6 +566,41 @@ export default function ModerationPage() {
         return newSet;
       });
     }
+  };
+
+  const handleAddToStopList = (supplier: StagingSupplier) => {
+    setStopListSupplier(supplier);
+    setStopListDialog(true);
+  };
+
+  const handleStopListSubmit = () => {
+    if (!stopListSupplier) return;
+
+    const finalReason = stopListReason === 'Другое...' ? stopListCustomReason : stopListReason;
+    if (!finalReason.trim()) {
+      toast({
+        title: "Ошибка валидации",
+        description: "Выберите или введите причину",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Нормализуем домен из URL поставщика
+    const normalizedDomain = normalizeWebsite(stopListSupplier.rawUrl);
+    if (!normalizedDomain) {
+      toast({
+        title: "Ошибка валидации",
+        description: "Не удалось извлечь домен из URL поставщика",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    addToStopListMutation.mutate({
+      domain: normalizedDomain,
+      reason: finalReason
+    });
   };
 
   const openHistoryModal = (supplierId: number, supplierName: string) => {
@@ -706,11 +818,11 @@ export default function ModerationPage() {
         <CardHeader>
           <CardTitle>Поставщики на модерацию</CardTitle>
           <CardDescription>
-            Всего записей: {stagingSuppliers?.length || 0}
+            Всего записей: {stagingSuppliers?.pagination?.total || 0}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {stagingSuppliers && stagingSuppliers.length > 0 ? (
+          {stagingSuppliers?.data && stagingSuppliers.data.length > 0 ? (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -727,7 +839,7 @@ export default function ModerationPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {stagingSuppliers.map((supplier, index) => {
+                  {stagingSuppliers?.data?.map((supplier, index) => {
                     const isProcessing = processingIds.has(supplier.id);
                     
                     return (
@@ -867,6 +979,17 @@ export default function ModerationPage() {
                                 История ответов
                               </Button>
                             )}
+                            
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleAddToStopList(supplier)}
+                              disabled={isProcessing}
+                              className="border-red-600 text-red-600 hover:bg-red-50 w-full"
+                            >
+                              <BanIcon className="h-4 w-4" />
+                              В стоп лист
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -881,6 +1004,17 @@ export default function ModerationPage() {
             </div>
           )}
         </CardContent>
+        
+        {/* Пагинация */}
+        {stagingSuppliers?.data && stagingSuppliers.data.length > 0 && stagingSuppliers.pagination && (
+          <Pagination
+            currentPage={stagingSuppliers.pagination.page}
+            totalPages={stagingSuppliers.pagination.totalPages}
+            onPageChange={handlePageChange}
+            hasNext={stagingSuppliers.pagination.hasNext}
+            hasPrev={stagingSuppliers.pagination.hasPrev}
+          />
+        )}
       </Card>
 
       {/* Модальное окно истории ответов */}
@@ -1153,6 +1287,79 @@ export default function ModerationPage() {
                   </>
                 ) : (
                   isEditingMode ? 'Обновить поставщика' : 'Создать поставщика'
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* StopListDialog - окно добавления в стоп-лист */}
+      <Dialog open={stopListDialog} onOpenChange={setStopListDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Добавить в стоп-лист</DialogTitle>
+            <DialogDescription>
+              Укажите причину добавления домена "{stopListSupplier?.rawUrl}" в стоп-лист
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="stopListReason">Причина исключения</Label>
+              <Select value={stopListReason} onValueChange={setStopListReason}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Выберите причину" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Маркетплейс/Агрегатор">Маркетплейс/Агрегатор</SelectItem>
+                  <SelectItem value="Информационный сайт/Блог">Информационный сайт/Блог</SelectItem>
+                  <SelectItem value="Форум/Социальная сеть">Форум/Социальная сеть</SelectItem>
+                  <SelectItem value="Спам/Низкое качество">Спам/Низкое качество</SelectItem>
+                  <SelectItem value="Государственный сайт">Государственный сайт</SelectItem>
+                  <SelectItem value="Другое...">Другое...</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {stopListReason === 'Другое...' && (
+              <div>
+                <Label htmlFor="stopListCustomReason">Укажите причину</Label>
+                <Textarea
+                  id="stopListCustomReason"
+                  placeholder="Введите причину исключения домена..."
+                  value={stopListCustomReason}
+                  onChange={(e) => setStopListCustomReason(e.target.value)}
+                  disabled={addToStopListMutation.isPending}
+                />
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-4 border-t">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setStopListDialog(false);
+                  setStopListSupplier(null);
+                  setStopListReason('');
+                  setStopListCustomReason('');
+                }}
+                disabled={addToStopListMutation.isPending}
+              >
+                Отмена
+              </Button>
+              <Button
+                onClick={handleStopListSubmit}
+                disabled={addToStopListMutation.isPending}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {addToStopListMutation.isPending ? (
+                  <>
+                    <Spinner size="sm" className="mr-2" />
+                    Добавление...
+                  </>
+                ) : (
+                  'Добавить в стоп-лист'
                 )}
               </Button>
             </div>

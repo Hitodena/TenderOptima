@@ -192,6 +192,22 @@ function Router() {
           </React.Suspense>
         );
       }} />
+      <Route path="/admin/client-requests/:id/results" component={() => {
+        const ClientRequestResults = React.lazy(() => import('./pages/admin/client-request-results'));
+        return (
+          <React.Suspense fallback={<div>Loading...</div>}>
+            <ClientRequestResults />
+          </React.Suspense>
+        );
+      }} />
+      <Route path="/admin/client-requests/:id/sent-requests" component={() => {
+        const ClientRequestSent = React.lazy(() => import('./pages/admin/client-request-sent'));
+        return (
+          <React.Suspense fallback={<div>Loading...</div>}>
+            <ClientRequestSent />
+          </React.Suspense>
+        );
+      }} />
       <Route>
         <ProtectedRoute component={NotFound} />
       </Route>

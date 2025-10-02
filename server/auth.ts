@@ -367,26 +367,11 @@ export async function setupAuth(app: Express) {
   });
 
   // Development mode middleware
-  // Setting FORCE_DEV_MODE to false to allow manual login
+  // ИСПРАВЛЕНО: Убрана автоматическая подмена на админа
   const FORCE_DEV_MODE = false;
   if (DEV_MODE || FORCE_DEV_MODE) {
-    console.log('[Server] DEV_MODE active: Enabling auto-login as admin');
-    app.use((req, res, next) => {
-      // If in dev mode and not authenticated, auto-login as admin
-      if (!req.isAuthenticated()) {
-        req.login({ 
-          id: 1, 
-          username: 'admin@example.com',
-          role: 'admin',
-          language: 'ru'
-        }, (err) => {
-          if (err) return next(err);
-          return next();
-        });
-      } else {
-        return next();
-      }
-    });
+    console.log('[Server] DEV_MODE active but not auto-logging as admin');
+    // Не устанавливаем автоматически админа - пусть пользователь логинится нормально
   } else {
     // Normal authentication mode
     passport.use(
@@ -853,16 +838,12 @@ export async function setupAuth(app: Express) {
       req.session.touch();
     }
     
-    // Only return fake admin user in dev mode if explicitly set to true
-    if (DEV_MODE && SKIP_AUTH) {
-      console.log('[Auth] Using DEV_MODE admin credentials');
-      return res.status(200).json({
-        id: 1,
-        username: 'admin@example.com',
-        role: 'admin',
-        language: 'ru'
-      });
-    }
+  // Only return fake admin user in dev mode if explicitly set to true
+  // ИСПРАВЛЕНО: Убрана автоматическая подмена на админа
+  if (DEV_MODE && SKIP_AUTH) {
+    console.log('[Auth] DEV_MODE enabled but not auto-logging as admin');
+    // Не возвращаем автоматически админа - пусть пользователь логинится нормально
+  }
     
     // Альтернативная проверка аутентификации
     // Если у нас есть userId в сессии, но passport не установил req.user, делаем это вручную
@@ -1087,16 +1068,10 @@ export async function setupAuth(app: Express) {
 // Middleware for protecting routes
 export function requireAuth(req: any, res: any, next: any) {
   // Only bypass auth if BOTH DEV_MODE AND SKIP_AUTH are true
+  // ИСПРАВЛЕНО: Убрана автоматическая подмена на админа
   if (DEV_MODE && SKIP_AUTH) {
-    console.log('[Auth] Skipping authorization check in DEV_MODE with SKIP_AUTH=true');
-    // Use default test user account in bypass mode
-    req.user = {
-      id: 1,
-      username: 'admin@example.com',
-      role: 'admin',
-      language: 'ru'
-    };
-    return next();
+    console.log('[Auth] DEV_MODE enabled but not auto-setting admin user');
+    // Не устанавливаем автоматически админа - пусть пользователь аутентифицируется нормально
   }
   
   // Reduced logging - only log auth failures
@@ -1113,16 +1088,10 @@ export function requireAuth(req: any, res: any, next: any) {
 // Middleware for requiring admin role
 export function requireAdmin(req: any, res: any, next: any) {
   // Only bypass auth if BOTH DEV_MODE AND SKIP_AUTH are true
+  // ИСПРАВЛЕНО: Убрана автоматическая подмена на админа
   if (DEV_MODE && SKIP_AUTH) {
-    console.log('[Auth] Skipping admin authorization check in DEV_MODE with SKIP_AUTH=true');
-    // Use default admin user account in bypass mode
-    req.user = {
-      id: 1,
-      username: 'admin@example.com',
-      role: 'admin',
-      language: 'ru'
-    };
-    return next();
+    console.log('[Auth] DEV_MODE enabled but not auto-setting admin user');
+    // Не устанавливаем автоматически админа - пусть пользователь аутентифицируется нормально
   }
   
   if (!req.isAuthenticated()) {

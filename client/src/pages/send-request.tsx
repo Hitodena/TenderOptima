@@ -12,8 +12,30 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
-import { Mail, X, Users, ArrowLeft, Info } from "lucide-react";
+import { Mail, X, Users, ArrowLeft, Info, Globe, Search } from "lucide-react";
 import type { SearchRequest, Supplier } from "@shared/schema";
+
+// Extended supplier type for handling multiple emails
+type ExtendedSupplier = Omit<Supplier, 'email'> & {
+  email: string[] | string;
+  selectedEmail?: string;
+};
+
+// Helper function to convert ExtendedSupplier to Supplier for compatibility
+const convertToSupplier = (extended: ExtendedSupplier): Supplier => ({
+  ...extended,
+  email: Array.isArray(extended.email) ? (extended.selectedEmail || extended.email[0] || '') : extended.email
+});
+
+// Helper function to convert ExtendedSupplier to SupplierTooltip format
+const convertToTooltipSupplier = (extended: ExtendedSupplier) => ({
+  name: extended.name,
+  email: Array.isArray(extended.email) ? (extended.selectedEmail || extended.email[0] || '') : extended.email,
+  phone: extended.phone,
+  website: extended.website,
+  description: extended.description,
+  categories: extended.categories
+});
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
@@ -25,8 +47,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { SupplierTooltip } from "@/components/ui/supplier-tooltip";
 
 export default function SendRequest() {
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [selectedSuppliers, setSelectedSuppliers] = useState<Supplier[]>([]);
+  const [suppliers, setSuppliers] = useState<ExtendedSupplier[]>([]);
+  const [selectedSuppliers, setSelectedSuppliers] = useState<ExtendedSupplier[]>([]);
   // Default to showing email form, but check URL and session storage first
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [productName, setProductName] = useState('');
@@ -36,6 +58,7 @@ export default function SendRequest() {
   const [groupId, setGroupId] = useState<number | null>(null);
   const [comingFromGroup, setComingFromGroup] = useState(false);
   const [searchRequest, setSearchRequest] = useState<SearchRequest | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [uniqueEmailsOnly, setUniqueEmailsOnly] = useState(true);
   const [trialLimitMessage, setTrialLimitMessage] = useState<string | null>(null);
   const [selectedSupplierInfo, setSelectedSupplierInfo] = useState<Supplier | null>(null);
@@ -47,7 +70,7 @@ export default function SendRequest() {
   const { isActiveOrLoading } = useSubscription();
 
   // Helper function to apply trial limitations to suppliers
-  const applyTrialLimitations = async (suppliers: Supplier[]) => {
+  const applyTrialLimitations = async (suppliers: ExtendedSupplier[]) => {
     try {
       const response = await fetch('/api/subscriptions/status');
       const subscription = response.ok ? await response.json() : null;
@@ -126,11 +149,11 @@ export default function SendRequest() {
     return date.toLocaleDateString();
   };
 
-  const handleAddSupplier = (supplier: Supplier) => {
+  const handleAddSupplier = (supplier: ExtendedSupplier) => {
     setSuppliers(prev => [...prev, supplier]);
   };
 
-  const handleBulkUpload = (newSuppliers: Supplier[]) => {
+  const handleBulkUpload = (newSuppliers: ExtendedSupplier[]) => {
     setSuppliers(prev => [...prev, ...newSuppliers]);
   };
 
@@ -139,10 +162,29 @@ export default function SendRequest() {
     setSelectedSuppliers(prev => prev.filter(s => s.id !== id));
   };
 
+  // Helper function to clean email address
+  const cleanEmail = (email: string): string => {
+    if (!email) return "";
+    
+    // Remove leading slashes, spaces, and other unwanted characters
+    let cleaned = email.trim();
+    
+    // Remove common prefixes that shouldn't be in email
+    cleaned = cleaned.replace(/^[\/\\\s]+/, ''); // Remove leading slashes and spaces
+    cleaned = cleaned.replace(/^mailto:/i, ''); // Remove mailto: prefix
+    cleaned = cleaned.replace(/^email:/i, ''); // Remove email: prefix
+    
+    // Remove any trailing slashes or spaces
+    cleaned = cleaned.replace(/[\/\\\s]+$/, '');
+    
+    return cleaned;
+  };
+
   // Helper function to get domain from email
   const getDomainFromEmail = (email: string): string => {
     if (!email) return "";
-    const parts = email.split('@');
+    const cleanedEmail = cleanEmail(email);
+    const parts = cleanedEmail.split('@');
     return parts.length > 1 ? parts[1].toLowerCase() : "";
   };
 
@@ -180,65 +222,167 @@ export default function SendRequest() {
     }
   };
 
-  // Function to select unique suppliers with smart deduplication
-  // Only deduplicates corporate emails where email domain matches website domain
-  const selectUniqueEmails = () => {
-    const selected: Supplier[] = [];
-    const corporateDomainsUsed = new Set<string>();
+  // Function to group suppliers by domain
+  const groupSuppliersByDomain = (suppliers: ExtendedSupplier[]) => {
+    const groups = new Map<string, ExtendedSupplier[]>();
     
     suppliers.forEach(supplier => {
-      const email = supplier.email || '';
       const website = supplier.website || '';
-      const emailDomain = getDomainFromEmail(email);
-      const websiteDomain = getDomainFromWebsite(website);
+      const domain = getDomainFromWebsite(website);
       
-      // Skip suppliers without email
-      if (!emailDomain) return;
-      
-      // Rule 1: Always keep suppliers with public email domains (gmail.com, mail.ru, etc.)
-      if (publicEmailDomains.has(emailDomain)) {
-        selected.push(supplier);
-        return;
-      }
-      
-      // Rule 2: For corporate emails (email domain matches website domain), deduplicate by website
-      if (websiteDomain && emailDomain === websiteDomain) {
-        if (!corporateDomainsUsed.has(websiteDomain)) {
-          corporateDomainsUsed.add(websiteDomain);
-          selected.push(supplier);
+      if (!domain) {
+        // Поставщики без сайта - отдельная группа
+        const noDomainKey = 'no-domain';
+        if (!groups.has(noDomainKey)) {
+          groups.set(noDomainKey, []);
         }
-        // Skip duplicate corporate emails from the same domain
-        return;
+        groups.get(noDomainKey)!.push(supplier);
+      } else {
+        if (!groups.has(domain)) {
+          groups.set(domain, []);
+        }
+        groups.get(domain)!.push(supplier);
       }
-      
-      // Rule 3: All other emails are considered unique
-      selected.push(supplier);
     });
     
-    // Sort selected suppliers to prioritize sales-related emails within each group
-    const sortedSelected = [...selected].sort((a, b) => {
-      const emailA = (a.email || '').toLowerCase();
-      const emailB = (b.email || '').toLowerCase();
-      
-      // Priority keywords for sales departments
-      const salesKeywords = ['sales', 'продажи', 'заказ', 'order', 'commercial', 'коммерческий', 'info'];
-      
-      // Check if email contains sales keywords
-      const aHasSalesKeyword = salesKeywords.some(keyword => emailA.includes(keyword));
-      const bHasSalesKeyword = salesKeywords.some(keyword => emailB.includes(keyword));
-      
-      if (aHasSalesKeyword && !bHasSalesKeyword) return -1;
-      if (!aHasSalesKeyword && bHasSalesKeyword) return 1;
-      
-      return 0; // Preserve original order for same priority
-    });
-    
-    return sortedSelected;
+    return groups;
   };
 
-  const handleSelectSupplier = (supplier: Supplier, checked: boolean) => {
+  // Function to select unique suppliers with smart deduplication
+  // Now works with domain groups - selects one supplier per domain group
+  const selectUniqueEmails = () => {
+    const groups = groupSuppliersByDomain(suppliers);
+    const selected: ExtendedSupplier[] = [];
+    
+    groups.forEach((groupSuppliers, domain) => {
+      if (groupSuppliers.length === 0) return;
+      
+      // Check if any supplier in group has public email domain
+      const hasPublicEmail = groupSuppliers.some(s => {
+        const emails = Array.isArray(s.email) ? s.email : [s.email];
+        return emails.some(email => {
+          if (!email) return false;
+          const emailDomain = getDomainFromEmail(cleanEmail(email));
+          return publicEmailDomains.has(emailDomain);
+        });
+      });
+      
+      if (hasPublicEmail) {
+        // For groups with public emails - keep all suppliers
+        selected.push(...groupSuppliers);
+      } else {
+        // For other groups - select only the best supplier with best email
+        const sortedGroup = [...groupSuppliers].sort((a, b) => {
+          const emailsA = Array.isArray(a.email) ? a.email : [a.email];
+          const emailsB = Array.isArray(b.email) ? b.email : [b.email];
+          
+          // Find best email for each supplier
+          const bestEmailA = findBestEmail(emailsA);
+          const bestEmailB = findBestEmail(emailsB);
+          
+          const salesKeywords = ['sales', 'продажи', 'заказ', 'order', 'commercial', 'коммерческий', 'info'];
+          const aHasSalesKeyword = salesKeywords.some(keyword => cleanEmail(bestEmailA).toLowerCase().includes(keyword));
+          const bHasSalesKeyword = salesKeywords.some(keyword => cleanEmail(bestEmailB).toLowerCase().includes(keyword));
+          
+          if (aHasSalesKeyword && !bHasSalesKeyword) return -1;
+          if (!aHasSalesKeyword && bHasSalesKeyword) return 1;
+          return 0;
+        });
+        
+        // Select the best supplier and set their best email
+        const bestSupplier = sortedGroup[0];
+        const allEmails = Array.isArray(bestSupplier.email) ? bestSupplier.email : [bestSupplier.email];
+        const bestEmail = findBestEmail(allEmails);
+        selected.push({ ...bestSupplier, email: allEmails, selectedEmail: bestEmail });
+      }
+    });
+    
+    return selected;
+  };
+
+  const handleSelectSupplier = (supplier: ExtendedSupplier, checked: boolean) => {
     if (checked) {
       setSelectedSuppliers(prev => [...prev, supplier]);
+    } else {
+      setSelectedSuppliers(prev => prev.filter(s => s.id !== supplier.id));
+    }
+  };
+
+  // Helper function to find the best email from a list
+  const findBestEmail = (emails: string[]): string => {
+    if (!emails || emails.length === 0) return '';
+    if (emails.length === 1) return emails[0];
+    
+    const salesKeywords = ['sales', 'продажи', 'заказ', 'order', 'commercial', 'коммерческий', 'info'];
+    
+    // First priority: sales-related emails
+    for (const email of emails) {
+      if (!email) continue;
+      const cleanEmailLower = cleanEmail(email).toLowerCase();
+      if (salesKeywords.some(keyword => cleanEmailLower.includes(keyword))) {
+        return email;
+      }
+    }
+    
+    // Second priority: info emails
+    for (const email of emails) {
+      if (!email) continue;
+      const cleanEmailLower = cleanEmail(email).toLowerCase();
+      if (cleanEmailLower.includes('info')) {
+        return email;
+      }
+    }
+    
+    // Default: return first non-empty email
+    return emails.find(email => email && email.trim()) || emails[0];
+  };
+
+  // Function to handle email selection within a supplier
+  const handleEmailSelection = (supplier: ExtendedSupplier, selectedEmail: string) => {
+    // Update the supplier's selectedEmail
+    const updatedSupplier = { ...supplier, selectedEmail: selectedEmail };
+    
+    // Update in the main suppliers list
+    setSuppliers(prev => 
+      prev.map(s => s.id === supplier.id ? updatedSupplier : s)
+    );
+    
+    // If supplier is already selected, update the selection
+    if (selectedSuppliers.some(s => s.id === supplier.id)) {
+      setSelectedSuppliers(prev => 
+        prev.map(s => s.id === supplier.id ? updatedSupplier : s)
+      );
+    }
+    
+    // Show a toast notification
+    toast({
+      title: "Email выбран",
+      description: `Выбран email: ${cleanEmail(selectedEmail)}`,
+    });
+  };
+
+  // Function to handle selection within a domain group
+  const handleSelectSupplierInGroup = (supplier: ExtendedSupplier, checked: boolean) => {
+    if (checked) {
+      // If selecting a supplier in a group, first deselect other suppliers from the same domain
+      const website = supplier.website || '';
+      const domain = getDomainFromWebsite(website);
+      
+      if (domain) {
+        // Remove other suppliers from the same domain
+        setSelectedSuppliers(prev => prev.filter(s => {
+          const sDomain = getDomainFromWebsite(s.website || '');
+          return sDomain !== domain;
+        }));
+      }
+      
+      // If supplier has multiple emails, use the best one
+      const emails = Array.isArray(supplier.email) ? supplier.email : [supplier.email];
+      const bestEmail = findBestEmail(emails);
+      const supplierWithBestEmail = { ...supplier, email: emails, selectedEmail: bestEmail };
+      
+      // Add the selected supplier
+      setSelectedSuppliers(prev => [...prev, supplierWithBestEmail]);
     } else {
       setSelectedSuppliers(prev => prev.filter(s => s.id !== supplier.id));
     }
@@ -506,6 +650,7 @@ export default function SendRequest() {
     const suppliersFromSearch = localStorage.getItem('sendRequestSuppliers');
     const requestIdFromSearch = localStorage.getItem('sendRequestId');
     const showSupplierSelectionView = localStorage.getItem('showSupplierSelectionView') === 'true';
+    const searchQueryFromStorage = localStorage.getItem('searchQuery') || '';
     
     console.log("suppliersFromSearch:", suppliersFromSearch ? "EXISTS" : "NULL");
     console.log("requestIdFromSearch:", requestIdFromSearch ? "EXISTS" : "NULL");
@@ -515,11 +660,40 @@ export default function SendRequest() {
       try {
         console.log("Found suppliers in localStorage from search results");
         const parsedSuppliers = JSON.parse(suppliersFromSearch);
+        console.log("Parsed suppliers sample:", parsedSuppliers[0]);
+        console.log("Email format check:", parsedSuppliers[0]?.email, Array.isArray(parsedSuppliers[0]?.email));
+        console.log("All suppliers email formats:", parsedSuppliers.slice(0, 3).map((s: any) => ({ 
+          name: s.name, 
+          email: s.email, 
+          isArray: Array.isArray(s.email),
+          length: Array.isArray(s.email) ? s.email.length : 1,
+          rawEmail: s.email
+        })));
+        
+        // Check if any supplier has multiple emails
+        const suppliersWithMultipleEmails = parsedSuppliers.filter((s: any) => 
+          Array.isArray(s.email) && s.email.length > 1
+        );
+        console.log("Suppliers with multiple emails:", suppliersWithMultipleEmails.length);
+        if (suppliersWithMultipleEmails.length > 0) {
+          console.log("Sample supplier with multiple emails:", suppliersWithMultipleEmails[0]);
+        }
         
         // Create async function to handle subscription check and apply trial limitations
         const processSuppliers = async () => {
           try {
-            const limitedSuppliers = await applyTrialLimitations(parsedSuppliers);
+            // Ensure all suppliers have proper email format
+            const processedSuppliers = parsedSuppliers.map((supplier: any) => {
+              const emails = Array.isArray(supplier.email) ? supplier.email : [supplier.email];
+              const selectedEmail = emails[0] || '';
+              return {
+                ...supplier,
+                email: emails,
+                selectedEmail: selectedEmail
+              } as ExtendedSupplier;
+            });
+            
+            const limitedSuppliers = await applyTrialLimitations(processedSuppliers);
             setSuppliers(limitedSuppliers);
             // ИСПРАВЛЕНИЕ: Не выбираем всех поставщиков автоматически
             setSelectedSuppliers([]);
@@ -530,6 +704,11 @@ export default function SendRequest() {
         };
         
         processSuppliers();
+        
+        // Set search query if available
+        if (searchQueryFromStorage) {
+          setSearchQuery(searchQueryFromStorage);
+        }
         
         // Show supplier selection view for found suppliers
         setShowEmailForm(false);
@@ -562,6 +741,7 @@ export default function SendRequest() {
           localStorage.removeItem('sendRequestSuppliers');
           localStorage.removeItem('sendRequestId');
           localStorage.removeItem('showSupplierSelectionView');
+          localStorage.removeItem('searchQuery');
           console.log("Cleaned up localStorage after successful loading");
         }, 1000);
         
@@ -868,7 +1048,22 @@ export default function SendRequest() {
                 totalRequests: null,
                 successfulMatches: null,
                 keywordStrength: null,
-                lastResponseTime: null
+                lastResponseTime: null,
+                // Добавляем недостающие поля для соответствия типу Supplier
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                verifiedResponses: 0,
+                unverifiedResponses: 0,
+                contactPerson: null,
+                companySize: null,
+                industry: null,
+                location: null,
+                notes: null,
+                region: null,
+                legalName: null,
+                taxId: null,
+                legalAddress: null,
+                bankDetails: null
               }));
               
               // Apply trial limitations and update state
@@ -957,7 +1152,22 @@ export default function SendRequest() {
             totalRequests: null,
             successfulMatches: null, 
             keywordStrength: null,
-            lastResponseTime: null
+            lastResponseTime: null,
+            // Добавляем недостающие поля для соответствия типу Supplier
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            verifiedResponses: 0,
+            unverifiedResponses: 0,
+            contactPerson: null,
+            companySize: null,
+            industry: null,
+            location: null,
+            notes: null,
+            region: null,
+            legalName: null,
+            taxId: null,
+            legalAddress: null,
+            bankDetails: null
           }));
           
           console.log("Преобразованные поставщики:", suppliersFromContacts.length);
@@ -1038,7 +1248,22 @@ export default function SendRequest() {
                     totalRequests: null,
                     successfulMatches: null,
                     keywordStrength: null,
-                    lastResponseTime: null
+                    lastResponseTime: null,
+                    // Добавляем недостающие поля для соответствия типу Supplier
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                    verifiedResponses: 0,
+                    unverifiedResponses: 0,
+                    contactPerson: null,
+                    companySize: null,
+                    industry: null,
+                    location: null,
+                    notes: null,
+                    region: null,
+                    legalName: null,
+                    taxId: null,
+                    legalAddress: null,
+                    bankDetails: null
                   }));
                   
                   console.log("Установка поставщиков:", suppliersFromContacts.length);
@@ -1185,7 +1410,19 @@ export default function SendRequest() {
               <Card>
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
-                    <CardTitle>Выбранные поставщики</CardTitle>
+                    <div className="flex flex-col gap-2">
+                      <CardTitle>Выбранные поставщики</CardTitle>
+                      {searchQuery && (
+                        <div className="flex items-center gap-2">
+                          <div className="inline-flex items-center px-3 py-1 rounded-full bg-blue-50 border border-blue-200">
+                            <Search className="h-4 w-4 text-blue-600 mr-2" />
+                            <span className="text-sm font-medium text-blue-800">
+                              Поиск: "{searchQuery}"
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                     <div className="flex items-center gap-4">
                       <div className="flex items-center space-x-2">
                         <Checkbox 
@@ -1262,7 +1499,19 @@ export default function SendRequest() {
                               </tr>
                             </thead>
                             <tbody>
-                              {suppliers.map((supplier, index) => (
+                              {suppliers
+                                .sort((a, b) => {
+                                  // Сортируем по доменам, чтобы одинаковые домены были рядом
+                                  const domainA = getDomainFromWebsite(a.website || '');
+                                  const domainB = getDomainFromWebsite(b.website || '');
+                                  
+                                  if (domainA === domainB) return 0;
+                                  if (!domainA) return 1;
+                                  if (!domainB) return -1;
+                                  
+                                  return domainA.localeCompare(domainB);
+                                })
+                                .map((supplier, index) => (
                                 <tr key={supplier.id} className={index % 2 === 1 ? "bg-muted/20" : ""}>
                                   <td className="px-3 py-1 text-center text-sm text-muted-foreground">
                                     {index + 1}
@@ -1272,7 +1521,9 @@ export default function SendRequest() {
                                       id={`supplier-${supplier.id}`}
                                       checked={selectedSuppliers.some(s => s.id === supplier.id)}
                                       onCheckedChange={(checked) => 
-                                        handleSelectSupplier(supplier, checked as boolean)
+                                        uniqueEmailsOnly 
+                                          ? handleSelectSupplierInGroup(supplier, checked as boolean)
+                                          : handleSelectSupplier(supplier, checked as boolean)
                                       }
                                     />
                                   </td>
@@ -1281,7 +1532,19 @@ export default function SendRequest() {
                                   </td>
                                   <td className="px-3 py-1">
                                     {supplier.email && (
-                                      <p className="text-sm">{supplier.email}</p>
+                                      <div className="space-y-1">
+                                        {Array.isArray(supplier.email) ? (
+                                          supplier.email.map((email, idx) => (
+                                            <p key={idx} className="text-sm text-blue-600 hover:text-blue-800 cursor-pointer" 
+                                               title="Нажмите для выбора этого email"
+                                               onClick={() => handleEmailSelection(supplier, email)}>
+                                              {cleanEmail(email)}
+                                            </p>
+                                          ))
+                                        ) : (
+                                          <p className="text-sm">{cleanEmail(supplier.email)}</p>
+                                        )}
+                                      </div>
                                     )}
                                   </td>
                                   <td className="px-3 py-1">
@@ -1308,7 +1571,7 @@ export default function SendRequest() {
                                     )}
                                   </td>
                                   <td className="px-3 py-1 text-center">
-                                    <SupplierTooltip supplier={supplier}>
+                                    <SupplierTooltip supplier={convertToTooltipSupplier(supplier)}>
                                       <Dialog>
                                         <DialogTrigger asChild>
                                           <Button 
@@ -1333,7 +1596,19 @@ export default function SendRequest() {
                                               {supplier.email && (
                                                 <div>
                                                   <Label className="text-sm font-medium">Email</Label>
-                                                  <p className="text-sm">{supplier.email}</p>
+                                                  {Array.isArray(supplier.email) ? (
+                                                    <div className="space-y-1">
+                                                      {supplier.email.map((email, idx) => (
+                                                        <p key={idx} className="text-sm text-blue-600 hover:text-blue-800 cursor-pointer"
+                                                           title="Нажмите для выбора этого email"
+                                                           onClick={() => handleEmailSelection(supplier, email)}>
+                                                          {cleanEmail(email)}
+                                                        </p>
+                                                      ))}
+                                                    </div>
+                                                  ) : (
+                                                    <p className="text-sm">{cleanEmail(supplier.email)}</p>
+                                                  )}
                                                 </div>
                                               )}
                                               {supplier.phone && (
@@ -1389,8 +1664,8 @@ export default function SendRequest() {
                             </tbody>
                           </table>
                           <div className="p-3 text-sm text-muted-foreground border-t">
-                            Итого загружено контактов: {suppliers.length}. Уникальных компаний: {
-                              new Set(suppliers.map(s => getDomainFromEmail(s.email || ''))).size
+                            Итого загружено контактов: {suppliers.length}. Уникальных доменов: {
+                              Array.from(groupSuppliersByDomain(suppliers).keys()).length
                             }
                           </div>
                         </div>
@@ -1415,8 +1690,8 @@ export default function SendRequest() {
                     </AlertDescription>
                   </Alert>
                   <EmailForm 
-                    suppliers={suppliers} 
-                    selectedSuppliers={selectedSuppliers} 
+                    suppliers={suppliers.map(convertToSupplier)} 
+                    selectedSuppliers={selectedSuppliers.map(convertToSupplier)} 
                     searchRequest={searchRequest || createEmptyRequest()}
                     comingFromGroup={comingFromGroup}
                     groupId={groupId}

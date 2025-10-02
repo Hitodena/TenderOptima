@@ -23,10 +23,10 @@ if (process.env.NODE_ENV === 'production') {
  */
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   // Check if authentication should be bypassed in development mode
+  // ИСПРАВЛЕНО: Убрана автоматическая подмена на админа
   if (SKIP_AUTH && DEV_MODE) {
-    console.log('[Auth] Skipping authorization check in DEV_MODE with SKIP_AUTH=true');
-    req.user = { id: 1, username: 'admin@example.com', role: 'admin' };
-    return next();
+    console.log('[Auth] DEV_MODE enabled but not auto-setting admin user');
+    // Не устанавливаем автоматически админа - пусть пользователь аутентифицируется нормально
   }
   
   // Check for admin token in header for admin panel requests

@@ -5,7 +5,7 @@ import bcrypt from 'bcryptjs';
 import dotenv from 'dotenv';
 
 // Load environment variables
-dotenv.config({ path: './env.dev' });
+dotenv.config({ path: './.env' });
 
 async function createUser() {
   try {

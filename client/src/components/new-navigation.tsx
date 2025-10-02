@@ -29,8 +29,8 @@ export function NewNavigation() {
     }
   }, [location]);
 
-  // Hide navigation on auth page
-  if (location === '/auth') {
+  // Hide navigation on auth page and admin panel
+  if (location === '/auth' || location.startsWith('/admpanel') || location.startsWith('/admin-login')) {
     return null;
   }
 
@@ -122,19 +122,7 @@ export function NewNavigation() {
               <span className="font-medium">{t('quick_procurement')}</span>
             </Link>
 
-            {/* Admin Panel - Only show for admin users with localStorage check */}
-            {user?.role === 'admin' && localStorage.getItem('isAdmin') === 'true' && (
-              <Link 
-                href="/admin/email"
-                className={`flex items-center h-full px-4 border-b-2 transition-colors ${
-                  location.startsWith('/admin')
-                  ? "border-blue-500 text-blue-800 bg-blue-50" 
-                  : "border-transparent hover:text-blue-800 text-gray-800"
-                }`}
-              >
-                <span className="font-medium">Админ панель</span>
-              </Link>
-            )}
+             {/* Admin Panel - REMOVED - админ панель отдельная система */}
 
             {/* Tender Procurement */}
             <Link 

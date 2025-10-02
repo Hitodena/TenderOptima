@@ -131,7 +131,7 @@ router.post('/', requireAuth, async (req, res) => {
       const results = uniqueResults;
 
       // 3. Сохранение результатов в БД (логика осталась прежней)
-      const savedSuppliers = await saveSearchResults(results, regionObjects[0]?.googleCode || "ru");
+      const savedSuppliers = await saveSearchResults(results, regionObjects[0]?.googleCode || "ru", userId);
 
       console.log(`[SupplierSearch] Successfully found and saved ${savedSuppliers.length} suppliers`);
 
@@ -274,7 +274,7 @@ async function callPythonParser(query: string, elements: number, userId: string,
 /**
  * Функция сохранения результатов в staging_suppliers
  */
-async function saveSearchResults(results: SearchResult[], region: string): Promise<any[]> {
+async function saveSearchResults(results: SearchResult[], region: string, userId?: string): Promise<any[]> {
     const savedSuppliers = [];
     for (const result of results) {
         try {
@@ -282,6 +282,7 @@ async function saveSearchResults(results: SearchResult[], region: string): Promi
             const supplierName = domain.split('.')[0].charAt(0).toUpperCase() + domain.split('.')[0].slice(1);
 
             const [saved] = await db.insert(stagingSuppliers).values({
+                userId: userId, // Добавляем userId для связи с пользователем
                 sourceEngine: result.engine,
                 searchQuery: result.query,
                 region: result.region || region, // Используем region из результата или fallback на переменную

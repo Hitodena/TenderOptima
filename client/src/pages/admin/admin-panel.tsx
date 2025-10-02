@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "wouter";
-import { Layout } from "@/components/layout";
 import { useTranslation } from "@/contexts/language-context";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertTriangleIcon, ShieldIcon, UsersIcon, CreditCardIcon, CheckSquareIcon, Building2Icon, BanIcon } from "lucide-react";
+import { AlertTriangleIcon, ShieldIcon, UsersIcon, CreditCardIcon, CheckSquareIcon, Building2Icon, BanIcon, FileSearchIcon } from "lucide-react";
 import { Redirect } from "wouter";
 
 // Lazy load admin features
@@ -13,6 +12,7 @@ const SubscriptionsPage = React.lazy(() => import('./subscriptions-page'));
 const ModerationPage = React.lazy(() => import('./moderation-page'));
 const VerifiedListPage = React.lazy(() => import('./verified-list-page'));
 const ExcludedDomainsPage = React.lazy(() => import('./excluded-domains-page'));
+const ClientRequestsPage = React.lazy(() => import('./client-requests-page'));
 
 export default function AdminPanel() {
   const { t } = useTranslation();
@@ -124,6 +124,14 @@ export default function AdminPanel() {
                 <BanIcon className="mr-2 h-4 w-4" />
                 Стоп-лист сайтов
               </Button>
+              <Button
+                variant={activeSection === 'client-requests' ? 'default' : 'ghost'}
+                className="w-full justify-start"
+                onClick={() => setActiveSection('client-requests')}
+              >
+                <FileSearchIcon className="mr-2 h-4 w-4" />
+                Запросы клиентов
+              </Button>
             </div>
           </nav>
         </div>
@@ -135,6 +143,7 @@ export default function AdminPanel() {
             {activeSection === 'moderation' && <ModerationPage />}
             {activeSection === 'verified-list' && <VerifiedListPage />}
             {activeSection === 'excluded-domains' && <ExcludedDomainsPage />}
+            {activeSection === 'client-requests' && <ClientRequestsPage />}
           </React.Suspense>
         </div>
       </div>

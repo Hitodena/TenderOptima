@@ -52,8 +52,12 @@ export default function ExcludedDomainsPage() {
   const { data: excludedDomains = [], isLoading, error } = useQuery<ExcludedDomain[]>({
     queryKey: ['excluded-domains'],
     queryFn: async () => {
+      const adminToken = localStorage.getItem('adminToken') || 'admin-token-123456';
       const response = await fetch('/api/admin/excluded-domains', {
         credentials: 'include',
+        headers: {
+          'X-Admin-Token': adminToken,
+        },
       });
       if (!response.ok) {
         throw new Error('Failed to fetch excluded domains');
@@ -65,10 +69,12 @@ export default function ExcludedDomainsPage() {
   // Add domain mutation
   const addDomainMutation = useMutation({
     mutationFn: async (data: { domain: string; reason: string }) => {
+      const adminToken = localStorage.getItem('adminToken') || 'admin-token-123456';
       const response = await fetch('/api/admin/excluded-domains', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-Admin-Token': adminToken,
         },
         credentials: 'include',
         body: JSON.stringify(data),
@@ -100,9 +106,13 @@ export default function ExcludedDomainsPage() {
   // Delete domain mutation
   const deleteDomainMutation = useMutation({
     mutationFn: async (id: number) => {
+      const adminToken = localStorage.getItem('adminToken') || 'admin-token-123456';
       const response = await fetch(`/api/admin/excluded-domains/${id}`, {
         method: 'DELETE',
         credentials: 'include',
+        headers: {
+          'X-Admin-Token': adminToken,
+        },
       });
       if (!response.ok) {
         throw new Error('Failed to delete domain');

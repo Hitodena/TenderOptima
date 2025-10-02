@@ -64,11 +64,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return true;
   };
 
-  // Check if user has admin privileges
-  const isAdmin = 
-    user?.role === "admin" || 
-    user?.username === "admin@example.com" || 
-    user?.username === "admin";
+  // Admin privileges removed - админ панель отдельная система
+  const isAdmin = false; // Всегда false для основной системы
 
   const value = {
     user,

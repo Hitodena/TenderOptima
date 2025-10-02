@@ -46,18 +46,33 @@ function normalizeWebsite(url: string): string {
  */
 router.get('/staging-suppliers', requireAuth, async (req: Request, res: Response) => {
   try {
-    console.log('[AdminModeration] Fetching staging suppliers for moderation');
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 30;
+    const offset = (page - 1) * limit;
     
-    // Получаем все записи со статусом 'new'
+    console.log(`[AdminModeration] Fetching staging suppliers for moderation - page: ${page}, limit: ${limit}`);
+    
+    // Получаем общее количество записей
+    const totalCountResult = await db
+      .select({ count: count() })
+      .from(stagingSuppliers)
+      .where(eq(stagingSuppliers.status, 'new'));
+    
+    const totalCount = totalCountResult[0]?.count || 0;
+    console.log(`[AdminModeration] Total records: ${totalCount}`);
+    
+    // Получаем записи с пагинацией
     const stagingRecords = await db
       .select()
       .from(stagingSuppliers)
       .where(eq(stagingSuppliers.status, 'new'))
-      .orderBy(stagingSuppliers.createdAt);
+      .orderBy(stagingSuppliers.createdAt)
+      .limit(limit)
+      .offset(offset);
 
-    console.log(`[AdminModeration] Found ${stagingRecords.length} records for moderation`);
+    console.log(`[AdminModeration] Found ${stagingRecords.length} records for page ${page}`);
 
-    // Обогащаем данные проверкой на дубликаты
+    // Обогащаем данные проверкой на дубликаты (только для текущей страницы)
     const enrichedRecords = await Promise.all(
       stagingRecords.map(async (record) => {
         try {
@@ -92,12 +107,19 @@ router.get('/staging-suppliers', requireAuth, async (req: Request, res: Response
       })
     );
 
-    console.log(`[AdminModeration] Returning ${enrichedRecords.length} enriched records`);
+    console.log(`[AdminModeration] Returning ${enrichedRecords.length} enriched records for page ${page}`);
     
     res.json({
       success: true,
       data: enrichedRecords,
-      total: enrichedRecords.length
+      pagination: {
+        page,
+        limit,
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / limit),
+        hasNext: page < Math.ceil(totalCount / limit),
+        hasPrev: page > 1
+      }
     });
 
   } catch (error) {

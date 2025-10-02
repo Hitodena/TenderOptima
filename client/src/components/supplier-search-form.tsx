@@ -529,7 +529,7 @@ export function SupplierSearchForm({ onComplete }: Props) {
             </FormItem>
             
             {searchYandex && (
-              <div className="ml-6 pl-4 border-l-2 border-muted">
+              <div className="ml-6 pl-4 border-l-2 border-muted hidden">
                 <FormItem className="flex flex-row items-center justify-between space-y-0 rounded-md p-2">
                   <div className="space-y-0.5">
                     <FormLabel className="text-sm">Включать рекламу</FormLabel>
@@ -720,7 +720,7 @@ export function SupplierSearchForm({ onComplete }: Props) {
             </Dialog>
           </div>
           
-          <div className="bg-muted/50 p-4 rounded-lg space-y-1 border">
+          <div className="bg-muted/50 p-4 rounded-lg space-y-1 border hidden">
             <div className="flex items-center justify-between">
               <h3 className="font-medium">Язык:</h3>
               <div className="flex items-center gap-2 ml-auto">

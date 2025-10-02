@@ -131,9 +131,11 @@ router.post('/', requireAuth, async (req, res) => {
       const results = uniqueResults;
 
       // 3. Сохранение результатов в БД (логика осталась прежней)
-      const savedSuppliers = await saveSearchResults(results, regionObjects[0]?.googleCode || "ru");
+      const savedSuppliers = await saveSearchResults(results, regionObjects[0]?.googleCode || "ru", userId);
 
       console.log(`[SupplierSearch] Successfully found and saved ${savedSuppliers.length} suppliers`);
+      console.log(`[SupplierSearch] Sample supplier data:`, savedSuppliers[0]);
+      console.log(`[SupplierSearch] Email format in savedSuppliers:`, savedSuppliers[0]?.email, Array.isArray(savedSuppliers[0]?.email));
 
       // Create a mock request object for frontend compatibility
       const combinedQuery = searchQueries.join(', ');
@@ -262,7 +264,7 @@ async function callPythonParser(query: string, elements: number, userId: string,
 /**
  * Функция сохранения результатов в staging_suppliers
  */
-async function saveSearchResults(results: SearchResult[], region: string): Promise<any[]> {
+async function saveSearchResults(results: SearchResult[], region: string, userId?: string): Promise<any[]> {
     const savedSuppliers = [];
     for (const result of results) {
         try {
@@ -270,6 +272,7 @@ async function saveSearchResults(results: SearchResult[], region: string): Promi
             const supplierName = domain.split('.')[0].charAt(0).toUpperCase() + domain.split('.')[0].slice(1);
 
             const [saved] = await db.insert(stagingSuppliers).values({
+                userId: userId, // Добавляем userId для связи с пользователем
                 sourceEngine: result.engine,
                 searchQuery: result.query,
                 region: result.region || region, // Используем region из результата или fallback на переменную
@@ -282,12 +285,17 @@ async function saveSearchResults(results: SearchResult[], region: string): Promi
             }).returning();
 
             if (saved) {
+                console.log(`[SupplierSearch] Processing result for ${result.domain}, emails:`, result.emails);
+                console.log(`[SupplierSearch] Email type:`, typeof result.emails, Array.isArray(result.emails));
+                if (Array.isArray(result.emails) && result.emails.length > 1) {
+                  console.log(`[SupplierSearch] Multiple emails found for ${result.domain}:`, result.emails);
+                }
                 // Адаптируем данные для совместимости с фронтендом
                 savedSuppliers.push({
                     // Основные поля для фронтенда
                     id: saved.id,
                     name: saved.rawTitle,
-                    email: result.emails && result.emails[0] ? result.emails[0] : '',
+                    email: result.emails || [],
                     website: saved.rawUrl,
                     description: saved.rawDescription,
                     categories: [result.engine],
@@ -319,7 +327,7 @@ async function saveSearchResults(results: SearchResult[], region: string): Promi
                     // Основные поля для фронтенда
                     id: Date.now(), // Временный ID для дубликатов
                     name: supplierName,
-                    email: result.emails && result.emails[0] ? result.emails[0] : '',
+                    email: result.emails || [],
                     website: result.domain,
                     description: result.description || '',
                     categories: [result.engine],

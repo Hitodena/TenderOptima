@@ -416,7 +416,7 @@ export function SupplierSearchForm({ onComplete }: Props) {
               </div>
             </div>
 
-            <div className="flex flex-row items-start space-x-3 space-y-0 rounded-md p-2">
+            <div className="flex flex-row items-start space-x-3 space-y-0 rounded-md p-2 hidden">
               <Checkbox
                 checked={includeAds}
                 onCheckedChange={setIncludeAds}
@@ -538,7 +538,7 @@ export function SupplierSearchForm({ onComplete }: Props) {
           </div>
 
           {/* Language Selection */}
-          <div className="space-y-2">
+          <div className="space-y-2 hidden">
             <FormLabel>Язык поиска</FormLabel>
             <div className="flex items-center space-x-2">
               <Input
