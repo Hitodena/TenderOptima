@@ -1,19 +1,16 @@
 import asyncio
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Union
 from urllib.parse import urlparse, urlunparse
-
 from parsers.google_parser import parse_google
 from parsers.yandex_parser import yandex_fetch_all
 from parsers.utils.logger import CustomLogger
 
 # ============ Configuration ============
-
 # Logger setup
 logger = CustomLogger(
     logger_name="SearchManager", file_path="SearchManager.log", debug=False, console=True
 ).get_logger()
-
 
 def normalize_link(link: str) -> str:
     """
@@ -27,6 +24,47 @@ def normalize_link(link: str) -> str:
     normalized = urlunparse((scheme, netloc, path, "", "", ""))
     return normalized
 
+# ============ НОВЫЕ ФУНКЦИИ ДЛЯ МУЛЬТИРЕГИОНАЛЬНОГО ПОИСКА ============
+def add_city_to_queries(original_query: str, city_name: str) -> str:
+    """
+    Добавляет название города к каждому подзапросу, разделенному запятой
+    
+    Args:
+        original_query: "купить стулья, стулья от производителя"
+        city_name: "Минск"
+        
+    Returns:
+        "купить стулья Минск, стулья от производителя Минск"
+    """
+    queries = [q.strip() for q in original_query.split(',') if q.strip()]
+    modified_queries = [f"{query} {city_name}" for query in queries]
+    return ', '.join(modified_queries)
+
+def prepare_query_for_region(original_query: str, region_object: Union[dict, None]) -> str:
+    """
+    Модифицирует запрос в зависимости от типа региона
+    
+    Args:
+        original_query: Исходный запрос пользователя
+        region_object: Объект региона с полями name, type, yandexId, googleCode
+        
+    Returns:
+        Модифицированный или оригинальный запрос
+    """
+    if not region_object or not isinstance(region_object, dict):
+        return original_query
+    
+    if region_object.get('type') == 'country':
+        logger.info(f"Region is country, using original query: {original_query}")
+        return original_query
+    
+    city_name = region_object.get('name', '')
+    if city_name:
+        modified_query = add_city_to_queries(original_query, city_name)
+        logger.info(f"Region is city/oblast: '{original_query}' -> '{modified_query}'")
+        return modified_query
+    
+    return original_query
 
 def build_exclusion_query(query: str, excluded_domains: List[str], search_engine: str) -> str:
     """
@@ -36,7 +74,7 @@ def build_exclusion_query(query: str, excluded_domains: List[str], search_engine
         query: Оригинальный поисковый запрос
         excluded_domains: Список доменов для исключения
         search_engine: Поисковая система ("google" или "yandex")
-    
+        
     Returns:
         Модифицированный запрос с исключениями
     """
@@ -45,9 +83,7 @@ def build_exclusion_query(query: str, excluded_domains: List[str], search_engine
     
     exclusions = []
     for domain in excluded_domains:
-        # Очищаем домен от протокола и www
         clean_domain = domain.replace("https://", "").replace("http://", "").replace("www.", "")
-        
         if search_engine == "google":
             exclusions.append(f"-site:{clean_domain}")
         elif search_engine == "yandex":
@@ -55,169 +91,103 @@ def build_exclusion_query(query: str, excluded_domains: List[str], search_engine
     
     if exclusions:
         modified_query = f"{query} {' '.join(exclusions)}"
-        logger.info(f"Modified {search_engine} query: '{query}' -> '{modified_query}'")
+        logger.info(f"Modified {search_engine} query with exclusions: '{query}' -> '{modified_query}'")
         return modified_query
     
     return query
 
-
 def get_yandex_region_code(region) -> int:
     """
-    Convert region to Yandex region code.
+    Convert region string to Yandex region code.
     
     Args:
-        region: Region string (e.g., 'ru', 'by', 'ua', 'kz'), 
-                integer yandexId (e.g., 213 for Moscow), 
-                or object with yandexId attribute
+        region: Region string (e.g., 'ru', 'by', 'ua', 'kz')
         
     Returns:
         Yandex region code (int)
     """
     region_mapping = {
-        # СНГ и ближнее зарубежье
-        'ru': 225,  # Россия
-        'by': 149,  # Беларусь
-        'ua': 187,  # Украина
-        'kz': 159,  # Казахстан
-        'uz': 166,  # Узбекистан (исправлено с 191)
-        'kg': 164,  # Кыргызстан (исправлено с 118)
-        'tj': 186,  # Таджикистан
-        'tm': 189,  # Туркменистан
-        'am': 169,  # Армения (исправлено с 7)
-        'az': 10,   # Азербайджан
-        'ge': 169,  # Грузия (исправлено с 35)
-        'md': 139,  # Молдова
-        
-        # Города России (по yandexId)
-        213: 213,  # Москва
-        2: 2,      # Санкт-Петербург
-        39: 39,    # Ростов-на-Дону
-        43: 43,    # Казань
-        47: 47,    # Нижний Новгород
-        46: 46,    # Самара
-        54: 54,    # Екатеринбург
-        56: 56,    # Челябинск
-        65: 65,    # Новосибирск
-        66: 66,    # Омск
-        
-        # Федеральные округа России
-        3: 3,      # Центральный ФО
-        17: 17,    # Северо-Западный ФО
-        35: 35,    # Южный ФО
-        26: 26,    # Северо-Кавказский ФО
-        41: 41,    # Приволжский ФО
-        73: 73,    # Дальневосточный ФО
-        
-        # Европа
-        'de': 132,  # Германия
-        'fr': 148,  # Франция
-        'gb': 12,   # Великобритания
-        'it': 138,  # Италия
-        'es': 137,  # Испания
-        'pl': 142,  # Польша
-        'nl': 140,  # Нидерланды
-        'be': 131,  # Бельгия
-        'at': 130,  # Австрия
-        'ch': 154,  # Швейцария
-        'se': 155,  # Швеция
-        'no': 141,  # Норвегия
-        'dk': 134,  # Дания
-        'fi': 147,  # Финляндия
-        'cz': 153,  # Чехия
-        'hu': 135,  # Венгрия
-        'ro': 144,  # Румыния
-        'bg': 132,  # Болгария
-        'hr': 150,  # Хорватия
-        'si': 146,  # Словения
-        'sk': 145,  # Словакия
-        'lt': 114,  # Литва
-        'lv': 115,  # Латвия
-        'ee': 116,  # Эстония
-        'gr': 133,  # Греция
-        'pt': 143,  # Португалия
-        'cy': 984,  # Кипр
-        'rs': 11232, # Сербия
-        'me': 11233, # Черногория
-        
-        # Азия
-        'cn': 134,  # Китай
-        'jp': 133,  # Япония
-        'kr': 10758, # Южная Корея
-        'in': 236,  # Индия
-        'th': 118,  # Таиланд
-        'il': 131,  # Израиль
-        'ae': 971,  # ОАЭ
-        'eg': 86,   # Египет
-        
-        # Америка
-        'us': 84,   # США
-        'ca': 104,  # Канада
-        'br': 233,  # Бразилия
-        
-        # Океания
-        'au': 129,  # Австралия
+        'ru': 225,
+        'by': 149,
+        'ua': 187,
+        'kz': 159,
+        'uz': 191,
+        'kg': 118,
+        'tj': 186,
+        'tm': 189,
+        'am': 7,
+        'az': 10,
+        'ge': 35,
+        'md': 139,
     }
     
-    # Обрабатываем как строковые коды стран, так и числовые коды городов
     if isinstance(region, str):
-        return region_mapping.get(region.lower(), 225)  # Default to Russia
+        return region_mapping.get(region.lower(), 225)
     elif isinstance(region, int):
-        return region_mapping.get(region, 225)  # Default to Russia
-    else:
-        # Если region - это объект с yandexId
-        yandex_id = getattr(region, 'yandexId', None) or getattr(region, 'yandex_id', None)
+        return region
+    elif isinstance(region, dict):
+        yandex_id = region.get('yandexId') or region.get('yandex_id')
         if yandex_id:
-            return region_mapping.get(yandex_id, 225)
-        return 225  # Default to Russia
-
+            return yandex_id
+    
+    return 225
 
 async def fetch_all(
     query: str,
     user_id: str,
     elements: int,
-    region: str,
+    region: Union[str, dict],
     google_search_api: str,
     google_search_id: str,
     yandex_key_file: Path,
     yandex_folder_id: str,
     sources: dict = {},
-    excluded_domains: List[str] = [],  # Восстанавливаем параметр стоп-листа
+    excluded_domains: List[str] = [],
 ) -> List[Dict]:
     """
     Unified fetcher: queries Google and Yandex in parallel,
     merges and deduplicates results by normalized URL.
-
+    
     Args:
         query (str): Search query.
         user_id (str): ID of the requesting user.
         elements (int): Total results.
+        region (Union[str, dict]): Region code or region object
         google_search_api (str): Google API token.
         google_search_id (str): Google CSE ID.
         yandex_key_file (Path): Path to Yandex key file.
         yandex_folder_id (str): Yandex folder ID.
-
+        sources (dict): Dictionary specifying which search sources to use
+        excluded_domains (List[str]): List of domains to exclude from search
+        
     Returns:
         List[Dict]: Deduplicated list of combined results.
     """
-    # Check which search sources are enabled
-    use_google = sources.get("google", True)  # default to True for backward compatibility
-    use_yandex = sources.get("yandex", False)  # default to False for backward compatibility
+    use_google = sources.get("google", True)
+    use_yandex = sources.get("yandex", False)
     
     logger.info(f"Search sources: google={use_google}, yandex={use_yandex}")
     logger.info(f"Excluded domains: {excluded_domains}")
+    logger.info(f"Region: {region}")
+    
+    # НОВАЯ ЛОГИКА: Модифицируем запрос на основе типа региона
+    region_object = region if isinstance(region, dict) else None
+    modified_query = prepare_query_for_region(query, region_object)
     
     # Строим модифицированные запросы с исключениями
-    google_query = build_exclusion_query(query, excluded_domains, "google") if use_google else query
-    # Отключаем исключения для Yandex - будем фильтровать после получения результатов
-    yandex_query = query  # Используем оригинальный запрос без исключений
+    google_query = build_exclusion_query(modified_query, excluded_domains, "google") if use_google else modified_query
+    yandex_query = modified_query  # Яндекс не поддерживает -site: хорошо, фильтруем после
+    
+    logger.info(f"Original query: {query}")
+    logger.info(f"Modified query for search: {modified_query}")
     
     # Concurrently fetch from enabled engines
     google_task = None
     if use_google and google_search_api and google_search_id:
         google_task = parse_google(
-            query=google_query,  # Используем модифицированный запрос
+            query=google_query,
             elements=elements,
-            region=region,
+            region=region if isinstance(region, str) else region.get('googleCode', 'ru'),
             user_id=user_id,
             token=google_search_api,
             cust=google_search_id,
@@ -225,31 +195,31 @@ async def fetch_all(
     
     yandex_task = None
     if use_yandex and yandex_key_file and yandex_folder_id:
-        # Convert region string to Yandex region code
         region_code = get_yandex_region_code(region)
         logger.info(f"Yandex search with region: {region} -> code: {region_code}")
+        
         yandex_task = yandex_fetch_all(
             key_file=yandex_key_file,
             folder_id=yandex_folder_id,
             user_id=user_id,
-            query=yandex_query,  # Используем модифицированный запрос
+            query=yandex_query,
             total_results=elements,
             region=region_code,
         )
-
+    
     tasks = [task for task in [google_task, yandex_task] if task is not None]
     results = await asyncio.gather(*tasks, return_exceptions=True)
-
+    
     # Merge
     combined: List[Dict] = []
     for res in results:
         if res and not isinstance(res, Exception):
             combined.extend(res)
-
+    
     if not combined:
         logger.warning("No results from any engine; returning empty list.")
         return []
-
+    
     # Deduplicate by normalized URL
     seen = set()
     unique_results: List[Dict] = []
@@ -261,17 +231,15 @@ async def fetch_all(
             unique_results.append(item)
         else:
             logger.debug(f"Duplicate skipped: {link}")
-
+    
     # Пост-фильтрация: исключаем домены из стоп-листа
     filtered_results: List[Dict] = []
     excluded_count = 0
     
     for item in unique_results:
         domain = item.get("domain", "")
-        # Извлекаем чистый домен для сравнения
         clean_domain = domain.replace("https://", "").replace("http://", "").replace("www.", "").split("/")[0]
         
-        # Проверяем, есть ли домен в стоп-листе
         is_excluded = False
         for excluded_domain in excluded_domains:
             excluded_clean = excluded_domain.replace("https://", "").replace("http://", "").replace("www.", "")
@@ -284,6 +252,7 @@ async def fetch_all(
         if not is_excluded:
             filtered_results.append(item)
     
-    logger.info(f"Post-filtering: {len(filtered_results)} results after excluding {excluded_count} domains from stop-list")
+    logger.info(f"Post-filtering: {len(filtered_results)} results after excluding {excluded_count} domains")
     logger.info(f"Final results: {len(filtered_results)} unique out of {len(combined)} total")
+    
     return filtered_results

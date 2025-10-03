@@ -1,14 +1,15 @@
-#!/usr-bin/env python3
+#!/usr/bin/env python3
+
 """
 FastAPI сервер для Python парсера поставщиков
 """
+
 import asyncio
 import json
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
-
+from typing import Dict, List, Optional, Union
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -16,12 +17,15 @@ from dotenv import load_dotenv
 # Загружаем переменные окружения из .env в корневой папке
 project_root = Path(__file__).resolve().parent.parent
 env_path = project_root / ".env"
+
 print(f"DEBUG: project_root = {project_root}")
 print(f"DEBUG: env_path = {env_path}")
 print(f"DEBUG: env_path.exists() = {env_path.exists()}")
+
 if env_path.exists():
     load_dotenv(dotenv_path=env_path)
     print(f"DEBUG: .env file loaded successfully")
+    
     # Проверяем, что загрузилось из .env
     print(f"DEBUG: YANDEX_KEY_PATH from .env = {os.getenv('YANDEX_KEY_PATH')}")
     print(f"DEBUG: YANDEX_FOLDER_ID from .env = {os.getenv('YANDEX_FOLDER_ID')}")
@@ -45,7 +49,7 @@ logger = CustomLogger(
 
 # FastAPI приложение
 app = FastAPI(
-    title="Supplier Parser API", 
+    title="Supplier Parser API",
     version="1.0.0",
     description="API для поиска поставщиков через Google и Yandex"
 )
@@ -55,9 +59,9 @@ class SearchRequest(BaseModel):
     query: str
     elements: int = 10
     user_id: str = "1"
-    region: str = "ru"
+    region: Union[str, dict] = "ru"  # ИЗМЕНЕНО: теперь может быть dict
     sources: dict = {}
-    excluded_domains: List[str] = []  # Восстанавливаем поддержку стоп-листа
+    excluded_domains: List[str] = []
 
 class SearchResponse(BaseModel):
     results: List[Dict]
@@ -82,7 +86,6 @@ async def health_check():
         "google_cse_configured": bool(os.getenv("GOOGLE_CUSTOM_SEARCH_ENGINE_ID")),
         "yandex_api_configured": bool(os.getenv("YANDEX_KEY_PATH")),
         "yandex_folder_configured": bool(os.getenv("YANDEX_FOLDER_ID"))
-        
     }
 
 @app.post("/search", response_model=SearchResponse)
@@ -109,7 +112,7 @@ async def search_endpoint(request: SearchRequest):
         if not google_api or not google_id:
             logger.error("Google API credentials not configured")
             raise HTTPException(
-                status_code=500, 
+                status_code=500,
                 detail="Google API credentials not configured. Please set GOOGLE_SEARCH_API_TOKEN and GOOGLE_CUSTOM_SEARCH_ENGINE_ID"
             )
         
@@ -118,6 +121,7 @@ async def search_endpoint(request: SearchRequest):
         logger.info(f"Yandex key file exists: {Path(yandex_key_path).exists() if yandex_key_path else False}")
         logger.info(f"Yandex key path: {yandex_key_path}")
         logger.info(f"Yandex key file exists: {Path(yandex_key_path).exists() if yandex_key_path else False}")
+        
         # Подготавливаем параметры для Yandex (если есть)
         yandex_key_file = Path(yandex_key_path) if yandex_key_path else None
         
@@ -126,13 +130,13 @@ async def search_endpoint(request: SearchRequest):
             query=request.query,
             user_id=request.user_id,
             elements=request.elements,
-            region=request.region,
+            region=request.region,  # Теперь может быть как строка, так и dict
             google_search_api=google_api,
             google_search_id=google_id,
             yandex_key_file=yandex_key_file,
             yandex_folder_id=yandex_folder,
             sources=request.sources,
-            excluded_domains=request.excluded_domains  # Передаем стоп-лист
+            excluded_domains=request.excluded_domains
         )
         
         logger.info(f"Search completed: found {len(results)} suppliers with contact information")
@@ -141,7 +145,7 @@ async def search_endpoint(request: SearchRequest):
             results=results,
             message=f"Found {len(results)} suppliers with contact information"
         )
-        
+    
     except HTTPException:
         # Перебрасываем HTTP исключения как есть
         raise
@@ -161,4 +165,5 @@ if __name__ == "__main__":
         logger.warning("Please set GOOGLE_SEARCH_API_TOKEN and GOOGLE_CUSTOM_SEARCH_ENGINE_ID")
     
     logger.info("🚀 Starting FastAPI server on port 8080...")
-    uvicorn.run("fastapi_server:app", host="0.0.0.0", port=8080, log_level="info")
+    uvicorn.run("parsers.fastapi_server:app", host="0.0.0.0", port=8080, log_level="info")
+

@@ -49,13 +49,22 @@ export function UnifiedSupplierSearch({ onSuppliersFound, selectedRegions }: Uni
       console.log(`[UnifiedSearch] Starting unified search for: "${searchQuery}"`);
       console.log(`[UnifiedSearch] Sources: Registry=${useRegistrySearch}, Yandex=${useYandexSearch}, Google=${useGoogleSearch}`);
 
+      // Преобразуем ключевые слова в массив для параллельного поиска
+      const keywordsArray = searchQuery
+        .split(',')
+        .map(keyword => keyword.trim())
+        .filter(keyword => keyword.length > 0);
+      
+      console.log(`[UnifiedSearch] Sending ${keywordsArray.length} keywords for parallel search:`, keywordsArray);
+
       const response = await fetch('/api/supplier-search', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          query: searchQuery,
+          queries: keywordsArray, // Отправляем массив запросов для параллельного поиска
+          query: searchQuery,     // Оставляем для обратной совместимости
           elements: elements,
           userId: 1, // Use authenticated user ID in production
           sources: {
@@ -64,7 +73,7 @@ export function UnifiedSupplierSearch({ onSuppliersFound, selectedRegions }: Uni
             google: useGoogleSearch
           },
           includeAds: includeAds,
-          regions: selectedRegions, // <-- Заменено
+          regions: selectedRegions,
           language: 'ru'
         }),
       });

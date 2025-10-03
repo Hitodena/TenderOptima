@@ -3,7 +3,7 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 import aiohttp
 
@@ -27,7 +27,7 @@ async def main_search(
     query: str,
     user_id: str = "1",
     elements: int = DEFAULT_ELEMENTS,
-    region: str = DEFAULT_REGION,
+    region: Union[str, dict] = DEFAULT_REGION,
     google_search_api: Optional[str] = None,
     google_search_id: Optional[str] = None,
     yandex_key_file: Optional[Path] = None,
@@ -139,7 +139,7 @@ async def main_search(
     # Step 4: Save results if any found
     if enriched_results:
         DATA_DIR.mkdir(exist_ok=True)
-        save_to_csv(enriched_results, DATA_DIR / "results.csv")
+        storage.save_to_csv(enriched_results, DATA_DIR / "results.csv")
     
     return enriched_results
 

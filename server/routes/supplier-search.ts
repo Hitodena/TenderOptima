@@ -131,7 +131,7 @@ router.post('/', requireAuth, async (req, res) => {
       const results = uniqueResults;
 
       // 3. Сохранение результатов в БД (логика осталась прежней)
-      const savedSuppliers = await saveSearchResults(results, regionObjects[0]?.googleCode || "ru", userId);
+      const savedSuppliers = await saveSearchResults(results, regionObjects[0]?.googleCode || "ru", parseInt(userId));
 
       console.log(`[SupplierSearch] Successfully found and saved ${savedSuppliers.length} suppliers`);
 
@@ -228,20 +228,30 @@ async function callPythonParser(query: string, elements: number, userId: string,
     console.log(`[PythonParser] Making HTTP request to FastAPI microservice on port 8080`);
     
     try {
-      // Извлекаем коды регионов для передачи в Python
-      const regionCodes = regionObject ? 
-        (Array.isArray(regionObject) ? regionObject.map(r => r.googleCode || r) : [regionObject.googleCode || regionObject]) :
-        ["ru"];
+      // Подготавливаем объект региона для передачи в Python
+      let regionForPython;
+      if (regionObject) {
+        if (typeof regionObject === 'string') {
+          // Обратная совместимость со старым форматом
+          regionForPython = { type: 'country', googleCode: regionObject, name: regionObject.toUpperCase() };
+        } else if (regionObject && typeof regionObject === 'object') {
+          // Новый формат с объектом
+          regionForPython = regionObject;
+        }
+      } else {
+        // Дефолтный регион
+        regionForPython = { type: 'country', googleCode: 'ru', name: 'Россия' };
+      }
       
       const requestBody = {
         query,
         elements,
         user_id: userId,
-        region: regionCodes[0], // Основной регион для обратной совместимости
-        regions: regionCodes, // Множественные регионы
+        region: regionForPython, // Передаем ОДИН объект региона
         sources,
         excluded_domains: excludedDomainsList // Передаем стоп-лист в Python
       };
+      console.log(`[SupplierSearch] Sending region to Python:`, requestBody.region);
       console.log(`[PythonParser] Sending to Python server:`, requestBody);
       
       const response = await fetch('http://localhost:8080/search', {
@@ -274,9 +284,13 @@ async function callPythonParser(query: string, elements: number, userId: string,
 /**
  * Функция сохранения результатов в staging_suppliers
  */
-async function saveSearchResults(results: SearchResult[], region: string, userId?: string): Promise<any[]> {
+async function saveSearchResults(results: SearchResult[], region: string, userId?: number): Promise<any[]> {
     const savedSuppliers = [];
     for (const result of results) {
+        // Ensure emails and phones are arrays (moved outside try block for use in catch block)
+        const emailsArray = Array.isArray(result.emails) ? result.emails : (result.emails ? [result.emails] : []);
+        const phonesArray = Array.isArray(result.phones) ? result.phones : (result.phones ? [result.phones] : []);
+        
         try {
             const domain = result.domain.replace(/^https?:\/\//, '').replace(/^www\./, '');
             const supplierName = domain.split('.')[0].charAt(0).toUpperCase() + domain.split('.')[0].slice(1);
@@ -289,8 +303,8 @@ async function saveSearchResults(results: SearchResult[], region: string, userId
                 rawTitle: supplierName,
                 rawDescription: result.description || '',
                 rawUrl: result.domain,
-                rawEmails: result.emails || [],
-                rawPhones: result.phones || [],
+                rawEmails: emailsArray,
+                rawPhones: phonesArray,
                 status: 'new'
             }).returning();
 
@@ -332,7 +346,7 @@ async function saveSearchResults(results: SearchResult[], region: string, userId
                     // Основные поля для фронтенда
                     id: Date.now(), // Временный ID для дубликатов
                     name: supplierName,
-                    email: result.emails && result.emails[0] ? result.emails[0] : '',
+                    email: emailsArray && emailsArray[0] ? emailsArray[0] : '',
                     website: result.domain,
                     description: result.description || '',
                     categories: [result.engine],
@@ -343,12 +357,12 @@ async function saveSearchResults(results: SearchResult[], region: string, userId
                     rawTitle: supplierName,
                     rawDescription: result.description || '',
                     rawUrl: result.domain,
-                    rawEmails: result.emails || [],
-                    rawPhones: result.phones || [],
+                    rawEmails: emailsArray,
+                    rawPhones: phonesArray,
                     status: 'new',
                     searchEngine: result.engine,
-                    allEmails: Array.isArray(result.emails) ? result.emails : [],
-                    allPhones: Array.isArray(result.phones) ? result.phones : [],
+                    allEmails: emailsArray,
+                    allPhones: phonesArray,
                     searchDate: result.dateOfSearch,
                 });
             } else {

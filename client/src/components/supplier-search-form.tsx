@@ -230,8 +230,17 @@ export function SupplierSearchForm({ onComplete }: Props) {
       } else {
         console.log("=== USING GOOGLE/YANDEX SEARCH API ===");
         
+        // Преобразуем ключевые слова в массив для параллельного поиска
+        const keywordsArray = searchKeywords
+          .split(',')
+          .map(keyword => keyword.trim())
+          .filter(keyword => keyword.length > 0);
+        
+        console.log(`[Frontend] Sending ${keywordsArray.length} keywords for parallel search:`, keywordsArray);
+        
         const response: any = await apiRequest("/api/supplier-search", "POST", {
-          query: searchKeywords,
+          queries: keywordsArray, // Отправляем массив запросов для параллельного поиска
+          query: searchKeywords,  // Оставляем для обратной совместимости
           sources: {
             registry: useRegistrySearch,
             google: searchGoogle,
@@ -292,10 +301,18 @@ export function SupplierSearchForm({ onComplete }: Props) {
       suppliersCount = data.suppliers?.length || 0;
       foundSuppliers = data.suppliers || [];
       
+      // Формируем сообщение с учетом статистики параллельного поиска
+      let successMessage = suppliersCount > 0 ? `Найдено ${suppliersCount} поставщиков` : "Результаты не найдены";
+      if (data.parallelSearchStats) {
+        const stats = data.parallelSearchStats;
+        successMessage += `\nОбработано запросов: ${stats.totalQueriesProcessed}`;
+        successMessage += `\nОбщее количество результатов: ${stats.totalResultsBeforeDedup}`;
+        successMessage += `\nУникальных результатов: ${stats.uniqueResultsAfterDedup}`;
+      }
+      
       toast({
         title: suppliersCount > 0 ? "Поиск завершен" : "Результаты не найдены",
-        description: suppliersCount > 0 
-          ? `Найдено ${suppliersCount} поставщиков`
+        description: successMessage
           : data.message || "Поставщики с достоверной контактной информацией не найдены",
         variant: suppliersCount > 0 ? "default" : "destructive"
       });

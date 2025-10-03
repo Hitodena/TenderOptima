@@ -680,8 +680,8 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     group_deleted: 'Группа удалена',
     
     // Main Navigation - New Menu Structure
-    quick_procurement: 'БЫСТРАЯ ЗАКУПКА',
-    tender_procurement: 'ТЕНДЕРНАЯ ЗАКУПКА',
+    quick_procurement: 'ВЫБОР ПОСТАВЩИКА',
+    tender_procurement: 'ТЕХНИЧЕСКИЙ АНАЛИЗ',
     // Removed duplicate settings and search_suppliers keys (already exist above)
     send_requests: 'Отправка Запросов',
     supplier_selection: 'Выбор поставщика',
@@ -692,9 +692,9 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     final_supplier_selection: 'Выбор поставщика',
     welcome_title: 'Добро пожаловать в SupplierFinder',
     welcome_description: 'Выберите тип закупочной процедуры для начала работы',
-    quick_procurement_home_title: 'Быстрая закупка',
+    quick_procurement_home_title: 'Выбор поставщика',
     quick_procurement_home_description: 'Инструкции и возможности для быстрого поиска поставщиков и отправки запросов',
-    tender_procurement_home_title: 'Тендерная закупка', 
+    tender_procurement_home_title: 'Технический анализ', 
     tender_procurement_home_description: 'Полный цикл тендерных процедур с техническим анализом и сравнением предложений',
 
     // Dashboard/Requests

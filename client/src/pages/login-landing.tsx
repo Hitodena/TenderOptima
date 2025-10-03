@@ -15,14 +15,14 @@ export default function LoginLanding() {
   const procurementSections = [
     {
       icon: Search,
-      title: 'Быстрая закупка',
+      title: 'Выбор поставщика',
       description: 'Инструменты и возможности для быстрого поиска поставщиков и отправки запросов',
       href: '/quick-procurement',
       color: 'blue'
     },
     {
       icon: BarChart3,
-      title: 'Тендерная закупка',
+      title: 'Технический анализ',
       description: 'Полный цикл тендерных процедур с техническим анализом и сравнением предложений',
       href: '/tender-procurement',
       color: 'slate'

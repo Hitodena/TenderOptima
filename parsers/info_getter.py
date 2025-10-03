@@ -20,9 +20,9 @@ except (ImportError, ModuleNotFoundError):
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     logger = logging.getLogger("ContactInfoGetter")
 
-# Константы
-CONTACT_PATHS = ["/contact", "/contacts", "/контакты", "/about", "/о-компании", "/impressum", "/legal"]
-CONTACT_KEYWORDS = ["contact", "about", "impressum", "legal", "kontakty", "о-нас", "связаться", "feedback"]
+# Константы 
+CONTACT_PATHS = ["/contact", "/contacts", "/kontakty", "/kontakti", "/контакты", "/about", "/о-компании", "/feedback", "/impressum", "/legal"]
+CONTACT_KEYWORDS = ["contact", "contacts", "kontakti", "about", "impressum", "legal", "kontakty", "о-нас", "связаться", "feedback"]
 EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 
 def sanitize_url(domain: str) -> str:

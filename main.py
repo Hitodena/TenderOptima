@@ -139,9 +139,9 @@ async def parse(
     data_dir.mkdir(exist_ok=True)
     cache_file = storage.get_today_cache_path(query, data_dir)
     cached_results = storage.load_cache(query, cache_file, data_dir)
-    if cached_results:
-        logger.info(f"Найдены результаты в кэше для '{query}'.")
-        return cached_results
+    #if cached_results:
+    #    logger.info(f"Найдены результаты в кэше для '{query}'.")
+    #    return cached_results
 
     logger.info(f"Кэш пуст для '{query}'. Запускаем поиск в {search_engines}...")
 
