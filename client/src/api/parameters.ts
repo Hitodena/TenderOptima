@@ -130,7 +130,7 @@ export async function getExtractedParameters(responseId: number): Promise<{
   try {
     return await apiClient.get<{
       parameters: Record<string, string> | Array<{ name: string; value: string; source?: string; confidence?: number }>;
-    }>(`/api/parameters/extracted/${responseId}`);
+    }>(`/api/supplier-responses/${responseId}/parameters`);
   } catch (error) {
     console.error(`Ошибка при получении извлеченных параметров для ответа ${responseId}:`, error);
     return { parameters: {} };

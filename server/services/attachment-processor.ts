@@ -43,7 +43,27 @@ export class AttachmentProcessor {
   private readonly defaultOptions: ProcessingOptions = {
     timeout: 60000, // 60 seconds
     maxFileSize: 50 * 1024 * 1024, // 50MB
-    allowedTypes: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+    allowedTypes: [
+      // PDF files
+      'application/pdf',
+      // Microsoft Word documents
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      // Microsoft Excel documents
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      // Text files
+      'text/plain',
+      'text/csv',
+      // Image files (OCR support)
+      'image/jpeg',
+      'image/jpg',
+      'image/png',
+      'image/gif',
+      'image/bmp',
+      'image/tiff',
+      'image/webp'
+    ],
     retryCount: 3
   };
 
@@ -93,7 +113,10 @@ export class AttachmentProcessor {
           processingStatus: {
             status: 'critical_failure',
             error: errorResult.processingError.message,
-            user_message: errorResult.userMessage
+            user_message: errorResult.userMessage,
+            error_type: errorResult.errorType || 'unknown_error',
+            suggestion: errorResult.suggestion || 'Попробуйте другой формат файла',
+            timestamp: new Date().toISOString()
           },
           error: errorResult.userMessage
         });
@@ -294,9 +317,53 @@ export class AttachmentProcessor {
     
     try {
       const fileBuffer = Buffer.from(attachment.content, 'base64');
-      await fs.writeFile(tempFilePath, fileBuffer);
+      
+      // Try to detect if this is a text file and handle encoding properly
+      if (attachment.contentType?.startsWith('text/') || attachment.filename?.endsWith('.txt')) {
+        // For text files, try multiple encodings for Russian text
+        const encodings = ['utf8', 'cp1251', 'windows-1251', 'latin1'];
+        let success = false;
+        
+        for (const encoding of encodings) {
+          try {
+            const textContent = fileBuffer.toString(encoding as BufferEncoding);
+            console.log(`[AttachmentProcessor] Text file detected with ${encoding} encoding, content: ${textContent.substring(0, 100)}...`);
+            await fs.writeFile(tempFilePath, textContent, 'utf8');
+            success = true;
+            break;
+          } catch (encodingError) {
+            console.log(`[AttachmentProcessor] ${encoding} decode failed, trying next encoding...`);
+          }
+        }
+        
+        if (!success) {
+          console.log(`[AttachmentProcessor] All text encodings failed, writing as binary`);
+          await fs.writeFile(tempFilePath, fileBuffer);
+        }
+      } else {
+        // For binary files, write as-is
+        await fs.writeFile(tempFilePath, fileBuffer);
+      }
       
       console.log(`[AttachmentProcessor] Created temp file: ${tempFilePath} (${fileBuffer.length} bytes)`);
+      
+      // Debug: Show first 200 chars of the file content
+      try {
+        const debugContent = fileBuffer.toString('utf8', 0, Math.min(200, fileBuffer.length));
+        console.log(`[AttachmentProcessor] File content preview: ${debugContent}`);
+        console.log(`[AttachmentProcessor] File content hex: ${fileBuffer.toString('hex', 0, Math.min(100, fileBuffer.length))}`);
+        
+        // Test different encodings
+        try {
+          const cp1251Content = fileBuffer.toString('cp1251', 0, Math.min(200, fileBuffer.length));
+          console.log(`[AttachmentProcessor] File content (CP1251): ${cp1251Content}`);
+        } catch (e) {
+          console.log(`[AttachmentProcessor] CP1251 decode failed: ${e.message}`);
+        }
+      } catch (debugError) {
+        console.log(`[AttachmentProcessor] Could not preview file content: ${debugError}`);
+      }
+      
       return tempFilePath;
     } catch (error) {
       throw new Error(`Failed to create temp file for ${attachment.filename}: ${error instanceof Error ? error.message : String(error)}`);
@@ -311,90 +378,171 @@ export class AttachmentProcessor {
     attachment: Attachment, 
     options: ProcessingOptions
   ): Promise<{ extractedText: string; processingStatus: ProcessingStatus }> {
-    return new Promise((resolve, reject) => {
-      const inputData = {
-        attachments: [{
-          filename: attachment.filename,
-          contentType: attachment.contentType,
-          content: attachment.content,
-          size: attachment.size
-        }]
-      };
+    // First try the simple extractor (like the old checkpoint)
+    try {
+      return await this.runSimpleExtractor(tempFilePath, attachment, options);
+    } catch (simpleError) {
+      console.log(`[AttachmentProcessor] Simple extractor failed for ${attachment.filename}, trying full processor: ${simpleError.message}`);
       
-      const inputFilePath = path.join(this.tempDir, `input_${Date.now()}.json`);
-      
-      // Создаем input файл
-      fs.writeFile(inputFilePath, JSON.stringify(inputData, null, 2), 'utf8')
-        .then(() => {
-          // Запускаем Python процесс
-          const pythonProcess = spawn('python', [
-            'server/file-processing/file_processor.py',
-            inputFilePath
-          ], {
-            cwd: process.cwd(),
-            stdio: ['pipe', 'pipe', 'pipe']
-          });
+      // Fallback to full processor
+      return new Promise((resolve, reject) => {
+        const inputData = {
+          attachments: [{
+            filename: attachment.filename,
+            contentType: attachment.contentType,
+            content: attachment.content,
+            size: attachment.size
+          }]
+        };
+        
+        const inputFilePath = path.join(this.tempDir, `input_${Date.now()}.json`);
+        
+        // Создаем input файл
+        fs.writeFile(inputFilePath, JSON.stringify(inputData, null, 2), 'utf8')
+          .then(() => {
+            // Запускаем Python процесс
+            const pythonProcess = spawn('python', [
+              'server/file-processing/file_processor.py',
+              inputFilePath
+            ], {
+              cwd: process.cwd(),
+              stdio: ['pipe', 'pipe', 'pipe']
+            });
 
-          let output = '';
-          let errorOutput = '';
+            let output = '';
+            let errorOutput = '';
 
-          // Таймаут для процесса
-          const timeout = setTimeout(() => {
-            pythonProcess.kill('SIGTERM');
-            reject(new Error(`Python process timeout after ${options.timeout}ms`));
-          }, options.timeout);
+            // Таймаут для процесса
+            const timeout = setTimeout(() => {
+              pythonProcess.kill('SIGTERM');
+              reject(new Error(`Python process timeout after ${options.timeout}ms`));
+            }, options.timeout);
 
-          pythonProcess.stdout.on('data', (data) => {
-            output += data.toString();
-          });
+            pythonProcess.stdout.on('data', (data) => {
+              output += data.toString();
+            });
 
-          pythonProcess.stderr.on('data', (data) => {
-            errorOutput += data.toString();
-          });
+            pythonProcess.stderr.on('data', (data) => {
+              errorOutput += data.toString();
+            });
 
-          pythonProcess.on('close', async (code) => {
-            clearTimeout(timeout);
-            
-            // Очистка input файла
-            try {
-              await fs.unlink(inputFilePath);
-            } catch (cleanupError) {
-              console.error('[AttachmentProcessor] Error cleaning up input file:', cleanupError);
-            }
-            
-            if (code === 0) {
+            pythonProcess.on('close', async (code) => {
+              clearTimeout(timeout);
+              
+              // Очистка input файла
               try {
-                const result = JSON.parse(output);
-                if (result.attachments && result.attachments.length > 0) {
-                  const processedAttachment = result.attachments[0];
+                await fs.unlink(inputFilePath);
+              } catch (cleanupError) {
+                console.error('[AttachmentProcessor] Error cleaning up input file:', cleanupError);
+              }
+              
+              if (code === 0) {
+                try {
+                  const result = JSON.parse(output);
+                  if (result.attachments && result.attachments.length > 0) {
+                    const processedAttachment = result.attachments[0];
+                    resolve({
+                      extractedText: processedAttachment.extractedText || '',
+                      processingStatus: processedAttachment.processing_status || { status: 'success' }
+                    });
+                  } else {
+                    resolve({
+                      extractedText: '',
+                      processingStatus: { status: 'success' }
+                    });
+                  }
+                } catch (parseError) {
+                  // Fallback: treat output as plain text
                   resolve({
-                    extractedText: processedAttachment.extractedText || '',
-                    processingStatus: processedAttachment.processing_status || { status: 'success' }
-                  });
-                } else {
-                  resolve({
-                    extractedText: '',
-                    processingStatus: { status: 'success' }
+                    extractedText: output.trim(),
+                    processingStatus: { status: 'success', method: 'fallback' }
                   });
                 }
-              } catch (parseError) {
-                // Fallback: treat output as plain text
-                resolve({
-                  extractedText: output.trim(),
-                  processingStatus: { status: 'success', method: 'fallback' }
-                });
+              } else {
+                reject(new Error(`Python processor failed with code ${code}: ${errorOutput}`));
               }
-            } else {
-              reject(new Error(`Python processor failed with code ${code}: ${errorOutput}`));
-            }
-          });
+            });
 
-          pythonProcess.on('error', (error) => {
-            clearTimeout(timeout);
-            reject(new Error(`Failed to start Python processor: ${error.message}`));
-          });
-        })
-        .catch(reject);
+            pythonProcess.on('error', (error) => {
+              clearTimeout(timeout);
+              reject(new Error(`Failed to start Python processor: ${error.message}`));
+            });
+          })
+          .catch(reject);
+      });
+    }
+  }
+
+  /**
+   * Run simple extractor (like the old checkpoint)
+   */
+  private async runSimpleExtractor(
+    tempFilePath: string, 
+    attachment: Attachment, 
+    options: ProcessingOptions
+  ): Promise<{ extractedText: string; processingStatus: ProcessingStatus }> {
+    return new Promise((resolve, reject) => {
+      // Запускаем простой Python скрипт
+      const pythonProcess = spawn('python', [
+        'server/file-processing/simple_text_extractor.py',
+        tempFilePath,
+        attachment.contentType
+      ], {
+        cwd: process.cwd(),
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+
+      let output = '';
+      let errorOutput = '';
+
+      // Таймаут для процесса
+      const timeout = setTimeout(() => {
+        pythonProcess.kill('SIGTERM');
+        reject(new Error(`Simple extractor timeout after ${options.timeout}ms`));
+      }, options.timeout);
+
+      pythonProcess.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+
+      pythonProcess.stderr.on('data', (data) => {
+        errorOutput += data.toString();
+      });
+
+      pythonProcess.on('close', (code) => {
+        clearTimeout(timeout);
+        
+        if (code === 0) {
+          try {
+            const result = JSON.parse(output);
+            if (result.success) {
+              resolve({
+                extractedText: result.text || '',
+                processingStatus: { 
+                  status: 'success', 
+                  method: 'simple_extractor',
+                  user_message: `Извлечено ${result.text_length || 0} символов`
+                }
+              });
+            } else {
+              reject(new Error(result.error || 'Simple extractor failed'));
+            }
+          } catch (parseError) {
+            // Fallback: treat output as plain text
+            resolve({
+              extractedText: output.trim(),
+              processingStatus: { status: 'success', method: 'simple_extractor_fallback' }
+            });
+          }
+        } else {
+          reject(new Error(`Simple extractor failed with code ${code}: ${errorOutput}`));
+        }
+      });
+
+      pythonProcess.on('error', (error) => {
+        clearTimeout(timeout);
+        reject(new Error(`Failed to start simple extractor: ${error.message}`));
+      });
     });
   }
 

@@ -1,0 +1,17 @@
+{
+  "metadata": {
+    "supplier_name": "Test Supplier",
+    "supplier_email": "test@example.com",
+    "email_date": "2025-10-03T14:48:20.736063",
+    "filename": "test_input.json",
+    "file_type": "json",
+    "processing_date": "2025-10-03T14:48:20.761386",
+    "request_id": null
+  },
+  "text_content": "{\n  \"attachments\": [\n    {\n      \"filename\": \"test_attachment.txt\",\n      \"contentType\": \"text/plain\",\n      \"content\": \"MS4g0KHRgtC+0LjQvNC+0YHRgtGMINC30LAgMSDRiNGCINCx0LXQtyDQndCU0KEgMTUwMCDRgNGD0LHQu9C10LkKMi4g0JTQvtGB0YLQsNCy0LrQsCAtIDE1INC00L3QtdC5Lg==\",\n      \"size\": 63\n    }\n  ]\n}",
+  "data": null,
+  "processing_status": {
+    "status": "success",
+    "method": "Text (content-based)"
+  }
+}

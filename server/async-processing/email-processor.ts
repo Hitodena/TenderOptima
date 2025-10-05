@@ -22,6 +22,7 @@ export class AsyncEmailProcessor {
   async processNewEmail(response: SupplierResponse): Promise<void> {
     try {
       console.log(`[AsyncEmailProcessor] Начинаем обработку email ID: ${response.id}`);
+      console.log(`[AsyncEmailProcessor] Email имеет ${(response.attachments as any[])?.length || 0} вложений`);
       
       // Обновляем статус на 'processing'
       await this.updateProcessingStatus(response.id, 'processing', new Date());
@@ -57,11 +58,15 @@ export class AsyncEmailProcessor {
 
       // Обрабатываем вложения через единый сервис
       const attachments = (response.attachments as any[]) || [];
+      console.log(`[AsyncEmailProcessor] Обрабатываем ${attachments.length} вложений для email ID: ${responseId}`);
+      
       const processedAttachments = await attachmentProcessor.processAttachments(attachments, {
         timeout: 60000, // 60 секунд
         maxFileSize: 50 * 1024 * 1024, // 50MB
         retryCount: 3
       });
+      
+      console.log(`[AsyncEmailProcessor] Обработано ${processedAttachments.length} вложений для email ID: ${responseId}`);
       
       // Используем batch обновление для оптимизации
       const batchResult = await batchDatabaseService.batchUpdateResponses([{

@@ -11,7 +11,7 @@ import { Request, Response } from 'express';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
-const apiAttachmentBridge = require('../file-processing/api_bridge');
+const apiAttachmentBridge = require('../file-processing/api_bridge.cjs');
 
 const router = express.Router();
 

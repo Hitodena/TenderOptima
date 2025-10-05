@@ -5,6 +5,7 @@ Attachment Analyzer for SupplierFinder
 This module integrates with the SupplierFinder application to automatically
 extract text from attachments in supplier emails and prepare the data for analysis.
 """
+print("!!! ЗАПУСК НОВЕЙШЕЙ ВЕРСИИ КОДА ОТ 2025-10-05 17:55 !!!")
 
 import os
 import sys
@@ -18,15 +19,15 @@ import traceback
 import re
 
 # Import file processor
-from file_processor import FileProcessor, process_attachment_batch
+from file_processor import FileProcessor
 
-# Setup logging
+# Setup logging - redirect to stderr to avoid interfering with JSON output
 logging.basicConfig(
-    level=logging.DEBUG,  # Changed to DEBUG for more detailed logging
+    level=logging.INFO,  # Reduced logging level for production
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler("attachment_analyzer.log"),
-        logging.StreamHandler(sys.stdout)
+        logging.StreamHandler(sys.stderr)  # Redirect to stderr instead of stdout
     ]
 )
 logger = logging.getLogger("attachment_analyzer")
@@ -319,7 +320,17 @@ def main():
     # Clean any stdout buffer and ensure only clean JSON output
     sys.stdout.flush()
     # Print only the JSON result without any additional output
-    print(json.dumps(result, ensure_ascii=False, default=str))
+    # Use sys.stdout.buffer.write to handle Unicode properly
+    try:
+        json_output = json.dumps(result, ensure_ascii=False, default=str)
+        sys.stdout.buffer.write(json_output.encode('utf-8'))
+        sys.stdout.buffer.flush()
+    except UnicodeEncodeError as e:
+        # Fallback: use ASCII encoding with replacement characters
+        logger.error(f"Unicode encoding error: {e}")
+        json_output = json.dumps(result, ensure_ascii=True, default=str)
+        sys.stdout.buffer.write(json_output.encode('utf-8'))
+        sys.stdout.buffer.flush()
 
 
 if __name__ == "__main__":

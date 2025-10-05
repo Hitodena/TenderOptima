@@ -1,0 +1,17 @@
+{
+  "metadata": {
+    "supplier_name": "Test Supplier",
+    "supplier_email": "test@example.com",
+    "email_date": "2025-10-03T17:06:41.366260",
+    "filename": "input_1759500400614.json",
+    "file_type": "json",
+    "processing_date": "2025-10-03T17:06:41.381734",
+    "request_id": null
+  },
+  "text_content": "{\n  \"attachments\": [\n    {\n      \"filename\": \"тест КП доставка - 15 дней.txt\",\n      \"contentType\": \"text/plain\",\n      \"content\": \"MS4g0YbQtdC90LAg0LfQsCAxINGI0YIg0LHQtdC3INC90LTRgSAxNTAwINGA0YPQsdC70LXQuQ0KMi7QtNC+0YHRgtCw0LLQutCwIC0gMTUg0LTQvdC10LkuDQoNCiA=\",\n      \"size\": 95\n    }\n  ]\n}",
+  "data": null,
+  "processing_status": {
+    "status": "success",
+    "method": "Text (content-based)"
+  }
+}

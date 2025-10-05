@@ -9,7 +9,7 @@ import OpenAI from "openai";
 import { requireAuth } from '../middleware/requireAuth';
 
 // @ts-ignore - No types available for API bridge
-import * as apiBridge from '../file-processing/api_bridge';
+import * as apiBridge from '../file-processing/api_bridge.cjs';
 import { extractParametersWithAI } from '../services/deepseek-api';
 
 // Create router
@@ -46,6 +46,52 @@ interface ExtractedParameter {
   confidence: number;
 }
 
+// Alternative cost extraction function for email text
+function extractCostFromEmailText(text: string): { value: string; confidence: number } {
+  if (!text || typeof text !== 'string') {
+    return { value: "-", confidence: 0 };
+  }
+  
+  try {
+    // More aggressive patterns for cost extraction
+    const patterns = [
+      // Pattern for "Общая стоимость без НДС: 50001 BYN"
+      /общая\s*стоимость\s*без\s*ндс\s*[\:\-]?\s*(\d[\d\s.,]+)(?:\s*(?:BYN|руб|₽|\$|USD|EUR|€))?/i,
+      // Pattern for "стоимость: 50001 BYN"
+      /стоимость\s*[\:\-]?\s*(\d[\d\s.,]+)(?:\s*(?:BYN|руб|₽|\$|USD|EUR|€))?/i,
+      // Pattern for "цена: 50001 BYN"
+      /цена\s*[\:\-]?\s*(\d[\d\s.,]+)(?:\s*(?:BYN|руб|₽|\$|USD|EUR|€))?/i,
+      // Pattern for "итого: 50001 BYN"
+      /итого\s*[\:\-]?\s*(\d[\d\s.,]+)(?:\s*(?:BYN|руб|₽|\$|USD|EUR|€))?/i,
+      // Pattern for "всего: 50001 BYN"
+      /всего\s*[\:\-]?\s*(\d[\d\s.,]+)(?:\s*(?:BYN|руб|₽|\$|USD|EUR|€))?/i
+    ];
+    
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        let value = match[1].trim().replace(/\s+/g, '');
+        
+        // Look for currency in the surrounding text
+        const currencyMatch = text.substring(match.index, match.index + match[0].length + 10).match(/(BYN|руб|₽|\$|USD|EUR|€)/i);
+        if (currencyMatch) {
+          value += ' ' + currencyMatch[0];
+        } else {
+          value += ' руб.'; // Default currency
+        }
+        
+        console.log(`Alternative cost extraction found: ${value}`);
+        return { value, confidence: 0.8 };
+      }
+    }
+    
+    return { value: "-", confidence: 0 };
+  } catch (error) {
+    console.error('Error in alternative cost extraction:', error);
+    return { value: "-", confidence: 0 };
+  }
+}
+
 // Function to extract parameters from text, improved version
 function extractParameterFromText(text: string, parameter: string): ExtractionResult {
   // Default result with no value found
@@ -70,6 +116,8 @@ function extractParameterFromText(text: string, parameter: string): ExtractionRe
     if (parameter === 'общая стоимость без ндс') {
       // Ищем в разных форматах с учетом возможной валюты
       const patterns = [
+        // Простой паттерн для "Общая стоимость без НДС: 50001 BYN"
+        /общая\s*стоимость\s*без\s*ндс\s*[\:\-]?\s*(\d[\d\s.,]+)(?:\s*(?:бел\.?руб\.|руб\.|₽|BYN|USD|\$|EUR|€))?/i,
         /итого\s*(?:бел\.?руб\.|руб\.|₽|BYN|USD|\$|EUR|€)?\s*,?\s*без\s*ндс\s*[\:\-]?\s*(\d[\d\s.,]+)(?:\s*(?:бел\.?руб\.|руб\.|₽|BYN|USD|\$|EUR|€))?/i,
         /(?:общая|полная|итоговая)?\s*стоимость\s*без\s*ндс\s*[\:\-]?\s*(\d[\d\s.,]+)(?:\s*(?:бел\.?руб\.|руб\.|₽|BYN|USD|\$|EUR|€))?/i,
         /сумма\s*без\s*ндс\s*[\:\-]?\s*(\d[\d\s.,]+)(?:\s*(?:бел\.?руб\.|руб\.|₽|BYN|USD|\$|EUR|€))?/i,
@@ -474,7 +522,7 @@ function extractParameterFromText(text: string, parameter: string): ExtractionRe
 }
 
 // Function to extract parameters from response
-async function extractParametersFromResponse(
+export async function extractParametersFromResponse(
   responseId: number, 
   parameters: string[], 
   useAI: boolean = true
@@ -614,11 +662,11 @@ async function extractParametersFromResponse(
     // If using AI and we have text to analyze, extract all parameters at once using AI
     if (useAI) {
       try {
-        // Collect all available text content
-        let combinedText = emailContent || '';
+        // PRIORITY: Collect attachment text FIRST, then email content
+        let combinedText = '';
         let attachmentTextFound = false;
         
-        // Add text from attachments
+        // Add text from attachments FIRST (PRIORITY)
         if (hasAttachments && Array.isArray(response.attachments)) {
           // Проверяем, есть ли хоть в одном вложении текст
           console.log('Checking if any attachments have extractedText:');
@@ -636,13 +684,21 @@ async function extractParametersFromResponse(
             console.warn('WARNING: No extractedText found in any attachments, AI extraction may not work');
           }
           
-          // Собираем текст из всех вложений
+          // Собираем текст из всех вложений ПЕРВЫМИ (ПРИОРИТЕТ)
           for (const attachment of response.attachments as any[]) {
             if (attachment.extractedText) {
-              combinedText += '\n\n--- ATTACHMENT: ' + attachment.filename + ' ---\n';
+              console.log(`[DEBUG] Attachment ${attachment.filename} extractedText: "${attachment.extractedText}"`);
+              combinedText += '--- ATTACHMENT: ' + attachment.filename + ' ---\n';
               combinedText += attachment.extractedText;
+              combinedText += '\n\n';
             }
           }
+        }
+        
+        // Add email content SECOND (fallback)
+        if (emailContent && emailContent.trim().length > 0) {
+          combinedText += '--- EMAIL BODY ---\n';
+          combinedText += emailContent;
         }
         
         // If we have text to analyze, use OpenAI compatible DeepSeek API directly (like in compare.ts)
@@ -667,12 +723,23 @@ async function extractParametersFromResponse(
               
               Твоя задача - внимательно изучить текст письма и вложенных документов и найти значения ТОЛЬКО для указанных выше параметров.
               
+              КРИТИЧЕСКИ ВАЖНО - ПРИОРИТЕТ ИСТОЧНИКОВ:
+              1. ВЛОЖЕНИЯ ИМЕЮТ ПРИОРИТЕТ НАД ТЕЛОМ ПИСЬМА
+              2. Если параметр найден И во вложении И в теле письма - используй значение ИЗ ВЛОЖЕНИЯ
+              3. Если параметр найден только в теле письма - используй его
+              4. Если параметр найден только во вложении - используй его
+              
+              ВАЖНО: НЕ РАЗДЕЛЯЙ ОДИНАКОВЫЕ ПАРАМЕТРЫ ПО РАЗНЫМ КОЛОНКАМ!
+              Если видишь "цена за единицу" и во вложении и в теле письма - используй ТОЛЬКО значение из вложения.
+              НЕ создавай отдельные колонки для одного и того же параметра!
+              
               ПРАВИЛА ИЗВЛЕЧЕНИЯ:
-              1. Ищи информацию в тексте письма и вложенных документах
-              2. Для стандартных параметров используй общепринятые правила поиска
-              3. Для пользовательских параметров (не входящих в стандартный список) ищи по точному названию или смыслу
-              4. Если параметр не найден, верни "-" с confidence: 0
-              5. Всегда включай валюту в значения цен и стоимости
+              1. СНАЧАЛА ищи информацию во вложенных документах (ПРИОРИТЕТ)
+              2. ТОЛЬКО ЕСЛИ не найдено во вложении - ищи в теле письма
+              3. Для стандартных параметров используй общепринятые правила поиска
+              4. Для пользовательских параметров (не входящих в стандартный список) ищи по точному названию или смыслу
+              5. Если параметр не найден, верни "-" с confidence: 0
+              6. Всегда включай валюту в значения цен и стоимости
               
               ПОИСК СТАНДАРТНЫХ ПАРАМЕТРОВ:
               - "общая стоимость без ндс": ищи "итого" "сумма" "общая стоимость" + "без ндс"/"без налога". Добавляй валюту
@@ -697,6 +764,12 @@ async function extractParametersFromResponse(
               - "общая стоимость с ндс": "76716 руб." (с валютой)
               - "контактный телефон для связи": "+7(846)250-00-16, +791602910909"
               - "сервис": "-" (если не найден в тексте)
+              
+              ПРИМЕР ПРАВИЛЬНОГО ПРИОРИТЕТА:
+              Если во вложении: "цена за 1 шт 1500 рублей"
+              И в теле письма: "цена за 1 шт 22500 рублей"
+              ТО используй: "цена за единицу без ндс": "1500 рублей" (из вложения)
+              НЕ создавай отдельную колонку "общая стоимость" для значения из вложения!
               
               Верни JSON-массив ТОЛЬКО для запрошенных параметров:
               [
@@ -748,7 +821,7 @@ async function extractParametersFromResponse(
                   
                   // Format the results for the API response with better source attribution
                   const results: ExtractedParameter[] = parsedResults.map((result: any) => {
-                    // Try to determine if the value came from email content
+                    // Try to determine if the value came from email content or attachment
                     let source: 'content' | 'attachment' | 'unknown' = 'unknown';
                     
                     if (result.value && result.value !== '-' && result.confidence > 0.2) {
@@ -756,16 +829,43 @@ async function extractParametersFromResponse(
                       const valueNormalized = result.value.replace(/\s+/g, ' ').toLowerCase().trim();
                       const emailContentNormalized = emailContent.replace(/\s+/g, ' ').toLowerCase();
                       
+                      // PRIORITY: Check attachments first, then email content
+                      let foundInAttachment = false;
+                      let foundInEmail = false;
+                      
                       // Check if the value is present in email content
                       if (emailContentNormalized.includes(valueNormalized) || 
                           // For numerical values, check with only numbers
                           (valueNormalized.match(/\d/) && 
                            emailContentNormalized.includes(valueNormalized.replace(/[^\d.,]/g, '')))) {
+                        foundInEmail = true;
+                      }
+                      
+                      // Check if the value is present in attachments
+                      if (hasAttachments && Array.isArray(response.attachments)) {
+                        for (const attachment of response.attachments as any[]) {
+                          if (attachment.extractedText) {
+                            const attachmentNormalized = attachment.extractedText.replace(/\s+/g, ' ').toLowerCase();
+                            if (attachmentNormalized.includes(valueNormalized) || 
+                                (valueNormalized.match(/\d/) && 
+                                 attachmentNormalized.includes(valueNormalized.replace(/[^\d.,]/g, '')))) {
+                              foundInAttachment = true;
+                              break;
+                            }
+                          }
+                        }
+                      }
+                      
+                      // PRIORITY RULE: Attachments have priority over email content
+                      if (foundInAttachment) {
+                        source = 'attachment';
+                        console.log(`Parameter ${result.name} found in attachment (PRIORITY): "${result.value}"`);
+                      } else if (foundInEmail) {
                         source = 'content';
-                        console.log(`Parameter ${result.name} appears to come from email content (direct API): "${result.value}"`);
+                        console.log(`Parameter ${result.name} found in email content: "${result.value}"`);
                       } else {
-                        source = attachmentTextFound ? 'attachment' : 'content'; 
-                        // If no attachments with text, it must be from content even if we can't find exact match
+                        source = attachmentTextFound ? 'attachment' : 'content';
+                        console.log(`Parameter ${result.name} source determined by context: ${source}`);
                       }
                     }
                     
@@ -777,9 +877,30 @@ async function extractParametersFromResponse(
                     };
                   });
                   
-                  console.log(`AI extraction complete, found ${results.filter(r => r.value !== "-").length} parameters with values`);
+                  // Check for duplicate parameters and prioritize attachments
+                  const parameterMap = new Map<string, ExtractedParameter>();
+                  
+                  // Process results with priority: attachments first
+                  for (const result of results) {
+                    const paramName = result.name;
+                    
+                    if (!parameterMap.has(paramName)) {
+                      parameterMap.set(paramName, result);
+                    } else {
+                      // If parameter already exists, check if new one is from attachment
+                      const existing = parameterMap.get(paramName)!;
+                      if (result.source === 'attachment' && existing.source !== 'attachment') {
+                        console.log(`Replacing ${paramName} value from content with attachment value: ${existing.value} -> ${result.value}`);
+                        parameterMap.set(paramName, result);
+                      }
+                    }
+                  }
+                  
+                  const finalResults = Array.from(parameterMap.values());
+                  
+                  console.log(`AI extraction complete, found ${finalResults.filter(r => r.value !== "-").length} parameters with values`);
                   console.log('AI analysis generated successfully');
-                  return results;
+                  return finalResults;
                 } else {
                   console.error('AI analysis: No valid JSON found in response');
                 }
@@ -793,7 +914,7 @@ async function extractParametersFromResponse(
           
           // If we get here, fallback to the service method
           try {
-            // Call the AI extraction service as fallback
+            // Call the AI extraction service as fallback with priority text
             const aiResults = await extractParametersWithAI(combinedText, parameters);
             console.log('AI extraction results (fallback method):', aiResults);
             
@@ -812,15 +933,42 @@ async function extractParametersFromResponse(
                   const valueNormalized = result.value.replace(/\s+/g, ' ').toLowerCase().trim();
                   const emailContentNormalized = emailContent.replace(/\s+/g, ' ').toLowerCase();
                   
+                  // PRIORITY: Check attachments first, then email content
+                  let foundInAttachment = false;
+                  let foundInEmail = false;
+                  
+                  // Check if the value is present in email content
                   if (emailContentNormalized.includes(valueNormalized) || 
                       // Check with fuzzy matching for price values (allowing for slight differences)
                       (valueNormalized.match(/\d/) && emailContentNormalized.includes(valueNormalized.replace(/[^\d.,]/g, '')))) {
+                    foundInEmail = true;
+                  }
+                  
+                  // Check if the value is present in attachments
+                  if (hasAttachments && Array.isArray(response.attachments)) {
+                    for (const attachment of response.attachments as any[]) {
+                      if (attachment.extractedText) {
+                        const attachmentNormalized = attachment.extractedText.replace(/\s+/g, ' ').toLowerCase();
+                        if (attachmentNormalized.includes(valueNormalized) || 
+                            (valueNormalized.match(/\d/) && 
+                             attachmentNormalized.includes(valueNormalized.replace(/[^\d.,]/g, '')))) {
+                          foundInAttachment = true;
+                          break;
+                        }
+                      }
+                    }
+                  }
+                  
+                  // PRIORITY RULE: Attachments have priority over email content
+                  if (foundInAttachment) {
+                    source = 'attachment';
+                    console.log(`Parameter ${result.name} found in attachment (PRIORITY): "${result.value}"`);
+                  } else if (foundInEmail) {
                     source = 'content';
-                    console.log(`Parameter ${result.name} appears to come from email content: "${result.value}"`);
+                    console.log(`Parameter ${result.name} found in email content: "${result.value}"`);
                   } else {
-                    // If there are no attachments with text, it must be from content even if we can't find exact match
                     source = attachmentTextFound ? 'attachment' : 'content';
-                    console.log(`Parameter ${result.name} appears to come from ${source}: "${result.value}"`);
+                    console.log(`Parameter ${result.name} source determined by context: ${source}`);
                   }
                 }
                 
@@ -860,23 +1008,50 @@ async function extractParametersFromResponse(
       // Log if we found something in the email content
       if (contentResult && contentResult.value !== "-") {
         console.log(`Found parameter "${parameter}" in email body: ${contentResult.value}`);
+      } else {
+        // If no result from email content, try with more aggressive patterns
+        console.log(`No result for "${parameter}" in email body, trying alternative extraction...`);
+        
+        // Try alternative extraction for common parameters
+        if (parameter === 'общая стоимость без ндс') {
+          const altResult = extractCostFromEmailText(emailContent);
+          if (altResult && altResult.value !== "-") {
+            contentResult.value = altResult.value;
+            contentResult.confidence = altResult.confidence;
+            console.log(`Alternative extraction found: ${contentResult.value}`);
+          }
+        }
       }
       
-      // Next try to extract from attachments
-      let bestResult = contentResult.value !== "-" ? contentResult : {
+      // PRIORITY: Check attachments first, then email content
+      let bestResult = {
         value: "-",
-        source: 'unknown',
+        source: 'unknown' as 'content' | 'attachment' | 'unknown',
         confidence: 0
       };
       
-      // If we have attachments, try to extract from them
+      // If we have attachments, try to extract from them FIRST (PRIORITY)
       if (hasAttachments && Array.isArray(response.attachments)) {
+        let attachmentHasUsefulContent = false;
+        
         for (const attachment of response.attachments as any[]) {
           // If no extractedText, skip this attachment
           if (!attachment.extractedText) {
             console.log(`Attachment ${attachment.filename} has no extractedText, skipping`);
             continue;
           }
+          
+          // Check if attachment has meaningful content (not just errors or empty text)
+          const extractedText = attachment.extractedText.trim();
+          if (extractedText.length < 10 || 
+              extractedText.includes('Error extracting') || 
+              extractedText.includes('Ошибка') ||
+              extractedText.includes('No text found')) {
+            console.log(`Attachment ${attachment.filename} has no meaningful content, skipping`);
+            continue;
+          }
+          
+          attachmentHasUsefulContent = true;
           
           // Debug
           console.log(`Checking attachment ${attachment.filename} for parameter: ${parameter}`);
@@ -885,22 +1060,36 @@ async function extractParametersFromResponse(
           try {
             const attachmentResult = extractParameterFromText(attachment.extractedText, parameter);
             
-            // If we got a result and it's better than our current best
-            if (attachmentResult && attachmentResult.value !== "-" && 
-                (bestResult.value === "-" || attachmentResult.confidence > bestResult.confidence)) {
-              
+            // If we got a result from attachment, use it (PRIORITY)
+            if (attachmentResult && attachmentResult.value !== "-") {
               bestResult = {
                 ...attachmentResult,
                 source: 'attachment'
               };
               
               // Debug
-              console.log(`Found parameter ${parameter} in attachment: ${bestResult.value} (confidence: ${bestResult.confidence})`);
+              console.log(`Found parameter ${parameter} in attachment (PRIORITY): ${bestResult.value} (confidence: ${bestResult.confidence})`);
+              break; // Stop at first attachment result since attachments have priority
             }
           } catch (extractError) {
             console.error(`Error extracting ${parameter} from attachment:`, extractError);
           }
         }
+        
+        // If no attachments had useful content, mark for email content fallback
+        if (!attachmentHasUsefulContent) {
+          console.log(`No attachments with useful content found, will use email content if available`);
+          bestResult = { value: "-", source: 'unknown', confidence: 0 };
+        }
+      }
+      
+      // Use email content if:
+      // 1. No attachment result was found (bestResult.value === "-")
+      // 2. OR attachment result has very low confidence (< 0.3)
+      // 3. OR attachment result is empty/meaningless
+      if ((bestResult.value === "-" || bestResult.confidence < 0.3 || bestResult.value.trim() === "") && contentResult.value !== "-") {
+        bestResult = contentResult;
+        console.log(`Using email content for parameter ${parameter}: ${bestResult.value} (attachment confidence: ${bestResult.confidence})`);
       }
       
       // Add the best result for this parameter

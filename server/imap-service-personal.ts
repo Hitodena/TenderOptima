@@ -5,7 +5,7 @@ import { createRequire } from 'module';
 
 // ES modules workaround for requiring CommonJS modules
 const require = createRequire(import.meta.url);
-const apiAttachmentBridge = require('./file-processing/api_bridge');
+const apiAttachmentBridge = require('./file-processing/api_bridge.cjs');
 
 // Interface for detailed email processing results
 interface PersonalEmailProcessingResult {
@@ -606,6 +606,116 @@ export class PersonalImapService {
             console.log(`✅ Automatic attachment processing started for response ${savedResponse.id}`);
           } catch (error) {
             console.error(`❌ Failed to start automatic attachment processing for response ${savedResponse.id}:`, error);
+          }
+        }
+
+        // Запускаем автоматическое извлечение параметров (ТОЧНО КАК В РУЧНОЙ РЕАЛИЗАЦИИ)
+        if (savedResponse && responseData.requestId) {
+          console.log(`🔄 Starting automatic parameter extraction for response ${savedResponse.id}`);
+          try {
+            // Получаем параметры запроса
+            const requestParams = await storage.getParametersForRequest(responseData.requestId);
+            if (requestParams && requestParams.parameters) {
+              const parameters = Array.isArray(requestParams.parameters) 
+                ? requestParams.parameters 
+                : JSON.parse(requestParams.parameters as string);
+              
+              if (parameters && parameters.length > 0) {
+                // ШАГ 1: Анализ вложений (если есть)
+                let attachmentParameters: Record<string, any> = {};
+                let hasAttachmentData = false;
+                
+                if (attachments && attachments.length > 0) {
+                  console.log(`🔄 Step 1: Analyzing ${attachments.length} attachments for response ${savedResponse.id}`);
+                  try {
+                    // Сначала обрабатываем вложения для извлечения текста
+                    const { apiAttachmentBridge } = await import('./file-processing/api_bridge.cjs');
+                    const attachmentResult = await apiAttachmentBridge.analyzeSupplierResponseAttachments(savedResponse);
+                    
+                    console.log(`📎 Attachment processing result:`, attachmentResult);
+                    
+                    if (attachmentResult && attachmentResult.parameters && Object.keys(attachmentResult.parameters).length > 0) {
+                      attachmentParameters = attachmentResult.parameters;
+                      hasAttachmentData = true;
+                      console.log(`✅ Step 1: Successfully extracted parameters from attachments:`, attachmentParameters);
+                    } else {
+                      console.log(`⚠️ Step 1: No parameters found in attachments, will try email body`);
+                    }
+                  } catch (error) {
+                    console.warn(`⚠️ Step 1: Attachment analysis error:`, error);
+                  }
+                }
+                
+                // ШАГ 2: Извлечение из тела письма
+                console.log(`🔄 Step 2: Extracting parameters from email body for response ${savedResponse.id}`);
+                try {
+                  // Ждем немного, чтобы вложения успели обработаться
+                  await new Promise(resolve => setTimeout(resolve, 2000));
+                  
+                  // Используем прямую функцию извлечения параметров
+                  const { extractParametersFromResponse } = await import('./routes/extract-parameters');
+                  const bodyResult = await extractParametersFromResponse(
+                    savedResponse.id,
+                    parameters,
+                    true // useAI = true
+                  );
+                  
+                  console.log(`✅ Step 2: Parameters extracted from email body using AI:`, bodyResult);
+                  
+                  // ШАГ 3: Приоритизация источников (ТОЧНО КАК В РУЧНОЙ РЕАЛИЗАЦИИ)
+                  let bodyParameters: Record<string, any> = {};
+                  let finalParameters: Record<string, string> = {};
+                  
+                  // Обрабатываем параметры из тела письма
+                  if (bodyResult && bodyResult.length > 0) {
+                    bodyResult.forEach((param: any) => {
+                      bodyParameters[param.name] = param.value || '-';
+                    });
+                  }
+                  
+                  // Применяем правила приоритета: Вложения > Тело письма
+                  parameters.forEach(paramName => {
+                    if (hasAttachmentData && attachmentParameters[paramName] && 
+                        attachmentParameters[paramName] !== '-' && 
+                        attachmentParameters[paramName] !== '' && 
+                        attachmentParameters[paramName] !== null) {
+                      finalParameters[paramName] = String(attachmentParameters[paramName]);
+                      console.log(`Priority rule: Using attachment value for ${paramName}: ${attachmentParameters[paramName]}`);
+                    } else if (bodyParameters[paramName] && 
+                               bodyParameters[paramName] !== '-' && 
+                               bodyParameters[paramName] !== '' && 
+                               bodyParameters[paramName] !== null) {
+                      finalParameters[paramName] = String(bodyParameters[paramName]);
+                      console.log(`Priority rule: Using body value for ${paramName}: ${bodyParameters[paramName]}`);
+                    } else {
+                      finalParameters[paramName] = '-';
+                      console.log(`Priority rule: No value found for ${paramName}, using default '-'`);
+                    }
+                  });
+                  
+                  // Сохраняем извлеченные параметры в базу данных
+                  console.log(`🔄 Step 3: Saving extracted parameters to database for response ${savedResponse.id}`);
+                  await storage.saveExtractedParameters({
+                    responseId: savedResponse.id,
+                    requestId: responseData.requestId,
+                    supplierEmail: responseData.supplierEmail,
+                    parameters: finalParameters,
+                    status: Object.values(finalParameters).some(val => val && val !== '-') ? 'completed' : 'no_parameters_found',
+                    userId: userId
+                  });
+                  
+                  console.log(`✅ Automatic parameter extraction completed for response ${savedResponse.id}:`, finalParameters);
+                } catch (error) {
+                  console.error(`❌ Step 2: Error extracting parameters from email body:`, error);
+                }
+              } else {
+                console.log(`⚠️ No parameters found for request ${responseData.requestId}, skipping parameter extraction`);
+              }
+            } else {
+              console.log(`⚠️ No request parameters found for request ${responseData.requestId}, skipping parameter extraction`);
+            }
+          } catch (error) {
+            console.error(`❌ Failed to start automatic parameter extraction for response ${savedResponse.id}:`, error);
           }
         }
       } catch (dbError) {
