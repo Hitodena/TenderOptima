@@ -13,6 +13,7 @@ import { authRateLimit, registerRateLimit, passwordResetRateLimit } from "./midd
 import { securityLogger } from "./middleware/securityLogger";
 import { ipMonitor } from "./middleware/ipMonitor";
 import { createFailedLoginAlert, createSuspiciousActivityAlert, createIPBlockedAlert } from "./middleware/securityAlerts";
+import { sendSimpleEmail } from "./email";
 
 // Настройка токенов доступа
 const TOKEN_SECRET = process.env.TOKEN_SECRET;
@@ -53,7 +54,73 @@ declare global {
 
 const scryptAsync = promisify(scrypt);
 
-async function hashPassword(password: string) {
+// Function to send password reset email
+async function sendPasswordResetEmail(email: string, token: string, resetUrl: string): Promise<boolean> {
+  try {
+    const subject = 'Восстановление пароля - TenderOptima';
+    const text = `
+Здравствуйте!
+
+Вы запросили восстановление пароля для вашего аккаунта в TenderOptima.
+
+Для установки нового пароля перейдите по ссылке:
+${resetUrl}
+
+Эта ссылка действительна в течение 1 часа.
+
+Если вы не запрашивали восстановление пароля, просто проигнорируйте это письмо.
+
+С уважением,
+Команда TenderOptima
+    `.trim();
+
+    const html = `
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h2 style="color: #2563eb;">Восстановление пароля</h2>
+  
+  <p>Здравствуйте!</p>
+  
+  <p>Вы запросили восстановление пароля для вашего аккаунта в TenderOptima.</p>
+  
+  <p>Для установки нового пароля нажмите на кнопку ниже:</p>
+  
+  <div style="text-align: center; margin: 30px 0;">
+    <a href="${resetUrl}" 
+       style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+      Восстановить пароль
+    </a>
+  </div>
+  
+  <p style="color: #666; font-size: 14px;">
+    Или скопируйте и вставьте эту ссылку в браузер:<br>
+    <a href="${resetUrl}" style="color: #2563eb; word-break: break-all;">${resetUrl}</a>
+  </p>
+  
+  <p style="color: #666; font-size: 14px;">
+    <strong>Важно:</strong> Эта ссылка действительна в течение 1 часа.
+  </p>
+  
+  <p style="color: #666; font-size: 14px;">
+    Если вы не запрашивали восстановление пароля, просто проигнорируйте это письмо.
+  </p>
+  
+  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+  
+  <p style="color: #666; font-size: 12px;">
+    С уважением,<br>
+    Команда TenderOptima
+  </p>
+</div>
+    `.trim();
+
+    return await sendSimpleEmail(email, subject, text, { html });
+  } catch (error) {
+    console.error('Error sending password reset email:', error);
+    return false;
+  }
+}
+
+export async function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
   const buf = (await scryptAsync(password, salt, 64)) as Buffer;
   return `${buf.toString("hex")}.${salt}`;
@@ -478,9 +545,21 @@ export async function setupAuth(app: Express) {
         })
         .where(eq(users.id, user.id));
       
-      // Send password reset email (this would use your email service)
-      // This is a placeholder - actual email sending would be implemented using your email service
-      console.log(`Password reset request for ${username}. Reset token: ${resetToken}`);
+      // Send password reset email
+      try {
+        const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:5000'}/auth?token=${resetToken}`;
+        
+        const emailSent = await sendPasswordResetEmail(username, resetToken, resetUrl);
+        
+        if (emailSent) {
+          console.log(`Password reset email sent successfully to ${username}`);
+        } else {
+          console.error(`Failed to send password reset email to ${username}`);
+        }
+      } catch (emailError) {
+        console.error('Error sending password reset email:', emailError);
+        // Continue anyway - don't reveal if email failed
+      }
       
       return res.status(200).json({ 
         message: 'Если учетная запись существует, инструкции по сбросу пароля были отправлены на указанный email' 
@@ -711,10 +790,14 @@ export async function setupAuth(app: Express) {
 
   app.post("/api/auth/register", registerRateLimit, async (req, res, next) => {
     try {
+      console.log('=== НАЧАЛО РЕГИСТРАЦИИ НА СЕРВЕРЕ ===');
+      console.log('Данные регистрации:', { username: req.body.username, hasPassword: !!req.body.password });
+      
       // Check if username already exists
       const [existingUser] = await db.select().from(users).where(eq(users.username, req.body.username));
       
       if (existingUser) {
+        console.log('Пользователь уже существует:', existingUser.username);
         return res.status(400).json({ error: 'Пользователь с таким email уже существует' });
       }
       
@@ -724,6 +807,7 @@ export async function setupAuth(app: Express) {
       let createdUser;
       
       try {
+        console.log('=== СОЗДАНИЕ ПОЛЬЗОВАТЕЛЯ ===');
         // Create user
         const [user] = await db.insert(users)
           .values({
@@ -737,6 +821,7 @@ export async function setupAuth(app: Express) {
           .returning();
         
         createdUser = user;
+        console.log("=== ПОЛЬЗОВАТЕЛЬ СОЗДАН ===");
         console.log("Created user:", createdUser);
         
         // Make sure createdUser.id exists
@@ -772,12 +857,35 @@ export async function setupAuth(app: Express) {
         language: createdUser.language || 'ru'
       }, (err) => {
         if (err) return next(err);
-        return res.status(201).json({
+        
+        // Generate access token for the registered user
+        console.log(`[Auth] Generating token for user ID: ${createdUser.id}`);
+        console.log(`[Auth] TOKEN_SECRET available: ${!!TOKEN_SECRET}`);
+        
+        const token = generateToken(createdUser.id);
+        
+        console.log(`[Auth] User registered successfully: ${createdUser.username} (ID: ${createdUser.id})`);
+        console.log(`[Auth] Generated access token for new user: ${token.substring(0, 20)}...`);
+        console.log(`[Auth] Token expiry: ${Date.now() + TOKEN_EXPIRY}`);
+        
+        const responseData = {
           id: createdUser.id,
           username: createdUser.username,
           role: createdUser.role,
-          language: createdUser.language || 'ru'
+          language: createdUser.language || 'ru',
+          accessToken: token,
+          tokenExpiry: Date.now() + TOKEN_EXPIRY
+        };
+        
+        console.log(`[Auth] Sending response to client:`, {
+          id: responseData.id,
+          username: responseData.username,
+          hasAccessToken: !!responseData.accessToken,
+          accessToken: responseData.accessToken ? responseData.accessToken.substring(0, 20) + '...' : 'НЕТ',
+          tokenExpiry: responseData.tokenExpiry
         });
+        
+        return res.status(201).json(responseData);
       });
     } catch (error) {
       console.error("Registration error:", error);

@@ -26,6 +26,8 @@ interface Subscription {
   userId: number;
   plan: string;
   status: string;
+  actualStatus?: string; // Calculated status based on end date
+  isExpired?: boolean; // Whether subscription is expired
   startDate: string;
   endDate: string | null;
   requestsLimit: number | null;
@@ -39,11 +41,13 @@ interface Subscription {
 interface SubscriptionFormData {
   userId: number;
   userEmail?: string; // For creating new users
+  systemLogin?: string; // System login for user
+  systemPassword?: string; // System password for user
   emailAccount?: string; // Email account for user
   emailPassword?: string; // Email password for user
   plan: string;
   status: string;
-  maxRequestsPerMonth: number | null;
+  maxRequestsPerMonth: number;
   startDate: string;
   endDate: string | null;
   notes: string | null;
@@ -98,7 +102,10 @@ export default function SubscriptionsPage() {
     queryFn: async () => {
       try {
         // Create headers object with admin token and cache busting
-        const adminToken = localStorage.getItem('adminToken') || 'admin-token-123456';
+        const adminToken = localStorage.getItem('adminToken');
+        if (!adminToken) {
+          throw new Error('Admin token not found. Please login again.');
+        }
         const timestamp = new Date().getTime();
         const headers = {
           "Content-Type": "application/json",
@@ -120,6 +127,23 @@ export default function SubscriptionsPage() {
         
         const data = await response.json();
         console.log("Fetched subscriptions at:", new Date().toISOString());
+        
+        // Debug: Log subscription data for debugging
+        console.log('[Admin Subscriptions] DEBUG - Subscription data:');
+        if (Array.isArray(data)) {
+          data.forEach((sub: Subscription, index: number) => {
+            console.log(`[Admin Subscriptions] Subscription ${index + 1}:`, {
+              id: sub.id,
+              username: sub.username,
+              status: sub.status,
+              actualStatus: (sub as any).actualStatus,
+              isExpired: (sub as any).isExpired,
+              endDate: sub.endDate,
+              expiryDate: (sub as any).expiryDate
+            });
+          });
+        }
+        
         setLastUpdated(new Date());
         return Array.isArray(data) ? data : [];
       } catch (err) {
@@ -193,7 +217,10 @@ export default function SubscriptionsPage() {
     queryFn: async () => {
       try {
         // Create headers object with admin token
-        const adminToken = localStorage.getItem('adminToken') || 'admin-token-123456';
+        const adminToken = localStorage.getItem('adminToken');
+        if (!adminToken) {
+          throw new Error('Admin token not found. Please login again.');
+        }
         const headers = {
           "Content-Type": "application/json",
           "X-Admin-Token": adminToken
@@ -227,7 +254,10 @@ export default function SubscriptionsPage() {
       console.log("Creating subscription with data:", data);
       
       // Create headers object with admin token
-      const adminToken = localStorage.getItem('adminToken') || 'admin-token-123456';
+      const adminToken = localStorage.getItem('adminToken');
+      if (!adminToken) {
+        throw new Error('Admin token not found. Please login again.');
+      }
       const headers = {
         "Content-Type": "application/json",
         "X-Admin-Token": adminToken
@@ -264,11 +294,21 @@ export default function SubscriptionsPage() {
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
     },
     onError: (error: Error) => {
-      toast({
-        title: t("subscription.createError"),
-        description: error.message,
-        variant: "destructive"
-      });
+      if (error.message.includes('Admin token not found')) {
+        toast({
+          title: "Ошибка аутентификации",
+          description: "Сессия истекла. Пожалуйста, войдите в систему заново.",
+          variant: "destructive"
+        });
+        // Redirect to admin login
+        window.location.href = '/admin-login';
+      } else {
+        toast({
+          title: t("subscription.createError"),
+          description: error.message,
+          variant: "destructive"
+        });
+      }
     }
   });
 
@@ -278,7 +318,10 @@ export default function SubscriptionsPage() {
       console.log(`Updating subscription ${data.id} with data:`, data.data);
       
       // Create headers object with admin token
-      const adminToken = localStorage.getItem('adminToken') || 'admin-token-123456';
+      const adminToken = localStorage.getItem('adminToken');
+      if (!adminToken) {
+        throw new Error('Admin token not found. Please login again.');
+      }
       const headers = {
         "Content-Type": "application/json",
         "X-Admin-Token": adminToken
@@ -310,11 +353,21 @@ export default function SubscriptionsPage() {
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
     },
     onError: (error: Error) => {
-      toast({
-        title: t("subscription.updateError"),
-        description: error.message,
-        variant: "destructive"
-      });
+      if (error.message.includes('Admin token not found')) {
+        toast({
+          title: "Ошибка аутентификации",
+          description: "Сессия истекла. Пожалуйста, войдите в систему заново.",
+          variant: "destructive"
+        });
+        // Redirect to admin login
+        window.location.href = '/admin-login';
+      } else {
+        toast({
+          title: t("subscription.updateError"),
+          description: error.message,
+          variant: "destructive"
+        });
+      }
     }
   });
 
@@ -322,7 +375,10 @@ export default function SubscriptionsPage() {
   const resetSubscriptionsMutation = useMutation({
     mutationFn: async () => {
       // Create headers object with admin token
-      const adminToken = localStorage.getItem('adminToken') || 'admin-token-123456';
+      const adminToken = localStorage.getItem('adminToken');
+      if (!adminToken) {
+        throw new Error('Admin token not found. Please login again.');
+      }
       const headers = {
         "Content-Type": "application/json",
         "X-Admin-Token": adminToken
@@ -352,25 +408,114 @@ export default function SubscriptionsPage() {
       queryClient.invalidateQueries({ queryKey: ["admin-subscriptions"] });
     },
     onError: (error: Error) => {
-      toast({
-        title: t("subscription.resetError"),
-        description: error.message,
-        variant: "destructive"
-      });
+      if (error.message.includes('Admin token not found')) {
+        toast({
+          title: "Ошибка аутентификации",
+          description: "Сессия истекла. Пожалуйста, войдите в систему заново.",
+          variant: "destructive"
+        });
+        // Redirect to admin login
+        window.location.href = '/admin-login';
+      } else {
+        toast({
+          title: t("subscription.resetError"),
+          description: error.message,
+          variant: "destructive"
+        });
+      }
     }
   });
 
   // Handle creating a new subscription
   const handleCreateSubscription = () => {
+    // Basic validation
+    if (!formData.userId && !formData.userEmail) {
+      toast({
+        title: "Ошибка валидации",
+        description: "Выберите пользователя или введите email для создания нового пользователя",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    if (formData.maxRequestsPerMonth && formData.maxRequestsPerMonth < 1) {
+      toast({
+        title: "Ошибка валидации", 
+        description: "Лимит запросов должен быть больше 0",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     createSubscriptionMutation.mutate(formData);
   };
 
   // Handle updating a subscription
   const handleUpdateSubscription = () => {
-    if (selectedSubscription) {
-      updateSubscriptionMutation.mutate({
-        id: selectedSubscription.id,
-        data: formData
+    if (!selectedSubscription) {
+      toast({
+        title: "Ошибка",
+        description: "Подписка не выбрана",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    // Basic validation
+    if (formData.maxRequestsPerMonth && formData.maxRequestsPerMonth < 1) {
+      toast({
+        title: "Ошибка валидации",
+        description: "Лимит запросов должен быть больше 0", 
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    updateSubscriptionMutation.mutate({
+      id: selectedSubscription.id,
+      data: formData
+    });
+  };
+
+  // Handle system password update
+  const handleUpdateSystemPassword = async () => {
+    if (!selectedSubscription || !formData.systemPassword) return;
+    
+    try {
+      const adminToken = localStorage.getItem('adminToken');
+      if (!adminToken) {
+        throw new Error('Admin token not found. Please login again.');
+      }
+      
+      const response = await fetch(`/api/admin/users/${selectedSubscription.userId}/system-password`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Admin-Token": adminToken
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          systemPassword: formData.systemPassword
+        })
+      });
+      
+      if (response.ok) {
+        toast({
+          title: "Пароль обновлен",
+          description: "Системный пароль пользователя успешно изменен"
+        });
+        // Clear the password field for security
+        setFormData(prev => ({ ...prev, systemPassword: "" }));
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to update system password');
+      }
+    } catch (error) {
+      console.error('Error updating system password:', error);
+      toast({
+        title: "Ошибка обновления пароля",
+        description: error instanceof Error ? error.message : "Не удалось обновить системный пароль",
+        variant: "destructive"
       });
     }
   };
@@ -385,6 +530,8 @@ export default function SubscriptionsPage() {
       startDate: new Date().toISOString().split('T')[0],
       endDate: null,
       notes: null,
+      systemLogin: "",
+      systemPassword: "",
       emailAccount: "",
       emailPassword: ""
     });
@@ -392,8 +539,10 @@ export default function SubscriptionsPage() {
   };
 
   // Set the form data when opening the edit dialog
-  const openEditDialog = (subscription: Subscription) => {
+  const openEditDialog = async (subscription: Subscription) => {
     setSelectedSubscription(subscription);
+    
+    // Initialize form with subscription data
     setFormData({
       userId: subscription.userId,
       plan: subscription.plan,
@@ -402,9 +551,91 @@ export default function SubscriptionsPage() {
       startDate: subscription.startDate.split('T')[0],
       endDate: subscription.endDate ? subscription.endDate.split('T')[0] : null,
       notes: null, // Not available in current interface  
+      systemLogin: "",
+      systemPassword: "",
       emailAccount: "",
       emailPassword: ""
     });
+    
+    // Load user system data and email configuration
+    try {
+      const adminToken = localStorage.getItem('adminToken');
+      if (!adminToken) {
+        throw new Error('Admin token not found. Please login again.');
+      }
+      
+      // Load system data
+      const systemResponse = await fetch(`/api/admin/users/${subscription.userId}/system-data`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Admin-Token": adminToken
+        },
+        credentials: "include"
+      });
+      
+      if (systemResponse.ok) {
+        const systemData = await systemResponse.json();
+        console.log('Loaded system data for user:', systemData);
+        
+        // Update form with system data
+        setFormData(prev => ({
+          ...prev,
+          systemLogin: systemData.systemLogin || "",
+          systemPassword: systemData.systemPassword || ""
+        }));
+      } else {
+        console.log('No system data found for user:', subscription.userId);
+      }
+      
+      // Debug: Check user data first
+      const debugResponse = await fetch(`/api/admin/users/${subscription.userId}/debug`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Admin-Token": adminToken
+        },
+        credentials: "include"
+      });
+      
+      if (debugResponse.ok) {
+        const debugData = await debugResponse.json();
+        console.log('Debug user data:', debugData);
+      }
+      
+      // Load email configuration
+      const emailResponse = await fetch(`/api/admin/users/${subscription.userId}/email-config`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Admin-Token": adminToken
+        },
+        credentials: "include"
+      });
+      
+      if (emailResponse.ok) {
+        const emailConfig = await emailResponse.json();
+        console.log('Loaded email config for user:', emailConfig);
+        console.log('Email account:', emailConfig.emailAccount);
+        console.log('Email password length:', emailConfig.emailPassword?.length || 0);
+        
+        // Update form with email configuration
+        setFormData(prev => ({
+          ...prev,
+          emailAccount: emailConfig.emailAccount || "",
+          emailPassword: emailConfig.emailPassword || ""
+        }));
+      } else {
+        console.log('No email configuration found for user:', subscription.userId);
+        console.log('Response status:', emailResponse.status);
+        console.log('Response text:', await emailResponse.text());
+        // Keep empty values if no config found
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+      // Keep empty values if error occurs
+    }
+    
     setShowEditDialog(true);
   };
 
@@ -418,8 +649,14 @@ export default function SubscriptionsPage() {
 
   // Format date for display
   const formatDate = (dateString: string | null) => {
-    if (!dateString) return "-";
-    return format(new Date(dateString), "dd.MM.yyyy", { locale: ru });
+    console.log('[formatDate] Input:', dateString, 'Type:', typeof dateString);
+    if (!dateString) {
+      console.log('[formatDate] No date string, returning "-"');
+      return "-";
+    }
+    const formatted = format(new Date(dateString), "dd.MM.yyyy", { locale: ru });
+    console.log('[formatDate] Formatted:', formatted);
+    return formatted;
   };
 
   if (!isAdmin) {
@@ -558,19 +795,33 @@ export default function SubscriptionsPage() {
                           </span>
                         </TableCell>
                         <TableCell>
-                          <span className={`inline-block px-2 py-1 rounded text-xs
-                            ${subscription.status === 'active' ? 'bg-green-100 text-green-800' : ''}
-                            ${subscription.status === 'expired' ? 'bg-red-100 text-red-800' : ''}
-                            ${subscription.status === 'cancelled' ? 'bg-gray-100 text-gray-800' : ''}
-                          `}>
-                            {subscription.status === 'active' ? t('subscription.statuses.active') :
-                             subscription.status === 'expired' ? t('subscription.statuses.expired') :
-                             subscription.status === 'cancelled' ? t('subscription.statuses.cancelled') :
-                             subscription.status}
-                          </span>
+                          {(() => {
+                            // Use actualStatus from server if available, otherwise calculate it
+                            const actualStatus = subscription.actualStatus || (() => {
+                              const now = new Date();
+                              // Use endDate if available, otherwise use expiryDate
+                              const endDate = subscription.endDate ? new Date(subscription.endDate) : 
+                                             (subscription as any).expiryDate ? new Date((subscription as any).expiryDate) : null;
+                              const isExpired = endDate && endDate < now;
+                              return isExpired ? 'expired' : subscription.status;
+                            })();
+                            
+                            return (
+                              <span className={`inline-block px-2 py-1 rounded text-xs
+                                ${actualStatus === 'active' ? 'bg-green-100 text-green-800' : ''}
+                                ${actualStatus === 'expired' ? 'bg-red-100 text-red-800' : ''}
+                                ${actualStatus === 'cancelled' ? 'bg-gray-100 text-gray-800' : ''}
+                              `}>
+                                {actualStatus === 'active' ? t('subscription.statuses.active') :
+                                 actualStatus === 'expired' ? t('subscription.statuses.expired') :
+                                 actualStatus === 'cancelled' ? t('subscription.statuses.cancelled') :
+                                 actualStatus}
+                              </span>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell>{formatDate(subscription.startDate)}</TableCell>
-                        <TableCell>{formatDate(subscription.endDate)}</TableCell>
+                        <TableCell>{formatDate(subscription.endDate || (subscription as any).expiryDate)}</TableCell>
                         <TableCell>{subscription.requestsLimit || "∞"}</TableCell>
                         <TableCell>{subscription.requestsUsed || 0}</TableCell>
                         <TableCell>
@@ -695,25 +946,14 @@ export default function SubscriptionsPage() {
                 <Label htmlFor="maxRequestsPerMonth" className="text-right">
                   {t("subscription.requestsLimit")}
                 </Label>
-                <div className="col-span-3 flex items-center space-x-4">
+                <div className="col-span-3">
                   <Input
                     id="maxRequestsPerMonth"
                     type="number"
-                    value={formData.maxRequestsPerMonth !== null ? formData.maxRequestsPerMonth : ''}
-                    onChange={(e) => handleFormChange("maxRequestsPerMonth", e.target.value ? parseInt(e.target.value) : null)}
-                    disabled={!formData.maxRequestsPerMonth}
+                    value={formData.maxRequestsPerMonth}
+                    onChange={(e) => handleFormChange("maxRequestsPerMonth", parseInt(e.target.value) || 0)}
                     className="w-full"
                   />
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="unlimited-requests"
-                      checked={formData.maxRequestsPerMonth === null}
-                      onCheckedChange={(checked) => 
-                        handleFormChange("maxRequestsPerMonth", checked ? null : 10)
-                      }
-                    />
-                    <Label htmlFor="unlimited-requests">{t("subscription.unlimited")}</Label>
-                  </div>
                 </div>
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
@@ -785,8 +1025,33 @@ export default function SubscriptionsPage() {
                 </div>
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="systemLogin" className="text-right">
+                  Логин для системы:
+                </Label>
+                <Input
+                  id="systemLogin"
+                  value={formData.systemLogin || ''}
+                  onChange={(e) => handleFormChange("systemLogin", e.target.value)}
+                  className="col-span-3"
+                  placeholder="user@example.com"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="systemPassword" className="text-right">
+                  Пароль для системы:
+                </Label>
+                <Input
+                  id="systemPassword"
+                  type="password"
+                  value={formData.systemPassword || ''}
+                  onChange={(e) => handleFormChange("systemPassword", e.target.value)}
+                  className="col-span-3"
+                  placeholder="Введите пароль для системы"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="emailAccount" className="text-right">
-                  Email аккаунт
+                  Email аккаунт для емайла:
                 </Label>
                 <Input
                   id="emailAccount"
@@ -798,7 +1063,7 @@ export default function SubscriptionsPage() {
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="emailPassword" className="text-right">
-                  Пароль email
+                  Пароль для Email аккаунта:
                 </Label>
                 <Input
                   id="emailPassword"
@@ -806,7 +1071,7 @@ export default function SubscriptionsPage() {
                   value={formData.emailPassword || ''}
                   onChange={(e) => handleFormChange("emailPassword", e.target.value)}
                   className="col-span-3"
-                  placeholder="Введите пароль"
+                  placeholder="Введите пароль для email"
                 />
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
@@ -886,25 +1151,14 @@ export default function SubscriptionsPage() {
                 <Label htmlFor="edit-maxRequestsPerMonth" className="text-right">
                   {t("subscription.requestsLimit")}
                 </Label>
-                <div className="col-span-3 flex items-center space-x-4">
+                <div className="col-span-3">
                   <Input
                     id="edit-maxRequestsPerMonth"
                     type="number"
-                    value={formData.maxRequestsPerMonth !== null ? formData.maxRequestsPerMonth : ''}
-                    onChange={(e) => handleFormChange("maxRequestsPerMonth", e.target.value ? parseInt(e.target.value) : null)}
-                    disabled={formData.maxRequestsPerMonth === null}
+                    value={formData.maxRequestsPerMonth}
+                    onChange={(e) => handleFormChange("maxRequestsPerMonth", parseInt(e.target.value) || 0)}
                     className="w-full"
                   />
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="edit-unlimited-requests"
-                      checked={formData.maxRequestsPerMonth === null}
-                      onCheckedChange={(checked) => 
-                        handleFormChange("maxRequestsPerMonth", checked ? null : 10)
-                      }
-                    />
-                    <Label htmlFor="edit-unlimited-requests">{t("subscription.unlimited")}</Label>
-                  </div>
                 </div>
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
@@ -976,8 +1230,44 @@ export default function SubscriptionsPage() {
                 </div>
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="edit-systemLogin" className="text-right">
+                  Логин для системы:
+                </Label>
+                <Input
+                  id="edit-systemLogin"
+                  value={formData.systemLogin || ''}
+                  onChange={(e) => handleFormChange("systemLogin", e.target.value)}
+                  className="col-span-3"
+                  placeholder="user@example.com"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="edit-systemPassword" className="text-right">
+                  Пароль для системы:
+                </Label>
+                <div className="col-span-3 flex gap-2">
+                  <Input
+                    id="edit-systemPassword"
+                    type="password"
+                    value={formData.systemPassword || ''}
+                    onChange={(e) => handleFormChange("systemPassword", e.target.value)}
+                    className="flex-1"
+                    placeholder="Введите новый пароль для системы"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleUpdateSystemPassword}
+                    disabled={!formData.systemPassword || formData.systemPassword.length < 6}
+                  >
+                    Обновить
+                  </Button>
+                </div>
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="edit-emailAccount" className="text-right">
-                  Email аккаунт
+                  Email аккаунт для емайла:
                 </Label>
                 <Input
                   id="edit-emailAccount"
@@ -989,7 +1279,7 @@ export default function SubscriptionsPage() {
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="edit-emailPassword" className="text-right">
-                  Пароль email
+                  Пароль для Email аккаунта:
                 </Label>
                 <Input
                   id="edit-emailPassword"
@@ -997,7 +1287,7 @@ export default function SubscriptionsPage() {
                   value={formData.emailPassword || ''}
                   onChange={(e) => handleFormChange("emailPassword", e.target.value)}
                   className="col-span-3"
-                  placeholder="Введите новый пароль"
+                  placeholder="Введите пароль для email"
                 />
               </div>
               <div className="grid grid-cols-4 items-center gap-4">

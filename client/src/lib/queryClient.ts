@@ -57,6 +57,19 @@ export async function apiRequest<T = Response>(
       const accessToken = localStorage.getItem('accessToken');
       const tokenExpiry = localStorage.getItem('tokenExpiry');
       
+      console.log(`=== ПРОВЕРКА ТОКЕНА ДЛЯ ${url} ===`);
+      console.log(`[Auth] apiRequest: Проверяем токен для ${url}:`, {
+        hasAccessToken: !!accessToken,
+        accessToken: accessToken ? accessToken.substring(0, 20) + '...' : 'НЕТ',
+        hasTokenExpiry: !!tokenExpiry,
+        tokenExpiry: tokenExpiry
+      });
+      console.log('localStorage содержимое:', {
+        accessToken: localStorage.getItem('accessToken'),
+        tokenExpiry: localStorage.getItem('tokenExpiry'),
+        allKeys: Object.keys(localStorage)
+      });
+      
       // Проверяем, не истек ли срок действия токена
       let headers: HeadersInit = {
         "Content-Type": "application/json",

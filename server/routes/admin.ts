@@ -195,14 +195,260 @@ router.get('/subscriptions', requireAuth, requireAdmin, async (req, res) => {
       .leftJoin(users, eq(subscriptions.userId, users.id))
       .orderBy(desc(subscriptions.id));
     
-    console.log(`[Admin API] Found ${subscriptionsList.length} subscriptions at ${new Date().toISOString()}`);
+    // Calculate actual status based on end date for each subscription
+    const now = new Date();
+    const subscriptionsWithActualStatus = subscriptionsList.map(subscription => {
+      // Use endDate if available, otherwise use expiryDate
+      const endDate = subscription.endDate ? new Date(subscription.endDate) : 
+                     subscription.expiryDate ? new Date(subscription.expiryDate) : null;
+      const isExpired = endDate && endDate < now;
+      const actualStatus = isExpired ? 'expired' : subscription.status;
+      
+      console.log(`[Admin API] Subscription ${subscription.id}:`, {
+        endDate: subscription.endDate,
+        expiryDate: subscription.expiryDate,
+        calculatedEndDate: endDate,
+        isExpired,
+        actualStatus
+      });
+      
+      return {
+        ...subscription,
+        actualStatus, // Add calculated status
+        isExpired
+      };
+    });
     
-    res.status(200).json(subscriptionsList);
+    console.log(`[Admin API] Found ${subscriptionsWithActualStatus.length} subscriptions at ${new Date().toISOString()}`);
+    
+    // Debug: Log subscription data for debugging
+    console.log('[Admin API] DEBUG - Subscription data:');
+    subscriptionsWithActualStatus.forEach((sub, index) => {
+      console.log(`[Admin API] Subscription ${index + 1}:`, {
+        id: sub.id,
+        username: sub.username,
+        status: sub.status,
+        actualStatus: sub.actualStatus,
+        isExpired: sub.isExpired,
+        endDate: sub.endDate,
+        expiryDate: sub.expiryDate
+      });
+    });
+    
+    res.status(200).json(subscriptionsWithActualStatus);
   } catch (error) {
     console.error('[Admin API] Error fetching subscriptions:', error);
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch subscriptions'
+    });
+  }
+});
+
+// Get user email configuration (admin only)
+router.get('/users/:id/email-config', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id);
+    console.log(`[Admin API] Fetching email config for user ${userId}`);
+    
+    if (isNaN(userId) || userId <= 0) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Invalid user ID'
+      });
+    }
+    
+    // Get user email configuration
+    const emailConfig = await storage.getUserEmailConfig(userId);
+    
+    console.log(`[Admin API] Raw email config from storage for user ${userId}:`, emailConfig);
+    
+    if (!emailConfig) {
+      console.log(`[Admin API] No email configuration found for user ${userId}`);
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Email configuration not found for this user'
+      });
+    }
+    
+    // Decrypt password if it's encrypted
+    let decryptedPassword = emailConfig.emailPassword;
+    if (emailConfig.emailPassword && emailConfig.emailPassword.includes(':') && emailConfig.emailPassword.split(':').length === 3) {
+      try {
+        const { decryptEmailPassword } = await import('../utils/email-encryption');
+        decryptedPassword = decryptEmailPassword(emailConfig.emailPassword);
+      } catch (error) {
+        console.error('Error decrypting password for user', userId, ':', error);
+        // Keep encrypted password if decryption fails
+      }
+    }
+    
+    console.log(`[Admin API] Email config for user ${userId}:`, {
+      emailAccount: emailConfig.emailAccount,
+      hasPassword: !!emailConfig.emailPassword,
+      emailConfigured: emailConfig.emailConfigured
+    });
+    
+    // Return config with decrypted password
+    res.status(200).json({
+      ...emailConfig,
+      emailPassword: decryptedPassword
+    });
+  } catch (error) {
+    console.error('[Admin API] Error fetching user email config:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to fetch user email configuration'
+    });
+  }
+});
+
+// Get user system data (admin only)
+router.get('/users/:id/system-data', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id);
+    console.log(`[Admin API] Fetching system data for user ${userId}`);
+    
+    if (isNaN(userId) || userId <= 0) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Invalid user ID'
+      });
+    }
+    
+    // Get user system data
+    const [user] = await db.select({
+      id: users.id,
+      username: users.username,
+      role: users.role
+    }).from(users).where(eq(users.id, userId));
+    
+    if (!user) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'User not found'
+      });
+    }
+    
+    console.log(`[Admin API] System data for user ${userId}:`, {
+      username: user.username,
+      role: user.role
+    });
+    
+    res.status(200).json({
+      systemLogin: user.username,
+      systemPassword: '[HIDDEN]' // Don't expose system password
+    });
+  } catch (error) {
+    console.error('[Admin API] Error fetching user system data:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to fetch user system data'
+    });
+  }
+});
+
+// Debug endpoint to check user data (admin only)
+router.get('/users/:id/debug', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id);
+    console.log(`[Admin API] Debug: Checking user data for user ${userId}`);
+    
+    if (isNaN(userId) || userId <= 0) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Invalid user ID'
+      });
+    }
+    
+    // Get full user data
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    
+    if (!user) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'User not found'
+      });
+    }
+    
+    console.log(`[Admin API] Debug: Full user data for user ${userId}:`, {
+      id: user.id,
+      username: user.username,
+      emailAccount: user.emailAccount,
+      emailPassword: user.emailPassword ? '[ENCRYPTED]' : null,
+      emailConfigured: user.emailConfigured,
+      smtpHost: user.smtpHost,
+      smtpPort: user.smtpPort,
+      imapHost: user.imapHost,
+      imapPort: user.imapPort
+    });
+    
+    res.status(200).json({
+      id: user.id,
+      username: user.username,
+      emailAccount: user.emailAccount,
+      emailPassword: user.emailPassword ? '[ENCRYPTED]' : null,
+      emailConfigured: user.emailConfigured,
+      smtpHost: user.smtpHost,
+      smtpPort: user.smtpPort,
+      imapHost: user.imapHost,
+      imapPort: user.imapPort
+    });
+  } catch (error) {
+    console.error('[Admin API] Error in debug endpoint:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to fetch user debug data'
+    });
+  }
+});
+
+// Update user system password (admin only)
+router.put('/users/:id/system-password', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id);
+    console.log(`[Admin API] Updating system password for user ${userId}`);
+    
+    if (isNaN(userId) || userId <= 0) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Invalid user ID'
+      });
+    }
+    
+    const { systemPassword } = req.body;
+    
+    if (!systemPassword || systemPassword.length < 6) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'System password must be at least 6 characters long'
+      });
+    }
+    
+    // Import password hashing function
+    const { hashPassword } = await import('../auth');
+    
+    // Hash the new password
+    const hashedPassword = await hashPassword(systemPassword);
+    
+    // Update user's system password
+    await db.update(users)
+      .set({ 
+        password: hashedPassword,
+        updatedAt: new Date()
+      })
+      .where(eq(users.id, userId));
+    
+    console.log(`[Admin API] System password updated for user ${userId}`);
+    
+    res.status(200).json({
+      message: 'System password updated successfully'
+    });
+  } catch (error) {
+    console.error('[Admin API] Error updating system password:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to update system password'
     });
   }
 });
@@ -325,6 +571,14 @@ router.put('/subscriptions/:id', requireAuth, requireAdmin, async (req, res) => 
     const subscriptionId = parseInt(req.params.id);
     console.log(`[Admin API] Updating subscription ${subscriptionId}:`, req.body);
     
+    // Validate subscription ID
+    if (isNaN(subscriptionId) || subscriptionId <= 0) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Invalid subscription ID'
+      });
+    }
+    
     // Add anti-caching headers
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
@@ -332,48 +586,58 @@ router.put('/subscriptions/:id', requireAuth, requireAdmin, async (req, res) => 
     
     const { userId, emailAccount, emailPassword, plan, status, maxRequestsPerMonth, startDate, endDate, managerId, notes } = req.body;
     
+    // Validate required fields if provided
+    if (plan && !['trial', 'basic', 'premium', 'professional'].includes(plan)) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Invalid plan. Must be one of: trial, basic, premium, professional'
+      });
+    }
+    
+    if (status && !['active', 'expired', 'canceled', 'pending'].includes(status)) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Invalid status. Must be one of: active, expired, canceled, pending'
+      });
+    }
+    
+    if (maxRequestsPerMonth !== undefined && (maxRequestsPerMonth < 0 || !Number.isInteger(maxRequestsPerMonth))) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Invalid maxRequestsPerMonth. Must be a non-negative integer'
+      });
+    }
+    
     // Convert string dates to Date objects if provided
     const endDateObj = endDate ? new Date(endDate) : undefined;
     const startDateObj = startDate ? new Date(startDate) : undefined;
     
-    // Update subscription using SQL for flexibility with column names
-    let updateQuery = 'UPDATE subscriptions SET updated_at = NOW()';
-    const updateValues: any[] = [];
-    let paramIndex = 1;
+    // Build update data object with only provided fields
+    const updateData: any = {
+      updatedAt: new Date()
+    };
     
-    if (userId !== undefined) {
-      updateQuery += `, user_id = $${paramIndex}`;
-      updateValues.push(userId);
-      paramIndex++;
-    }
-    if (plan) {
-      updateQuery += `, plan = $${paramIndex}`;
-      updateValues.push(plan);
-      paramIndex++;
-    }
-    if (status) {
-      updateQuery += `, status = $${paramIndex}`;
-      updateValues.push(status);
-      paramIndex++;
-    }
+    if (userId !== undefined) updateData.userId = userId;
+    if (plan) updateData.plan = plan;
+    if (status) updateData.status = status;
     if (maxRequestsPerMonth !== undefined) {
-      updateQuery += `, requests_limit = $${paramIndex}`;
-      updateValues.push(maxRequestsPerMonth);
-      paramIndex++;
+      updateData.requestsLimit = maxRequestsPerMonth;
+      updateData.maxRequests = maxRequestsPerMonth;
     }
     if (endDateObj) {
-      updateQuery += `, expiry_date = $${paramIndex}`;
-      updateValues.push(endDateObj);
-      paramIndex++;
+      updateData.expiryDate = endDateObj;
+      updateData.endDate = endDateObj;
     }
+    if (startDateObj) updateData.startDate = startDateObj;
     
-    // Add WHERE clause and RETURNING *
-    updateQuery += ` WHERE id = $${paramIndex} RETURNING *`;
-    updateValues.push(subscriptionId);
+    console.log(`[Admin API] Update data for subscription ${subscriptionId}:`, updateData);
     
-    const result = await db.execute(sql.raw(updateQuery, updateValues));
+    // Update the subscription using Drizzle ORM
+    const [updatedSubscription] = await db.update(subscriptions)
+      .set(updateData)
+      .where(eq(subscriptions.id, subscriptionId))
+      .returning();
     
-    const updatedSubscription = Array.isArray(result) ? result[0] : result;
     if (!updatedSubscription) {
       return res.status(404).json({
         error: 'Not Found',
@@ -405,9 +669,16 @@ router.put('/subscriptions/:id', requireAuth, requireAdmin, async (req, res) => 
     res.status(200).json(updatedSubscription);
   } catch (error) {
     console.error('[Admin API] Error updating subscription:', error);
+    console.error('[Admin API] Error details:', {
+      subscriptionId: req.params.id,
+      body: req.body,
+      errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      errorStack: error instanceof Error ? error.stack : undefined
+    });
     res.status(500).json({
       error: 'Internal Server Error',
-      message: 'Failed to update subscription'
+      message: 'Failed to update subscription',
+      details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });

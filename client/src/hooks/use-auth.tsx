@@ -135,17 +135,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Register mutation
   const registerMutation = useMutation({
     mutationFn: async (credentials: RegisterData) => {
-      const res = await apiRequest<UserData>("/api/auth/register", "POST", credentials);
-      return res;
+      console.log('=== НАЧАЛО РЕГИСТРАЦИИ ===');
+      console.log('Выполняем регистрацию пользователя:', credentials.username);
+      
+      const res = await apiRequest<UserData & { accessToken?: string; tokenExpiry?: number }>("/api/auth/register", "POST", credentials);
+      
+      console.log('=== ОТВЕТ СЕРВЕРА ===');
+      console.log('Регистрация успешна, получены данные:', res);
+      console.log('Проверяем токен в ответе:', {
+        hasAccessToken: !!res.accessToken,
+        accessToken: res.accessToken ? res.accessToken.substring(0, 20) + '...' : 'НЕТ',
+        hasTokenExpiry: !!res.tokenExpiry,
+        tokenExpiry: res.tokenExpiry
+      });
+      
+      // Сохраняем токен в localStorage, если он доступен
+      console.log('=== СОХРАНЕНИЕ ТОКЕНА ===');
+      if (res.accessToken) {
+        console.log('Сохраняем токен в localStorage...');
+        localStorage.setItem('accessToken', res.accessToken);
+        localStorage.setItem('tokenExpiry', String(res.tokenExpiry || (Date.now() + 24*60*60*1000)));
+        console.log('Токен доступа сохранен в localStorage после регистрации');
+        console.log('Проверяем сохранение токена:', {
+          accessToken: localStorage.getItem('accessToken') ? 'СОХРАНЕН' : 'НЕ СОХРАНЕН',
+          tokenExpiry: localStorage.getItem('tokenExpiry') ? 'СОХРАНЕН' : 'НЕ СОХРАНЕН'
+        });
+        console.log('=== ТОКЕН УСПЕШНО СОХРАНЕН ===');
+      } else {
+        console.warn('=== ОШИБКА: ТОКЕН НЕ ПОЛУЧЕН ===');
+        console.warn('Токен не получен от сервера после регистрации!');
+        console.warn('Полный ответ сервера:', res);
+      }
+      
+      // Возвращаем данные пользователя без токена
+      const { accessToken, tokenExpiry, ...userDataWithoutToken } = res;
+      return userDataWithoutToken as UserData;
     },
     onSuccess: (userData: UserData) => {
+      console.log('=== ONSUCCESS РЕГИСТРАЦИИ ===');
+      console.log('Регистрация успешна, обновляем кэш запросов');
+      console.log('Проверяем токен в localStorage после успешной регистрации:', {
+        accessToken: localStorage.getItem('accessToken') ? 'ЕСТЬ' : 'НЕТ',
+        tokenExpiry: localStorage.getItem('tokenExpiry') ? 'ЕСТЬ' : 'НЕТ'
+      });
+      
       queryClient.setQueryData(["/api/auth/me"], userData);
+      
+      // Инвалидируем все запросы, чтобы они перезагрузились с новыми куками/токеном
+      queryClient.invalidateQueries();
+      
       toast({
         title: "Регистрация успешна",
         description: "Ваша учетная запись создана.",
       });
+      console.log('=== РЕГИСТРАЦИЯ ЗАВЕРШЕНА ===');
     },
     onError: (error: Error) => {
+      console.error('Ошибка регистрации обработана в UI:', error);
       toast({
         title: "Ошибка регистрации",
         description: error.message,

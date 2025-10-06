@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Registration Debug</title>
+</head>
+<body>
+    <h1>Test Registration Debug</h1>
+    <div id="output"></div>
+    
+    <script>
+        async function testRegistration() {
+            const output = document.getElementById('output');
+            
+            try {
+                // Test registration
+                const response = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username: 'test@example.com',
+                        password: 'testpassword123'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                output.innerHTML = `
+                    <h2>Registration Response:</h2>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                    <h2>LocalStorage after registration:</h2>
+                    <p>accessToken: ${localStorage.getItem('accessToken') || 'NOT FOUND'}</p>
+                    <p>tokenExpiry: ${localStorage.getItem('tokenExpiry') || 'NOT FOUND'}</p>
+                `;
+                
+                // Test API call with token
+                if (data.accessToken) {
+                    localStorage.setItem('accessToken', data.accessToken);
+                    localStorage.setItem('tokenExpiry', String(data.tokenExpiry || (Date.now() + 24*60*60*1000)));
+                    
+                    // Test supplier search
+                    const searchResponse = await fetch('/api/supplier-search', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${data.accessToken}`
+                        },
+                        body: JSON.stringify({
+                            queries: ['test search'],
+                            sources: { google: true },
+                            regions: ['ru']
+                        })
+                    });
+                    
+                    const searchData = await searchResponse.json();
+                    
+                    output.innerHTML += `
+                        <h2>Search Response:</h2>
+                        <pre>${JSON.stringify(searchData, null, 2)}</pre>
+                    `;
+                }
+                
+            } catch (error) {
+                output.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+            }
+        }
+        
+        // Run test on page load
+        testRegistration();
+    </script>
+</body>
+</html>

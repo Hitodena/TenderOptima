@@ -7,7 +7,7 @@ import { Request, Response } from 'express';
  */
 export const authRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 минут
-  max: 10, // максимум 5 попыток за 15 минут
+  max: 20, // максимум 20 попыток за 15 минут
   message: {
     error: 'Слишком много попыток входа. Попробуйте снова через 15 минут.',
     retryAfter: 15 * 60 // секунды до следующей попытки
@@ -57,19 +57,19 @@ export const registerRateLimit = rateLimit({
  * Ограничивает количество запросов на восстановление пароля
  */
 export const passwordResetRateLimit = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 час
-  max: 3, // максимум 3 запроса за час
+  windowMs: 15 * 60 * 1000, // 15 минут
+  max: 10, // максимум 10 запросов за 15 минут
   message: {
-    error: 'Слишком много запросов на восстановление пароля. Попробуйте снова через час.',
-    retryAfter: 60 * 60
+    error: 'Слишком много запросов на восстановление пароля. Попробуйте снова через 15 минут.',
+    retryAfter: 15 * 60
   },
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req: Request, res: Response) => {
     console.log(`[RateLimit] Too many password reset attempts from IP: ${req.ip}`);
     res.status(429).json({
-      error: 'Слишком много запросов на восстановление пароля. Попробуйте снова через час.',
-      retryAfter: 60 * 60
+      error: 'Слишком много запросов на восстановление пароля. Попробуйте снова через 15 минут.',
+      retryAfter: 15 * 60
     });
   },
   skip: (req: Request) => {
@@ -83,7 +83,7 @@ export const passwordResetRateLimit = rateLimit({
  */
 export const apiRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 минут
-  max: 100, // максимум 100 запросов за 15 минут
+  max: 200, // максимум 200 запросов за 15 минут
   message: {
     error: 'Слишком много запросов к API. Попробуйте снова через 15 минут.',
     retryAfter: 15 * 60
