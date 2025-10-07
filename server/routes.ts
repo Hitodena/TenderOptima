@@ -5,6 +5,7 @@ import { emailService, sendEmail, sendSimpleEmail } from "./email";
 import { ImapService } from "./imap-service";
 import { personalImapService } from "./imap-service-personal";
 import { AsyncEmailProcessor } from "./async-processing/email-processor";
+import { nanoid } from "nanoid";
 import 'express-session';
 
 // Расширяем типы для Session, чтобы добавить поддержку userId
@@ -998,15 +999,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.log(`Created requestSupplier record with ID: ${requestSupplier.id}`);
 
             // Format the subject with request and tracking IDs
-            // Remove the REQ- prefix if it already exists in orderNumber to avoid duplication
-            const requestRef = (searchRequest.orderNumber || searchRequest.id).toString();
-            const cleanRequestRef = requestRef.startsWith('REQ-') ? requestRef : `REQ-${requestRef}`;
-            const formattedSubject = `${subject} - [${cleanRequestRef}] [TID:${trackingId}]`;
+            // REQ must be the same for ALL emails in the same request (use orderNumber from DB)
+            // TID is unique for each individual email
+            const requestRef = searchRequest.orderNumber;
+            const formattedSubject = `${subject} - [${requestRef}] [TID:${trackingId}]`;
 
-            // Add reference footer to message for tracking
-            const referenceFooter = `\n\n!Request Reference: ${cleanRequestRef}\nRequest Tracking ID: ${trackingId}\nPlease include this reference in your reply to ensure proper tracking of your response.`;
-
-            const fullMessage = message + referenceFooter;
+            // Add tracking footer to message content BEFORE business card
+            // The footer should appear after the main content but before the business card
+            const referenceFooter = `\n**!При ответе на наш запрос не меняйте тему письма (Subject), иначе мы не сможем обработать ваш ответ!**\n`;
+            
+            // Insert the footer before the business card if it exists in content
+            let fullMessage = message;
+            if (message.includes('С уважением,') || message.includes('С Уважением,')) {
+              // Find the position where business card starts and insert footer before it
+              const businessCardStart = message.lastIndexOf('С уважением,');
+              if (businessCardStart !== -1) {
+                const beforeBusinessCard = message.substring(0, businessCardStart);
+                const businessCard = message.substring(businessCardStart);
+                // Add one space before business card
+                fullMessage = beforeBusinessCard + referenceFooter + '\n' + businessCard;
+              } else {
+                fullMessage = message + referenceFooter;
+              }
+            } else {
+              fullMessage = message + referenceFooter;
+            }
 
             // Сохранение первого сообщения в истории с userId
             try {
@@ -1031,7 +1048,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               formattedSubject, 
               fullMessage,
               {
-                html: fullMessage.replace(/\n/g, '<br/>'),
+                html: fullMessage.replace(/\n/g, '<br/>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>'),
                 attachments: sanitizedAttachments,
                 trackingId: trackingId,
                 requestId: searchRequest.id, // Используем ID запроса как дополнительный идентификатор

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { storage } from '../storage';
 import { emailService } from '../email';
+import { nanoid } from 'nanoid';
 
 export async function sendImprovementRequest(req: Request, res: Response) {
   try {
@@ -19,16 +20,16 @@ export async function sendImprovementRequest(req: Request, res: Response) {
     }
 
     // Generate tracking ID for this improvement request
-    const trackingId = Math.random().toString(36).substring(2, 12);
+    const trackingId = storage.generateTrackingId();
     
     // Format subject with tracking identifiers
-    const orderNumber = requestDetails.orderNumber || '0000-00000';
-    const requestRef = `REQ-${orderNumber}`;
+    // REQ must be the same for ALL emails in the same request (use orderNumber from DB)
+    const requestRef = requestDetails.orderNumber;
     const formattedSubject = `${subject} [${requestRef}] [TID:${trackingId}]`;
     
     // Add tracking footer to message BEFORE business card
     // The footer should appear after the main content but before the business card
-    const referenceFooter = `\n**!При ответе на наш запрос не меняйте тему письма (Subject), иначе мы не сможем обработать ваш ответ!**\n!Request Reference: ${requestRef}\nRequest Tracking ID: ${trackingId}\n`;
+    const referenceFooter = `\n**!При ответе на наш запрос не меняйте тему письма (Subject), иначе мы не сможем обработать ваш ответ!**\n`;
     
     // Insert the footer before the business card if it exists in content
     let fullMessage = message;

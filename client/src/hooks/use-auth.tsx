@@ -35,7 +35,7 @@ type LoginData = {
 };
 
 type RegisterData = {
-  username: string;
+  email: string;
   password: string;
   language?: string;
 };
@@ -136,7 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const registerMutation = useMutation({
     mutationFn: async (credentials: RegisterData) => {
       console.log('=== НАЧАЛО РЕГИСТРАЦИИ ===');
-      console.log('Выполняем регистрацию пользователя:', credentials.username);
+      console.log('Выполняем регистрацию пользователя:', credentials.email);
       
       const res = await apiRequest<UserData & { accessToken?: string; tokenExpiry?: number }>("/api/auth/register", "POST", credentials);
       

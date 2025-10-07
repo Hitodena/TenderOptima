@@ -153,8 +153,8 @@ ${productDescription ? `${productDescription}` : ''}
 ---------------------------------------------
 ${generateParameterList()}
 ---------------------------------------------
-!При ответе на наш запрос не изменяйте тему письма (Subject), иначе мы не сможем обработать ваш ответ!
-${getBusinessCardSignature()}
+
+
 `.trim();
 
   // Handle the IDs - convert negative IDs (from DeepSeek API) to string representations
@@ -235,8 +235,7 @@ ${productDescription ? `${productDescription}` : ''}
 ---------------------------------------------
 ${generateParameterList()}
 ---------------------------------------------
-!При ответе на наш запрос не изменяйте тему письма (Subject), иначе мы не сможем обработать ваш ответ!
-${getBusinessCardSignature()}
+ 
 `.trim();
 
       // Update the form message
@@ -585,11 +584,22 @@ ${getBusinessCardSignature()}
       // Invalidate subscription status query to refresh request counter
       queryClient.invalidateQueries({ queryKey: ["subscription", "status"] });
       
-      // Показываем детальную информацию об успешности
-      toast({
-        title: "Успешно",
-        description: `Ваш запрос был отправлен ${data.successCount} из ${data.totalCount} выбранным поставщикам.`,
-      });
+      // Проверяем реальный успех отправки
+      if (data.success && data.successCount > 0) {
+        // Показываем детальную информацию об успешности
+        toast({
+          title: "Успешно",
+          description: `Ваш запрос был отправлен ${data.successCount} из ${data.totalCount} выбранным поставщикам.`,
+        });
+      } else {
+        // Показываем ошибку, если письма не были отправлены
+        toast({
+          title: "Ошибка отправки",
+          description: `Не удалось отправить письма поставщикам. Проверьте настройки email.`,
+          variant: "destructive",
+        });
+        return; // Не перенаправляем на страницу успеха
+      }
       
       // Очищаем localStorage после успешной отправки
       localStorage.removeItem('groupId');

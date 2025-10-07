@@ -184,7 +184,6 @@ router.get('/subscriptions', requireAuth, requireAdmin, async (req, res) => {
         requestsUsed: subscriptions.requestsUsed,
         startDate: subscriptions.startDate,
         endDate: subscriptions.endDate,
-        expiryDate: subscriptions.expiryDate,
         maxRequests: subscriptions.maxRequests,
         createdAt: subscriptions.createdAt,
         updatedAt: subscriptions.updatedAt,
@@ -198,15 +197,13 @@ router.get('/subscriptions', requireAuth, requireAdmin, async (req, res) => {
     // Calculate actual status based on end date for each subscription
     const now = new Date();
     const subscriptionsWithActualStatus = subscriptionsList.map(subscription => {
-      // Use endDate if available, otherwise use expiryDate
-      const endDate = subscription.endDate ? new Date(subscription.endDate) : 
-                     subscription.expiryDate ? new Date(subscription.expiryDate) : null;
+      // Use endDate for expiration check
+      const endDate = subscription.endDate ? new Date(subscription.endDate) : null;
       const isExpired = endDate && endDate < now;
       const actualStatus = isExpired ? 'expired' : subscription.status;
       
       console.log(`[Admin API] Subscription ${subscription.id}:`, {
         endDate: subscription.endDate,
-        expiryDate: subscription.expiryDate,
         calculatedEndDate: endDate,
         isExpired,
         actualStatus
@@ -230,8 +227,7 @@ router.get('/subscriptions', requireAuth, requireAdmin, async (req, res) => {
         status: sub.status,
         actualStatus: sub.actualStatus,
         isExpired: sub.isExpired,
-        endDate: sub.endDate,
-        expiryDate: sub.expiryDate
+        endDate: sub.endDate
       });
     });
     
@@ -526,9 +522,8 @@ router.post('/subscriptions', requireAuth, requireAdmin, async (req, res) => {
       status: status || 'active',
       requestsLimit: maxRequestsPerMonth || 10,
       requestsUsed: 0,
-      expiryDate: endDateObj,
-      startDate: startDateObj,
       endDate: endDateObj,
+      startDate: startDateObj,
       maxRequests: maxRequestsPerMonth || 10,
       createdAt: new Date(),
       updatedAt: new Date()
@@ -625,7 +620,6 @@ router.put('/subscriptions/:id', requireAuth, requireAdmin, async (req, res) => 
       updateData.maxRequests = maxRequestsPerMonth;
     }
     if (endDateObj) {
-      updateData.expiryDate = endDateObj;
       updateData.endDate = endDateObj;
     }
     if (startDateObj) updateData.startDate = startDateObj;

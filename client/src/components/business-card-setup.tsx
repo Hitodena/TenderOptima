@@ -123,50 +123,52 @@ export function BusinessCardSetup({ onComplete, initialBusinessCard = "", initia
       </CardHeader>
       <form onSubmit={form.handleSubmit(onSubmit)}>
         <CardContent className="space-y-6">
-          {/* Logo upload */}
-          <div className="space-y-2">
-            <Label htmlFor="logo-upload">{t("company_logo")} ({t("optional")})</Label>
-            <div className="flex flex-col items-center space-y-4">
-              {logoPreview ? (
-                <div className="relative w-40 h-40 mb-2">
-                  <img 
-                    src={logoPreview} 
-                    alt={t("logo_preview")} 
-                    className="w-full h-full object-contain"
+          {/* Logo upload - TEMPORARILY HIDDEN */}
+          {false && (
+            <div className="space-y-2">
+              <Label htmlFor="logo-upload">{t("company_logo")} ({t("optional")})</Label>
+              <div className="flex flex-col items-center space-y-4">
+                {logoPreview ? (
+                  <div className="relative w-40 h-40 mb-2">
+                    <img 
+                      src={logoPreview} 
+                      alt={t("logo_preview")} 
+                      className="w-full h-full object-contain"
+                    />
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      className="absolute -top-2 -right-2"
+                      onClick={() => {
+                        setLogoFile(null);
+                        setLogoPreview(null);
+                        form.setValue("logoUrl", "");
+                      }}
+                    >
+                      ×
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="w-40 h-40 border-2 border-dashed rounded-md flex items-center justify-center bg-muted">
+                    <Upload className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                )}
+                <div className="grid w-full max-w-sm items-center gap-1.5">
+                  <Label htmlFor="logo-upload" className="cursor-pointer text-center p-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-md">
+                    {logoPreview ? t("change_logo") : t("upload_logo")}
+                  </Label>
+                  <Input
+                    id="logo-upload"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleLogoChange}
                   />
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="sm"
-                    className="absolute -top-2 -right-2"
-                    onClick={() => {
-                      setLogoFile(null);
-                      setLogoPreview(null);
-                      form.setValue("logoUrl", "");
-                    }}
-                  >
-                    ×
-                  </Button>
                 </div>
-              ) : (
-                <div className="w-40 h-40 border-2 border-dashed rounded-md flex items-center justify-center bg-muted">
-                  <Upload className="h-8 w-8 text-muted-foreground" />
-                </div>
-              )}
-              <div className="grid w-full max-w-sm items-center gap-1.5">
-                <Label htmlFor="logo-upload" className="cursor-pointer text-center p-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-md">
-                  {logoPreview ? t("change_logo") : t("upload_logo")}
-                </Label>
-                <Input
-                  id="logo-upload"
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleLogoChange}
-                />
               </div>
             </div>
-          </div>
+          )}
 
           {/* Business card text */}
           <div className="space-y-2">

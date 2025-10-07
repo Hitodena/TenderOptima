@@ -16,24 +16,19 @@ async function checkSubscription() {
       console.log('Status:', sub.status);
       console.log('Start Date:', sub.startDate);
       console.log('End Date:', sub.endDate);
-      console.log('Expiry Date:', sub.expiryDate);
       console.log('Requests Limit:', sub.requestsLimit);
       console.log('Requests Used:', sub.requestsUsed);
       
       // Check if subscription is expired
       const now = new Date();
       const endDate = sub.endDate ? new Date(sub.endDate) : null;
-      const expiryDate = sub.expiryDate ? new Date(sub.expiryDate) : null;
       
       console.log('\nDate analysis:');
       console.log('Current time:', now);
       console.log('End Date:', endDate);
-      console.log('Expiry Date:', expiryDate);
       
       if (endDate && endDate < now) {
-        console.log('❌ Subscription is EXPIRED (based on endDate)');
-      } else if (expiryDate && expiryDate < now) {
-        console.log('❌ Subscription is EXPIRED (based on expiryDate)');
+        console.log('❌ Subscription is EXPIRED');
       } else {
         console.log('✅ Subscription is ACTIVE');
       }

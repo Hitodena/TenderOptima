@@ -18,7 +18,8 @@ export function BusinessCardPreview({ className = '', hidden = false }: Business
     <div className={`mt-4 p-4 border-t border-gray-200 ${className}`}>
       <div className="text-sm text-gray-600 mb-2">Визитная карточка:</div>
       <div className="bg-gray-50 p-3 rounded-md">
-        {user.logoUrl && (
+        {/* Logo temporarily hidden */}
+        {false && user.logoUrl && (
           <div className="mb-3">
             <img 
               src={user.logoUrl} 

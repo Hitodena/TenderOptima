@@ -1223,7 +1223,7 @@ export class DatabaseStorage implements IStorage {
 
   generateTrackingId(): string {
     // Using nanoid to generate a unique, URL-friendly ID
-    return nanoid(10); // 10 characters is sufficient for our needs
+    return nanoid(6); // 6 characters is sufficient for our needs
   }
 
   async getPendingSearchRequests(): Promise<SearchRequest[]> {

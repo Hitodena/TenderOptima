@@ -46,7 +46,7 @@ export const WinnerEmailModal: React.FC<WinnerEmailModalProps> = ({
 
 В ближайшее время наш менеджер свяжется с вами для обсуждения деталей договора.
 
-С уважением,${businessCardSignature}`;
+${businessCardSignature}`;
 
       setSubject(defaultSubject);
       setContent(defaultContent);
@@ -82,10 +82,21 @@ export const WinnerEmailModal: React.FC<WinnerEmailModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
-          <div className="flex justify-between items-center mb-6">
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50" 
+      style={{ 
+        top: 0, 
+        left: 0, 
+        right: 0, 
+        bottom: 0,
+        width: '100vw',
+        height: '100vh',
+        position: 'fixed'
+      }}
+    >
+      <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[95vh] overflow-hidden flex flex-col">
+        <div className="p-6 flex flex-col h-full">
+          <div className="flex justify-between items-center mb-6 flex-shrink-0">
             <h2 className="text-xl font-semibold text-gray-900">
               Отправить уведомление победителю
             </h2>
@@ -98,7 +109,7 @@ export const WinnerEmailModal: React.FC<WinnerEmailModalProps> = ({
             </button>
           </div>
           
-          <div className="space-y-4">
+          <div className="space-y-4 flex-1 flex flex-col">
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
               <div className="flex items-center space-x-2">
                 <div className="w-2 h-2 bg-green-500 rounded-full"></div>
@@ -123,15 +134,14 @@ export const WinnerEmailModal: React.FC<WinnerEmailModalProps> = ({
               />
             </div>
 
-            <div>
+            <div className="flex-1 flex flex-col">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Текст письма
               </label>
               <textarea
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
-                rows={12}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+                className="flex-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none min-h-[200px]"
                 disabled={isLoading}
               />
             </div>
@@ -181,7 +191,7 @@ export const WinnerEmailModal: React.FC<WinnerEmailModalProps> = ({
               </div>
             </div>
 
-            <div className="flex justify-end space-x-3 pt-4 border-t">
+            <div className="flex justify-end space-x-3 pt-4 border-t flex-shrink-0">
               <Button
                 variant="outline"
                 onClick={handleClose}

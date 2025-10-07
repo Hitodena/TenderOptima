@@ -791,10 +791,13 @@ export async function setupAuth(app: Express) {
   app.post("/api/auth/register", registerRateLimit, async (req, res, next) => {
     try {
       console.log('=== НАЧАЛО РЕГИСТРАЦИИ НА СЕРВЕРЕ ===');
-      console.log('Данные регистрации:', { username: req.body.username, hasPassword: !!req.body.password });
+      console.log('Данные регистрации:', { email: req.body.email, hasPassword: !!req.body.password });
+      
+      // Use email as username
+      const username = req.body.email;
       
       // Check if username already exists
-      const [existingUser] = await db.select().from(users).where(eq(users.username, req.body.username));
+      const [existingUser] = await db.select().from(users).where(eq(users.username, username));
       
       if (existingUser) {
         console.log('Пользователь уже существует:', existingUser.username);
@@ -811,7 +814,7 @@ export async function setupAuth(app: Express) {
         // Create user
         const [user] = await db.insert(users)
           .values({
-            username: req.body.username,
+            username: username,
             password: hashedPassword,
             role: 'user',
             language: 'ru',
@@ -830,15 +833,15 @@ export async function setupAuth(app: Express) {
         }
         
         // Create default subscription
-        const expiryDate = new Date();
-        expiryDate.setDate(expiryDate.getDate() + 14); // 14 days trial
+        const endDate = new Date();
+        endDate.setDate(endDate.getDate() + 14); // 14 days trial
         
         await db.insert(subscriptions)
           .values({
             userId: createdUser.id,
             plan: 'trial',
             status: 'active',
-            expiryDate: expiryDate,
+            endDate: endDate,
             requestsLimit: 5,
             requestsUsed: 0,
             createdAt: new Date(),

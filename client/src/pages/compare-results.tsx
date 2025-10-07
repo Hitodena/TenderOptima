@@ -19,6 +19,7 @@ import { MainNavigation } from '@/components/main-navigation';
 import { apiRequest } from '@/lib/queryClient';
 import { SupplierFollowUp } from '@/components/supplier-follow-up';
 import { BusinessCardPreview } from '@/components/business-card-preview';
+import { ImprovedImprovementRequestModal } from '@/components/improved-improvement-request-modal';
 import { useAuth } from '@/hooks/use-auth';
 import { SubscriptionGuard } from '@/components/SubscriptionGuard';
 import { useSubscription } from '@/hooks/useSubscription';
@@ -234,99 +235,21 @@ const ImprovementRequestButton: React.FC<ImprovementRequestButtonProps> = ({ sup
   const [isEmailSent, setIsEmailSent] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
-  const [subject, setSubject] = useState('');
-  const [message, setMessage] = useState('');
-  const { user } = useAuth();
 
-  // Function to add business card to email if available
-  const getBusinessCardSignature = () => {
-    if (user?.businessCard) {
-      console.log("Adding business card to email:", user.businessCard);
-      return `\n\n${user.businessCard}`;
-    }
-    return '';
-  };
-
-  // Initialize email content when dialog opens
   const openEmailDialog = () => {
-    const defaultSubject = `Предложение об улучшении условий`;
-    const defaultMessage = `Уважаемый ${supplier.name},
-
-Благодарим за предоставленное коммерческое предложение.
-
-В рамках тендерной процедуры предлагаем вам возможность улучшить условия вашего предложения по следующим параметрам:
-
-• Цена - возможность предложить более конкурентные условия
-• Сроки поставки - сокращение времени выполнения заказа
-• Условия оплаты - более гибкие варианты расчетов
-• Гарантийные обязательства - расширение гарантийного покрытия
-• Дополнительные услуги - предложение сопутствующих сервисов
-
-Просим предоставить улучшенное предложение в течение 3 рабочих дней.
-
-${getBusinessCardSignature()}`;
-
-    
-    setSubject(defaultSubject);
-    setMessage(defaultMessage);
     setShowEmailDialog(true);
   };
 
-  const sendEmail = async () => {
-    if (!subject.trim() || !message.trim()) {
-      toast({
-        title: "Ошибка",
-        description: "Пожалуйста, заполните тему и сообщение",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsLoading(true);
+  const handleSuccess = () => {
+    setIsEmailSent(true);
+    setShowEmailDialog(false);
     
-    try {
-      // Use the improvement request API endpoint to properly log this as an improvement request
-      const response = await apiRequest(
-        '/api/improvement-request',
-        'POST',
-        {
-          requestId: requestId,
-          supplierEmail: supplier.email,
-          supplierName: supplier.name,
-          subject: subject,
-          message: message
-        }
-      );
-
-      // apiRequest handles the response parsing, so we just check if we got a response
-      if (response) {
-        setIsEmailSent(true);
-        setShowEmailDialog(false);
-        toast({
-          title: "Запрос отправлен",
-          description: `Запрос на улучшение условий отправлен поставщику ${supplier.name}`,
-          variant: "default"
-        });
-        
-        // Trigger improvement counts refresh after successful send
-        if (window.refreshImprovementCounts) {
-          console.log('📤 Triggering improvement counts refresh after successful send');
-          window.refreshImprovementCounts();
-        } else {
-          console.warn('⚠️ refreshImprovementCounts function not available');
-        }
-      } else {
-        throw new Error('Failed to send email');
-      }
-    } catch (error) {
-      console.error('Error sending improvement request:', error);
-      toast({
-        title: "Ошибка отправки",
-        description: "Не удалось отправить запрос. Попробуйте позже.",
-        variant: "destructive"
-      });
-    } finally {
-      setIsLoading(false);
+    // Trigger improvement counts refresh after successful send
+    if (window.refreshImprovementCounts) {
+      console.log('📤 Triggering improvement counts refresh after successful send');
+      window.refreshImprovementCounts();
+    } else {
+      console.warn('⚠️ refreshImprovementCounts function not available');
     }
   };
 
@@ -360,91 +283,14 @@ ${getBusinessCardSignature()}`;
         </div>
       </div>
 
-      {/* Email Composition Dialog for Improvement Request */}
-      {showEmailDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold">
-                  Запрос на улучшение условий - {supplier.name}
-                </h3>
-                <button
-                  onClick={() => setShowEmailDialog(false)}
-                  className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
-                >
-                  ×
-                </button>
-              </div>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Email:
-                  </label>
-                  <div className="text-sm text-gray-600">
-                    {supplier.email}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Тема
-                  </label>
-                  <input
-                    type="text"
-                    value={subject}
-                    onChange={(e) => setSubject(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Сообщение
-                  </label>
-                  <textarea
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    rows={14}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
-                  />
-                </div>
-
-                {/* Business Card Preview - Hidden for improvement request emails */}
-                <BusinessCardPreview hidden={true} />
-
-                <div className="flex justify-end space-x-3">
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowEmailDialog(false)}
-                    disabled={isLoading}
-                  >
-                    Отмена
-                  </Button>
-                  <Button
-                    onClick={sendEmail}
-                    disabled={isLoading}
-                    className="flex items-center gap-2"
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Отправка...
-                      </>
-                    ) : (
-                      <>
-                        <Send className="w-4 h-4" />
-                        Отправить запрос
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Improved Email Composition Dialog */}
+      <ImprovedImprovementRequestModal
+        supplier={supplier}
+        requestId={requestId || 0}
+        isOpen={showEmailDialog}
+        onClose={() => setShowEmailDialog(false)}
+        onSuccess={handleSuccess}
+      />
     </>
   );
 };

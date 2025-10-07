@@ -49,7 +49,7 @@ const loginSchema = z.object({
 
 // Enhanced registration form schema
 const registerSchema = z.object({
-  username: z.string()
+  email: z.string()
     .min(1, { message: "Email обязателен" })
     .email({ message: "Введите корректный email адрес" }),
   password: z.string()
@@ -317,7 +317,7 @@ export default function EnhancedAuthPage() {
       
       // Switch to login tab after successful registration
       setActiveTab("login");
-      loginForm.setValue("username", data.username);
+      loginForm.setValue("username", data.email);
     } catch (error: any) {
       console.error('Ошибка регистрации:', error);
       
@@ -819,14 +819,14 @@ export default function EnhancedAuthPage() {
                           type="email"
                           placeholder="mail@example.com"
                           className="pl-10"
-                          {...registerForm.register("username")}
+                          {...registerForm.register("email")}
                         />
                       </div>
-                      {registerForm.formState.errors.username && (
+                      {registerForm.formState.errors.email && (
                         <Alert variant="destructive">
                           <AlertCircle className="h-4 w-4" />
                           <AlertDescription>
-                            {registerForm.formState.errors.username.message}
+                            {registerForm.formState.errors.email.message}
                           </AlertDescription>
                         </Alert>
                       )}

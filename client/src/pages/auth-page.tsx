@@ -28,7 +28,7 @@ const loginSchema = z.object({
 
 // Registration form schema
 const registerSchema = z.object({
-  username: z.string().email({ message: "Введите корректный email" }),
+  email: z.string().email({ message: "Введите корректный email" }),
   password: z.string().min(6, { message: "Пароль должен содержать минимум 6 символов" }),
   confirmPassword: z.string().min(6, { message: "Пароль должен содержать минимум 6 символов" }),
 }).refine((data) => data.password === data.confirmPassword, {
@@ -449,11 +449,11 @@ export default function AuthPage() {
                         id="register-email"
                         type="email"
                         placeholder="mail@example.com"
-                        {...registerForm.register("username")}
+                        {...registerForm.register("email")}
                       />
-                      {registerForm.formState.errors.username && (
+                      {registerForm.formState.errors.email && (
                         <p className="text-sm text-destructive">
-                          {registerForm.formState.errors.username.message}
+                          {registerForm.formState.errors.email.message}
                         </p>
                       )}
                     </div>

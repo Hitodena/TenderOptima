@@ -24,7 +24,6 @@ if (response.ok) {
     console.log('Is Expired:', sub27.isExpired);
     console.log('Start Date:', sub27.startDate);
     console.log('End Date:', sub27.endDate);
-    console.log('Expiry Date:', sub27.expiryDate);
     console.log('Requests Limit:', sub27.requestsLimit);
     console.log('Requests Used:', sub27.requestsUsed);
   } else {

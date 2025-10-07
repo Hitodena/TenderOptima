@@ -1,6 +1,7 @@
-import { createClient } from 'pg';
+import pkg from 'pg';
+const { Client } = pkg;
 
-const client = createClient({
+const client = new Client({
   connectionString: process.env.DATABASE_URL || 'postgresql://postgres:password@localhost:5432/supplierfinder'
 });
 
@@ -10,7 +11,7 @@ async function checkSubscription() {
     console.log('Connected to database');
     
     const result = await client.query(`
-      SELECT id, user_id, status, start_date, end_date, expiry_date, requests_limit, requests_used 
+      SELECT id, user_id, status, start_date, end_date, requests_limit, requests_used 
       FROM subscriptions 
       WHERE id = 27
     `);
@@ -23,26 +24,20 @@ async function checkSubscription() {
       console.log('Status:', sub.status);
       console.log('Start Date:', sub.start_date);
       console.log('End Date:', sub.end_date);
-      console.log('Expiry Date:', sub.expiry_date);
       console.log('Requests Limit:', sub.requests_limit);
       console.log('Requests Used:', sub.requests_used);
       
       // Check if subscription is expired
       const now = new Date();
       const endDate = sub.end_date ? new Date(sub.end_date) : null;
-      const expiryDate = sub.expiry_date ? new Date(sub.expiry_date) : null;
       
       console.log('\n=== Date Analysis ===');
       console.log('Current time:', now.toISOString());
       console.log('End Date:', endDate ? endDate.toISOString() : 'NULL');
-      console.log('Expiry Date:', expiryDate ? expiryDate.toISOString() : 'NULL');
       
       if (endDate && endDate < now) {
-        console.log('❌ Subscription is EXPIRED (based on endDate)');
+        console.log('❌ Subscription is EXPIRED');
         console.log('Days expired:', Math.ceil((now - endDate) / (1000 * 60 * 60 * 24)));
-      } else if (expiryDate && expiryDate < now) {
-        console.log('❌ Subscription is EXPIRED (based on expiryDate)');
-        console.log('Days expired:', Math.ceil((now - expiryDate) / (1000 * 60 * 60 * 24)));
       } else {
         console.log('✅ Subscription is ACTIVE');
         if (endDate) {

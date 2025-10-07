@@ -28,7 +28,6 @@ interface Subscription {
   status: string;
   startDate: string;
   endDate: string;
-  expiryDate: string;
   requestsLimit: number;
   requestsUsed: number;
   username: string;
@@ -253,8 +252,7 @@ export default function AdminEmailPanel() {
                     {subscription.startDate ? new Date(subscription.startDate).toLocaleDateString('ru-RU') : '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {subscription.expiryDate ? new Date(subscription.expiryDate).toLocaleDateString('ru-RU') : 
-                     subscription.endDate ? new Date(subscription.endDate).toLocaleDateString('ru-RU') : '-'}
+                    {subscription.endDate ? new Date(subscription.endDate).toLocaleDateString('ru-RU') : '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{subscription.requestsLimit}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{subscription.requestsUsed}</td>

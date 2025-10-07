@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { storage } from '../storage';
 import { emailService } from '../email';
 import { z } from 'zod';
+import { nanoid } from 'nanoid';
 
 const winnerNotificationSchema = z.object({
   requestId: z.number(),
@@ -55,16 +56,16 @@ export const sendWinnerNotification = async (req: Request, res: Response) => {
     }
 
     // Generate tracking identifiers
-    const trackingId = Math.random().toString(36).substring(2, 12);
-    const orderNumber = requestDetails.orderNumber || '0000-00000';
-    const requestRef = `REQ-${orderNumber}`;
+    const trackingId = storage.generateTrackingId();
+    // REQ must be the same for ALL emails in the same request (use orderNumber from DB)
+    const requestRef = requestDetails.orderNumber;
     
     // Format subject with tracking identifiers
     const formattedSubject = `${subject} [${requestRef}] [TID:${trackingId}]`;
     
     // Add tracking footer to message content BEFORE business card
     // The footer should appear after the main content but before the business card
-    const referenceFooter = `\n**!При ответе на наш запрос не меняйте тему письма (Subject), иначе мы не сможем обработать ваш ответ!**\n!Request Reference: ${requestRef}\nRequest Tracking ID: ${trackingId}\n`;
+    const referenceFooter = `\n**!При ответе на наш запрос не меняйте тему письма (Subject), иначе мы не сможем обработать ваш ответ!**\n`;
     
     // Insert the footer before the business card if it exists in content
     let fullContent = content;

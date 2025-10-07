@@ -138,8 +138,7 @@ export default function SubscriptionsPage() {
               status: sub.status,
               actualStatus: (sub as any).actualStatus,
               isExpired: (sub as any).isExpired,
-              endDate: sub.endDate,
-              expiryDate: (sub as any).expiryDate
+              endDate: sub.endDate
             });
           });
         }
@@ -799,9 +798,8 @@ export default function SubscriptionsPage() {
                             // Use actualStatus from server if available, otherwise calculate it
                             const actualStatus = subscription.actualStatus || (() => {
                               const now = new Date();
-                              // Use endDate if available, otherwise use expiryDate
-                              const endDate = subscription.endDate ? new Date(subscription.endDate) : 
-                                             (subscription as any).expiryDate ? new Date((subscription as any).expiryDate) : null;
+                              // Use endDate for expiration check
+                              const endDate = subscription.endDate ? new Date(subscription.endDate) : null;
                               const isExpired = endDate && endDate < now;
                               return isExpired ? 'expired' : subscription.status;
                             })();
@@ -821,7 +819,7 @@ export default function SubscriptionsPage() {
                           })()}
                         </TableCell>
                         <TableCell>{formatDate(subscription.startDate)}</TableCell>
-                        <TableCell>{formatDate(subscription.endDate || (subscription as any).expiryDate)}</TableCell>
+                        <TableCell>{formatDate(subscription.endDate)}</TableCell>
                         <TableCell>{subscription.requestsLimit || "∞"}</TableCell>
                         <TableCell>{subscription.requestsUsed || 0}</TableCell>
                         <TableCell>

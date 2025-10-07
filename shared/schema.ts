@@ -48,7 +48,6 @@ export const subscriptions = pgTable("subscriptions", {
   requestsLimit: integer("requests_limit").default(10), // Max number of requests per period
   requestsUsed: integer("requests_used").default(0), // Current number of requests used
   requestsRest: integer("requests_rest"), // Remaining requests (computed as requestsLimit - requestsUsed)
-  expiryDate: timestamp("expiry_date"), // When the subscription expires
   status: text("status").default("active").notNull(), // 'active', 'expired', 'canceled', 'pending'
   startDate: timestamp("start_date").defaultNow(), // When the subscription started
   endDate: timestamp("end_date"), // When the subscription expires

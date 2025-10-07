@@ -40,15 +40,15 @@ async function createUser() {
     console.log('Пользователь создан:', newUser);
     
     // Создаем подписку
-    const expiryDate = new Date();
-    expiryDate.setDate(expiryDate.getDate() + 365); // 1 год
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() + 365); // 1 год
     
     const [subscription] = await db.insert(subscriptions)
       .values({
         userId: newUser.id,
         plan: 'premium',
         status: 'active',
-        expiryDate: expiryDate,
+        endDate: endDate,
         requestsLimit: 1000,
         requestsUsed: 0,
         createdAt: new Date(),

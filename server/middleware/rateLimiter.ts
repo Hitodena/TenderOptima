@@ -23,7 +23,7 @@ export const authRateLimit = rateLimit({
   },
   // Пропускаем rate limiting в режиме разработки
   skip: (req: Request) => {
-    return process.env.NODE_ENV === 'development' && process.env.SKIP_AUTH === 'true';
+    return process.env.NODE_ENV === 'development' || process.env.SKIP_AUTH === 'true';
   }
 });
 
@@ -48,7 +48,7 @@ export const registerRateLimit = rateLimit({
     });
   },
   skip: (req: Request) => {
-    return process.env.NODE_ENV === 'development' && process.env.SKIP_AUTH === 'true';
+    return process.env.NODE_ENV === 'development' || process.env.SKIP_AUTH === 'true';
   }
 });
 
@@ -73,7 +73,7 @@ export const passwordResetRateLimit = rateLimit({
     });
   },
   skip: (req: Request) => {
-    return process.env.NODE_ENV === 'development' && process.env.SKIP_AUTH === 'true';
+    return process.env.NODE_ENV === 'development' || process.env.SKIP_AUTH === 'true';
   }
 });
 
@@ -98,6 +98,6 @@ export const apiRateLimit = rateLimit({
     });
   },
   skip: (req: Request) => {
-    return process.env.NODE_ENV === 'development' && process.env.SKIP_AUTH === 'true';
+    return process.env.NODE_ENV === 'development' || process.env.SKIP_AUTH === 'true';
   }
 });

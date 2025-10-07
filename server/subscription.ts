@@ -50,9 +50,8 @@ export class SubscriptionServiceImpl implements SubscriptionService {
       }
     }
 
-    // Set default expiry date for trial subscriptions if not provided
+    // Set default end date for trial subscriptions if not provided
     let endDate = data.endDate;
-    let expiryDate = data.expiryDate;
     
     if (!endDate && data.plan === 'trial') {
       // Trial subscription expires in 14 days by default
@@ -60,9 +59,9 @@ export class SubscriptionServiceImpl implements SubscriptionService {
       endDate.setDate(endDate.getDate() + 14);
     }
     
-    // Set expiryDate to match endDate if not provided
-    if (!expiryDate) {
-      expiryDate = endDate || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000); // 14 days from now
+    // Set default end date if not provided
+    if (!endDate) {
+      endDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000); // 14 days from now
     }
 
     const [subscription] = await db
@@ -70,8 +69,7 @@ export class SubscriptionServiceImpl implements SubscriptionService {
       .values({
         ...data,
         requestsLimit,
-        endDate,
-        expiryDate
+        endDate
       })
       .returning();
     
@@ -131,8 +129,7 @@ export class SubscriptionServiceImpl implements SubscriptionService {
         requestsLimit: 5,
         requestsUsed: 0,
         startDate: new Date(),
-        endDate: trialEndDate,
-        expiryDate: trialEndDate
+        endDate: trialEndDate
       });
       
       return {

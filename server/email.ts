@@ -413,6 +413,15 @@ export const sendSimpleEmail = async (
 ): Promise<boolean> => {
   console.log(`[email] *** sendSimpleEmail FUNCTION CALLED ***`, { to, subject, userId: options?.userId });
   
+  // Детальное логирование SMTP конфигурации
+  console.log(`[email] SMTP Configuration check:`, {
+    SMTP_HOST: process.env.SMTP_HOST || 'NOT SET',
+    SMTP_PORT: process.env.SMTP_PORT || 'NOT SET',
+    SMTP_USER: process.env.SMTP_USER ? 'SET' : 'NOT SET',
+    SMTP_PASS: process.env.SMTP_PASS ? 'SET' : 'NOT SET',
+    NODE_ENV: process.env.NODE_ENV || 'NOT SET'
+  });
+  
   // Process attachments to ensure proper encoding
   let processedAttachments = options?.attachments;
   
@@ -502,7 +511,17 @@ export const sendSimpleEmail = async (
   }
   
   console.log(`[email] CALLING emailService.sendEmail (SIMPLE) with:`, { to: emailOptions.to, subject: emailOptions.subject, userId: options?.userId });
-  return emailService.sendEmail({ ...emailOptions, userId: options?.userId });
+  
+  const result = await emailService.sendEmail({ ...emailOptions, userId: options?.userId });
+  
+  console.log(`[email] sendSimpleEmail RESULT:`, { 
+    success: result, 
+    to: emailOptions.to, 
+    subject: emailOptions.subject, 
+    userId: options?.userId 
+  });
+  
+  return result;
 };
 
 export const sendEmail = async (

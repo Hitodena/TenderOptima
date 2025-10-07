@@ -3,6 +3,7 @@ import { z } from "zod";
 import { emailService } from "../email";
 import { storage } from "../storage";
 import { log } from "../vite";
+import { nanoid } from "nanoid";
 
 // Schema for follow-up email validation
 const followUpSchema = z.object({
@@ -77,10 +78,11 @@ async function processSupplierFollowUp(
     if (requestSupplierId) {
       try {
         // Формируем полный текст сообщения с идентификаторами для отслеживания
-        const requestRef = `RQ${requestId}`;
+        // REQ must be the same for ALL emails in the same request (use orderNumber from DB)
+        const requestRef = searchRequest.orderNumber;
         const msgFormattedSubject = `${subject} [${requestRef}] [TID:${trackingId}]`;
         // Add tracking footer to message BEFORE business card
-        const referenceFooter = `\n**!При ответе на наш запрос не меняйте тему письма (Subject), иначе мы не сможем обработать ваш ответ!**\n!Request Reference: ${requestRef}\nRequest Tracking ID: ${trackingId}\n`;
+        const referenceFooter = `\n**!При ответе на наш запрос не меняйте тему письма (Subject), иначе мы не сможем обработать ваш ответ!**\n`;
         
         // Insert the footer before the business card if it exists in content
         let msgFullContent = message;
@@ -118,12 +120,12 @@ async function processSupplierFollowUp(
     }
     
     // Формируем тему и сообщение с трекинг-информацией
-    const orderNumber = searchRequest.orderNumber || '0000-00000';
-    const requestRef = `REQ-${orderNumber}`;
+    // REQ must be the same for ALL emails in the same request (use orderNumber from DB)
+    const requestRef = searchRequest.orderNumber;
     const formattedSubject = `${subject} [${requestRef}] [TID:${trackingId}]`;
     // Add tracking footer to message BEFORE business card
     // The footer should appear after the main content but before the business card
-    const referenceFooter = `\n**!При ответе на наш запрос не меняйте тему письма (Subject), иначе мы не сможем обработать ваш ответ!**\n!Request Reference: ${requestRef}\nRequest Tracking ID: ${trackingId}\n`;
+    const referenceFooter = `\n**!При ответе на наш запрос не меняйте тему письма (Subject), иначе мы не сможем обработать ваш ответ!**\n`;
     
     // Insert the footer before the business card if it exists in content
     let fullMessage = message;

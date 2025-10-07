@@ -35,7 +35,7 @@ router.get('/status', requireAuth, async (req, res) => {
       console.log('[Subscription Status] Manual session authentication, userId:', req.session.passport.user);
       userId = req.session.passport.user as number;
       // Manually set user for this request
-      req.user = { id: userId };
+      req.user = { id: userId, username: '', role: 'user' };
     }
     
     if (!userId) {
@@ -67,9 +67,8 @@ router.get('/status', requireAuth, async (req, res) => {
     const subscriptionRow = subscriptionResult.rows[0];
     console.log('[Subscription Status] Found subscription:', subscriptionRow);
     
-    // Get the expiry date from the database 
-    const expiryDate = subscriptionRow.expiry_date || subscriptionRow.end_date || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-    const endDate = new Date(expiryDate);
+    // Get the end date from the database 
+    const endDate = subscriptionRow.end_date ? new Date(subscriptionRow.end_date) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     
     // Check if subscription is expired
     const now = new Date();
@@ -104,8 +103,6 @@ router.get('/status', requireAuth, async (req, res) => {
       status: status,
       startDate: subscriptionRow.start_date ? new Date(subscriptionRow.start_date) : (subscriptionRow.created_at ? new Date(subscriptionRow.created_at) : new Date()),
       endDate: endDate,
-      isAutoRenew: false,
-      features: ['unlimited_requests', 'priority_support'],
       maxRequests: requestsLimit,
       maxSuppliers: subscriptionRow.max_suppliers || 50,
       requestsUsed: requestsUsed,
@@ -238,8 +235,7 @@ router.post('/', requireAuth, async (req, res) => {
         startDate: startDate ? new Date(startDate) : new Date(),
         endDate: endDate ? new Date(endDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days default
         maxRequests: maxRequestsPerMonth || 100,
-        isAutoRenew: false,
-        features: ['basic_access'],
+        requestsLimit: maxRequestsPerMonth || 100,
         createdAt: new Date(),
         updatedAt: new Date()
       })
@@ -371,7 +367,7 @@ router.post('/increment-usage', requireAuth, async (req, res) => {
     if (!userId && req.session?.passport?.user) {
       console.log('[Increment Usage] Manual session authentication, userId:', req.session.passport.user);
       userId = req.session.passport.user;
-      req.user = { id: userId };
+      req.user = { id: userId, username: '', role: 'user' };
     }
     
     if (!userId) {
