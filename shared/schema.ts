@@ -25,6 +25,7 @@ export const users = pgTable("users", {
   emailConfigured: boolean("email_configured").default(false), // Flag indicating if email is configured
   createdAt: timestamp("created_at").defaultNow(),
   lastLogin: timestamp("last_login"),
+  lastEmailCheck: timestamp("last_email_check"), // Дата последней успешной проверки emails
   updatedAt: timestamp("updated_at").defaultNow()
 });
 
@@ -691,6 +692,46 @@ export const excludedDomains = pgTable("excluded_domains", {
 
 export type ExcludedDomain = typeof excludedDomains.$inferSelect;
 export type InsertExcludedDomain = typeof excludedDomains.$inferInsert;
+
+// Table for unprocessed emails (emails without REQ/ID tags)
+export const unprocessedEmails = pgTable("unprocessed_emails", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id),
+  messageId: text("message_id").notNull().unique(), // Unique IMAP message ID
+  senderEmail: text("sender_email").notNull(),
+  senderName: text("sender_name"),
+  subject: text("subject").notNull(),
+  content: text("content").notNull(),
+  attachments: jsonb("attachments").default([]).notNull(), // JSON array of attachments
+  receivedAt: timestamp("received_at").notNull(),
+  status: text("status", { 
+    enum: ["new", "replied"] 
+  }).default("new").notNull(),
+  linkedRequestId: integer("linked_request_id").references(() => searchRequests.id),
+  repliedAt: timestamp("replied_at"),
+  replyContent: text("reply_content"),
+  processedBy: integer("processed_by").references(() => users.id),
+  processedAt: timestamp("processed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type UnprocessedEmail = typeof unprocessedEmails.$inferSelect;
+export type InsertUnprocessedEmail = typeof unprocessedEmails.$inferInsert;
+
+// Email reply templates table
+export const emailReplyTemplates = pgTable("email_reply_templates", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id),
+  name: text("name").notNull(),
+  subject: text("subject").notNull(),
+  content: text("content").notNull(),
+  isDefault: boolean("is_default").default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type EmailReplyTemplate = typeof emailReplyTemplates.$inferSelect;
+export type InsertEmailReplyTemplate = typeof emailReplyTemplates.$inferInsert;
 
 // Additional types for the matching system
 export interface EmailAttachment {

@@ -41,6 +41,8 @@ import LoginLanding from "@/pages/login-landing";
 import { SupplierSearchPage } from "@/pages/SupplierSearchPage";
 import { NewNavigation } from "@/components/new-navigation";
 import AdminEmailPanel from "@/pages/AdminEmailPanel";
+import UnprocessedEmailsPage from "@/pages/admin/unprocessed-emails";
+import EmailTemplatesPage from "@/pages/admin/email-templates";
 
 function Router() {
   return (
@@ -71,6 +73,12 @@ function Router() {
         </Route>
         <Route path="/admin/email">
           <ProtectedRoute component={AdminEmailPanel} />
+        </Route>
+        <Route path="/admin/unprocessed-emails">
+          <ProtectedRoute component={UnprocessedEmailsPage} />
+        </Route>
+        <Route path="/admin/email-templates">
+          <ProtectedRoute component={EmailTemplatesPage} />
         </Route>
         <Route path="/admin-email-panel">
           <ProtectedRoute component={AdminEmailPanel} />

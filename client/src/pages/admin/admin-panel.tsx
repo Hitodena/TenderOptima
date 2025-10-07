@@ -4,7 +4,7 @@ import { useTranslation } from "@/contexts/language-context";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertTriangleIcon, ShieldIcon, UsersIcon, CreditCardIcon, CheckSquareIcon, Building2Icon, BanIcon, FileSearchIcon } from "lucide-react";
+import { AlertTriangleIcon, ShieldIcon, UsersIcon, CreditCardIcon, CheckSquareIcon, Building2Icon, BanIcon, FileSearchIcon, MailIcon } from "lucide-react";
 import { Redirect } from "wouter";
 
 // Lazy load admin features
@@ -13,6 +13,7 @@ const ModerationPage = React.lazy(() => import('./moderation-page'));
 const VerifiedListPage = React.lazy(() => import('./verified-list-page'));
 const ExcludedDomainsPage = React.lazy(() => import('./excluded-domains-page'));
 const ClientRequestsPage = React.lazy(() => import('./client-requests-page'));
+const UnprocessedEmailsPage = React.lazy(() => import('./unprocessed-emails'));
 
 export default function AdminPanel() {
   const { t } = useTranslation();
@@ -132,6 +133,14 @@ export default function AdminPanel() {
                 <FileSearchIcon className="mr-2 h-4 w-4" />
                 Запросы клиентов
               </Button>
+              <Button
+                variant={activeSection === 'unprocessed-emails' ? 'default' : 'ghost'}
+                className="w-full justify-start"
+                onClick={() => setActiveSection('unprocessed-emails')}
+              >
+                <MailIcon className="mr-2 h-4 w-4" />
+                Неразобранные письма
+              </Button>
             </div>
           </nav>
         </div>
@@ -144,6 +153,7 @@ export default function AdminPanel() {
             {activeSection === 'verified-list' && <VerifiedListPage />}
             {activeSection === 'excluded-domains' && <ExcludedDomainsPage />}
             {activeSection === 'client-requests' && <ClientRequestsPage />}
+            {activeSection === 'unprocessed-emails' && <UnprocessedEmailsPage />}
           </React.Suspense>
         </div>
       </div>

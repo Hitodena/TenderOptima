@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/use-auth';
+import { Link } from 'wouter';
 
 interface User {
   id: number;
@@ -211,7 +212,23 @@ export default function AdminEmailPanel() {
 
   return (
     <div className="container mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6">Админ-панель управления email</h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">Админ-панель управления email</h1>
+        <div className="flex gap-4">
+          <Link 
+            href="/admin/unprocessed-emails"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+          >
+            Неразобранные письма
+          </Link>
+          <Link 
+            href="/admin/email-templates"
+            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+          >
+            Шаблоны ответов
+          </Link>
+        </div>
+      </div>
       
       {/* Subscriptions section */}
       <div className="mb-8">

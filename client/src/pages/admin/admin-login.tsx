@@ -66,50 +66,53 @@ export default function AdminLogin() {
     setError("");
 
     try {
-      // Direct admin access for hardcoded admin credentials
-      if ((username === "admin" && password === "admin") || 
-          (username === "admin@example.com" && password === "admin")) {
-        
-        // Store admin credentials in localStorage
-        localStorage.setItem('isAdmin', 'true');
-        localStorage.setItem('adminUsername', username);
-        // Store a simple admin token for API authentication
-        localStorage.setItem('adminToken', 'admin-token-123456');
-        
-        toast({
-          title: "Успешный вход",
-          description: "Вы вошли как администратор"
-        });
-        
-        navigate("/admpanel");
-        return;
-      }
+      // Try regular login first
+      await loginMutation.mutateAsync({ username, password });
       
-      // Try regular login for other users
-      try {
-        await loginMutation.mutateAsync({ username, password });
-        
-        // For simplicity in this version, only allow hardcoded admin accounts
-        setError("У вас нет прав доступа к панели администратора");
-        toast({
-          title: "Ошибка доступа",
-          description: "У вас нет прав доступа к панели администратора",
-          variant: "destructive"
-        });
-      } catch (loginError) {
-        setError("Неверные учетные данные");
-        toast({
-          title: "Ошибка входа",
-          description: "Неверные учетные данные",
-          variant: "destructive"
-        });
-      }
-    } catch (err) {
-      console.error("Admin login error:", err);
-      setError("Ошибка сервера");
+      // After successful login, check if user has admin role
+      // The loginMutation will set the user context with role information
+      // We need to wait a bit for the context to update
+      setTimeout(async () => {
+        try {
+          // Check current user's role from the auth context
+          const currentUser = await apiRequest<{ role: string }>("/api/auth/me", "GET");
+          
+          if (currentUser.role === 'admin') {
+            // Store admin credentials in localStorage
+            localStorage.setItem('isAdmin', 'true');
+            localStorage.setItem('adminUsername', username);
+            
+            toast({
+              title: "Успешный вход",
+              description: "Вы вошли как администратор"
+            });
+            
+            navigate("/admpanel");
+          } else {
+            setError("У вас нет прав доступа к панели администратора");
+            toast({
+              title: "Ошибка доступа",
+              description: "У вас нет прав доступа к панели администратора",
+              variant: "destructive"
+            });
+          }
+        } catch (roleError) {
+          console.error("Error checking admin role:", roleError);
+          setError("Ошибка проверки прав доступа");
+          toast({
+            title: "Ошибка доступа",
+            description: "Ошибка проверки прав доступа",
+            variant: "destructive"
+          });
+        }
+      }, 100);
+      
+    } catch (loginError) {
+      console.error("Login error:", loginError);
+      setError("Неверные учетные данные");
       toast({
         title: "Ошибка входа",
-        description: "Ошибка сервера",
+        description: "Неверные учетные данные",
         variant: "destructive"
       });
     } finally {

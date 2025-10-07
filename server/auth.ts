@@ -4,6 +4,7 @@ import { Express } from "express";
 import session from "express-session";
 import { scrypt, randomBytes, timingSafeEqual, createHmac } from "crypto";
 import { promisify } from "util";
+import bcrypt from "bcrypt";
 import { db } from "./db";
 import { users, subscriptions, improvementRequests } from "@shared/schema";
 import { eq, and, count } from "drizzle-orm";
@@ -127,10 +128,17 @@ export async function hashPassword(password: string) {
 }
 
 async function comparePasswords(supplied: string, stored: string) {
-  const [hashed, salt] = stored.split(".");
-  const hashedBuf = Buffer.from(hashed, "hex");
-  const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer;
-  return timingSafeEqual(hashedBuf, suppliedBuf);
+  // Проверяем, является ли stored паролем в формате bcrypt
+  if (stored.startsWith('$2b$') || stored.startsWith('$2a$') || stored.startsWith('$2y$')) {
+    // Используем bcrypt для сравнения
+    return await bcrypt.compare(supplied, stored);
+  } else {
+    // Старый формат hash.salt
+    const [hashed, salt] = stored.split(".");
+    const hashedBuf = Buffer.from(hashed, "hex");
+    const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer;
+    return timingSafeEqual(hashedBuf, suppliedBuf);
+  }
 }
 
 // Функции для работы с токенами аутентификации

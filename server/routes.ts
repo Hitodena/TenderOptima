@@ -44,6 +44,7 @@ import adminModerationRoutes from "./routes/admin-moderation";
 import adminModerationTestRoutes from "./routes/admin-moderation-test";
 import adminExcludedDomainsRoutes from "./routes/admin-excluded-domains";
 import adminClientRequestsRoutes from "./routes/admin-client-requests";
+import adminUnprocessedEmailsRoutes from "./routes/admin-unprocessed-emails";
 
 
 import { matchingService } from "./matching-service";
@@ -2545,6 +2546,9 @@ app.post("/api/check-emails", requireAuth, async (req, res) => {
   // Register admin client requests routes
   console.log('[Server] Registered admin client requests routes');
   app.use('/api/admin', adminClientRequestsRoutes);
+  // Register admin unprocessed emails routes
+  console.log('[Server] Registered admin unprocessed emails routes');
+  app.use('/api/admin', adminUnprocessedEmailsRoutes);
   // Register admin moderation test routes (NO AUTH - FOR TESTING ONLY)
   console.log('[Server] Registered admin moderation test routes');
   app.use('/api/admin-test', adminModerationTestRoutes);

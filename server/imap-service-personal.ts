@@ -9,7 +9,7 @@ const apiAttachmentBridge = require('./file-processing/api_bridge.cjs');
 
 // Interface for detailed email processing results
 interface PersonalEmailProcessingResult {
-  status: 'success' | 'failed' | 'timeout' | 'db_error' | 'attachment_error' | 'no_tracking' | 'already_processed';
+  status: 'success' | 'failed' | 'timeout' | 'db_error' | 'attachment_error' | 'no_tracking' | 'already_processed' | 'saved_as_unprocessed' | 'duplicate_skipped';
   savedToDb: boolean;
   dbRecordId?: number;
   attachmentsProcessed: boolean;
@@ -184,10 +184,10 @@ export class PersonalImapService {
     newResponses: number;
   }> {
     console.log(`\n================================`);
-    console.log(`🔍 PERSONAL EMAIL CHECK INITIATED`);
-    console.log(`Timestamp: ${new Date().toISOString()}`);
-    console.log(`Request ID: ${requestId || 'All requests'}`);
-    console.log(`User ID: ${userId || 'No user specified'}`);
+    console.log(`🔍 [PERSONAL IMAP] PERSONAL EMAIL CHECK INITIATED`);
+    console.log(`🔍 [PERSONAL IMAP] Timestamp: ${new Date().toISOString()}`);
+    console.log(`🔍 [PERSONAL IMAP] Request ID: ${requestId || 'All requests'}`);
+    console.log(`🔍 [PERSONAL IMAP] User ID: ${userId || 'No user specified'}`);
     console.log(`================================\n`);
 
     if (!userId) {
@@ -317,7 +317,7 @@ export class PersonalImapService {
 
   private async checkPersonalFolder(imap: Imap, folderName: string, userId: number): Promise<void> {
     return new Promise((resolve, reject) => {
-      imap.openBox(folderName, false, (err, box) => {
+      imap.openBox(folderName, false, async (err, box) => {
         if (err) {
           console.error(`[PERSONAL EMAIL] Failed to open ${folderName} for user ${userId}:`, err);
           return reject(err);
@@ -325,25 +325,28 @@ export class PersonalImapService {
 
         console.log(`[PERSONAL EMAIL] Successfully opened ${folderName} for user ${userId}`);
 
-        // Используем время последней проверки для этого пользователя или 7 дней назад для первой проверки
-        const lastCheck = this.lastCheckTime.get(userId) || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-        const searchDate = new Date(lastCheck.getTime() - 2 * 60 * 60 * 1000); // Добавляем 2 часа буфера
-        
-        console.log(`[PERSONAL EMAIL] Last check was: ${lastCheck.toISOString()}`);
-        console.log(`[PERSONAL EMAIL] Searching for emails since ${searchDate.toISOString()} for user ${userId}`);
-        const searchCriteria = ['ALL', ['SINCE', searchDate]];
+        try {
+          // Получаем время последней проверки из базы данных
+          const lastCheck = await storage.getLastEmailCheck(userId);
+          const searchDate = lastCheck 
+            ? new Date(lastCheck.getTime() - 2 * 60 * 60 * 1000) // Добавляем 2 часа буфера
+            : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // 7 дней назад для первой проверки
+          
+          console.log(`[PERSONAL EMAIL] Last check was: ${lastCheck?.toISOString() || 'Never'}`);
+          console.log(`[PERSONAL EMAIL] Searching for emails since ${searchDate.toISOString()} for user ${userId}`);
+          const searchCriteria = ['ALL', ['SINCE', searchDate]];
 
-        imap.search(searchCriteria, (err, results) => {
-          if (err) return reject(err);
-          if (!results || !results.length) {
-            console.log(`[PERSONAL EMAIL] No emails found in ${folderName} for user ${userId}`);
-            return resolve();
-          }
+          imap.search(searchCriteria, (err, results) => {
+            if (err) return reject(err);
+            if (!results || !results.length) {
+              console.log(`[PERSONAL EMAIL] No emails found in ${folderName} for user ${userId}`);
+              return resolve();
+            }
 
-          console.log(`[PERSONAL EMAIL] Found ${results.length} emails in ${folderName} for user ${userId}`);
+            console.log(`[PERSONAL EMAIL] Found ${results.length} emails in ${folderName} for user ${userId}`);
 
-          const fetch = imap.fetch(results, {
-            bodies: '',
+            const fetch = imap.fetch(results, {
+              bodies: '',
             markSeen: false
           });
 
@@ -359,16 +362,34 @@ export class PersonalImapService {
             });
           });
 
-          fetch.once('error', (err: any) => {
+          fetch.once('error', async (err: any) => {
             console.error(`[PERSONAL EMAIL] Fetch error in ${folderName} for user ${userId}:`, err);
+            // Обновляем время проверки даже при ошибке
+            try {
+              await storage.updateLastEmailCheck(userId);
+              console.log(`[PERSONAL EMAIL] ✅ Updated lastEmailCheck for user ${userId} (after error)`);
+            } catch (updateError) {
+              console.error(`[PERSONAL EMAIL] ❌ Error updating lastEmailCheck after error for user ${userId}:`, updateError);
+            }
             reject(err);
           });
 
-          fetch.once('end', () => {
+          fetch.once('end', async () => {
             console.log(`[PERSONAL EMAIL] Done checking emails in ${folderName} for user ${userId}`);
+            // Обновляем время последней проверки в базе данных
+            try {
+              await storage.updateLastEmailCheck(userId);
+              console.log(`[PERSONAL EMAIL] ✅ Updated lastEmailCheck for user ${userId}`);
+            } catch (error) {
+              console.error(`[PERSONAL EMAIL] ❌ Error updating lastEmailCheck for user ${userId}:`, error);
+            }
             resolve();
           });
         });
+        } catch (error) {
+          console.error(`[PERSONAL EMAIL] Error in checkPersonalFolder for user ${userId}:`, error);
+          reject(error);
+        }
       });
     });
   }
@@ -434,41 +455,58 @@ export class PersonalImapService {
 
   private async processPersonalEmail(parsed: any, userId: number): Promise<void> {
     if (!parsed || !parsed.messageId) {
-      console.log(`[PERSONAL EMAIL] Skipping email without messageId for user ${userId}`);
+      console.log(`❌ [PERSONAL IMAP] Skipping email without messageId for user ${userId}`);
       return;
     }
 
     const messageId = parsed.messageId;
+    const fromEmail = parsed.from?.text || 'Unknown';
+    const subject = parsed.subject || 'No subject';
     const userMessageKey = `${userId}:${messageId}`;
-    console.log(`\n🔍 [PERSONAL EMAIL PROCESSING] Starting email processing for message ID: ${messageId}, user: ${userId}`);
+    
+    console.log(`\n🔍 [PERSONAL IMAP] ===== PERSONAL EMAIL PROCESSING START =====`);
+    console.log(`🔍 [PERSONAL IMAP] Message ID: ${messageId}`);
+    console.log(`🔍 [PERSONAL IMAP] From: ${fromEmail}`);
+    console.log(`🔍 [PERSONAL IMAP] Subject: ${subject}`);
+    console.log(`🔍 [PERSONAL IMAP] User ID: ${userId}`);
+    console.log(`🔍 [PERSONAL IMAP] Processing at: ${new Date().toLocaleTimeString()}`);
     
     // Check if this email was already successfully processed
     if (this.processedMessageIds.has(userMessageKey)) {
-      console.log(`⏭️ [PERSONAL EMAIL CACHING] Email ${messageId} found in memory cache for user ${userId} - skipping`);
+      console.log(`⏭️ [PERSONAL IMAP] Email ${messageId} found in memory cache for user ${userId} - skipping`);
       return;
     }
 
     const result = await this._processPersonalEmailWithDetails(parsed, userId);
+    
+    console.log(`🔍 [PERSONAL IMAP] Processing result:`, {
+      status: result.status,
+      savedToDb: result.savedToDb,
+      attachmentsProcessed: result.attachmentsProcessed,
+      error: result.error
+    });
     
     // НОВАЯ ЛОГИКА КЕШИРОВАНИЯ - только success в кеш
     if (result.status === 'success' && 
         result.savedToDb === true && 
         result.attachmentsProcessed === true) {
       this.processedMessageIds.add(userMessageKey);
-      console.log(`✅ [PERSONAL EMAIL CACHING] Email ${messageId} successfully processed and cached for user ${userId}`);
+      console.log(`✅ [PERSONAL IMAP] Email ${messageId} successfully processed and cached for user ${userId}`);
     } else if (result.status === 'already_processed' && result.alreadyInDatabase) {
       // Также кешируем если email уже был успешно обработан ранее
       this.processedMessageIds.add(userMessageKey);
-      console.log(`✅ [PERSONAL EMAIL CACHING] Email ${messageId} already in database, added to cache for user ${userId}`);
+      console.log(`✅ [PERSONAL IMAP] Email ${messageId} already in database, added to cache for user ${userId}`);
     } else {
-      console.log(`❌ [PERSONAL EMAIL CACHING] Email ${messageId} not cached for user ${userId} due to: ${result.status}, DB: ${result.savedToDb}, Attachments: ${result.attachmentsProcessed}`);
+      console.log(`❌ [PERSONAL IMAP] Email ${messageId} not cached for user ${userId} due to: ${result.status}, DB: ${result.savedToDb}, Attachments: ${result.attachmentsProcessed}`);
       if (result.error) {
-        console.log(`🚨 [PERSONAL EMAIL CACHING] Error details: ${result.error}`);
+        console.log(`🚨 [PERSONAL IMAP] Error details: ${result.error}`);
       }
       if (result.attachmentErrors && result.attachmentErrors.length > 0) {
-        console.log(`📎 [PERSONAL EMAIL CACHING] Attachment errors: ${result.attachmentErrors.join(', ')}`);
+        console.log(`📎 [PERSONAL IMAP] Attachment errors: ${result.attachmentErrors.join(', ')}`);
       }
     }
+    
+    console.log(`🔍 [PERSONAL IMAP] ===== PERSONAL EMAIL PROCESSING END =====\n`);
   }
 
   private async _processPersonalEmailWithDetails(parsed: any, userId: number): Promise<PersonalEmailProcessingResult> {
@@ -505,11 +543,53 @@ export class PersonalImapService {
       // Extract tracking information
       const trackingInfo = this.extractTrackingInfo(parsed.text || '', parsed.subject || '');
       
-      if (!trackingInfo.orderNumber && !trackingInfo.trackingId) {
+      // Требуются И REQ И TID для успешной обработки
+      if (!trackingInfo.orderNumber || !trackingInfo.trackingId) {
         console.log(`❌ [TRACKING] No tracking information found in email for user ${userId}`);
-        result.status = 'no_tracking';
-        result.error = 'No tracking information found';
-        return result;
+        
+        // Save as unprocessed email for manual review
+        try {
+          console.log(`📧 [PERSONAL IMAP] [UNPROCESSED] Saving email ${messageId} as unprocessed for manual review`);
+          console.log(`📧 [PERSONAL IMAP] [UNPROCESSED] Email details: From=${parsed.from?.text || 'Unknown'}, Subject="${parsed.subject || 'No subject'}"`);
+          console.log(`📧 [PERSONAL IMAP] [UNPROCESSED] User ID: ${userId}, Attachments: ${parsed.attachments?.length || 0}`);
+          
+          const attachments = parsed.attachments ? parsed.attachments.map((att: any) => ({
+            filename: att.filename || 'attachment',
+            contentType: att.contentType || 'application/octet-stream',
+            content: att.content ? att.content.toString('base64') : '',
+            encoding: 'base64',
+            size: att.size || (att.content ? att.content.length : 0)
+          })) : [];
+          
+          const unprocessedEmail = await storage.createUnprocessedEmail({
+            userId: userId,
+            messageId: messageId,
+            senderEmail: parsed.from?.text || 'Unknown',
+            senderName: parsed.from?.text || null,
+            subject: parsed.subject || 'No subject',
+            content: parsed.text || '',
+            attachments: attachments,
+            receivedAt: new Date()
+          });
+          
+          if (unprocessedEmail) {
+            console.log(`✅ [PERSONAL IMAP] [UNPROCESSED] Successfully saved unprocessed email with ID: ${unprocessedEmail.id}`);
+            console.log(`✅ [PERSONAL IMAP] [UNPROCESSED] Email will appear in admin panel for manual review`);
+            result.status = 'saved_as_unprocessed';
+            result.savedToDb = true;
+            result.dbRecordId = unprocessedEmail.id;
+          } else {
+            console.log(`⏭️ [PERSONAL IMAP] [UNPROCESSED] Email already exists, skipping duplicate`);
+            result.status = 'duplicate_skipped';
+            result.savedToDb = false;
+          }
+          return result;
+        } catch (unprocessedError) {
+          console.error(`❌ [PERSONAL IMAP] [UNPROCESSED] Error saving unprocessed email:`, unprocessedError);
+          result.status = 'no_tracking';
+          result.error = 'No tracking information found and failed to save as unprocessed';
+          return result;
+        }
       }
 
       console.log(`✅ [TRACKING] Found tracking info for user ${userId}:`, trackingInfo);

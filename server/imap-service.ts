@@ -274,26 +274,31 @@ export class ImapService {
 
   private async _checkEmails(userId?: number): Promise<void> {
     console.log('========================');
-    console.log('Starting general IMAP check at:', new Date().toISOString());
+    console.log('🔍 [GENERAL IMAP] Starting general IMAP check at:', new Date().toISOString());
+    console.log('🔍 [GENERAL IMAP] User ID:', userId || 'No user specified');
+    console.log('🔍 [GENERAL IMAP] IMAP connection status:', this.imap ? 'Connected' : 'Not connected');
 
     if (!this.imap) {
+      console.error('❌ [GENERAL IMAP] IMAP connection is not initialized');
       throw new Error("IMAP connection is not initialized");
     }
 
     // Используем только INBOX и Spam (для mail.ru)
     // '[Gmail]/Spam' не работает на mail.ru
     const foldersToCheck = ['INBOX', 'Spam'];
+    console.log('🔍 [GENERAL IMAP] Folders to check:', foldersToCheck);
 
     for (const folder of foldersToCheck) {
-      console.log(`Checking folder: ${folder}`);
+      console.log(`🔍 [GENERAL IMAP] Checking folder: ${folder}`);
       try {
         await this.checkFolder(folder, userId);
+        console.log(`✅ [GENERAL IMAP] Successfully checked folder: ${folder}`);
       } catch (error) {
-        console.error(`Error checking folder ${folder}:`, error);
+        console.error(`❌ [GENERAL IMAP] Error checking folder ${folder}:`, error);
       }
     }
 
-    console.log('Done checking all email folders');
+    console.log('✅ [GENERAL IMAP] Done checking all email folders');
     return;
   }
 
@@ -328,7 +333,7 @@ export class ImapService {
         return reject(new Error("IMAP connection is not initialized"));
       }
 
-      this.imap.openBox(folderName, false, (err, box) => {
+      this.imap.openBox(folderName, false, async (err, box) => {
         if (err) {
           console.error(`Failed to open ${folderName}:`, err);
           return reject(err);
@@ -340,9 +345,15 @@ export class ImapService {
           return reject(new Error("IMAP connection is not initialized"));
         }
 
-        const searchDate = new Date();
-        searchDate.setDate(searchDate.getDate() - 5);
-
+        try {
+          // Получаем время последней проверки из базы данных
+          const lastCheck = await storage.getLastEmailCheck(userId || 0);
+        const searchDate = lastCheck 
+          ? new Date(lastCheck.getTime() - 2 * 60 * 60 * 1000) // Добавляем 2 часа буфера
+          : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // 7 дней назад для первой проверки
+        
+        console.log(`[GENERAL IMAP] Last check was: ${lastCheck?.toISOString() || 'Never'}`);
+        console.log(`[GENERAL IMAP] Searching for emails since ${searchDate.toISOString()}`);
         const searchCriteria = ['ALL', ['SINCE', searchDate]];
 
         this.imap.search(searchCriteria, (err, results) => {
@@ -380,11 +391,24 @@ export class ImapService {
             reject(err);
           });
 
-          fetch.once('end', () => {
+          fetch.once('end', async () => {
             console.log(`Done checking emails in ${folderName}`);
+            // Обновляем время последней проверки в базе данных
+            if (userId) {
+              try {
+                await storage.updateLastEmailCheck(userId);
+                console.log(`[GENERAL IMAP] Updated lastEmailCheck for user ${userId}`);
+              } catch (error) {
+                console.error(`[GENERAL IMAP] Error updating lastEmailCheck for user ${userId}:`, error);
+              }
+            }
             resolve();
           });
         });
+        } catch (error) {
+          console.error(`[GENERAL IMAP] Error in checkFolder:`, error);
+          reject(error);
+        }
       });
     });
   }
@@ -461,37 +485,53 @@ export class ImapService {
 
   private async processEmail(mail: any, userId?: number): Promise<void> {
     if (!mail) {
-      console.log('No email data to process');
+      console.log('❌ [GENERAL IMAP] No email data to process');
       return;
     }
 
     const messageId = mail.messageId || mail.headers?.['message-id'] || `unknown-${Date.now()}`;
-    console.log(`\n🔍 [EMAIL PROCESSING] Starting email processing for message ID: ${messageId}`);
-    console.log(`🕐 [EMAIL PROCESSING] Processing email at: ${new Date().toLocaleTimeString()}`);
+    const fromEmail = mail.from?.value?.[0]?.address || 'Unknown';
+    const subject = mail.subject || 'No subject';
+    
+    console.log(`\n🔍 [GENERAL IMAP] ===== EMAIL PROCESSING START =====`);
+    console.log(`🔍 [GENERAL IMAP] Message ID: ${messageId}`);
+    console.log(`🔍 [GENERAL IMAP] From: ${fromEmail}`);
+    console.log(`🔍 [GENERAL IMAP] Subject: ${subject}`);
+    console.log(`🔍 [GENERAL IMAP] User ID: ${userId || 'No user specified'}`);
+    console.log(`🔍 [GENERAL IMAP] Processing at: ${new Date().toLocaleTimeString()}`);
     
     // Check if this email was already successfully processed
     if (this.processedMessageIds.has(messageId)) {
-      console.log(`⏭️ [EMAIL CACHING] Email ${messageId} found in memory cache for user ${userId || 'unknown'} - skipping`);
+      console.log(`⏭️ [GENERAL IMAP] Email ${messageId} found in memory cache - skipping`);
       return;
     }
 
     const result = await this._processEmailWithDetails(mail, userId);
+    
+    console.log(`🔍 [GENERAL IMAP] Processing result:`, {
+      status: result.status,
+      savedToDb: result.savedToDb,
+      attachmentsProcessed: result.attachmentsProcessed,
+      error: result.error
+    });
     
     // НОВАЯ ЛОГИКА КЕШИРОВАНИЯ - только success в кеш
     if (result.status === 'success' && 
         result.savedToDb === true && 
         result.attachmentsProcessed === true) {
       this.processedMessageIds.add(messageId);
-      console.log(`✅ [EMAIL CACHING] Email ${messageId} successfully processed and cached`);
+      console.log(`✅ [GENERAL IMAP] Email ${messageId} successfully processed and cached`);
     } else {
-      console.log(`❌ [EMAIL CACHING] Email ${messageId} not cached due to: ${result.status}, DB: ${result.savedToDb}, Attachments: ${result.attachmentsProcessed}`);
+      console.log(`❌ [GENERAL IMAP] Email ${messageId} not cached due to: ${result.status}, DB: ${result.savedToDb}, Attachments: ${result.attachmentsProcessed}`);
       if (result.error) {
-        console.log(`🚨 [EMAIL CACHING] Error details: ${result.error}`);
+        console.log(`🚨 [GENERAL IMAP] Error details: ${result.error}`);
       }
       if (result.attachmentErrors && result.attachmentErrors.length > 0) {
-        console.log(`📎 [EMAIL CACHING] Attachment errors: ${result.attachmentErrors.join(', ')}`);
+        console.log(`📎 [GENERAL IMAP] Attachment errors: ${result.attachmentErrors.join(', ')}`);
       }
     }
+    
+    console.log(`🔍 [GENERAL IMAP] ===== EMAIL PROCESSING END =====\n`);
   }
 
   private async _processEmailWithDetails(mail: any, userId?: number): Promise<EmailProcessingResult> {
@@ -940,7 +980,8 @@ export class ImapService {
         }
       }
 
-      if (requestId || extractedInfo.orderNumber) {
+      // Требуются И REQ И TID для успешной обработки
+      if (requestId && extractedInfo.trackingId) {
         if (extractedInfo.orderNumber) {
           console.log(`🔍 Looking up request by extracted order number: ${extractedInfo.orderNumber}`);
           const request = await storage.getSearchRequestByOrderNumber(extractedInfo.orderNumber);
@@ -1287,9 +1328,42 @@ export class ImapService {
         return result;
       } else {
         console.log(`❌ [MATCHING] Could not match email ${messageId} to any request`);
-        result.status = 'failed';
-        result.error = 'Could not match email to any request';
-        return result;
+        
+        // Save as unprocessed email for manual review
+        try {
+          console.log(`📧 [GENERAL IMAP] [UNPROCESSED] Saving email ${messageId} as unprocessed for manual review`);
+          console.log(`📧 [GENERAL IMAP] [UNPROCESSED] Email details: From=${fromEmail}, Subject="${subject}"`);
+          console.log(`📧 [GENERAL IMAP] [UNPROCESSED] User ID: ${userId || 'No user'}, Attachments: ${filteredAttachments.length}`);
+          
+          const unprocessedEmail = await storage.createUnprocessedEmail({
+            userId: userId || null,
+            messageId: messageId,
+            senderEmail: fromEmail,
+            senderName: from?.value?.[0]?.name || null,
+            subject: subject || 'No subject',
+            content: text || '',
+            attachments: filteredAttachments,
+            receivedAt: messageDate
+          });
+          
+          if (unprocessedEmail) {
+            console.log(`✅ [GENERAL IMAP] [UNPROCESSED] Successfully saved unprocessed email with ID: ${unprocessedEmail.id}`);
+            console.log(`✅ [GENERAL IMAP] [UNPROCESSED] Email will appear in admin panel for manual review`);
+            result.status = 'saved_as_unprocessed';
+            result.savedToDb = true;
+            result.dbRecordId = unprocessedEmail.id;
+          } else {
+            console.log(`⏭️ [GENERAL IMAP] [UNPROCESSED] Email already exists, skipping duplicate`);
+            result.status = 'duplicate_skipped';
+            result.savedToDb = false;
+          }
+          return result;
+        } catch (unprocessedError) {
+          console.error(`❌ [GENERAL IMAP] [UNPROCESSED] Error saving unprocessed email:`, unprocessedError);
+          result.status = 'failed';
+          result.error = 'Could not match email to any request and failed to save as unprocessed';
+          return result;
+        }
       }
     } catch (error: unknown) {
       console.error(`🚨 [ERROR] Error processing email ${messageId}:`, error);

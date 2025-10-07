@@ -25,6 +25,10 @@ import {
   type InsertSupplierMessage,
   type RequestParameter,
   type InsertRequestParameter,
+  type UnprocessedEmail,
+  type InsertUnprocessedEmail,
+  type EmailReplyTemplate,
+  type InsertEmailReplyTemplate,
   suppliers,
   searchRequests,
   requestSuppliers,
@@ -39,7 +43,9 @@ import {
   requestParameters,
   extractedParameters,
   improvementRequests,
-  winnerSelections
+  winnerSelections,
+  unprocessedEmails,
+  emailReplyTemplates
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, inArray, count, sql, isNull, isNotNull } from "drizzle-orm";
@@ -169,6 +175,21 @@ export interface IStorage {
   createWinnerSelection(selection: any): Promise<any>;
   getWinnerByRequestId(requestId: number): Promise<any>;
   deleteWinnerSelection(requestId: number): Promise<boolean>;
+  
+  // Unprocessed emails operations
+  createUnprocessedEmail(email: InsertUnprocessedEmail): Promise<UnprocessedEmail>;
+  getUnprocessedEmails(userId?: number, status?: string): Promise<UnprocessedEmail[]>;
+  getUnprocessedEmailById(id: number): Promise<UnprocessedEmail | undefined>;
+  updateUnprocessedEmailStatus(id: number, status: string, processedBy?: number): Promise<boolean>;
+  deleteUnprocessedEmail(id: number): Promise<boolean>;
+  markEmailAsReplied(id: number, replyContent: string): Promise<boolean>;
+  
+  // Email reply templates operations
+  createEmailReplyTemplate(template: InsertEmailReplyTemplate): Promise<EmailReplyTemplate>;
+  getEmailReplyTemplates(userId?: number): Promise<EmailReplyTemplate[]>;
+  getEmailReplyTemplateById(id: number): Promise<EmailReplyTemplate | undefined>;
+  updateEmailReplyTemplate(id: number, template: Partial<InsertEmailReplyTemplate>): Promise<boolean>;
+  deleteEmailReplyTemplate(id: number): Promise<boolean>;
   
   // Helper functions
   generateOrderNumber(): string;
@@ -2748,6 +2769,7 @@ export class DatabaseStorage implements IStorage {
 
   /**
    * Get all users with configured email accounts
+   * Only returns users who have BOTH emailAccount AND emailPassword filled
    */
   async getUsersWithEmailConfig(): Promise<Array<{ id: number; emailAccount: string }>> {
     try {
@@ -2759,10 +2781,16 @@ export class DatabaseStorage implements IStorage {
         .from(users)
         .where(and(
           eq(users.emailConfigured, true),
-          isNotNull(users.emailAccount)
+          isNotNull(users.emailAccount),
+          isNotNull(users.emailPassword)
         ));
       
-      return result.filter(user => user.emailAccount);
+      // Additional filter to ensure both fields are not empty strings
+      return result.filter(user => 
+        user.emailAccount && 
+        user.emailAccount.trim() !== '' &&
+        user.emailAccount !== null
+      );
     } catch (error) {
       console.error('Error getting users with email config:', error);
       return [];
@@ -2923,6 +2951,279 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Helper method to generate unique order numbers
+
+  // ============================================================================
+  // UNPROCESSED EMAILS OPERATIONS
+  // ============================================================================
+
+  async createUnprocessedEmail(email: InsertUnprocessedEmail): Promise<UnprocessedEmail | null> {
+    try {
+      // Проверяем, существует ли уже email с таким message_id
+      const existing = await db
+        .select({ id: unprocessedEmails.id })
+        .from(unprocessedEmails)
+        .where(eq(unprocessedEmails.messageId, email.messageId))
+        .limit(1);
+      
+      if (existing.length > 0) {
+        console.log(`[Storage] Unprocessed email with message_id ${email.messageId} already exists, skipping (duplicate)`);
+        return null; // Возвращаем null вместо существующей записи
+      }
+      
+      const [result] = await db
+        .insert(unprocessedEmails)
+        .values(email)
+        .returning();
+      
+      console.log(`[Storage] Created unprocessed email with ID: ${result.id}`);
+      return result;
+    } catch (error) {
+      // Если ошибка дубликата - просто пропускаем
+      if (error.code === '23505' && error.constraint === 'unprocessed_emails_message_id_key') {
+        console.log(`[Storage] Duplicate unprocessed email with message_id ${email.messageId}, skipping`);
+        return null;
+      }
+      console.error('[Storage] Error creating unprocessed email:', error);
+      throw error;
+    }
+  }
+
+  async getUnprocessedEmails(userId?: number, status?: string): Promise<UnprocessedEmail[]> {
+    try {
+      let query = db
+        .select({
+          id: unprocessedEmails.id,
+          userId: unprocessedEmails.userId,
+          messageId: unprocessedEmails.messageId,
+          senderEmail: unprocessedEmails.senderEmail,
+          senderName: unprocessedEmails.senderName,
+          subject: unprocessedEmails.subject,
+          content: unprocessedEmails.content,
+          attachments: unprocessedEmails.attachments,
+          receivedAt: unprocessedEmails.receivedAt,
+          status: unprocessedEmails.status,
+          linkedRequestId: unprocessedEmails.linkedRequestId,
+          repliedAt: unprocessedEmails.repliedAt,
+          replyContent: unprocessedEmails.replyContent,
+          processedBy: unprocessedEmails.processedBy,
+          processedAt: unprocessedEmails.processedAt,
+          createdAt: unprocessedEmails.createdAt,
+          // User data
+          userEmailAccount: users.emailAccount,
+          userEmailConfigured: users.emailConfigured
+        })
+        .from(unprocessedEmails)
+        .leftJoin(users, eq(unprocessedEmails.userId, users.id));
+      
+      const conditions = [];
+      if (userId) {
+        conditions.push(eq(unprocessedEmails.userId, userId));
+      }
+      if (status) {
+        conditions.push(eq(unprocessedEmails.status, status));
+      }
+      
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions));
+      }
+      
+      const result = await query.orderBy(desc(unprocessedEmails.receivedAt));
+      console.log(`[Storage] Retrieved ${result.length} unprocessed emails`);
+      return result;
+    } catch (error) {
+      console.error('[Storage] Error getting unprocessed emails:', error);
+      throw error;
+    }
+  }
+
+  async getUnprocessedEmailById(id: number): Promise<UnprocessedEmail | undefined> {
+    try {
+      const [result] = await db
+        .select()
+        .from(unprocessedEmails)
+        .where(eq(unprocessedEmails.id, id))
+        .limit(1);
+      
+      return result;
+    } catch (error) {
+      console.error(`[Storage] Error getting unprocessed email by ID ${id}:`, error);
+      throw error;
+    }
+  }
+
+  async updateUnprocessedEmailStatus(id: number, status: string, processedBy?: number): Promise<boolean> {
+    try {
+      const updateData: any = {
+        status,
+        processedAt: new Date()
+      };
+      
+      if (processedBy) {
+        updateData.processedBy = processedBy;
+      }
+      
+      await db
+        .update(unprocessedEmails)
+        .set(updateData)
+        .where(eq(unprocessedEmails.id, id));
+      
+      console.log(`[Storage] Updated unprocessed email ${id} status to ${status}`);
+      return true;
+    } catch (error) {
+      console.error(`[Storage] Error updating unprocessed email ${id} status:`, error);
+      return false;
+    }
+  }
+
+  async deleteUnprocessedEmail(id: number): Promise<boolean> {
+    try {
+      await db
+        .delete(unprocessedEmails)
+        .where(eq(unprocessedEmails.id, id));
+      
+      console.log(`[Storage] Deleted unprocessed email ${id}`);
+      return true;
+    } catch (error) {
+      console.error(`[Storage] Error deleting unprocessed email ${id}:`, error);
+      return false;
+    }
+  }
+
+  async markEmailAsReplied(id: number, replyContent: string): Promise<boolean> {
+    try {
+      await db
+        .update(unprocessedEmails)
+        .set({
+          status: 'replied',
+          repliedAt: new Date(),
+          replyContent,
+          processedAt: new Date()
+        })
+        .where(eq(unprocessedEmails.id, id));
+      
+      console.log(`[Storage] Marked email ${id} as replied`);
+      return true;
+    } catch (error) {
+      console.error(`[Storage] Error marking email ${id} as replied:`, error);
+      return false;
+    }
+  }
+
+  // ============================================================================
+  // EMAIL REPLY TEMPLATES OPERATIONS
+  // ============================================================================
+
+  async createEmailReplyTemplate(template: InsertEmailReplyTemplate): Promise<EmailReplyTemplate> {
+    try {
+      const [result] = await db
+        .insert(emailReplyTemplates)
+        .values(template)
+        .returning();
+      
+      console.log(`[Storage] Created email reply template with ID: ${result.id}`);
+      return result;
+    } catch (error) {
+      console.error('[Storage] Error creating email reply template:', error);
+      throw error;
+    }
+  }
+
+  async getEmailReplyTemplates(userId?: number): Promise<EmailReplyTemplate[]> {
+    try {
+      let query = db.select().from(emailReplyTemplates);
+      
+      if (userId) {
+        query = query.where(eq(emailReplyTemplates.userId, userId));
+      }
+      
+      const result = await query.orderBy(desc(emailReplyTemplates.createdAt));
+      console.log(`[Storage] Retrieved ${result.length} email reply templates`);
+      return result;
+    } catch (error) {
+      console.error('[Storage] Error getting email reply templates:', error);
+      throw error;
+    }
+  }
+
+  async getEmailReplyTemplateById(id: number): Promise<EmailReplyTemplate | undefined> {
+    try {
+      const [result] = await db
+        .select()
+        .from(emailReplyTemplates)
+        .where(eq(emailReplyTemplates.id, id))
+        .limit(1);
+      
+      return result;
+    } catch (error) {
+      console.error(`[Storage] Error getting email reply template by ID ${id}:`, error);
+      throw error;
+    }
+  }
+
+  async updateEmailReplyTemplate(id: number, template: Partial<InsertEmailReplyTemplate>): Promise<boolean> {
+    try {
+      await db
+        .update(emailReplyTemplates)
+        .set({
+          ...template,
+          updatedAt: new Date()
+        })
+        .where(eq(emailReplyTemplates.id, id));
+      
+      console.log(`[Storage] Updated email reply template ${id}`);
+      return true;
+    } catch (error) {
+      console.error(`[Storage] Error updating email reply template ${id}:`, error);
+      return false;
+    }
+  }
+
+  async deleteEmailReplyTemplate(id: number): Promise<boolean> {
+    try {
+      await db
+        .delete(emailReplyTemplates)
+        .where(eq(emailReplyTemplates.id, id));
+      
+      console.log(`[Storage] Deleted email reply template ${id}`);
+      return true;
+    } catch (error) {
+      console.error(`[Storage] Error deleting email reply template ${id}:`, error);
+      return false;
+    }
+  }
+
+  // ============================================================================
+  // EMAIL CHECK OPTIMIZATION
+  // ============================================================================
+
+  async updateLastEmailCheck(userId: number): Promise<void> {
+    try {
+      await db
+        .update(users)
+        .set({ lastEmailCheck: new Date() })
+        .where(eq(users.id, userId));
+      
+      console.log(`[Storage] Updated lastEmailCheck for user ${userId}`);
+    } catch (error) {
+      console.error(`[Storage] Error updating lastEmailCheck for user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  async getLastEmailCheck(userId: number): Promise<Date | null> {
+    try {
+      const result = await db
+        .select({ lastEmailCheck: users.lastEmailCheck })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+      
+      return result[0]?.lastEmailCheck || null;
+    } catch (error) {
+      console.error(`[Storage] Error getting lastEmailCheck for user ${userId}:`, error);
+      return null;
+    }
+  }
 }
 
 export const storage = new DatabaseStorage();

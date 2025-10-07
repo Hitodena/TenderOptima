@@ -40,3 +40,6 @@ export function Layout({ children, title }: LayoutProps) {
     </div>
   );
 }
+
+// Add default export
+export default Layout;

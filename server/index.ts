@@ -49,12 +49,31 @@ async function checkEmailsForAllUsers() {
   try {
     console.log('📧 Checking emails for all users with configured email...');
     
-    // Get all users with email configuration
+    // Get all users with email configuration (both emailAccount AND emailPassword must be filled)
     const usersWithEmail = await storage.getUsersWithEmailConfig();
-    console.log(`📧 Found ${usersWithEmail.length} users with configured email`);
+    console.log(`📧 Found ${usersWithEmail.length} users with BOTH emailAccount AND emailPassword configured`);
     
     if (usersWithEmail.length === 0) {
-      console.log('📧 No users with configured email found');
+      console.log('📧 No users with complete email configuration found (need both emailAccount AND emailPassword)');
+      
+      // Optional: Log how many users have partial configuration for debugging
+      try {
+        const allUsers = await storage.getAllUsers();
+        const usersWithPartialConfig = allUsers.filter(user => 
+          user.emailConfigured && 
+          user.emailAccount && 
+          user.emailAccount.trim() !== '' &&
+          (!user.emailPassword || user.emailPassword.trim() === '')
+        );
+        
+        if (usersWithPartialConfig.length > 0) {
+          console.log(`📧 Note: ${usersWithPartialConfig.length} users have emailAccount but missing emailPassword:`, 
+            usersWithPartialConfig.map(u => `${u.id}(${u.emailAccount})`).join(', '));
+        }
+      } catch (debugError) {
+        console.log('📧 Could not check partial configurations:', debugError);
+      }
+      
       return;
     }
     

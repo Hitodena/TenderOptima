@@ -84,9 +84,33 @@ class EmailService {
     }
   }
 
-  async sendEmail(options: EmailOptions & { userId?: number; hideBusinessCard?: boolean }): Promise<boolean> {
+  async sendEmail(options: EmailOptions & { 
+    userId?: number; 
+    hideBusinessCard?: boolean;
+    from?: string;
+    auth?: { user: string; pass: string };
+    smtp?: { host: string; port: number; secure: boolean };
+  }): Promise<boolean> {
     // Check if user has personal email configuration
     console.log(`[email] DEBUG - sendEmail called with options:`, { to: options.to, subject: options.subject, userId: options.userId, hideBusinessCard: options.hideBusinessCard });
+    
+    // If custom SMTP configuration is provided, use it
+    if (options.smtp && options.auth && options.from) {
+      console.log(`[email] Using custom SMTP configuration`);
+      const customTransporter = nodemailer.createTransport({
+        host: options.smtp.host,
+        port: options.smtp.port,
+        secure: options.smtp.secure,
+        auth: options.auth,
+        tls: {
+          rejectUnauthorized: false
+        }
+      });
+      
+      // Override from address
+      const customOptions = { ...options, from: options.from };
+      return this.sendWithTransporter(customTransporter, customOptions);
+    }
     
     if (options.userId) {
       // Clear cache for this user to ensure fresh data
@@ -99,6 +123,8 @@ class EmailService {
         return this.sendWithTransporter(personalTransporter, options);
       } else {
         console.log(`[email] CRITICAL DEBUG - No personal transporter available for user ${options.userId}, using fallback`);
+        // Don't fall back to shared transporter for user emails - return false
+        return false;
       }
     }
 
@@ -126,7 +152,21 @@ class EmailService {
 
       // Load user email configuration from database
       const userConfig = await this.loadUserEmailConfig(userId);
-      if (!userConfig || !userConfig.emailConfigured) {
+      console.log(`[email] DEBUG - User ${userId} email config:`, {
+        hasConfig: !!userConfig,
+        hasAccount: !!userConfig?.emailAccount,
+        hasPassword: !!userConfig?.emailPassword,
+        emailConfigured: userConfig?.emailConfigured,
+        smtpHost: userConfig?.smtpHost,
+        smtpPort: userConfig?.smtpPort
+      });
+      
+      if (!userConfig || !userConfig.emailAccount || !userConfig.emailPassword) {
+        console.log(`[email] User ${userId} email not configured:`, {
+          hasAccount: !!userConfig?.emailAccount,
+          hasPassword: !!userConfig?.emailPassword,
+          emailConfigured: userConfig?.emailConfigured
+        });
         return null;
       }
 
@@ -542,6 +582,17 @@ export const sendEmail = async (
     }>;
     userId?: number; // ID пользователя для включения бизнес-карточки
     hideBusinessCard?: boolean; // Скрыть визитную карточку
+    // User SMTP configuration
+    from?: string;
+    auth?: {
+      user: string;
+      pass: string;
+    };
+    smtp?: {
+      host: string;
+      port: number;
+      secure: boolean;
+    };
   }
 ): Promise<boolean> => {
   console.log(`[email] *** sendEmail FUNCTION CALLED ***`, { to, subject, userId: options?.userId });
@@ -615,8 +666,8 @@ export const sendEmail = async (
   }
   
   // Восстанавливаем функциональность бизнес-карточки
-  let finalText = text;
-  let finalHtml = options?.html || text.replace(/\n/g, '<br/>');
+  let finalText = text || '';
+  let finalHtml = options?.html || (text || '').replace(/\n/g, '<br/>');
   let businessCardAttachments = processedAttachments || [];
   
   // Получаем бизнес-карточку пользователя, если userId предоставлен и не скрыта
