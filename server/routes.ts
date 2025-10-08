@@ -1902,12 +1902,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // On-demand email checking endpoint
 app.post("/api/check-emails", requireAuth, async (req, res) => {
   try {
+    // Проверяем, это ручной запрос от пользователя или автоматический
+    const isManualRequest = req.headers['x-manual-check'] === 'true';
+    
     console.log("\n🔍 PERSONAL EMAIL CHECK REQUEST RECEIVED");
     console.log("User:", req.user?.username, "ID:", req.user?.id);
+    console.log("Request Type:", isManualRequest ? "MANUAL (user-triggered)" : "AUTOMATIC (system-triggered)");
     console.log("Timestamp:", new Date().toISOString());
 
     const requestId = req.body.requestId;
     console.log("Request ID from client:", requestId);
+    
+    // Если это автоматический запрос и email checking отключен - блокируем
+    if (!isManualRequest && process.env.ENABLE_EMAIL_CHECKING !== 'true') {
+      console.log("📧 Email checking is disabled for automatic requests");
+      return res.json({
+        success: true,
+        message: "Email checking is disabled (automatic requests only)",
+        newResponses: 0
+      });
+    }
     
     // Get user's email configuration for debugging
     try {
@@ -2108,21 +2122,18 @@ app.post("/api/check-emails", requireAuth, async (req, res) => {
 
       // Send the email with sanitized attachments
       try {
-        // Create message history to include in the reply
+        // Create clean reply content - user's text + tracking phrase + business card + message history
         let emailContent = content;
 
-        // Add original message content to the reply as a quote
+        // Add tracking footer like in improvement requests
+        const referenceFooter = `\n\n**!При ответе на наш запрос не меняйте тему письма (Subject), иначе мы не сможем обработать ваш ответ!**\n`;
+        emailContent += referenceFooter;
+
+        // Prepare message history to be added after business card
+        let messageHistory = '';
         if (response.content) {
           const responseDate = response.responseDate ? new Date(response.responseDate) : new Date();
-          emailContent += `\n\n-------------------------\nОригинальное сообщение от ${response.supplierName || response.supplierEmail} (${responseDate.toLocaleString('ru-RU')}):\n\n${response.content}`;
-        }
-
-        // Add request details if available
-        if (request.productName) {
-          emailContent += `\n\n-------------------------\nЗапрос: ${request.productName}`;
-          if (request.productDescription) {
-            emailContent += `\nОписание: ${request.productDescription}`;
-          }
+          messageHistory = `\n\n-------------------------\nОригинальное сообщение от ${response.supplierName || response.supplierEmail} (${responseDate.toLocaleString('ru-RU')}):\n\n${response.content}`;
         }
 
         // Получаем ID пользователя, отправляющего ответ
@@ -2136,7 +2147,8 @@ app.post("/api/check-emails", requireAuth, async (req, res) => {
             attachments: sanitizedAttachments, // Use sanitized attachments instead of raw ones
             userId: userId, // Добавляем ID пользователя для включения бизнес-карточки
             requestId: response.requestId, // Добавляем requestId 
-            replyTo: response.supplierEmail // Используем email как replyTo
+            replyTo: response.supplierEmail, // Используем email как replyTo
+            messageHistory: messageHistory // Добавляем историю сообщений для вставки после бизнес-карточки
           }
         );
 

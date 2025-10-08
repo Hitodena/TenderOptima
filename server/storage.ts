@@ -1713,6 +1713,7 @@ export class DatabaseStorage implements IStorage {
         email: contact.email || '',
         name: contact.name || null,
         phone: contact.phone || null,
+        website: contact.website || null,
         organization: contact.organization || null
       }));
       

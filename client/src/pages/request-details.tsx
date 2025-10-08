@@ -41,7 +41,11 @@ export default function RequestDetails() {
 
   // Мутация для проверки новых email
   const checkEmailsMutation = useMutation<EmailCheckResponse, Error, number>({
-    mutationFn: (requestId: number) => apiRequest('/api/check-emails', 'POST', { requestId }),
+    mutationFn: (requestId: number) => apiRequest('/api/check-emails', 'POST', { requestId }, {
+      headers: {
+        'x-manual-check': 'true'  // Помечаем как ручной запрос от пользователя
+      }
+    }),
     onSuccess: (response) => {
       if (response.newResponses > 0) {
         toast({
@@ -62,27 +66,7 @@ export default function RequestDetails() {
     }
   });
 
-  // --- НОВАЯ ЛОГИКА АВТОМАТИЧЕСКОГО ОБНОВЛЕНИЯ ---
-  useEffect(() => {
-    if (!id) return; // Не запускаем, если нет ID
-
-    // Функция для вызова мутации, если она не занята
-    const check = () => {
-      if (!checkEmailsMutation.isPending) {
-        checkEmailsMutation.mutate(id);
-      }
-    };
-
-    // Запускаем проверку один раз при загрузке страницы
-    check();
-
-    // Устанавливаем интервал для последующих проверок каждые 20 секунд
-    const intervalId = setInterval(check, 20000);
-
-    // Очищаем интервал, когда пользователь уходит со страницы
-    return () => clearInterval(intervalId);
-
-  }, [id]); // Зависимость только от ID запроса
+  // Удалена автоматическая проверка email - теперь только по кнопке
 
   // Мутация для отметки ответов как прочитанных
   const markAsReadMutation = useMutation({

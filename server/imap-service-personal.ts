@@ -282,15 +282,19 @@ export class PersonalImapService {
   private async checkPersonalEmails(imap: Imap, userId: number): Promise<void> {
     console.log(`[PERSONAL EMAIL] Starting personal email check for user ${userId}`);
     
-    // Проверяем только INBOX, так как не все почтовые сервисы имеют папку Spam
-    const foldersToCheck = ['INBOX'];
+    // Проверяем INBOX и Spam (для mail.ru)
+    // '[Gmail]/Spam' не работает на mail.ru, используем просто 'Spam'
+    const foldersToCheck = ['INBOX', 'Spam'];
+    console.log(`[PERSONAL EMAIL] Folders to check for user ${userId}:`, foldersToCheck);
     
     for (const folder of foldersToCheck) {
       console.log(`[PERSONAL EMAIL] Checking folder: ${folder} for user ${userId}`);
       try {
         await this.checkPersonalFolder(imap, folder, userId);
+        console.log(`✅ [PERSONAL EMAIL] Successfully checked folder: ${folder} for user ${userId}`);
       } catch (error) {
-        console.error(`[PERSONAL EMAIL] Error checking folder ${folder} for user ${userId}:`, error);
+        console.error(`❌ [PERSONAL EMAIL] Error checking folder ${folder} for user ${userId}:`, error);
+        // Продолжаем проверку других папок даже если одна папка недоступна
       }
     }
 
@@ -300,15 +304,19 @@ export class PersonalImapService {
   private async checkPersonalEmailsForOrderNumber(imap: Imap, orderNumber: string, userId: number): Promise<void> {
     console.log(`[PERSONAL EMAIL] Starting targeted email check for order ${orderNumber}, user ${userId}`);
     
-    // Проверяем только INBOX, так как не все почтовые сервисы имеют папку Spam
-    const foldersToCheck = ['INBOX'];
+    // Проверяем INBOX и Spam (для mail.ru)
+    // '[Gmail]/Spam' не работает на mail.ru, используем просто 'Spam'
+    const foldersToCheck = ['INBOX', 'Spam'];
+    console.log(`[PERSONAL EMAIL] Folders to check for order ${orderNumber}, user ${userId}:`, foldersToCheck);
     
     for (const folder of foldersToCheck) {
       console.log(`[PERSONAL EMAIL] Checking folder: ${folder} for order ${orderNumber}, user ${userId}`);
       try {
         await this.checkPersonalFolderWithOrderNumber(imap, folder, orderNumber, userId);
+        console.log(`✅ [PERSONAL EMAIL] Successfully checked folder: ${folder} for order ${orderNumber}, user ${userId}`);
       } catch (error) {
-        console.error(`[PERSONAL EMAIL] Error checking folder ${folder} for order ${orderNumber}, user ${userId}:`, error);
+        console.error(`❌ [PERSONAL EMAIL] Error checking folder ${folder} for order ${orderNumber}, user ${userId}:`, error);
+        // Продолжаем проверку других папок даже если одна папка недоступна
       }
     }
 

@@ -31,7 +31,7 @@ export function SupplierTooltip({ supplier, children, className = '' }: Supplier
     const triggerRect = triggerRef.current.getBoundingClientRect();
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
-    const tooltipWidth = Math.min(320, viewportWidth - 32);
+    const tooltipWidth = Math.min(384, viewportWidth - 32); // w-96 = 384px
     const tooltipHeight = 280;
     const margin = 16;
 
@@ -164,7 +164,7 @@ export function SupplierTooltip({ supplier, children, className = '' }: Supplier
   };
 
   const getPositionClasses = () => {
-    const baseClasses = "absolute z-50 w-80 max-w-sm bg-white border border-gray-200 rounded-lg shadow-xl p-4 animate-in fade-in-0 zoom-in-95 duration-200 max-h-80 overflow-y-auto";
+    const baseClasses = "absolute z-50 w-96 max-w-md bg-white border border-gray-200 rounded-lg shadow-xl p-4 animate-in fade-in-0 zoom-in-95 duration-200 max-h-80 overflow-hidden";
     
     switch (position) {
       case 'top':
@@ -233,59 +233,12 @@ export function SupplierTooltip({ supplier, children, className = '' }: Supplier
             <div className={getArrowClasses().inner}></div>
           </div>
           
-          {/* Содержимое */}
+          {/* Содержимое - только описание при наведении */}
           <div className="space-y-3">
-            <div>
-              <Label className="text-sm font-medium text-gray-700">Название компании</Label>
-              <p className="text-sm text-gray-900">{supplier.name}</p>
-            </div>
-            
-            {supplier.email && (
-              <div>
-                <Label className="text-sm font-medium text-gray-700">Email</Label>
-                <p className="text-sm text-gray-900">{supplier.email}</p>
-              </div>
-            )}
-            
-            {supplier.phone && (
-              <div>
-                <Label className="text-sm font-medium text-gray-700">Телефон</Label>
-                <p className="text-sm text-gray-900">{supplier.phone}</p>
-              </div>
-            )}
-            
-            {supplier.website && (
-              <div>
-                <Label className="text-sm font-medium text-gray-700">Веб-сайт</Label>
-                <a 
-                  href={formatWebsiteUrl(supplier.website)} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-sm text-blue-600 hover:text-blue-800 hover:underline break-all"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {supplier.website}
-                </a>
-              </div>
-            )}
-            
             {supplier.description && (
               <div>
                 <Label className="text-sm font-medium text-gray-700">Описание</Label>
-                <p className="text-sm text-gray-900">{supplier.description}</p>
-              </div>
-            )}
-            
-            {supplier.categories && supplier.categories.length > 0 && (
-              <div>
-                <Label className="text-sm font-medium text-gray-700">Категории</Label>
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {supplier.categories.map((category, idx) => (
-                    <Badge key={idx} variant="secondary" className="text-xs">
-                      {category}
-                    </Badge>
-                  ))}
-                </div>
+                <p className="text-sm text-gray-900 break-words whitespace-normal overflow-wrap-anywhere">{supplier.description}</p>
               </div>
             )}
           </div>

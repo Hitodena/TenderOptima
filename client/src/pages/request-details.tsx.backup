@@ -88,8 +88,8 @@ export default function RequestDetails() {
         // Show toast for new responses
         if (data.newResponses > 0) {
           toast({
-            title: "Email Check Complete",
-            description: `Found ${data.newResponses} new supplier ${data.newResponses === 1 ? 'response' : 'responses'}`,
+            title: "Проверка email завершена",
+            description: `Найдено ${data.newResponses} новых ответов от поставщиков`,
             variant: "default"
           });
 
@@ -97,8 +97,8 @@ export default function RequestDetails() {
           setTab("responses");
         } else {
           toast({
-            title: "Email Check Complete",
-            description: "No new supplier responses found",
+            title: "Проверка email завершена",
+            description: "Новых ответов от поставщиков не найдено",
             variant: "default"
           });
         }
@@ -109,14 +109,14 @@ export default function RequestDetails() {
         // Show success message with the number of new responses found
         if (data.newResponses > 0) {
           toast({
-            title: "Email Check Complete",
-            description: `Found ${data.newResponses} new supplier ${data.newResponses === 1 ? 'response' : 'responses'}`,
+            title: "Проверка email завершена",
+            description: `Найдено ${data.newResponses} новых ответов от поставщиков`,
             variant: "default"
           });
         } else {
           toast({
-            title: "Email Check Complete",
-            description: "No new supplier responses found",
+            title: "Проверка email завершена",
+            description: "Новых ответов от поставщиков не найдено",
             variant: "default"
           });
         }

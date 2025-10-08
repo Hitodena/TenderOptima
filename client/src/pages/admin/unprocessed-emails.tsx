@@ -198,7 +198,10 @@ export default function UnprocessedEmailsPage() {
                   try {
                     const response = await fetch('/api/check-emails', {
                       method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
+                      headers: { 
+                        'Content-Type': 'application/json',
+                        'x-manual-check': 'true'  // Помечаем как ручной запрос от пользователя
+                      },
                       body: JSON.stringify({})
                     });
                     const result = await response.json();
@@ -222,7 +225,10 @@ export default function UnprocessedEmailsPage() {
                     // Сначала запускаем проверку emails
                     const response = await fetch('/api/check-emails', {
                       method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
+                      headers: { 
+                        'Content-Type': 'application/json',
+                        'x-manual-check': 'true'  // Помечаем как ручной запрос от пользователя
+                      },
                       body: JSON.stringify({})
                     });
                     const result = await response.json();

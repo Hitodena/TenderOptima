@@ -175,6 +175,7 @@ export default function ContactGroupDetailsPage() {
     const name = formData.get("name") as string;
     const email = formData.get("email") as string;
     const phone = formData.get("phone") as string;
+    const website = formData.get("website") as string;
     const organization = formData.get("organization") as string;
 
     if (!name.trim() || !email.trim()) {
@@ -191,6 +192,7 @@ export default function ContactGroupDetailsPage() {
       name,
       email,
       phone,
+      website: website || undefined,
       organization: organization || undefined,
     });
   };
@@ -204,6 +206,7 @@ export default function ContactGroupDetailsPage() {
     const name = formData.get("name") as string;
     const email = formData.get("email") as string;
     const phone = formData.get("phone") as string;
+    const website = formData.get("website") as string;
     const organization = formData.get("organization") as string;
 
     if (!name.trim() || !email.trim()) {
@@ -220,6 +223,7 @@ export default function ContactGroupDetailsPage() {
       name,
       email,
       phone,
+      website: website || undefined,
       organization: organization || undefined,
     });
   };
@@ -393,6 +397,10 @@ export default function ContactGroupDetailsPage() {
                 <p className="text-xs text-muted-foreground">Несколько телефонов вводите через запятую</p>
               </div>
               <div className="space-y-2">
+                <Label htmlFor="website">Веб-сайт</Label>
+                <Input id="website" name="website" placeholder="https://example.com" />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="organization">Описание</Label>
                 <Input id="organization" name="organization" placeholder="Дополнительная информация" />
               </div>
@@ -451,6 +459,15 @@ export default function ContactGroupDetailsPage() {
                     defaultValue={editingContact.phone}
                   />
                   <p className="text-xs text-muted-foreground">Несколько телефонов вводите через запятую</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-website">Веб-сайт</Label>
+                  <Input
+                    id="edit-website"
+                    name="website"
+                    placeholder="https://example.com"
+                    defaultValue={editingContact.website || ""}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-organization">Описание</Label>

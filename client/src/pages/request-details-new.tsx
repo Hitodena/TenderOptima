@@ -222,6 +222,10 @@ export default function RequestDetails() {
     mutationFn: async () => {
       return apiRequest<EmailCheckResponse>('/api/check-emails', 'POST', {
         requestId: id
+      }, {
+        headers: {
+          'x-manual-check': 'true'  // Помечаем как ручной запрос от пользователя
+        }
       });
     },
     onSuccess: async (data: EmailCheckResponse) => {
@@ -240,8 +244,8 @@ export default function RequestDetails() {
         }
         
         toast({
-          title: "Email Check Complete",
-          description: `Found ${data.newResponses} new supplier responses`,
+          title: "Проверка email завершена",
+          description: `Найдено ${data.newResponses} новых ответов от поставщиков`,
           variant: "default"
         });
         setTab("responses");
@@ -251,8 +255,8 @@ export default function RequestDetails() {
         setActiveResponse(null);
       } else {
         toast({
-          title: "Email Check Complete",
-          description: "No new supplier responses found",
+          title: "Проверка email завершена",
+          description: "Новых ответов от поставщиков не найдено",
           variant: "default"
         });
       }
@@ -260,8 +264,8 @@ export default function RequestDetails() {
     onError: (error) => {
       console.error('Email check failed:', error);
       toast({
-        title: "Email Check Failed",
-        description: error instanceof Error ? error.message : "Failed to check emails",
+        title: "Ошибка проверки email",
+        description: error instanceof Error ? error.message : "Не удалось проверить email",
         variant: "destructive"
       });
     }
@@ -280,49 +284,7 @@ export default function RequestDetails() {
     }
   }, [tab, data?.supplierResponses, hasAutoSelectedFirstEmail, handleSupplierSelect]);
 
-  // Автоматическая проверка новых email каждые 30 секунд
-  useEffect(() => {
-    if (!id) return;
-
-    const interval = setInterval(async () => {
-      try {
-        console.log('🔄 Auto-checking for new emails...');
-        const checkResult = await apiRequest<EmailCheckResponse>('/api/check-emails', 'POST', {
-          requestId: id
-        });
-        
-        if (checkResult.newResponses > 0) {
-          console.log(`📧 Found ${checkResult.newResponses} new responses, refreshing data...`);
-          
-          // Обновляем данные
-          await queryClient.invalidateQueries({ queryKey: ['/api/search-requests', 'single', id] });
-          await queryClient.invalidateQueries({ queryKey: ['/api/supplier-responses', id] });
-          await queryClient.invalidateQueries({ queryKey: ['/api/supplier-responses-batch'] });
-          
-          // Принудительно обновляем данные
-          await refetch();
-          
-          // Показываем уведомление о новых письмах
-          toast({
-            title: "Новые письма получены",
-            description: `Получено ${checkResult.newResponses} новых ответов от поставщиков`,
-            variant: "default"
-          });
-          
-          // Переключаемся на вкладку ответов
-          setTab("responses");
-          
-          console.log('✅ Data refreshed after auto-check');
-        } else {
-          console.log('📭 No new responses found in auto-check');
-        }
-      } catch (error) {
-        console.error('❌ Auto-check failed:', error);
-      }
-    }, 15000); // Проверяем каждые 15 секунд для более быстрого обновления
-
-    return () => clearInterval(interval);
-  }, [id, queryClient, refetch, toast]);
+  // Удалена автоматическая проверка email - теперь только по кнопке
 
   // Update status mutation
   const updateStatusMutation = useMutation({
@@ -456,7 +418,7 @@ export default function RequestDetails() {
               </TabsList>
           </Tabs>
           <h1 className="text-2xl font-bold">
-            {request?.productName || 'НЕСОК'}
+            {request?.productName || '-'}
           </h1>
         </div>
 

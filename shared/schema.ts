@@ -281,6 +281,7 @@ export const contactItems = pgTable("contact_items", {
   name: text("name"), // Переименуем на фронтенде в "Компания"
   phone: text("phone"), // Будем хранить несколько телефонов через разделитель
   organization: text("organization"), // Переименуем на фронтенде в "Описание" 
+  website: text("website"), // Веб-сайт контакта
   // position: text("position"), // Поле удалено
   createdAt: timestamp("created_at").defaultNow(),
 });

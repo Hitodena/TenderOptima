@@ -179,7 +179,8 @@ export function CustomSupplierInput({ onSupplierAdded }: Props) {
           name: values.name,
           email: values.email,
           phone: values.phone || "",
-          organization: values.website || ""
+          website: values.website || "",
+          organization: values.description || ""
         };
         
         await addContactsToGroup(selectedGroup.id, [contactToAdd]);

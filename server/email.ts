@@ -21,6 +21,7 @@ interface EmailOptions {
   }>;
   headers?: Record<string, string>;
   hideBusinessCard?: boolean; // Скрыть визитную карточку
+  messageHistory?: string; // История сообщений для добавления после бизнес-карточки
 }
 
 class EmailService {
@@ -87,6 +88,7 @@ class EmailService {
   async sendEmail(options: EmailOptions & { 
     userId?: number; 
     hideBusinessCard?: boolean;
+    messageHistory?: string;
     from?: string;
     auth?: { user: string; pass: string };
     smtp?: { host: string; port: number; secure: boolean };
@@ -498,7 +500,7 @@ export const sendSimpleEmail = async (
   
   // Восстанавливаем функциональность бизнес-карточки - ПРОСТАЯ ВЕРСИЯ
   let finalText = text;
-  let finalHtml = options?.html || text.replace(/\n/g, '<br/>');
+  let finalHtml = options?.html || text.replace(/\n/g, '<br/>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
   let businessCardAttachments = processedAttachments || [];
   
   // Получаем бизнес-карточку пользователя, если userId предоставлен
@@ -530,6 +532,12 @@ export const sendSimpleEmail = async (
       console.error(`[email] Error processing business card for user ${options.userId}:`, error);
       // Продолжаем отправку без бизнес-карточки
     }
+  }
+  
+  // Добавляем историю сообщений после бизнес-карточки, если она есть
+  if (options?.messageHistory) {
+    finalText += options.messageHistory;
+    finalHtml += options.messageHistory.replace(/\n/g, '<br/>');
   }
   
   const emailOptions: EmailOptions = {
@@ -582,6 +590,7 @@ export const sendEmail = async (
     }>;
     userId?: number; // ID пользователя для включения бизнес-карточки
     hideBusinessCard?: boolean; // Скрыть визитную карточку
+    messageHistory?: string; // История сообщений для добавления после бизнес-карточки
     // User SMTP configuration
     from?: string;
     auth?: {
@@ -667,7 +676,7 @@ export const sendEmail = async (
   
   // Восстанавливаем функциональность бизнес-карточки
   let finalText = text || '';
-  let finalHtml = options?.html || (text || '').replace(/\n/g, '<br/>');
+  let finalHtml = options?.html || (text || '').replace(/\n/g, '<br/>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
   let businessCardAttachments = processedAttachments || [];
   
   // Получаем бизнес-карточку пользователя, если userId предоставлен и не скрыта
@@ -728,6 +737,11 @@ export const sendEmail = async (
           finalText += textBusinessCard;
         }
         
+        // Добавляем историю сообщений после бизнес-карточки, если она есть
+        if (options?.messageHistory) {
+          finalText += options.messageHistory;
+        }
+        
         // Добавляем бизнес-карточку к HTML версии
         const htmlBusinessCard = formatHtmlBusinessCard(businessCard, logoUrl);
         
@@ -751,6 +765,11 @@ export const sendEmail = async (
         } else {
           // Для обычных email (без фразы) добавляем визитную карточку в конец - ПРОСТАЯ ЛОГИКА
           finalHtml += htmlBusinessCard;
+        }
+        
+        // Добавляем историю сообщений после бизнес-карточки в HTML версии, если она есть
+        if (options?.messageHistory) {
+          finalHtml += options.messageHistory.replace(/\n/g, '<br/>');
         }
         
         console.log(`[email] Business card added successfully`);

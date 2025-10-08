@@ -842,11 +842,12 @@ export function ResponsePanel({
           </ScrollArea>
         </div>
 
-        {/* Right panel - Selected response content */}
-        <div className="md:col-span-4 overflow-hidden flex flex-col">
+        {/* Right panel - Email content with fixed reply section */}
+        <div className="md:col-span-4 flex flex-col h-full overflow-hidden" style={{ height: '100%' }}>
           {activeResponse ? (
             <>
-              <div className="p-4 border-b bg-muted/20">
+              {/* Email header - fixed */}
+              <div className="p-4 border-b bg-muted/20 flex-shrink-0">
                 <div className="flex justify-between items-start">
                   <div>
                     <h3 className="font-medium">
@@ -958,7 +959,8 @@ export function ResponsePanel({
                 </div>
               </div>
 
-              <ScrollArea className="flex-1 p-4">
+              {/* Email content - scrollable area */}
+              <ScrollArea className="flex-1 p-4 min-h-0" style={{ flex: '1 1 0%', minHeight: '0' }}>
                 <div className="space-y-4">
                   {/* Parameter Extraction Status Card removed - now shown in the main request details layout */}
 
@@ -1004,191 +1006,192 @@ export function ResponsePanel({
                       }
                     })()}
                   </div>
-                  
-                  {/* Reply section */}
-                  <div className={`mt-8 border-t pt-4 transition-all duration-500 ${
-                    highlightReplyForm 
-                      ? 'bg-primary/5 border-primary/20 rounded-lg p-4 shadow-lg ring-2 ring-primary/30' 
-                      : ''
+                </div>
+              </ScrollArea>
+
+              {/* Reply section - fixed at bottom */}
+              {!messageSent ? (
+                <div className={`border-t bg-background flex-shrink-0 transition-all duration-500 max-h-[200px] overflow-y-auto ${
+                  highlightReplyForm 
+                    ? 'bg-primary/5 border-primary/20 shadow-lg ring-2 ring-primary/30' 
+                    : ''
+                }`} style={{ flexShrink: 0, maxHeight: '200px' }}>
+                <div className="p-4">
+                  <h3 className={`text-sm font-medium mb-3 transition-colors duration-300 ${
+                    highlightReplyForm ? 'text-primary font-semibold' : ''
                   }`}>
-                    <h3 className={`text-sm font-medium mb-3 transition-colors duration-300 ${
-                      highlightReplyForm ? 'text-primary font-semibold' : ''
-                    }`}>
-                      Ответить на письмо
-                    </h3>
-                    <textarea 
-                      rows={6}
-                      className={`w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all duration-300 ${
-                        highlightReplyForm 
-                          ? 'border-primary/50 bg-primary/5 ring-2 ring-primary/30 shadow-md' 
-                          : ''
-                      }`}
-                      placeholder="Текст сообщения..."
-                      value={(activeResponse as any).replyDraft || ''}
-                      onChange={(e) => {
-                        if (activeResponse) {
-                          const updatedResponse = {
-                            ...activeResponse,
-                            replyDraft: e.target.value
-                          };
-                          updateActiveResponse(updatedResponse);
-                        }
-                      }}
-                      disabled={messageSent || isSending}
-                    />
-                    
-                    {/* Attachments for reply */}
-                    <div className="mt-3">
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {attachments.map((file, i) => (
-                          <div key={i} className="flex items-center bg-muted/30 px-2 py-1 rounded-md text-xs">
-                            <File className="h-3 w-3 mr-1" />
-                            <span className="max-w-[120px] truncate">{file.filename}</span>
-                            <span className="text-muted-foreground ml-1">({formatFileSize(file.size)})</span>
-                            <button 
-                              className="ml-1 text-destructive hover:bg-muted/50 rounded-full p-0.5"
-                              onClick={() => removeAttachment(i)}
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    
-                    {/* Hide the file upload and send button if message already sent */}
-                    {!messageSent && (
-                      <>
-                        <div className="flex items-center justify-between mt-3">
-                          <label 
-                            className="inline-flex items-center gap-1 rounded-md cursor-pointer text-xs px-2 py-1.5 bg-muted/30 hover:bg-muted/50"
-                            htmlFor="file-upload"
+                    Ответить на письмо
+                  </h3>
+                  <textarea 
+                    rows={2}
+                    className={`w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all duration-300 resize-y min-h-[2.5rem] ${
+                      highlightReplyForm 
+                        ? 'border-primary/50 bg-primary/5 ring-2 ring-primary/30 shadow-md' 
+                        : ''
+                    }`}
+                    placeholder="Текст сообщения..."
+                    value={(activeResponse as any).replyDraft || ''}
+                    onChange={(e) => {
+                      if (activeResponse) {
+                        const updatedResponse = {
+                          ...activeResponse,
+                          replyDraft: e.target.value
+                        };
+                        updateActiveResponse(updatedResponse);
+                      }
+                    }}
+                    disabled={isSending}
+                  />
+                  
+                  {/* Attachments for reply */}
+                  <div className="mt-3">
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {attachments.map((file, i) => (
+                        <div key={i} className="flex items-center bg-muted/30 px-2 py-1 rounded-md text-xs">
+                          <File className="h-3 w-3 mr-1" />
+                          <span className="max-w-[120px] truncate">{file.filename}</span>
+                          <span className="text-muted-foreground ml-1">({formatFileSize(file.size)})</span>
+                          <button 
+                            className="ml-1 text-destructive hover:bg-muted/50 rounded-full p-0.5"
+                            onClick={() => removeAttachment(i)}
                           >
-                            <Paperclip className="h-3 w-3" />
-                            Прикрепить файл
-                          </label>
-                          <input 
-                            type="file" 
-                            id="file-upload" 
-                            className="hidden"
-                            multiple
-                            onChange={handleFileChange}
-                            ref={fileInputRef}
-                            disabled={isSending}
-                          />
-                          
-                          <div className="flex gap-2">
-                            <Button 
-                              size="sm"
-                              variant="outline"
-                              className="text-xs"
-                              onClick={() => {
-                                if (activeResponse) {
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center justify-between mt-3">
+                        <label 
+                          className="inline-flex items-center gap-1 rounded-md cursor-pointer text-xs px-2 py-1.5 bg-muted/30 hover:bg-muted/50"
+                          htmlFor="file-upload"
+                        >
+                          <Paperclip className="h-3 w-3" />
+                          Прикрепить файл
+                        </label>
+                        <input 
+                          type="file" 
+                          id="file-upload" 
+                          className="hidden"
+                          multiple
+                          onChange={handleFileChange}
+                          ref={fileInputRef}
+                          disabled={isSending}
+                        />
+                        
+                        <div className="flex gap-2">
+                          <Button 
+                            size="sm"
+                            variant="outline"
+                            className="text-xs"
+                            onClick={() => {
+                              if (activeResponse) {
+                                const updatedResponse = {
+                                  ...activeResponse,
+                                  replyDraft: ''
+                                };
+                                updateActiveResponse(updatedResponse);
+                                setAttachments([]);
+                              }
+                            }}
+                            disabled={
+                              isSending || 
+                              !activeResponse || 
+                              !((activeResponse as any).replyDraft?.trim() || attachments.length > 0)
+                            }
+                          >
+                            Очистить
+                          </Button>
+                          <Button 
+                            size="sm"
+                            variant="default"
+                            className="text-xs"
+                            disabled={
+                              isSending || 
+                              !activeResponse || 
+                              (!(activeResponse as any).replyDraft?.trim() && attachments.length === 0)
+                            }
+                            onClick={async () => {
+                              if (!activeResponse) return;
+                              
+                              try {
+                                setIsSending(true);
+                                
+                                const replyText = (activeResponse as any).replyDraft || '';
+                                
+                                // Use apiRequest from queryClient to include authentication
+                                const accessToken = localStorage.getItem('accessToken');
+                                console.log(`Sending reply with token: ${accessToken ? 'Present' : 'Missing'}`);
+                                
+                                const response = await fetch(`/api/supplier-responses/${activeResponse.id}/reply`, {
+                                  method: 'POST',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${accessToken || ''}`,
+                                    'X-Requested-With': 'XMLHttpRequest'
+                                  },
+                                  credentials: 'include',
+                                  body: JSON.stringify({
+                                    content: replyText,
+                                    attachments,
+                                  }),
+                                });
+                                
+                                if (!response.ok) {
+                                  throw new Error(`HTTP error! status: ${response.status}`);
+                                }
+                                
+                                const result = await response.json();
+                                
+                                if (result.success) {
+                                  // Update local state
                                   const updatedResponse = {
                                     ...activeResponse,
-                                    replyDraft: ''
+                                    replyDraft: '',
+                                    isRepliedTo: true,
                                   };
                                   updateActiveResponse(updatedResponse);
                                   setAttachments([]);
-                                }
-                              }}
-                              disabled={
-                                isSending || 
-                                !activeResponse || 
-                                !((activeResponse as any).replyDraft?.trim() || attachments.length > 0)
-                              }
-                            >
-                              Очистить
-                            </Button>
-                            <Button 
-                              size="sm"
-                              variant="default"
-                              className="text-xs"
-                              disabled={
-                                isSending || 
-                                !activeResponse || 
-                                (!(activeResponse as any).replyDraft?.trim() && attachments.length === 0)
-                              }
-                              onClick={async () => {
-                                if (!activeResponse) return;
-                                
-                                try {
-                                  setIsSending(true);
+                                  setMessageSent(true);
                                   
-                                  const replyText = (activeResponse as any).replyDraft || '';
-                                  
-                                  // Use apiRequest from queryClient to include authentication
-                                  const accessToken = localStorage.getItem('accessToken');
-                                  console.log(`Sending reply with token: ${accessToken ? 'Present' : 'Missing'}`);
-                                  
-                                  const response = await fetch(`/api/supplier-responses/${activeResponse.id}/reply`, {
-                                    method: 'POST',
-                                    headers: {
-                                      'Content-Type': 'application/json',
-                                      'Authorization': `Bearer ${accessToken || ''}`,
-                                      'X-Requested-With': 'XMLHttpRequest'
-                                    },
-                                    credentials: 'include',
-                                    body: JSON.stringify({
-                                      content: replyText,
-                                      attachments,
-                                    }),
-                                  });
-                                  
-                                  if (!response.ok) {
-                                    throw new Error(`HTTP error! status: ${response.status}`);
-                                  }
-                                  
-                                  const result = await response.json();
-                                  
-                                  if (result.success) {
-                                    // Update local state
-                                    const updatedResponse = {
-                                      ...activeResponse,
-                                      replyDraft: '',
-                                      isRepliedTo: true,
-                                    };
-                                    updateActiveResponse(updatedResponse);
-                                    setAttachments([]);
-                                    setMessageSent(true);
-                                    
-                                    toast({
-                                      title: "Письмо отправлено",
-                                      description: "Ваш ответ был успешно отправлен поставщику.",
-                                    });
-                                  } else {
-                                    throw new Error(result.error || 'Unknown error');
-                                  }
-                                } catch (error) {
-                                  console.error("Ошибка отправки ответа:", error);
                                   toast({
-                                    title: "Ошибка отправки",
-                                    description: "Не удалось отправить ответ. Пожалуйста, попробуйте снова.",
-                                    variant: "destructive",
+                                    title: "Письмо отправлено",
+                                    description: "Ваш ответ был успешно отправлен поставщику.",
                                   });
-                                } finally {
-                                  setIsSending(false);
+                                } else {
+                                  throw new Error(result.error || 'Unknown error');
                                 }
-                              }}
-                            >
-                              {isSending ? "Отправка..." : "Отправить ответ"}
-                            </Button>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                    
-                    {messageSent && (
-                      <div className="mt-3 p-3 bg-primary/5 rounded-md">
-                        <div className="flex items-center">
-                          <Badge variant="outline" className="mr-2 bg-primary/10">Отправлено</Badge>
-                          <span className="text-xs text-muted-foreground">Ваш ответ был успешно отправлен поставщику.</span>
+                              } catch (error) {
+                                console.error("Ошибка отправки ответа:", error);
+                                toast({
+                                  title: "Ошибка отправки",
+                                  description: "Не удалось отправить ответ. Пожалуйста, попробуйте снова.",
+                                  variant: "destructive",
+                                });
+                              } finally {
+                                setIsSending(false);
+                              }
+                            }}
+                          >
+                            {isSending ? "Отправка..." : "Отправить ответ"}
+                          </Button>
                         </div>
                       </div>
-                    )}
+                    </div>
+                  </div>
+              ) : (
+                <div className="border-t bg-background flex-shrink-0">
+                  <div className="p-4">
+                    <div className="p-3 bg-primary/5 rounded-md">
+                      <div className="flex items-center">
+                        <Badge variant="outline" className="mr-2 bg-primary/10">Отправлено</Badge>
+                        <span className="text-xs text-muted-foreground">Ваш ответ был успешно отправлен поставщику.</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </ScrollArea>
+              )}
             </>
           ) : (
             <div className="flex items-center justify-center h-full text-muted-foreground">

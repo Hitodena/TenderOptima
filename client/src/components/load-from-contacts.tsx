@@ -95,7 +95,7 @@ export function LoadFromContacts({ onContactsLoaded }: Props) {
       name: contact.name || 'Компания',
       email: contact.email || '',
       phone: contact.phone || '',
-      website: '',
+      website: contact.website || '',
       categories: [] as string[],
       description: contact.organization || '',
       responseRate: null,

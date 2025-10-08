@@ -11,6 +11,7 @@ export async function apiRequest<T = Response>(
   urlOrMethod: string,
   methodOrData?: 'GET' | 'POST' | 'PATCH' | 'DELETE' | 'PUT' | string | any,
   data?: unknown | undefined,
+  options?: { headers?: Record<string, string> }
 ): Promise<T> {
   let method: string = 'GET';  // Default method
   let url: string = '';  
@@ -76,6 +77,12 @@ export async function apiRequest<T = Response>(
         "X-Requested-With": "XMLHttpRequest", // Некоторые серверы используют этот заголовок для проверки CORS
       };
       
+      // Добавляем дополнительные заголовки если они переданы
+      if (options && options.headers) {
+        Object.assign(headers, options.headers);
+        console.log(`[Auth] apiRequest: Добавлены дополнительные заголовки для ${url}:`, options.headers);
+      }
+      
       // Всегда добавляем токен, если он есть (пусть сервер проверяет его валидность)
       if (accessToken) {
         headers["Authorization"] = `Bearer ${accessToken}`;
@@ -90,7 +97,7 @@ export async function apiRequest<T = Response>(
         : `/${url}`; // Убедимся, что URL имеет ведущий слэш если нет абсолютного URL
       
       // GET и HEAD запросы не могут иметь body по спецификации
-      const options: RequestInit = {
+      const requestOptions: RequestInit = {
         method: method,
         headers,
         credentials: "include", // Важно для передачи куки
@@ -118,7 +125,7 @@ export async function apiRequest<T = Response>(
           newlineCount: (jsonBody.match(/\\n/g) || []).length,
           jsonPreview: jsonBody.substring(0, 200) + '...'
         });
-        options.body = jsonBody;
+        requestOptions.body = jsonBody;
       } else if (data && (method === 'GET' || method === 'HEAD')) {
         // Для GET запросов с данными, конвертируем в query параметры
         const params = new URLSearchParams();
@@ -139,7 +146,7 @@ export async function apiRequest<T = Response>(
       
       console.log(`[Auth] Выполняется запрос ${method} к ${formattedUrl}`, { headers, hasToken: !!headers["Authorization"] });
       
-      const res = await fetch(formattedUrl, options);
+      const res = await fetch(formattedUrl, requestOptions);
       
       // Check for token expiration headers and handle token refresh
       const tokenExpired = res.headers.get('X-Token-Expired');

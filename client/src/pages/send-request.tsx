@@ -1642,27 +1642,23 @@ export default function SendRequest() {
                                               {supplier.website && (
                                                 <div>
                                                   <Label className="text-sm font-medium">Веб-сайт</Label>
-                                                  <p className="text-sm break-all">
-                                                    {supplier.website.startsWith('http') ? supplier.website : `http://${supplier.website}`}
-                                                  </p>
+                                                  <div className="mt-1">
+                                                    <a 
+                                                      href={supplier.website.startsWith('http') ? supplier.website : `http://${supplier.website}`}
+                                                      target="_blank" 
+                                                      rel="noopener noreferrer"
+                                                      className="text-sm text-blue-600 hover:text-blue-800 hover:underline break-all"
+                                                      onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                      {supplier.website}
+                                                    </a>
+                                                  </div>
                                                 </div>
                                               )}
                                               {supplier.description && (
                                                 <div>
                                                   <Label className="text-sm font-medium">Описание</Label>
                                                   <p className="text-sm">{supplier.description}</p>
-                                                </div>
-                                              )}
-                                              {supplier.categories && supplier.categories.length > 0 && (
-                                                <div>
-                                                  <Label className="text-sm font-medium">Категории</Label>
-                                                  <div className="flex flex-wrap gap-1 mt-1">
-                                                    {supplier.categories.map((category, idx) => (
-                                                      <Badge key={idx} variant="secondary" className="text-xs">
-                                                        {category}
-                                                      </Badge>
-                                                    ))}
-                                                  </div>
                                                 </div>
                                               )}
                                             </div>
