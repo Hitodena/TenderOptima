@@ -65,6 +65,7 @@ export default function SendRequest() {
   const [errorMessageShown, setErrorMessageShown] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   
+  
   const { toast } = useToast();
   const [location, setLocation] = useLocation();
   const { isActiveOrLoading } = useSubscription();
@@ -428,6 +429,7 @@ export default function SendRequest() {
     }
     return null;
   };
+  
 
   // Типы для разных источников данных
   type ServerKeyData = {
@@ -1336,11 +1338,29 @@ export default function SendRequest() {
         <div className="container mx-auto px-4 py-8">
        
         <div className="mt-4">
-          <div className="grid grid-cols-1">
-            <h2 className="text-2xl font-semibold">Отправить запрос поставщикам</h2>
-            <div className="text-m text-gray-400">
-              Выберите поставщиков и отправьте запрос на получение коммерческих предложений
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-semibold">
+                {getSearchParam('requestId') && (
+                  <span className="text-sm font-normal text-muted-foreground mr-2">3/3</span>
+                )}
+                Отправить запрос поставщикам
+              </h2>
+              <div className="text-m text-gray-400">
+                Выберите поставщиков и отправьте запрос на получение коммерческих предложений
+              </div>
             </div>
+            {selectedSuppliers.length > 0 && (
+              <div className="text-right">
+                <div className="text-sm font-medium text-gray-900">
+                  Выбрано поставщиков: {selectedSuppliers.length}
+                </div>
+                <div className="text-xs text-gray-500">
+                  Запрос будет отправлен всем выбранным поставщикам
+                </div>
+              </div>
+            )}
+          </div>
             {comingFromGroup && groupName && (
       
               <div className="flex items-center gap-2">
@@ -1391,7 +1411,9 @@ export default function SendRequest() {
               <div className="mb-6">
                 <div className="flex gap-4 flex-wrap lg:flex-nowrap">
                   <CustomSupplierInput onSupplierAdded={handleAddSupplier} />
-                  <UploadSuppliersExcel onSuppliersUploaded={handleBulkUpload} />
+                  <div className="hidden">
+                    <UploadSuppliersExcel onSuppliersUploaded={handleBulkUpload} />
+                  </div>
                   <LoadFromContacts onContactsLoaded={(suppliers, groupName, groupId) => {
                     handleBulkUpload(suppliers);
                     setGroupName(groupName);
@@ -1683,12 +1705,6 @@ export default function SendRequest() {
               </div>
               {selectedSuppliers.length > 0 ? (
                 <div>
-                  <Alert className="mb-4">
-                    <AlertTitle>Выбрано поставщиков:  {selectedSuppliers.length}</AlertTitle>
-                    <AlertDescription>
-                      Запрос будет отправлен всем выбранным поставщикам.
-                    </AlertDescription>
-                  </Alert>
                   <EmailForm 
                     suppliers={suppliers.map(convertToSupplier)} 
                     selectedSuppliers={selectedSuppliers.map(convertToSupplier)} 
@@ -1704,7 +1720,6 @@ export default function SendRequest() {
               )}
             </div>
           )}
-          </div>
         </div>
       </SubscriptionGuard>
       </div>

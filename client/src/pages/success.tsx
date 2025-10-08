@@ -30,24 +30,24 @@ export default function SuccessPage() {
   const isTemporaryRequest = orderNumber === "0" || (!isLoading && isError);
   
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="bg-background flex items-center justify-center p-4">
       <Card className="w-full max-w-2xl shadow-lg">
         <CardHeader className="text-center pb-2">
-          <div className="flex justify-center mb-6">
-            <div className="rounded-full bg-green-100 p-3">
-              <CheckCircle2 className="h-12 w-12 text-green-600" />
+          <div className="flex justify-center mb-4">
+            <div className="rounded-full bg-green-100 p-2">
+              <CheckCircle2 className="h-8 w-8 text-green-600" />
             </div>
           </div>
-          <CardTitle className="text-2xl sm:text-3xl font-bold">
+          <CardTitle className="text-xl sm:text-2xl font-bold">
             Запрос успешно отправлен!
           </CardTitle>
-          <CardDescription className="text-lg mt-2">
+          <CardDescription className="text-base mt-1">
             {isTemporaryRequest 
               ? "Ваш прямой запрос отправлен поставщикам" 
               : `Ваш запрос #${orderNumber} отправлен поставщикам`}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6 pt-6">
+        <CardContent className="space-y-4 pt-4">
           {isLoading ? (
             <p className="text-center text-muted-foreground">Загрузка деталей запроса...</p>
           ) : isTemporaryRequest ? (
@@ -92,7 +92,7 @@ export default function SuccessPage() {
             </div>
           )}
 
-          <div className="flex flex-col sm:flex-row gap-3 pt-4">
+          <div className="flex flex-col sm:flex-row gap-3 pt-2">
             {!isTemporaryRequest && data ? (
               <Button className="flex-1" asChild>
                 <Link href={`/requests/${data.request.id}`}>

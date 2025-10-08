@@ -206,8 +206,8 @@ export default function RequestDetails() {
     },
     enabled: !!id,
     refetchInterval: false,
-    staleTime: 600000, // 10 minutes - longer caching for better performance
-    refetchOnWindowFocus: false,
+    staleTime: 10000, // 10 seconds - shorter caching for more frequent updates
+    refetchOnWindowFocus: true, // Refetch when window gains focus
     refetchOnMount: true
   });
 
@@ -279,6 +279,50 @@ export default function RequestDetails() {
       console.log("Auto-selected first email:", firstResponse.id);
     }
   }, [tab, data?.supplierResponses, hasAutoSelectedFirstEmail, handleSupplierSelect]);
+
+  // Автоматическая проверка новых email каждые 30 секунд
+  useEffect(() => {
+    if (!id) return;
+
+    const interval = setInterval(async () => {
+      try {
+        console.log('🔄 Auto-checking for new emails...');
+        const checkResult = await apiRequest<EmailCheckResponse>('/api/check-emails', 'POST', {
+          requestId: id
+        });
+        
+        if (checkResult.newResponses > 0) {
+          console.log(`📧 Found ${checkResult.newResponses} new responses, refreshing data...`);
+          
+          // Обновляем данные
+          await queryClient.invalidateQueries({ queryKey: ['/api/search-requests', 'single', id] });
+          await queryClient.invalidateQueries({ queryKey: ['/api/supplier-responses', id] });
+          await queryClient.invalidateQueries({ queryKey: ['/api/supplier-responses-batch'] });
+          
+          // Принудительно обновляем данные
+          await refetch();
+          
+          // Показываем уведомление о новых письмах
+          toast({
+            title: "Новые письма получены",
+            description: `Получено ${checkResult.newResponses} новых ответов от поставщиков`,
+            variant: "default"
+          });
+          
+          // Переключаемся на вкладку ответов
+          setTab("responses");
+          
+          console.log('✅ Data refreshed after auto-check');
+        } else {
+          console.log('📭 No new responses found in auto-check');
+        }
+      } catch (error) {
+        console.error('❌ Auto-check failed:', error);
+      }
+    }, 15000); // Проверяем каждые 15 секунд для более быстрого обновления
+
+    return () => clearInterval(interval);
+  }, [id, queryClient, refetch, toast]);
 
   // Update status mutation
   const updateStatusMutation = useMutation({
@@ -604,8 +648,8 @@ export default function RequestDetails() {
           </div>
 
           <div className="flex flex-col justify-end">
-            {/* OPTIMIZED: Parameter extraction panel - loads only when response is selected */}
-            {tab === 'responses' && (
+            {/* OPTIMIZED: Parameter extraction panel - loads only when response is selected and there are responses */}
+            {tab === 'responses' && supplierResponses.length > 0 && (
               <Card className="border-primary/30 h-[600px] overflow-hidden flex flex-col">
                 <CardHeader className="bg-primary/5 flex-shrink-0">
                   <CardTitle className="font-semibold normal-case">Извлеченные параметры</CardTitle>
@@ -621,9 +665,20 @@ export default function RequestDetails() {
                         supplierName={activeResponse.supplierName || ''}
                         requestParameters={parametersData?.parameters || []}
                         forceExtract={forceParameterExtraction} 
-                        onParametersExtracted={(parameters) => {
+                        onParametersExtracted={async (parameters) => {
                           console.log('Parameters extracted:', parameters);
                           setForceParameterExtraction(false);
+                          
+                          // Обновляем данные после извлечения параметров
+                          try {
+                            console.log('🔄 Refreshing data after parameter extraction...');
+                            await queryClient.invalidateQueries({ queryKey: ['/api/search-requests', 'single', id] });
+                            await queryClient.invalidateQueries({ queryKey: ['/api/supplier-responses', id] });
+                            await refetch();
+                            console.log('✅ Data refreshed after parameter extraction');
+                          } catch (error) {
+                            console.error('❌ Failed to refresh data after parameter extraction:', error);
+                          }
                         }}
                       />
                     ) : (

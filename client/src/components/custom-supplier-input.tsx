@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, X, UserPlus, Users, ChevronDown, Check } from "lucide-react";
+import { Plus, X, UserPlus, Users, ChevronDown, ChevronUp, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Supplier } from "@shared/schema";
 import { getContactGroups, createContactGroup, addContactsToGroup, type ContactGroup, type ContactItem } from "@/api/contact-groups";
@@ -74,6 +74,7 @@ export function CustomSupplierInput({ onSupplierAdded }: Props) {
   const [isLoadingGroups, setIsLoadingGroups] = useState(false);
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
   const [isAddingContact, setIsAddingContact] = useState(false);
+  const [showAdditionalFields, setShowAdditionalFields] = useState(false);
   
   const form = useForm<CustomSupplierFormValues>({
     resolver: zodResolver(customSupplierSchema),
@@ -230,6 +231,7 @@ export function CustomSupplierInput({ onSupplierAdded }: Props) {
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            {/* Основные поля */}
             <FormField
               control={form.control}
               name="name"
@@ -258,58 +260,81 @@ export function CustomSupplierInput({ onSupplierAdded }: Props) {
               )}
             />
 
-            <FormField
-              control={form.control}
-              name="phone"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Телефон</FormLabel>
-                  <FormControl>
-                    <Input placeholder="+7 (XXX) XXX-XX-XX" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* Кнопка "Дополнительно" */}
+            <div className="pt-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowAdditionalFields(!showAdditionalFields)}
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+              >
+                Дополнительно
+                {showAdditionalFields ? (
+                  <ChevronUp className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
 
-            <FormField
-              control={form.control}
-              name="website"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Веб-сайт</FormLabel>
-                  <FormControl>
-                    <Input placeholder="https://example.com" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* Дополнительные поля */}
+            {showAdditionalFields && (
+              <div className="space-y-4 pt-2 border-t">
+                <FormField
+                  control={form.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Телефон</FormLabel>
+                      <FormControl>
+                        <Input placeholder="+7 (XXX) XXX-XX-XX" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Описание</FormLabel>
-                  <FormControl>
-                    <Textarea 
-                      placeholder="Краткое описание компании..."
-                      className="min-h-[80px]"
-                      {...field} 
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                <FormField
+                  control={form.control}
+                  name="website"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Веб-сайт</FormLabel>
+                      <FormControl>
+                        <Input placeholder="https://example.com" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-            {/* Добавление в группу контактов */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <FormLabel className="text-sm font-medium">Добавить в базу контактов</FormLabel>
-                <span className="text-xs text-muted-foreground">(необязательно)</span>
+                <FormField
+                  control={form.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Описание</FormLabel>
+                      <FormControl>
+                        <Textarea 
+                          placeholder="Краткое описание компании..."
+                          className="min-h-[80px]"
+                          {...field} 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
+            )}
+
+            {/* Добавление в группу контактов - перемещено в дополнительную секцию */}
+            {showAdditionalFields && (
+              <div className="space-y-3 pt-2 border-t">
+                <div className="flex items-center justify-between">
+                  <FormLabel className="text-sm font-medium">Добавить в базу контактов</FormLabel>
+                </div>
               
               {/* Выбор существующей группы */}
               <Popover open={isGroupSelectorOpen} onOpenChange={setIsGroupSelectorOpen}>
@@ -432,7 +457,8 @@ export function CustomSupplierInput({ onSupplierAdded }: Props) {
                   )}
                 </div>
               )}
-            </div>
+              </div>
+            )}
 
             <DialogFooter className="mt-6">
               <Button 

@@ -216,7 +216,31 @@ export default function UnprocessedEmailsPage() {
               >
                 Проверить email
               </Button>
-              <Button onClick={fetchData} variant="outline">
+              <Button 
+                onClick={async () => {
+                  try {
+                    // Сначала запускаем проверку emails
+                    const response = await fetch('/api/check-emails', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({})
+                    });
+                    const result = await response.json();
+                    if (result.success) {
+                      toast({ title: "Проверка email", description: `Найдено ${result.newResponses} новых ответов` });
+                    } else {
+                      toast({ title: "Ошибка проверки", description: result.message, variant: "destructive" });
+                    }
+                    // Затем обновляем список
+                    await fetchData();
+                  } catch (error) {
+                    toast({ title: "Ошибка", description: "Не удалось запустить проверку email", variant: "destructive" });
+                    // Все равно обновляем список
+                    await fetchData();
+                  }
+                }}
+                variant="outline"
+              >
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Обновить
               </Button>

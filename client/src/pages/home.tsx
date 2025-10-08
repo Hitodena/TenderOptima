@@ -63,12 +63,15 @@ export default function Home() {
 
         {!searchRequest && !showDirectEmailForm ? (
           <>
-            <SupplierSearchForm onComplete={setSearchRequest} />
+            {React.createElement(SupplierSearchForm as any, { onComplete: setSearchRequest })}
           </>
         ) : showDirectEmailForm ? (
           <div className="space-y-8">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-semibold">Отправить запрос поставщикам</h2>
+              <h2 className="text-2xl font-semibold">
+                <span className="text-sm font-normal text-muted-foreground mr-2">3/3</span>
+                Отправить запрос поставщикам
+              </h2>
               <button 
                 onClick={() => setShowDirectEmailForm(false)} 
                 className="text-sm text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"

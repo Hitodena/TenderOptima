@@ -2570,8 +2570,8 @@ const AnalysisWorkspace: React.FC<AnalysisWorkspaceProps> = ({ mode }) => {
                       </Card>
                     )}
                     
-                    {/* Display extracted parameters if available */}
-                    {extractedParameters.length > 0 && (
+                    {/* Display extracted parameters if available and suppliers have responded via email */}
+                    {extractedParameters.length > 0 && complianceResults.length > 0 && (
                       <Card>
                         <CardHeader>
                           <CardTitle className={themeClasses.textPrimary}>

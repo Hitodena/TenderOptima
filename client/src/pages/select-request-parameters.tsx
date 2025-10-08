@@ -21,20 +21,18 @@ import { MainNavigation } from '@/components/main-navigation';
 import { apiRequest } from '@/lib/queryClient';
 import type { Supplier, SearchRequest } from '@shared/schema';
 
-// Default request parameters - all selected by default, NONE required
+// Default request parameters - some unselected by default
 const DEFAULT_PARAMETERS = [
   { id: 'product_description', label: 'Описание товара', selected: true },
   { id: 'total_price_no_vat', label: 'Общая стоимость без НДС', selected: true },
   { id: 'total_price_with_vat', label: 'Общая стоимость с НДС', selected: true },
   { id: 'price_no_vat', label: 'Цена за единицу без НДС', selected: true },
-  // { id: 'price_with_vat', label: 'Цена за единицу с НДС', selected: true },
   { id: 'payment_terms', label: 'Условия оплаты', selected: true },
   { id: 'delivery_time', label: 'Сроки поставки', selected: true },
-  { id: 'delivery_terms', label: 'Условия поставки', selected: true },
-  { id: 'warranty', label: 'Гарантия', selected: true },
-  // { id: 'other_conditions', label: 'Иные условия', selected: true },
+  { id: 'delivery_terms', label: 'Условия поставки', selected: false }, // Выключено по умолчанию
+  { id: 'warranty', label: 'Гарантия', selected: false }, // Выключено по умолчанию
   { id: 'supplier_name', label: 'Наименование поставщика', selected: true },
-  { id: 'supplier_residency', label: 'Резидентство поставщика (страна)', selected: true },
+  { id: 'supplier_residency', label: 'Резидентство поставщика (страна)', selected: false }, // Выключено по умолчанию
   { id: 'supplier_inn_unp', label: 'ИНН / УНП', selected: true },
 ];
 
@@ -390,126 +388,145 @@ export default function SelectRequestParameters({ suppliers = [], searchRequest,
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="bg-background">
       <MainNavigation />
-      <div className="container mx-auto px-4 py-8">
-        <Card>
-          <CardHeader>
-            <CardTitle>Выбор параметров для запроса</CardTitle>
-            <CardDescription>
-              {selectedSuppliers.length > 0 
-                ? `Выберите параметры, которые будут включены в письмо с запросом для ${selectedSuppliers.length} выбранных поставщиков. В дальнейшем, автоматический анализ предложений поставщиков будет производиться по этим заданным параметрам. `
-                : 'Загрузка поставщиков...'
-              }
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+      <div className="container mx-auto px-4 py-4">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          {/* Левая колонка - Выбор параметров (40%) */}
+          <Card className="lg:col-span-2">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">
+                <span className="text-sm font-normal text-muted-foreground mr-2">1/3</span>
+                Выбор параметров для запроса
+              </CardTitle>
+              <CardDescription className="text-sm">
+                {selectedSuppliers.length > 0 
+                  ? `Выберите параметры, которые будут включены в письмо с запросом для ${selectedSuppliers.length} выбранных поставщиков.`
+                  : 'Загрузка поставщиков...'
+                }
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pb-4">
+              <div className="mb-2">
+                <div className="text-sm text-muted-foreground mb-2">
+                  Выбранных параметров: {selectedCount}
+                </div>
+                
+                {/* Список параметров с уменьшенными отступами */}
+                <div className="space-y-0.5">
+                  {parameters.map((parameter) => {
+                    const isCustom = parameter.id.startsWith('custom_');
+                    return (
+                      <div key={parameter.id} className="flex items-center justify-between py-0.5 border-b border-gray-100">
+                        <div className="flex items-center">
+                          <Checkbox 
+                            id={parameter.id}
+                            checked={parameter.selected}
+                            onCheckedChange={() => toggleParameter(parameter.id)}
+                          />
+                          <Label 
+                            htmlFor={parameter.id}
+                            className="ml-3 cursor-pointer text-sm"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              toggleParameter(parameter.id);
+                            }}
+                          >
+                            {parameter.label}
+                          </Label>
+                        </div>
 
+                        {isCustom && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-red-500 hover:text-red-700"
+                            onClick={() => removeParameter(parameter.id)}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
 
-            <div className="flex items-center justify-between mb-4">
-              <div>Выбранных параметров: {selectedCount}</div>
-              <div className="flex items-center gap-2">
-                <Input
-                  placeholder="Добавить свой параметр..."
-                  value={newParameter}
-                  onChange={(e) => setNewParameter(e.target.value)}
-                  className="w-64"
-                  onKeyDown={(e) => e.key === 'Enter' && addCustomParameter()}
-                />
-                <Button 
+              {/* Добавление своего параметра - как обычная строка */}
+              <div className="flex items-center justify-between py-0.5 border-b border-gray-100">
+                <div className="flex items-center flex-1">
+                  <Input
+                    placeholder="Добавить свой параметр..."
+                    value={newParameter}
+                    onChange={(e) => setNewParameter(e.target.value)}
+                    className="border-0 shadow-none p-0 text-sm"
+                    onKeyDown={(e) => e.key === 'Enter' && addCustomParameter()}
+                  />
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-gray-500 hover:text-gray-700"
                   onClick={addCustomParameter}
                   disabled={!newParameter.trim()}
                 >
-                  Добавить
+                  <PlusCircle className="h-4 w-4" />
                 </Button>
               </div>
-            </div>
+            </CardContent>
+          </Card>
 
-            <div>
-              {parameters.map((parameter) => {
-                const isCustom = parameter.id.startsWith('custom_');
-                return (
-                  <div key={parameter.id} className="flex items-center justify-between py-2 border-b border-gray-100">
-                    <div className="flex items-center">
-                      <Checkbox 
-                        id={parameter.id}
-                        checked={parameter.selected}
-                        onCheckedChange={() => toggleParameter(parameter.id)}
-                      />
-                      <Label 
-                        htmlFor={parameter.id}
-                        className="ml-3 cursor-pointer"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          toggleParameter(parameter.id);
-                        }}
-                      >
-                        {parameter.label}
-                      </Label>
-                    </div>
-
-                    {isCustom && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-red-500 hover:text-red-700"
-                        onClick={() => removeParameter(parameter.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            <Separator className="my-6" />
-
-            {/* Product Description Section - Moved below parameters */}
-            <div className="mb-6">
-              <h2 className="text-xl font-semibold mb-2">Описание товара/услуги</h2>
-              <p className="text-sm text-muted-foreground mb-3">
-                Предоставьте подробное описание товара или услуги, которую вы хотите закупить. Эта информация будет включена в письмо поставщикам и поможет им лучше понять ваши требования.
-              </p>
+          {/* Правая колонка - Описание товара/услуги (60%) */}
+          <Card className="lg:col-span-3">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">
+                <span className="text-sm font-normal text-muted-foreground mr-2">2/3</span>
+                Описание товара/услуги
+              </CardTitle>
+              <CardDescription className="text-sm">
+                Предоставьте подробное описание товара или услуги, которую вы хотите закупить. Эта информация будет включена в письмо поставщикам.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pb-4">
               <Textarea
                 placeholder="Опишите детально товар или услугу, технические характеристики, объемы, особые требования..."
                 value={productDescription}
                 onChange={(e) => {
                   setProductDescription(e.target.value);
-                  // Save to session storage immediately
                   sessionStorage.setItem('productDescription', e.target.value);
                 }}
-                className="min-h-[120px]"
+                className="min-h-[200px]"
               />
-            </div>
-          </CardContent>
-          <CardFooter className="flex justify-between">
-            <Button 
-              variant="outline"
-              onClick={() => {
-                // Go back to supplier selection
-                setLocation('/send-request');
-              }}
-            >
-              Назад
-            </Button>
-            <Button 
-              variant="default" 
-              onClick={saveParametersAndContinue}
-              disabled={isLoading || !productDescription.trim()}
-              className="flex items-center gap-2"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Обработка...
-                </>
-              ) : (
-                "Создать запрос"
-              )}
-            </Button>
-          </CardFooter>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Кнопки внизу страницы */}
+        <div className="flex justify-between mt-6 pb-4">
+          <Button 
+            variant="outline"
+            onClick={() => {
+              setLocation('/send-request');
+            }}
+          >
+            Назад
+          </Button>
+          <Button 
+            variant="default" 
+            onClick={saveParametersAndContinue}
+            disabled={isLoading || !productDescription.trim()}
+            className="flex items-center gap-2"
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Обработка...
+              </>
+            ) : (
+              "Создать запрос"
+            )}
+          </Button>
+        </div>
       </div>
     </div>
   );

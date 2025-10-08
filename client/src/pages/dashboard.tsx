@@ -210,8 +210,24 @@ function RequestCard({ request, tab, onComplete, onActivate }: RequestCardProps)
       })
     : "Unknown date";
 
-  // Dashboard показывает только список запросов - количество ответов не отображается
-  // Ответы загружаются только при клике на конкретный запрос
+  // Загружаем данные о количестве ответов для каждого запроса
+  const { data: responsesData } = useQuery<SupplierResponse[]>({
+    queryKey: ['/api/supplier-responses', request.id],
+    enabled: !!request.id,
+    queryFn: async () => {
+      try {
+        const response = await apiRequest<SupplierResponse[]>(`/api/supplier-responses?requestId=${request.id}`, 'GET');
+        return response || [];
+      } catch (error) {
+        console.error('Error loading responses for request', request.id, error);
+        return [];
+      }
+    },
+    staleTime: 30000, // 30 seconds
+  });
+
+  const responseCount = responsesData?.length || 0;
+  const newResponseCount = responsesData?.filter(r => !r.isRead).length || 0;
 
   // Get status badge color - simplified to just active or completed
   const getStatusColor = (status: string) => {
@@ -257,6 +273,23 @@ function RequestCard({ request, tab, onComplete, onActivate }: RequestCardProps)
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Кружок с количеством входящих email */}
+          {responseCount > 0 && (
+            <div className="relative">
+              <div className="flex items-center justify-center w-8 h-8 border border-gray-300 rounded-full bg-white">
+                <span className="text-sm font-semibold text-gray-700">
+                  {responseCount}
+                </span>
+              </div>
+              {/* Красная циферка для новых email */}
+              {newResponseCount > 0 && (
+                <div className="absolute -top-1 -right-1 flex items-center justify-center w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full border-2 border-white">
+                  {newResponseCount}
+                </div>
+              )}
+            </div>
+          )}
+          
           <Button asChild size="sm" onClick={(e) => e.stopPropagation()}>
             <Link href={`/requests/${request.id}?tab=responses`}>Смотреть</Link>
           </Button>
