@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { getExtractedParameters, getRequestParameters, extractParameters } from "@/api/parameters";
 import { extractParametersFromResponse } from "@/api/extract-parameters";
 import { apiRequest } from "@/lib/queryClient";
@@ -9,6 +9,12 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw, AlertCircle, Edit3, Check, X } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface ParameterExtractionStatusProps {
   requestId: number;
@@ -16,6 +22,7 @@ interface ParameterExtractionStatusProps {
   supplierEmail: string;
   supplierName?: string;
   onParametersExtracted?: (parameters: any) => void;
+  onStatusChange?: (status: string, isRefreshing: boolean, onRefresh: () => void) => void;
   forceExtract?: boolean;
   requestParameters?: string[]; // Добавляем параметры как пропс
 }
@@ -31,6 +38,7 @@ export function ParameterExtractionStatus({
   supplierEmail,
   supplierName,
   onParametersExtracted,
+  onStatusChange,
   forceExtract = false,
   requestParameters = [] // Используем переданные параметры
 }: ParameterExtractionStatusProps) {
@@ -45,6 +53,7 @@ export function ParameterExtractionStatus({
   const [editingParam, setEditingParam] = useState<string | null>(null);
   const [editedValue, setEditedValue] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
+
 
   // Обновляем параметры когда они изменяются
   useEffect(() => {
@@ -61,6 +70,8 @@ export function ParameterExtractionStatus({
       handleRefresh();
     }
   }, [forceExtract, responseId]);
+
+
 
   // Load pre-processed parameters when responseId changes
   useEffect(() => {
@@ -168,43 +179,10 @@ export function ParameterExtractionStatus({
     
     loadPreProcessedParameters();
   }, [responseId, requestId, onParametersExtracted, isRefreshing]);
-
-
-  // Handle case when no parameters were selected for this request
-  if (requestParametersList.length === 0) {
-    return (
-      <div className="space-y-4 pointer-events-auto">
-        <div className="flex items-center">
-          <svg 
-            xmlns="http://www.w3.org/2000/svg" 
-            width="18" 
-            height="18" 
-            viewBox="0 0 24 24" 
-            fill="none" 
-            stroke="currentColor" 
-            strokeWidth="2" 
-            strokeLinecap="round" 
-            strokeLinejoin="round" 
-            className="mr-2 text-blue-500"
-          >
-            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-          </svg>
-          <span className="text-sm text-blue-500 font-medium">Нет выбранных параметров</span>
-        </div>
-        
-        <Card className="bg-blue-50/30 mt-2">
-          <CardContent className="p-4">
-            <div className="text-muted-foreground text-sm text-center py-4">
-              Для этого запроса не были выбраны параметры для сравнения
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  // Note: Do not early-return before hooks to avoid changing hook order between renders
 
   // Function to try extracting parameters using DeepSeek API
-  const tryExtractParameters = async () => {
+  const tryExtractParameters = useCallback(async () => {
     if (!responseId || !requestId || requestParametersList.length === 0) {
       console.error('Cannot extract parameters: missing responseId, requestId, or parameters list');
       setErrorMessage('Не указаны параметры для извлечения');
@@ -363,7 +341,24 @@ export function ParameterExtractionStatus({
     } finally {
       setIsRefreshing(false);
     }
-  };
+  }, [responseId, requestId, requestParametersList, onParametersExtracted]);
+
+  // Function to handle refresh/retry
+  const handleRefresh = useCallback(() => {
+    if (isRefreshing) return; // Prevent multiple clicks
+    
+    setIsRefreshing(true);
+    setTimeout(() => {
+      tryExtractParameters();
+    }, 500); // Add a slight delay to ensure UI shows loading state
+  }, [isRefreshing, tryExtractParameters]);
+
+  // Notify parent component about status changes
+  useEffect(() => {
+    if (onStatusChange) {
+      onStatusChange(status, isRefreshing, handleRefresh);
+    }
+  }, [status, isRefreshing, onStatusChange, handleRefresh]);
 
   // Function to extract parameter values and convert them to a displayable format
   const displayableParameters = () => {
@@ -402,15 +397,7 @@ export function ParameterExtractionStatus({
     return paramArray;
   };
   
-  // Function to handle refresh/retry
-  const handleRefresh = () => {
-    if (isRefreshing) return; // Prevent multiple clicks
-    
-    setIsRefreshing(true);
-    setTimeout(() => {
-      tryExtractParameters();
-    }, 500); // Add a slight delay to ensure UI shows loading state
-  };
+
 
   // Functions for inline editing
   const startEditing = (paramName: string, currentValue: string) => {
@@ -476,49 +463,15 @@ export function ParameterExtractionStatus({
 
   if (status === 'success') {
     return (
-      <div className="space-y-4 pointer-events-auto w-full max-w-full">
-        <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center">
-            <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center mr-3">
-              <svg 
-                xmlns="http://www.w3.org/2000/svg" 
-                width="12" 
-                height="12" 
-                viewBox="0 0 24 24" 
-                fill="none" 
-                stroke="currentColor" 
-                strokeWidth="3" 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-                className="text-green-600"
-              >
-                <path d="M20 6L9 17l-5-5" />
-              </svg>
-            </div>
-            <span className="text-sm text-slate-700 font-semibold">Параметры найдены</span>
-          </div>
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="p-1.5 h-8 w-8 hover:bg-slate-100 rounded-full transition-colors duration-200"
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            tabIndex={0}
-            title="Обновить параметры"
-          >
-            <RefreshCw 
-              size={14} 
-              className={`text-slate-500 hover:text-slate-700 transition-colors duration-200 ${isRefreshing ? 'animate-spin' : ''}`}
-            />
-          </Button>
-        </div>
+      <div className="flex flex-col h-full min-h-0 space-y-4 pointer-events-auto w-full max-w-full">
         
         <Card className="bg-gradient-to-br from-slate-50 to-slate-100/50 mt-3 border-slate-200 shadow-md hover:shadow-lg transition-shadow duration-300 h-full flex flex-col">
           <CardContent className="p-2 flex-1 flex flex-col min-h-0">
-            {supplierName && (
+            {/* Temporarily hidden supplier name field */}
+            {/* {supplierName && (
               <h4 className="text-sm font-semibold mb-3 text-slate-700 border-b border-slate-200 pb-1.5 flex-shrink-0">{supplierName}</h4>
-            )}
-            <div className="h-[400px] pr-2 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
+            )} */}
+            <div className="flex-1 pr-2 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
               <div className="space-y-1.5 text-sm pb-2">
                 {displayableParameters().length > 0 ? (
                   displayableParameters().map((param, index) => (
@@ -569,15 +522,23 @@ export function ParameterExtractionStatus({
                                 {param.value === '-' ? 'Не указано' : param.value}
                               </span>
                             </div>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => startEditing(param.name, param.value)}
-                              className="h-7 w-7 p-0 opacity-40 group-hover:opacity-100 transition-opacity ml-2 hover:bg-slate-100"
-                              title="Редактировать"
-                            >
-                              <Edit3 size={12} className="text-slate-600" />
-                            </Button>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => startEditing(param.name, param.value)}
+                                    className="h-7 w-7 p-0 opacity-40 group-hover:opacity-100 transition-opacity ml-2 hover:bg-slate-100"
+                                  >
+                                    <Edit3 size={12} className="text-slate-600" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom" className="bg-gray-800 text-white border-0">
+                                  <p>Редактировать</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           </div>
                         )}
                       </div>

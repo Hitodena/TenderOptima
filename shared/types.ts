@@ -78,6 +78,7 @@ export interface RequestSupplier {
   hasResponded: boolean;
   messagesSent: number;
   lastContactDate?: Date;
+  businessCard?: string; // Business card data at the time of sending
   createdAt?: Date;
   updatedAt?: Date;
 }

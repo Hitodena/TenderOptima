@@ -2,6 +2,7 @@ import Imap from 'node-imap';
 import { simpleParser } from 'mailparser';
 import { storage } from './storage';
 import { createRequire } from 'module';
+import { REQ_PATTERNS, TID_PATTERNS, EmailPatternMatcher } from './utils/email-patterns';
 
 // ES modules workaround for requiring CommonJS modules
 const require = createRequire(import.meta.url);
@@ -108,15 +109,15 @@ export class ImapService {
     
     console.log(`\n🔍 Extracting tracking info from subject: "${subject}"`);
     
-    // Прямой поиск REQ-XXXX-XXXXX в теме (приоритетно)
-    const directOrderMatch = subject.match(/REQ-\d{4}-\d{5}/);
+    // Прямой поиск REQ-XXXX-XXXXX в теме (приоритетно) - поддерживает дефисы и подчеркивания
+    const directOrderMatch = subject.match(REQ_PATTERNS.DIRECT);
     if (directOrderMatch) {
       result.orderNumber = directOrderMatch[0];
       console.log(`✅ DIRECT MATCH - Found order number in subject: ${result.orderNumber}`);
     }
     
-    // Прямой поиск [TID:...] в теме
-    const directTrackingMatch = subject.match(/\[TID:([^\]]+)\]/i);
+    // Прямой поиск [TID:...] в теме - поддерживает подчеркивания
+    const directTrackingMatch = subject.match(TID_PATTERNS.BRACKET);
     if (directTrackingMatch && directTrackingMatch[1]) {
       result.trackingId = directTrackingMatch[1].trim();
       console.log(`✅ DIRECT MATCH - Found tracking ID in subject: ${result.trackingId}`);
@@ -125,27 +126,27 @@ export class ImapService {
     // Combined text to search in (только если прямой поиск не дал результатов)
     const fullText = `${subject}\n${content}`;
     
-    // Try to extract tracking ID (typically alphanumeric)
+    // Try to extract tracking ID (typically alphanumeric with underscores)
     if (!result.trackingId) {
-      const trackingMatch = fullText.match(/tracking\s*(?:id|number|code)?\s*[:#\s]+\s*([a-zA-Z0-9_-]{7,15})/i);
+      const trackingMatch = fullText.match(TID_PATTERNS.CONTENT);
       if (trackingMatch && trackingMatch[1]) {
         result.trackingId = trackingMatch[1].trim();
         console.log(`✅ CONTENT MATCH - Found tracking ID in content: ${result.trackingId}`);
       }
     }
     
-    // Try to extract order number (typically REQ-XXXX-XXXXX format)
+    // Try to extract order number (supports dashes and underscores)
     if (!result.orderNumber) {
-      const orderMatch = fullText.match(/(?:order|request)\s*(?:number|id|#)?\s*[:#\s]+\s*(REQ-\d{4}-\d{5})/i);
+      const orderMatch = fullText.match(REQ_PATTERNS.CONTENT);
       if (orderMatch && orderMatch[1]) {
         result.orderNumber = orderMatch[1].trim();
         console.log(`✅ CONTENT MATCH - Found order number in content: ${result.orderNumber}`);
       }
     }
     
-    // Alternative format without REQ prefix
+    // Alternative format without REQ prefix (supports dashes and underscores)
     if (!result.orderNumber) {
-      const altOrderMatch = fullText.match(/(?:order|request)\s*(?:number|id|#)?\s*[:#\s]+\s*(\d{4}-\d{5})/i);
+      const altOrderMatch = fullText.match(REQ_PATTERNS.ALTERNATIVE);
       if (altOrderMatch && altOrderMatch[1]) {
         result.orderNumber = `REQ-${altOrderMatch[1].trim()}`;
         console.log(`✅ CONTENT MATCH - Found alternative order number format: ${result.orderNumber}`);
@@ -638,38 +639,24 @@ export class ImapService {
       let supplierName = displayFromName;
       let requestSupplier = null;
 
-      // Шаг 1: Поиск запроса поставщика (supplier) по email
-      const allRequestSuppliers = await storage.getRequestSuppliers(null);
-      const matchByEmail = allRequestSuppliers.find(s => 
-        s.supplierEmail.toLowerCase() === fromEmail.toLowerCase()
-      );
-
-      if (matchByEmail) {
-        console.log('✅ Found supplier match by email:', matchByEmail.supplierName);
-        requestId = matchByEmail.requestId;
-        requestSupplier = matchByEmail;
-        supplierId = matchByEmail.supplierId;
-        supplierName = matchByEmail.supplierName;
-      }
-
-      // Шаг 2: Если не нашли по email, ищем по номеру заказа + email supplier match
+      // Шаг 1: Поиск по номеру заказа (REQ и TID) - единственный способ связи
       if (!requestId) {
         // Собираем все возможные номера заказов из темы и текста письма
         const possibleOrderNumbers: string[] = [];
         
         // Поиск в теме письма (приоритет)
         if (subject) {
-          const subjectMatches = subject.match(/REQ-\d{4}-\d{5}/g) || [];
+          const subjectMatches = subject.match(REQ_PATTERNS.DIRECT_GLOBAL) || [];
           possibleOrderNumbers.push(...subjectMatches);
         }
         
         // Поиск в тексте письма
         if (text) {
-          const textMatches = text.match(/REQ-\d{4}-\d{5}/g) || [];
+          const textMatches = text.match(REQ_PATTERNS.DIRECT_GLOBAL) || [];
           possibleOrderNumbers.push(...textMatches);
           
-          // Поиск усеченных номеров вида -XXXX-XXXXX
-          const truncatedMatches = text.match(/-\d{4}-\d{5}/g) || [];
+          // Поиск усеченных номеров вида -XXXX-XXXXX (поддерживает дефисы и подчеркивания)
+          const truncatedMatches = text.match(REQ_PATTERNS.TRUNCATED_GLOBAL) || [];
           truncatedMatches.forEach((match: string) => {
             possibleOrderNumbers.push(`REQ${match}`);
           });
@@ -689,23 +676,13 @@ export class ImapService {
             if (request) {
               console.log(`Found request with order ${orderNumber}: ID=${request.id}`);
               
-              // Now check if this supplier was actually contacted for this request
-              const requestSuppliers = await storage.getRequestSuppliers(request.id);
-              const supplierMatch = requestSuppliers.find(s => 
-                s.supplierEmail.toLowerCase() === fromEmail.toLowerCase()
-              );
-              
-              if (supplierMatch) {
-                console.log(`✅ CONFIRMED: Supplier ${fromEmail} was contacted for request ${request.id}. Using this request ID to maintain parameter consistency.`);
-                requestId = request.id;
-                requestSupplier = supplierMatch;
-                supplierId = supplierMatch.supplierId;
-                supplierName = supplierMatch.supplierName;
-                break;
-              } else {
-                console.log(`⚠️ Supplier ${fromEmail} was NOT contacted for request ${request.id}. Looking for another request...`);
-                // Continue looking for the correct request where this supplier was actually contacted
-              }
+              // Accept any email with valid REQ/TID - no email verification needed
+              console.log(`✅ ACCEPTED: Email ${fromEmail} contains valid REQ ${orderNumber}. Using this request ID.`);
+              requestId = request.id;
+              // Use default values since we don't need to match specific supplier
+              supplierId = 'unknown';
+              supplierName = displayFromName;
+              break;
             }
           }
           
@@ -757,18 +734,17 @@ export class ImapService {
         }
       }
       
-      // ПРОВЕРКА ПО SUBJECT + EMAIL (приоритет #2)
-      const subjectEmailDuplicate = existingResponses.find(response => 
-        response.subject === subject &&
-        response.supplierEmail?.toLowerCase() === fromEmail.toLowerCase()
+      // ПРОВЕРКА ТОЛЬКО ПО SUBJECT (без email) - поставщик может отвечать с разных email
+      const subjectDuplicate = existingResponses.find(response => 
+        response.subject === subject
       );
       
-      if (subjectEmailDuplicate) {
-        console.log(`🚫 DUPLICATE DETECTED: Subject "${subject}" from ${fromEmail} already exists as response ${subjectEmailDuplicate.id}. BLOCKING save operation.`);
+      if (subjectDuplicate) {
+        console.log(`🚫 DUPLICATE DETECTED: Subject "${subject}" already exists as response ${subjectDuplicate.id}. BLOCKING save operation.`);
         return null;
       }
       
-      console.log(`✅ NO DUPLICATES FOUND: Email is unique and safe to save`);
+      console.log(`✅ NO DUPLICATES FOUND: Subject is unique and safe to save`);
       // КОНЕЦ КРИТИЧЕСКОЙ ПРОВЕРКИ НА ДУБЛИКАТЫ
       
       // Добавляем сообщение в список обработанных для in-memory дедупликации
@@ -808,13 +784,13 @@ export class ImapService {
 
       console.log('\n🔍 Extracted tracking info:', JSON.stringify(extractedInfo, null, 2));
 
-      let possibleRefs = subject ? (subject.match(/REQ-\d{4}-\d{5}/g) || []) : [];
+      let possibleRefs = subject ? (subject.match(REQ_PATTERNS.DIRECT_GLOBAL) || []) : [];
 
       if (possibleRefs.length === 0) {
-        possibleRefs = text ? (text.match(/REQ-\d{4}-\d{5}/g) || []) : [];
+        possibleRefs = text ? (text.match(REQ_PATTERNS.DIRECT_GLOBAL) || []) : [];
       }
 
-      const truncatedMatches = text ? (text.match(/-\d{4}-\d{5}/g) || []) : [];
+      const truncatedMatches = text ? (text.match(REQ_PATTERNS.TRUNCATED_GLOBAL) || []) : [];
       if (truncatedMatches.length > 0) {
         const reconstructedRefs = truncatedMatches.map((ref: string) => `REQ${ref}`);
         console.log(`Found truncated references: ${truncatedMatches.join(', ')}`);
@@ -873,7 +849,7 @@ export class ImapService {
 
       if (!requestId && possibleRefs.length > 0) {
         // Сначала поищем точное совпадение номера заказа в subject (приоритетно)
-        const subjectRefs = subject ? subject.match(/REQ-\d{4}-\d{5}/g) || [] : [];
+        const subjectRefs = subject ? subject.match(REQ_PATTERNS.DIRECT_GLOBAL) || [] : [];
         if (subjectRefs.length > 0) {
           console.log(`📑 References found in subject: ${subjectRefs.join(', ')}`);
           for (const ref of subjectRefs) {
@@ -884,22 +860,13 @@ export class ImapService {
             if (request) {
               console.log(`Found request with order ${ref}: ID=${request.id}`);
               
-              // Check if this supplier was actually contacted for this request
-              const requestSuppliers = await storage.getRequestSuppliers(request.id);
-              const supplierMatch = requestSuppliers.find(s => 
-                s.supplierEmail.toLowerCase() === fromEmail.toLowerCase()
-              );
-              
-              if (supplierMatch) {
-                console.log(`✅ CONFIRMED FROM SUBJECT: Supplier ${fromEmail} was contacted for request ${request.id}. Using this request ID to maintain parameter consistency.`);
-                requestId = request.id;
-                requestSupplier = supplierMatch;
-                supplierId = supplierMatch.supplierId;
-                supplierName = supplierMatch.supplierName;
-                break;
-              } else {
-                console.log(`⚠️ Supplier ${fromEmail} was NOT contacted for request ${request.id}. Looking for another request...`);
-              }
+              // Accept any email with valid REQ/TID - no email verification needed
+              console.log(`✅ ACCEPTED FROM SUBJECT: Email ${fromEmail} contains valid REQ ${ref}. Using this request ID.`);
+              requestId = request.id;
+              // Use default values since we don't need to match specific supplier
+              supplierId = 'unknown';
+              supplierName = displayFromName;
+              break;
             } else {
               console.log(`❌ No matching request found for reference from subject: ${ref}`);
             }
@@ -916,23 +883,13 @@ export class ImapService {
             if (request) {
               console.log(`Found request with order ${ref}: ID=${request.id}`);
               
-              // Check if this supplier was actually contacted for this request
-              const requestSuppliers = await storage.getRequestSuppliers(request.id);
-              const supplierMatch = requestSuppliers.find(s => 
-                s.supplierEmail.toLowerCase() === fromEmail.toLowerCase()
-              );
-              
-              if (supplierMatch) {
-                console.log(`✅ CONFIRMED FROM CONTENT: Supplier ${fromEmail} was contacted for request ${request.id}. Using this request ID to maintain parameter consistency.`);
-                requestId = request.id;
-                requestSupplier = supplierMatch;
-                supplierId = supplierMatch.supplierId;
-                supplierName = supplierMatch.supplierName;
-                break;
-              } else {
-                console.log(`⚠️ Supplier ${fromEmail} was NOT contacted for request ${request.id}. Looking for another request...`);
-                // Continue looking for the correct request where this supplier was actually contacted
-              }
+              // Accept any email with valid REQ/TID - no email verification needed
+              console.log(`✅ ACCEPTED FROM CONTENT: Email ${fromEmail} contains valid REQ ${ref}. Using this request ID.`);
+              requestId = request.id;
+              // Use default values since we don't need to match specific supplier
+              supplierId = 'unknown';
+              supplierName = displayFromName;
+              break;
             }
           }
         }

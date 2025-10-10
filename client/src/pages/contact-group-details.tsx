@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
-import { ArrowLeft, Plus, Trash2, Edit, Loader2, User, Mail, Phone, Building } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Edit, Loader2, User, Mail, Phone, Building, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +34,7 @@ import {
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest } from "@/lib/queryClient";
+import { format } from "date-fns";
 
 interface ContactGroup {
   id: number;
@@ -49,6 +50,7 @@ interface ContactItem {
   name: string;
   email: string;
   phone: string;
+  website?: string | null;
   organization: string | null;
   position: string | null;
   createdAt: string;
@@ -88,6 +90,7 @@ export default function ContactGroupDetailsPage() {
       name: string;
       email: string;
       phone: string;
+      website?: string;
       organization?: string;
     }) => {
       return await apiRequest("/api/contact-items", "POST", formData) as ContactItem;
@@ -118,6 +121,7 @@ export default function ContactGroupDetailsPage() {
       name: string;
       email: string;
       phone: string;
+      website?: string;
       organization?: string;
     }) => {
       const { id, ...data } = formData;
@@ -267,56 +271,78 @@ export default function ContactGroupDetailsPage() {
 
   return (
     <Layout title="Группа">
-      <h1 className="text-3xl font-bold">{group?.name}</h1>
-      {group?.description && <p className="text-muted-foreground mt-1">{group.description}</p>}
-      <p className="text-lg font-medium mt-4">Контакты ({contacts?.length || 0})</p>
+      {/* Breadcrumbs */}
+      <nav className="flex items-center space-x-1 text-sm text-muted-foreground mb-4">
+        <Link href="/contact-groups" className="hover:text-foreground transition-colors">
+          База контактов
+        </Link>
+        <ChevronRight className="w-4 h-4" />
+        <span className="text-foreground">Группы</span>
+      </nav>
+
+      {/* Main header */}
+      <div className="mb-6">
+        <div className="flex items-center gap-3 mb-2">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{group?.name}</h1>
+          <span className="inline-flex px-3 py-1 rounded-full text-sm font-medium bg-primary/10 text-primary border border-primary/20">
+            Группа
+          </span>
+        </div>
+        
+        {/* Metadata row */}
+        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+          {group?.createdAt && (
+            <span>Создана: {format(new Date(group.createdAt), 'dd.MM.yyyy')}</span>
+          )}
+          {group?.updatedAt && (
+            <span>Обновлена: {format(new Date(group.updatedAt), 'dd.MM.yyyy')}</span>
+          )}
+        </div>
+      </div>
+
+      {/* Contacts section header with actions */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <h2 className="text-xl font-semibold">Контакты ({contacts?.length || 0})</h2>
+        </div>
+        
+        <div className="flex items-center gap-3">
+          <Link href="/contact-groups">
+            <Button variant="outline" size="sm">
+              <ArrowLeft className="w-4 h-4 mr-2" /> Назад к группам
+            </Button>
+          </Link>
+          
+          <Button onClick={() => setCreateDialogOpen(true)} size="sm">
+            <Plus className="w-4 h-4 mr-2" /> Добавить контакт
+          </Button>
+        </div>
+      </div>
 
       <div className="mb-8">
-        <div className="flex justify-between items-center mb-6">
-          
-          <div className="flex space-x-2">
-            <Link href="/contact-groups">
-              <Button variant="outline" className="mb-4">
-                <ArrowLeft className="w-4 h-4 mr-2" /> Назад к группам  
-              </Button>
-            </Link>
-
-            <Button variant="outline" onClick={() => setCreateDialogOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" /> Добавить контакт
-            </Button>
-             
-            
-            <Button className="w-4 h-4 mr-2 hidden">
-             <div>
-                            {group && <SendGroupEmailLink groupId={group.id} groupName={group.name} />}
-                          </div>
-            </Button>
-
-          </div>
-        </div>
 
         {contacts && contacts.length > 0 ? (
           <div className="divide-y border rounded-lg overflow-hidden">
-            <div className="grid grid-cols-12 py-3 px-4 font-medium text-muted-foreground text-sm bg-muted/10">
+            <div className="grid grid-cols-12 py-4 px-6 font-semibold text-foreground text-sm bg-muted/20 border-b">
               <div className="col-span-4">Компания / Описание</div>
               <div className="col-span-5">Email</div>
               <div className="col-span-3 text-right">Действия</div>
             </div>
             {contacts.map((contact) => (
-              <div key={contact.id} className="grid grid-cols-12 py-3 px-4 items-center hover:bg-muted/20">
+              <div key={contact.id} className="grid grid-cols-12 py-5 px-6 items-center hover:bg-muted/30 transition-colors">
                 <div className="col-span-4">
-                  <div className="font-medium">{contact.name || "Без названия"}</div>
+                  <div className="font-medium text-foreground">{contact.name || "Без названия"}</div>
                   {contact.organization && (
-                    <div className="text-xs text-muted-foreground">{contact.organization}</div>
+                    <div className="text-sm text-muted-foreground mt-1">{contact.organization}</div>
                   )}
                 </div>
                 <div className="col-span-5 flex items-center">
-                  <Mail className="w-4 h-4 mr-2 text-muted-foreground flex-shrink-0" />
-                  <a href={`mailto:${contact.email}`} className="text-sm hover:underline truncate">
+                  <Mail className="w-4 h-4 mr-3 text-muted-foreground flex-shrink-0" />
+                  <a href={`mailto:${contact.email}`} className="text-sm hover:underline truncate text-foreground">
                     {contact.email}
                   </a>
                 </div>
-                <div className="col-span-3 flex justify-end space-x-2">
+                <div className="col-span-3 flex justify-end space-x-1">
                   <Button
                     variant="ghost"
                     size="icon"
@@ -324,13 +350,13 @@ export default function ContactGroupDetailsPage() {
                       setEditingContact(contact);
                       setEditDialogOpen(true);
                     }}
-                    className="h-8 w-8"
+                    className="h-9 w-9 hover:bg-muted/50"
                   >
                     <Edit className="w-4 h-4" />
                   </Button>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <Button variant="ghost" size="icon" className="h-9 w-9 hover:bg-destructive/10">
                         <Trash2 className="w-4 h-4 text-destructive" />
                       </Button>
                     </AlertDialogTrigger>

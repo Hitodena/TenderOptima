@@ -299,28 +299,33 @@ export function ParameterExtractionStatus({
   // Show success state with extracted parameters
   if (status === 'success' && parameters) {
     return (
-      <div className="space-y-2">
+      <div className="flex flex-col h-full min-h-0 space-y-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center">
-            <Check size={16} className="text-green-500 mr-2" />
-            <span className="text-sm text-green-600">
-              {hasLargeFiles ? 'Ручное заполнение' : 'Извлеченные данные'}
-            </span>
+            <span className="text-sm font-medium text-slate-700">Извлеченные параметры</span>
+            <div className="relative ml-2 group">
+              <Check size={16} className="text-green-500" />
+              {/* Tooltip on hover */}
+              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
+                {hasLargeFiles ? 'Ручное заполнение' : 'Параметры найдены'}
+              </div>
+            </div>
+            
+            {/* Refresh button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              tabIndex={0}
+              className="ml-2"
+            >
+              <RefreshCw 
+                size={14} 
+                className={`text-gray-500 hover:text-gray-700 ${isRefreshing ? 'animate-spin' : ''}`}
+              />
+            </Button>
           </div>
-          
-          {/* Refresh button */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            tabIndex={0}
-          >
-            <RefreshCw 
-              size={14} 
-              className={`text-gray-500 hover:text-gray-700 ${isRefreshing ? 'animate-spin' : ''}`}
-            />
-          </Button>
         </div>
         
         {/* Large files warning */}
@@ -339,12 +344,13 @@ export function ParameterExtractionStatus({
           </Alert>
         )}
         
-        <Card className="bg-muted/30 mt-2">
-          <CardContent className="p-3">
-            {supplierName && (
+        <Card className="bg-muted/30 mt-2 flex-1 min-h-0">
+          <CardContent className="p-3 flex flex-col h-full">
+            {/* Temporarily hidden supplier name field */}
+            {/* {supplierName && (
               <h4 className="text-sm font-medium mb-2">{supplierName}</h4>
-            )}
-            <ScrollArea className="h-[200px] pr-3">
+            )} */}
+            <ScrollArea className="flex-1 pr-3">
               <div className="space-y-2 text-sm">
                 {displayableParameters().map((param, index) => (
                   <div key={index} className="grid grid-cols-[1fr_auto] gap-2 border-b last:border-0 py-2">

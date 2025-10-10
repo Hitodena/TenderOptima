@@ -4,6 +4,9 @@ import { emailService } from "../email";
 import { storage } from "../storage";
 import { log } from "../vite";
 import { nanoid } from "nanoid";
+import { db } from "../db";
+import { users } from "@shared/schema";
+import { eq } from "drizzle-orm";
 
 // Schema for follow-up email validation
 const followUpSchema = z.object({
@@ -51,6 +54,18 @@ async function processSupplierFollowUp(
     let requestSupplierId = requestSupplier?.id;
     if (!requestSupplier) {
       try {
+        // Get user's business card at the time of sending
+        let userBusinessCard = null;
+        if (userId) {
+          try {
+            const [user] = await db.select({ businessCard: users.businessCard }).from(users).where(eq(users.id, userId));
+            userBusinessCard = user?.businessCard || null;
+            console.log(`[follow-up] Retrieved business card for user ${userId}: ${userBusinessCard ? 'found' : 'not found'}`);
+          } catch (error) {
+            console.error(`[follow-up] Error retrieving business card for user ${userId}:`, error);
+          }
+        }
+
         const newRequestSupplier = await storage.createRequestSupplier({
           userId: userId || undefined, // Use the userId passed from the route handler
           requestId: requestId,
@@ -63,6 +78,7 @@ async function processSupplierFollowUp(
           hasResponded: false,
           emailSubject: subject,
           emailContent: message,
+          businessCard: userBusinessCard, // Save business card at the time of sending
           sentAt: new Date()
         });
         requestSupplierId = newRequestSupplier.id;

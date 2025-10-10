@@ -146,6 +146,7 @@ export const requestSuppliers = pgTable("request_suppliers", {
   sentAt: timestamp("sent_at").defaultNow(),
   emailSubject: text("email_subject").notNull(),
   emailContent: text("email_content").notNull(),
+  businessCard: text("business_card"), // Business card data at the time of sending
   hasResponded: boolean("has_responded").default(false),
 });
 

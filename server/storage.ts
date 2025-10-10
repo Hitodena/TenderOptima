@@ -520,6 +520,12 @@ export class DatabaseStorage implements IStorage {
     const orderNumber = this.generateOrderNumber();
     console.log(`Generated order number: ${orderNumber} for new search request`);
     
+    // Validate the generated order number (should always pass, but good practice)
+    const orderValidation = this.validateOrderNumber(orderNumber);
+    if (!orderValidation.isValid) {
+      throw new Error(`Generated order number is invalid: ${orderValidation.error}`);
+    }
+    
     // Create the search request with the generated order number
     const [searchRequest] = await db
       .insert(searchRequests)
@@ -623,6 +629,12 @@ export class DatabaseStorage implements IStorage {
     // Generate a tracking ID if not provided
     if (!request.trackingId) {
       request.trackingId = this.generateTrackingId();
+    }
+
+    // Validate the tracking ID
+    const trackingValidation = this.validateTrackingId(request.trackingId);
+    if (!trackingValidation.isValid) {
+      throw new Error(`Tracking ID is invalid: ${trackingValidation.error}`);
     }
 
     const [requestSupplier] = await db
@@ -1233,10 +1245,14 @@ export class DatabaseStorage implements IStorage {
   // Helper functions
   generateOrderNumber(): string {
     // Format: REQ-YYMM-XXXXX (Year-Month-Random)
+    // This format is guaranteed to be compatible with regex patterns
     const date = new Date();
     const year = date.getFullYear().toString().slice(-2);
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
     const random = Math.floor(Math.random() * 100000).toString().padStart(5, '0');
+    
+    // Generated format: REQ-YYMM-XXXXX (e.g., REQ-2510-12345)
+    // This contains only A-Z, 0-9, and dashes, which is compatible with [A-Z0-9_-]+
     return `REQ-${year}${month}-${random}`;
   }
 
@@ -1244,7 +1260,89 @@ export class DatabaseStorage implements IStorage {
 
   generateTrackingId(): string {
     // Using nanoid to generate a unique, URL-friendly ID
-    return nanoid(6); // 6 characters is sufficient for our needs
+    // nanoid generates only A-Z, a-z, 0-9, _, - characters
+    // We'll filter to only A-Z, a-z, 0-9, _ to match our regex pattern
+    const id = nanoid(8); // 8 characters for better uniqueness
+    // Remove any dashes to ensure compatibility with [A-Za-z0-9_]+ pattern
+    return id.replace(/-/g, '');
+  }
+
+  // Validation methods
+  validateOrderNumber(orderNumber: string): { isValid: boolean; error?: string } {
+    if (!orderNumber || typeof orderNumber !== 'string') {
+      return {
+        isValid: false,
+        error: 'Order number is required and must be a string'
+      };
+    }
+
+    const trimmed = orderNumber.trim();
+    
+    if (trimmed.length === 0) {
+      return {
+        isValid: false,
+        error: 'Order number cannot be empty'
+      };
+    }
+
+    if (trimmed.length > 50) {
+      return {
+        isValid: false,
+        error: 'Order number is too long (max 50 characters)'
+      };
+    }
+
+    // Check if it matches our regex pattern [A-Z0-9_-]+
+    if (!/^[A-Z0-9_-]+$/.test(trimmed)) {
+      return {
+        isValid: false,
+        error: 'Order number can only contain letters (A-Z), numbers (0-9), dashes (-), and underscores (_)'
+      };
+    }
+
+    return { isValid: true };
+  }
+
+  validateTrackingId(trackingId: string): { isValid: boolean; error?: string } {
+    if (!trackingId || typeof trackingId !== 'string') {
+      return {
+        isValid: false,
+        error: 'Tracking ID is required and must be a string'
+      };
+    }
+
+    const trimmed = trackingId.trim();
+    
+    if (trimmed.length === 0) {
+      return {
+        isValid: false,
+        error: 'Tracking ID cannot be empty'
+      };
+    }
+
+    if (trimmed.length < 3) {
+      return {
+        isValid: false,
+        error: 'Tracking ID must be at least 3 characters long'
+      };
+    }
+
+    if (trimmed.length > 20) {
+      return {
+        isValid: false,
+        error: 'Tracking ID is too long (max 20 characters)'
+      };
+    }
+
+    // Check if it matches our regex pattern [A-Za-z0-9_]+
+    if (!/^[A-Za-z0-9_]+$/.test(trimmed)) {
+      return {
+        isValid: false,
+        error: 'Tracking ID can only contain letters (A-Z, a-z), numbers (0-9), and underscores (_)'
+      };
+    }
+
+    return { isValid: true };
   }
 
   async getPendingSearchRequests(): Promise<SearchRequest[]> {

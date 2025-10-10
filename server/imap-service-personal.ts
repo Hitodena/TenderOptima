@@ -2,6 +2,7 @@ import Imap from 'node-imap';
 import { simpleParser } from 'mailparser';
 import { storage } from './storage';
 import { createRequire } from 'module';
+import { REQ_PATTERNS, TID_PATTERNS, EmailPatternMatcher } from './utils/email-patterns';
 
 // ES modules workaround for requiring CommonJS modules
 const require = createRequire(import.meta.url);
@@ -864,15 +865,15 @@ export class PersonalImapService {
 
     const fullText = `${subject} ${content}`;
     
-    // ИСПРАВЛЕНИЕ 1: Поиск order number в квадратных скобках [REQ-XXXXXXXXX] (буквы, цифры, подчеркивание)
-    const bracketOrderMatch = fullText.match(/\[REQ-([A-Z0-9_-]+)\]/);
+    // ИСПРАВЛЕНИЕ 1: Поиск order number в квадратных скобках [REQ-XXXXXXXXX] (буквы, цифры, дефис, подчеркивание)
+    const bracketOrderMatch = fullText.match(REQ_PATTERNS.BRACKET);
     if (bracketOrderMatch) {
       result.orderNumber = `REQ-${bracketOrderMatch[1]}`;
       console.log(`[PERSONAL EMAIL] ✅ BRACKET ORDER MATCH - Found: ${result.orderNumber}`);
     }
     
-    // ИСПРАВЛЕНИЕ 2: Поиск tracking ID в квадратных скобках [TID:XXXXXXXXX]
-    const bracketTidMatch = fullText.match(/\[TID:([A-Za-z0-9]+)\]/);
+    // ИСПРАВЛЕНИЕ 2: Поиск tracking ID в квадратных скобках [TID:XXXXXXXXX] (буквы, цифры, подчеркивание)
+    const bracketTidMatch = fullText.match(TID_PATTERNS.BRACKET);
     if (bracketTidMatch) {
       result.trackingId = bracketTidMatch[1];
       console.log(`[PERSONAL EMAIL] ✅ BRACKET TID MATCH - Found: ${result.trackingId}`);
@@ -880,7 +881,7 @@ export class PersonalImapService {
 
     // Fallback: Direct search for REQ-XXXX-XXXXX без скобок (для совместимости)
     if (!result.orderNumber) {
-      const directOrderMatch = fullText.match(/REQ-\d{4}-\d{5}/);
+      const directOrderMatch = fullText.match(REQ_PATTERNS.DIRECT);
       if (directOrderMatch) {
         result.orderNumber = directOrderMatch[0];
         console.log(`[PERSONAL EMAIL] ✅ DIRECT MATCH - Found order number: ${result.orderNumber}`);
@@ -889,8 +890,7 @@ export class PersonalImapService {
     
     // Fallback: Поиск tracking ID в тексте (старый алгоритм для совместимости)
     if (!result.trackingId) {
-      const fullTextLower = fullText.toLowerCase();
-      const trackingMatch = fullTextLower.match(/tracking[:\s]+([a-z0-9]{8,})/i);
+      const trackingMatch = fullText.match(TID_PATTERNS.CONTENT);
       if (trackingMatch && trackingMatch[1]) {
         result.trackingId = trackingMatch[1].trim();
         console.log(`[PERSONAL EMAIL] ✅ FALLBACK TRACKING MATCH - Found: ${result.trackingId}`);
@@ -899,8 +899,7 @@ export class PersonalImapService {
     
     // Fallback: Поиск order number в контенте (старый алгоритм для совместимости)
     if (!result.orderNumber) {
-      const fullTextLower = fullText.toLowerCase();
-      const orderMatch = fullTextLower.match(/(?:order|request)\s*(?:number|id|#)?\s*[:#\s]+\s*(req-\d{4}-\d{5})/i);
+      const orderMatch = fullText.match(REQ_PATTERNS.CONTENT);
       if (orderMatch && orderMatch[1]) {
         result.orderNumber = orderMatch[1].toUpperCase();
         console.log(`[PERSONAL EMAIL] ✅ FALLBACK CONTENT MATCH - Found: ${result.orderNumber}`);
@@ -909,8 +908,7 @@ export class PersonalImapService {
     
     // Альтернативный формат без REQ префикса
     if (!result.orderNumber) {
-      const fullTextLower = fullText.toLowerCase();
-      const altOrderMatch = fullTextLower.match(/(?:order|request)\s*(?:number|id|#)?\s*[:#\s]+\s*(\d{4}-\d{5})/i);
+      const altOrderMatch = fullText.match(REQ_PATTERNS.ALTERNATIVE);
       if (altOrderMatch && altOrderMatch[1]) {
         result.orderNumber = `REQ-${altOrderMatch[1].toUpperCase()}`;
         console.log(`[PERSONAL EMAIL] ✅ FALLBACK ALT FORMAT - Found: ${result.orderNumber}`);

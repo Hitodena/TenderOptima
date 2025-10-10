@@ -577,10 +577,10 @@ export default function RequestDetails() {
                                   <div className="flex justify-between items-start">
                                     <div>
                                       <h3 className="font-medium">
-                                        {(response as any).subject || '(No subject)'}
+                                        <span className="font-bold">Тема:</span> {(response as any).subject || '(No subject)'}
                                       </h3>
                                       <div className="text-muted-foreground text-sm mt-1">
-                                        From: <span className="font-medium">{response.supplierName}</span> &lt;{response.supplierEmail}&gt;
+                                        <span className="font-bold">От:</span> <span className="font-medium">{response.supplierName}</span> &lt;{response.supplierEmail}&gt;
                                       </div>
                                       <div className="text-muted-foreground text-xs mt-1">
                                         {response.responseDate ? format(new Date(response.responseDate), "dd MMMM yyyy, HH:mm") : ""}
@@ -725,7 +725,7 @@ export default function RequestDetails() {
                               <AccordionTrigger>View Email Sent</AccordionTrigger>
                               <AccordionContent>
                                 <div className="p-4 bg-muted rounded-md mt-2">
-                                  <p className="font-medium mb-2">Subject: {supplier.emailSubject}</p>
+                                  <p className="font-medium mb-2"><span className="font-bold">Тема:</span> {supplier.emailSubject}</p>
                                   <p className="text-sm text-muted-foreground whitespace-pre-line">
                                     {supplier.emailContent}
                                   </p>

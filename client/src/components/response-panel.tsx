@@ -31,7 +31,8 @@ import {
   ArrowDownNarrowWide,
   ListFilter,
   RefreshCw,
-  Reply
+  Reply,
+  Info
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -44,12 +45,21 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter
+} from "@/components/ui/dialog";
 import { type SupplierResponse, type RequestSupplier } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { AddToContactGroup } from "@/components/add-to-contact-group";
 import { AttachmentsList } from "@/components/attachments-list";
 // Импортируем функцию для работы с избранными ответами
 import * as SupplierResponsesAPI from "@/api/supplier-responses";
+import { cleanEmailSubject, hasServiceTags } from "@/lib/email-utils";
+import { ToggleSwitch } from "@/components/ui/toggle-switch";
 
 // CSS стили для скрытия блока с reference
 const emailContentStyles = `
@@ -84,6 +94,13 @@ interface ResponsePanelProps {
   onExtractParameters?: () => void; // Callback for when "Extract Parameters" button is clicked
   onCheckNewOffers?: () => void; // Callback for checking new offers
   isCheckingOffers?: boolean; // Loading state for checking offers
+  onShowSuppliers?: () => void; // Callback for showing suppliers list
+  unreadCount?: number; // Number of unread responses
+  requestName?: string; // Request product name
+  request?: any; // Full request object for detailed info
+  requestSuppliers?: any[]; // Request suppliers for statistics
+  onStatusUpdate?: (id: number, status: string) => void; // Callback for status update
+  isUpdatingStatus?: boolean; // Loading state for status update
 }
 
 export function ResponsePanel({
@@ -96,7 +113,14 @@ export function ResponsePanel({
   onActiveResponseChange,
   onExtractParameters,
   onCheckNewOffers,
-  isCheckingOffers = false
+  isCheckingOffers = false,
+  onShowSuppliers,
+  unreadCount = 0,
+  requestName,
+  request,
+  requestSuppliers,
+  onStatusUpdate,
+  isUpdatingStatus = false
 }: ResponsePanelProps) {
   const { toast } = useToast();
   const [isSending, setIsSending] = useState<boolean>(false);
@@ -109,6 +133,8 @@ export function ResponsePanel({
   const [favoriteLoadingStates, setFavoriteLoadingStates] = useState<Set<number>>(new Set());
   const [highlightReplyForm, setHighlightReplyForm] = useState<boolean>(false);
   const [replyButtonClicked, setReplyButtonClicked] = useState<boolean>(false);
+  const [showSentEmails, setShowSentEmails] = useState<boolean>(false);
+  const [replyText, setReplyText] = useState<string>('');
   
   // Sorting options
   type SortField = 'date' | 'sender' | 'status' | 'favorite';
@@ -127,6 +153,7 @@ export function ResponsePanel({
   const [isUploading, setIsUploading] = useState(false);
   const [isAddToGroupOpen, setIsAddToGroupOpen] = useState(false);
   const [isParameterViewerOpen, setIsParameterViewerOpen] = useState(false);
+  const [isRequestInfoOpen, setIsRequestInfoOpen] = useState(false);
   const [contactsToAdd, setContactsToAdd] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -194,6 +221,15 @@ export function ResponsePanel({
   
   // Find the active response from local state
   const activeResponse = localResponses.find(r => r.id === activeResponseId);
+
+  // Sync replyText with activeResponse replyDraft
+  useEffect(() => {
+    if (activeResponse && (activeResponse as any).replyDraft !== undefined) {
+      setReplyText((activeResponse as any).replyDraft || '');
+    } else {
+      setReplyText('');
+    }
+  }, [activeResponse]);
 
   // Function to update the active response (for reply drafts, etc.)
   const updateActiveResponse = (updatedResponse: SupplierResponse) => {
@@ -583,25 +619,71 @@ export function ResponsePanel({
       <div className="grid grid-cols-1 md:grid-cols-5 h-[600px] border rounded-md">
         {/* Left panel - Response list */}
         <div className="border-r md:col-span-1 overflow-hidden">
+          {/* Folder toggle header */}
+          <div className="px-3 py-3 bg-primary/5 border-b">
+            <div className="flex items-center justify-between h-6">
+              <div className="flex items-center gap-1">
+                <span className="text-sm font-medium">
+                  {showSentEmails ? "Отправленные" : "Входящие"}
+                </span>
+                {!showSentEmails && unreadCount > 0 && (
+                  <Badge 
+                    variant="destructive" 
+                    className="h-4 w-4 p-0 text-xs flex items-center justify-center rounded-full"
+                  >
+                    {unreadCount}
+                  </Badge>
+                )}
+              </div>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <ToggleSwitch
+                      checked={showSentEmails}
+                      onCheckedChange={(checked) => {
+                        setShowSentEmails(checked);
+                        if (checked && onShowSuppliers) {
+                          onShowSuppliers();
+                        }
+                      }}
+                      size="sm"
+                    />
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="bg-gray-800 text-white border-0">
+                    <p>{showSentEmails ? "Переключить на Входящие" : "Переключить на Отправленные"}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          </div>
+
           {/* Панель инструментов */}
           <div className="p-3 bg-muted/30 border-b">
             {/* Кнопки действий */}
             <div className="flex items-center gap-2 mb-3">
               {/* Кнопка проверки новых предложений */}
               {onCheckNewOffers && (
-                <Button 
-                  variant="outline" 
-                  size="icon" 
-                  className="w-8 h-8"
-                  onClick={onCheckNewOffers}
-                  disabled={isCheckingOffers}
-                  title="Проверить новые предложения"
-                >
-                  <RefreshCw 
-                    size={14} 
-                    className={isCheckingOffers ? 'animate-spin' : ''} 
-                  />
-                </Button>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button 
+                        variant="outline" 
+                        size="icon" 
+                        className="w-8 h-8"
+                        onClick={onCheckNewOffers}
+                        disabled={isCheckingOffers}
+                      >
+                        <RefreshCw 
+                          size={14} 
+                          className={isCheckingOffers ? 'animate-spin' : ''} 
+                        />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="bg-gray-800 text-white border-0">
+                      <p>Проверить новые предложения</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               )}
               
               {/* Кнопка сравнения выбранных */}
@@ -679,7 +761,7 @@ export function ResponsePanel({
                         />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>
+                    <TooltipContent side="bottom" className="bg-gray-800 text-white border-0">
                       <p>Показать только избранные</p>
                     </TooltipContent>
                   </Tooltip>
@@ -818,9 +900,24 @@ export function ResponsePanel({
                         />
                       </Button>
                     </div>
-                    <div className="text-xs text-muted-foreground truncate mt-1">
-                      {(response as any).subject || '(No subject)'}
-                    </div>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="text-xs text-muted-foreground truncate mt-1 cursor-help">
+                            {cleanEmailSubject((response as any).subject) || '(No subject)'}
+                          </div>
+                        </TooltipTrigger>
+                        {(() => {
+                          const originalSubject = (response as any).subject;
+                          const cleanedSubject = cleanEmailSubject(originalSubject);
+                          return originalSubject && originalSubject !== cleanedSubject && (
+                            <TooltipContent side="bottom" className="bg-gray-800 text-white border-0">
+                              <p>{cleanedSubject}</p>
+                            </TooltipContent>
+                          );
+                        })()}
+                      </Tooltip>
+                    </TooltipProvider>
                     <div className="text-xs mt-1 flex justify-between items-center">
                       <span className="text-muted-foreground">
                         {response.responseDate ? format(new Date(response.responseDate), "dd.MM HH:mm") : ""}
@@ -847,20 +944,13 @@ export function ResponsePanel({
           {activeResponse ? (
             <>
               {/* Email header - fixed */}
-              <div className="p-4 border-b bg-muted/20 flex-shrink-0">
-                <div className="flex justify-between items-start">
+              <div className="px-4 py-3 border-b bg-primary/5 flex-shrink-0 hidden">
+                <div className="flex justify-between items-center h-6">
                   <div>
-                    <h3 className="font-medium">
-                      {(activeResponse as any).subject || '(No subject)'}
+                    <h3 className="text-sm font-medium">
+                      {requestName || 'Запрос поставщику'}
                     </h3>
-                    <div className="text-muted-foreground text-sm mt-1">
-                      From: <span className="font-medium">{activeResponse.supplierName}</span> &lt;{activeResponse.supplierEmail}&gt;
-                    </div>
-                    <div className="text-muted-foreground text-xs mt-1">
-                      {activeResponse.responseDate ? format(new Date(activeResponse.responseDate), "dd MMMM yyyy, HH:mm") : ""}
-                    </div>
                   </div>
-
                   <div className="flex gap-2">
                     <TooltipProvider>
                       <Tooltip>
@@ -868,21 +958,35 @@ export function ResponsePanel({
                           <Button
                             variant="outline"
                             size="icon"
-                            className="h-8 w-8 hidden"
-                            onClick={() => handleToggleFavorite(activeResponse.id)}
-                            disabled={favoriteLoadingStates.has(activeResponse.id)}
+                            className="h-8 w-8"
+                            onClick={() => {
+                              setIsRequestInfoOpen(true);
+                            }}
                           >
-                            <Star 
-                              className={`h-4 w-4 ${activeResponse.isFavorite ? 'text-yellow-500 fill-yellow-500' : 'text-muted-foreground'} ${favoriteLoadingStates.has(activeResponse.id) ? 'opacity-50' : ''}`} 
-                            />
+                            <Info className="h-4 w-4" />
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent>
-                          <p>{activeResponse.isFavorite ? 'Удалить из избранного' : 'Добавить в избранное'}</p>
+                          <p>Информация о запросе</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
+                  </div>
+                </div>
+              </div>
 
+              {/* Email metadata */}
+              <div className="px-4 py-1 border-b bg-muted/10">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1 space-y-0">
+                    <div className="text-muted-foreground text-sm">
+                      <span className="font-bold">От:</span> {activeResponse.supplierName} &lt;{activeResponse.supplierEmail}&gt; • {activeResponse.responseDate ? format(new Date(activeResponse.responseDate), "dd MMMM yyyy, HH:mm") : ""}
+                    </div>
+                    <div className="text-muted-foreground text-sm">
+                      <span className="font-bold">Тема:</span> {cleanEmailSubject((activeResponse as any).subject) || '(No subject)'}
+                    </div>
+                  </div>
+                  <div className="flex gap-2 ml-4">
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -901,57 +1005,8 @@ export function ResponsePanel({
                             }`} />
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent>
+                        <TooltipContent side="bottom" className="bg-gray-800 text-white border-0">
                           <p>Ответить на письмо</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                    
-                    {/* We'll move the Parameter Extraction Status elsewhere */}
-                    
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8 hidden"
-                            onClick={async () => {
-                              // Automatically open parameter viewer with current active response
-                              
-                              // Автоматический анализ вложений перед открытием просмотра параметров
-                              if (activeResponse && activeResponse.attachments && 
-                                  Array.isArray(activeResponse.attachments) &&
-                                  activeResponse.attachments.length > 0) {
-                                try {
-                                  await fetch(`/api/supplier-responses/${activeResponse.id}/analyze-attachments`, {
-                                    method: 'POST',
-                                    headers: {
-                                      'Content-Type': 'application/json',
-                                      'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-                                      'X-Requested-With': 'XMLHttpRequest'
-                                    },
-                                    credentials: 'include',
-                                  });
-                                  console.log('Attachment analysis triggered successfully');
-                                  
-                                  // Notify parent component to force parameter extraction
-                                  if (onExtractParameters) {
-                                    onExtractParameters();
-                                  }
-                                } catch (error) {
-                                  console.error('Error triggering attachment analysis:', error);
-                                }
-                              }
-                              
-                              setIsParameterViewerOpen(true);
-                            }}
-                          >
-                            <ListFilter className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Извлечь параметры</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
@@ -1015,171 +1070,159 @@ export function ResponsePanel({
                   highlightReplyForm 
                     ? 'bg-primary/5 border-primary/20 shadow-lg ring-2 ring-primary/30' 
                     : ''
-                }`} style={{ flexShrink: 0, maxHeight: '200px' }}>
-                <div className="p-4">
-                  <h3 className={`text-sm font-medium mb-3 transition-colors duration-300 ${
+                }`} style={{ flexShrink: 0, maxHeight: '180px' }}>
+                <div className="p-2">
+                  <h3 className={`text-sm font-medium mb-1 transition-colors duration-300 ${
                     highlightReplyForm ? 'text-primary font-semibold' : ''
                   }`}>
                     Ответить на письмо
                   </h3>
-                  <textarea 
-                    rows={2}
-                    className={`w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all duration-300 resize-y min-h-[2.5rem] ${
-                      highlightReplyForm 
-                        ? 'border-primary/50 bg-primary/5 ring-2 ring-primary/30 shadow-md' 
-                        : ''
-                    }`}
-                    placeholder="Текст сообщения..."
-                    value={(activeResponse as any).replyDraft || ''}
-                    onChange={(e) => {
-                      if (activeResponse) {
-                        const updatedResponse = {
-                          ...activeResponse,
-                          replyDraft: e.target.value
-                        };
-                        updateActiveResponse(updatedResponse);
-                      }
-                    }}
-                    disabled={isSending}
-                  />
-                  
-                  {/* Attachments for reply */}
-                  <div className="mt-3">
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {attachments.map((file, i) => (
-                        <div key={i} className="flex items-center bg-muted/30 px-2 py-1 rounded-md text-xs">
-                          <File className="h-3 w-3 mr-1" />
-                          <span className="max-w-[120px] truncate">{file.filename}</span>
-                          <span className="text-muted-foreground ml-1">({formatFileSize(file.size)})</span>
-                          <button 
-                            className="ml-1 text-destructive hover:bg-muted/50 rounded-full p-0.5"
-                            onClick={() => removeAttachment(i)}
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center justify-between mt-3">
-                        <label 
-                          className="inline-flex items-center gap-1 rounded-md cursor-pointer text-xs px-2 py-1.5 bg-muted/30 hover:bg-muted/50"
-                          htmlFor="file-upload"
-                        >
-                          <Paperclip className="h-3 w-3" />
-                          Прикрепить файл
-                        </label>
-                        <input 
-                          type="file" 
-                          id="file-upload" 
-                          className="hidden"
-                          multiple
-                          onChange={handleFileChange}
-                          ref={fileInputRef}
-                          disabled={isSending}
-                        />
-                        
-                        <div className="flex gap-2">
-                          <Button 
-                            size="sm"
-                            variant="outline"
-                            className="text-xs"
-                            onClick={() => {
-                              if (activeResponse) {
-                                const updatedResponse = {
-                                  ...activeResponse,
-                                  replyDraft: ''
-                                };
-                                updateActiveResponse(updatedResponse);
-                                setAttachments([]);
-                              }
-                            }}
-                            disabled={
-                              isSending || 
-                              !activeResponse || 
-                              !((activeResponse as any).replyDraft?.trim() || attachments.length > 0)
-                            }
-                          >
-                            Очистить
-                          </Button>
-                          <Button 
-                            size="sm"
-                            variant="default"
-                            className="text-xs"
-                            disabled={
-                              isSending || 
-                              !activeResponse || 
-                              (!(activeResponse as any).replyDraft?.trim() && attachments.length === 0)
-                            }
-                            onClick={async () => {
-                              if (!activeResponse) return;
-                              
-                              try {
-                                setIsSending(true);
-                                
-                                const replyText = (activeResponse as any).replyDraft || '';
-                                
-                                // Use apiRequest from queryClient to include authentication
-                                const accessToken = localStorage.getItem('accessToken');
-                                console.log(`Sending reply with token: ${accessToken ? 'Present' : 'Missing'}`);
-                                
-                                const response = await fetch(`/api/supplier-responses/${activeResponse.id}/reply`, {
-                                  method: 'POST',
-                                  headers: {
-                                    'Content-Type': 'application/json',
-                                    'Authorization': `Bearer ${accessToken || ''}`,
-                                    'X-Requested-With': 'XMLHttpRequest'
-                                  },
-                                  credentials: 'include',
-                                  body: JSON.stringify({
-                                    content: replyText,
-                                    attachments,
-                                  }),
-                                });
-                                
-                                if (!response.ok) {
-                                  throw new Error(`HTTP error! status: ${response.status}`);
-                                }
-                                
-                                const result = await response.json();
-                                
-                                if (result.success) {
-                                  // Update local state
-                                  const updatedResponse = {
-                                    ...activeResponse,
-                                    replyDraft: '',
-                                    isRepliedTo: true,
-                                  };
-                                  updateActiveResponse(updatedResponse);
-                                  setAttachments([]);
-                                  setMessageSent(true);
-                                  
-                                  toast({
-                                    title: "Письмо отправлено",
-                                    description: "Ваш ответ был успешно отправлен поставщику.",
-                                  });
-                                } else {
-                                  throw new Error(result.error || 'Unknown error');
-                                }
-                              } catch (error) {
-                                console.error("Ошибка отправки ответа:", error);
-                                toast({
-                                  title: "Ошибка отправки",
-                                  description: "Не удалось отправить ответ. Пожалуйста, попробуйте снова.",
-                                  variant: "destructive",
-                                });
-                              } finally {
-                                setIsSending(false);
-                              }
-                            }}
-                          >
-                            {isSending ? "Отправка..." : "Отправить ответ"}
-                          </Button>
+                  <div className="flex gap-2 items-start">
+                    <div className="flex-1">
+                      <textarea 
+                        rows={2}
+                        className={`w-full p-1.5 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all duration-300 resize-y min-h-[2.5rem] ${
+                          highlightReplyForm 
+                            ? 'border-primary/50 bg-primary/5 ring-2 ring-primary/30 shadow-md' 
+                            : ''
+                        }`}
+                        placeholder="Текст сообщения..."
+                        value={replyText}
+                        onChange={(e) => {
+                          setReplyText(e.target.value);
+                          if (activeResponse) {
+                            const updatedResponse = {
+                              ...activeResponse,
+                              replyDraft: e.target.value
+                            };
+                            updateActiveResponse(updatedResponse);
+                          }
+                        }}
+                        disabled={isSending}
+                      />
+                      
+                      {/* Attachments for reply */}
+                      <div className="mt-1">
+                        <div className="flex flex-wrap gap-1">
+                          {attachments.map((file, i) => (
+                            <div key={i} className="flex items-center bg-muted/30 px-2 py-1 rounded-md text-xs">
+                              <File className="h-3 w-3 mr-1" />
+                              <span className="max-w-[120px] truncate">{file.filename}</span>
+                              <span className="text-muted-foreground ml-1">({formatFileSize(file.size)})</span>
+                              <button 
+                                className="ml-1 text-destructive hover:bg-muted/50 rounded-full p-0.5"
+                                onClick={() => removeAttachment(i)}
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     </div>
+                    
+                    <div className="flex items-center gap-1">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <label 
+                              className="inline-flex items-center justify-center w-8 h-8 rounded-md cursor-pointer text-xs bg-muted/30 hover:bg-muted/50 transition-colors"
+                              htmlFor="file-upload"
+                            >
+                              <Paperclip className="h-4 w-4" />
+                            </label>
+                          </TooltipTrigger>
+                          <TooltipContent className="bg-slate-800 text-white border-slate-700">
+                            <p>Прикрепить файл</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      <input 
+                        type="file" 
+                        id="file-upload" 
+                        className="hidden"
+                        multiple
+                        onChange={handleFileChange}
+                        ref={fileInputRef}
+                        disabled={isSending}
+                      />
+                      
+                      <Button 
+                        size="sm"
+                        variant="default"
+                        className="text-xs whitespace-nowrap"
+                        disabled={
+                          isSending || 
+                          !activeResponse || 
+                          (!replyText?.trim() && attachments.length === 0)
+                        }
+                        onClick={async () => {
+                          if (!activeResponse) return;
+                          
+                          try {
+                            setIsSending(true);
+                            
+                            const replyTextToSend = replyText || '';
+                            
+                            // Use apiRequest from queryClient to include authentication
+                            const accessToken = localStorage.getItem('accessToken');
+                            console.log(`Sending reply with token: ${accessToken ? 'Present' : 'Missing'}`);
+                            
+                            const response = await fetch(`/api/supplier-responses/${activeResponse.id}/reply`, {
+                              method: 'POST',
+                              headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${accessToken}`
+                              },
+                              credentials: 'include',
+                              body: JSON.stringify({
+                                replyText: replyTextToSend,
+                                attachments: attachments.map(file => ({
+                                  filename: file.filename,
+                                  content: file.content,
+                                  contentType: file.contentType
+                                }))
+                              })
+                            });
+                            
+                            if (response.ok) {
+                              // Clear the reply draft and attachments
+                              const updatedResponse = {
+                                ...activeResponse,
+                                replyDraft: ''
+                              };
+                              updateActiveResponse(updatedResponse);
+                              setReplyText('');
+                              setAttachments([]);
+                              
+                              toast({
+                                title: "Ответ отправлен",
+                                description: "Ваш ответ успешно отправлен поставщику"
+                              });
+                              
+                              // Refresh the responses to show the new reply
+                              // queryClient.invalidateQueries({ queryKey: ['/api/supplier-responses', activeResponse.requestId] });
+                            } else {
+                              throw new Error('Failed to send reply');
+                            }
+                          } catch (error) {
+                            console.error('Error sending reply:', error);
+                            toast({
+                              title: "Ошибка отправки",
+                              description: "Не удалось отправить ответ. Попробуйте еще раз.",
+                              variant: "destructive"
+                            });
+                          } finally {
+                            setIsSending(false);
+                          }
+                        }}
+                      >
+                        {isSending ? "Отправка..." : "Отправить ответ"}
+                      </Button>
+                    </div>
                   </div>
+                </div>
+              </div>
               ) : (
                 <div className="border-t bg-background flex-shrink-0">
                   <div className="p-4">
@@ -1211,6 +1254,104 @@ export function ResponsePanel({
           response={activeResponse}
         />
       )}
+
+      {/* Request Info Dialog */}
+        <Dialog open={isRequestInfoOpen} onOpenChange={setIsRequestInfoOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="text-base">Общая информация о запросе</DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              {/* Request Details */}
+              <div className="space-y-3">
+                <div>
+                  <h4 className="font-medium text-sm mb-2">{requestName || 'Запрос поставщику'}</h4>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Создано: {request?.createdAt ? format(new Date(request.createdAt), 'dd.MM.yyyy') : 'Unknown date'}</p>
+                    <p className="text-sm text-muted-foreground">Запрос: № {requestId || 'N/A'}</p>
+                    <p className="text-sm text-muted-foreground">Код запроса: REQ-{request?.orderNumber || 'N/A'}</p>
+                  </div>
+                </div>
+                
+                <div className="border-t pt-3">
+                  <h4 className="font-medium text-sm mb-2">Описание</h4>
+                  <p className="text-sm text-muted-foreground">
+                    {request?.productDescription || "Нет описания"}
+                  </p>
+                </div>
+
+                <div className="border-t pt-3">
+                  <h4 className="font-medium text-sm mb-3">Статус</h4>
+                  <div className="flex items-center gap-3">
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      request?.status === "completed" 
+                        ? "bg-green-100 text-green-800" 
+                        : "bg-blue-100 text-blue-800"
+                    }`}>
+                      {request?.status === "completed" ? "completed" : "active"}
+                    </span>
+                    <div className="flex gap-2">
+                      {request?.status !== "completed" ? (
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          className="text-muted-foreground border-muted-foreground/30 hover:bg-muted/50"
+                          onClick={() => onStatusUpdate?.(request.id, "completed")}
+                          disabled={isUpdatingStatus}
+                        >
+                          Отметить как завершенное
+                        </Button>
+                      ) : (
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          className="text-muted-foreground border-muted-foreground/30 hover:bg-muted/50"
+                          onClick={() => onStatusUpdate?.(request.id, "active")}
+                          disabled={isUpdatingStatus}
+                        >
+                          Сделать активным
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Statistics */}
+              <div className="border-t pt-3">
+                <h4 className="font-medium text-sm mb-3">Статистика</h4>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="p-2 bg-muted rounded-lg">
+                    <p className="text-lg font-semibold">{requestSuppliers?.length || 0}</p>
+                    <p className="text-xs text-muted-foreground">Отправлено запросов</p>
+                  </div>
+                  <div className="p-2 bg-muted rounded-lg">
+                    <p className="text-lg font-semibold">{supplierResponses.length}</p>
+                    <p className="text-xs text-muted-foreground">Получено ответов</p>
+                  </div>
+                  <div className="p-2 bg-muted rounded-lg">
+                    <p className="text-lg font-semibold">
+                      {(() => {
+                        const suppliersCount = requestSuppliers?.length || 0;
+                        return suppliersCount > 0 
+                          ? Math.round((supplierResponses.length / suppliersCount) * 100) 
+                          : 0;
+                      })()}%
+                    </p>
+                    <p className="text-xs text-muted-foreground">конверсия</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsRequestInfoOpen(false)}>
+                Закрыть
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
     </div>
   );
 }

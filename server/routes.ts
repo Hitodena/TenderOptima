@@ -983,7 +983,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
             console.log(`🔧 Fixed supplier ID: ${supplier.id} → ${fixedSupplierId}`);
 
-            // Create a record of this supplier request with userId
+            // Get user's business card at the time of sending
+            let userBusinessCard = null;
+            try {
+              const [user] = await db.select({ businessCard: users.businessCard }).from(users).where(eq(users.id, userId));
+              userBusinessCard = user?.businessCard || null;
+              console.log(`[routes] Retrieved business card for user ${userId}: ${userBusinessCard ? 'found' : 'not found'}`);
+            } catch (error) {
+              console.error(`[routes] Error retrieving business card for user ${userId}:`, error);
+            }
+
+            // Create a record of this supplier request with userId and business card
             const requestSupplier = await storage.createRequestSupplier({
               userId: userId, // Add the user ID for proper data isolation
               requestId: searchRequest.id,
@@ -995,6 +1005,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               trackingId: trackingId,
               emailSubject: subject,
               emailContent: message,
+              businessCard: userBusinessCard, // Save business card at the time of sending
             });
 
             console.log(`Created requestSupplier record with ID: ${requestSupplier.id}`);

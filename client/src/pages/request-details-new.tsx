@@ -1,6 +1,6 @@
 import { useRoute, useLocation, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { useToast, toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,15 @@ import { ParameterExtractionStatus } from "@/components/parameter-extraction-sta
 import { useSocket } from "@/hooks/useSocket";
 import { useUserId } from "@/hooks/useUserId";
 import { useRequestParameters } from "@/hooks/use-request-parameters";
+import { RequestOverviewModal } from "@/components/request-overview-modal";
+import { ToggleSwitch } from "@/components/ui/toggle-switch";
+import { 
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { SentEmailsPanel } from "@/components/sent-emails-panel";
 
 interface RequestDetailsData {
   request: SearchRequest;
@@ -100,7 +109,12 @@ function AnalysisResultsTab({ requestId }: AnalysisResultsTabProps) {
                     </span>
                   </div>
                 </div>
-                <Button variant="outline" size="sm" asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="bg-white text-primary border-primary hover:bg-white hover:text-primary"
+                  asChild
+                >
                   <Link href={`/analysis/${result.id}`}>
                     <FileText className="h-4 w-4 mr-1" />
                     Смотреть
@@ -119,11 +133,15 @@ export default function RequestDetails() {
   const [, params] = useRoute<{ id: string }>("/requests/:id");
   const [, navigate] = useLocation();
   const id = params?.id ? parseInt(params.id) : null;
-  const [tab, setTab] = useState<string>("responses");
   const [selectedResponses, setSelectedResponses] = useState<number[]>([]);
   const [activeResponse, setActiveResponse] = useState<SupplierResponse | null>(null);
   const [forceParameterExtraction, setForceParameterExtraction] = useState(false);
+  const [parameterStatus, setParameterStatus] = useState<string>('idle');
+  const [isParameterRefreshing, setIsParameterRefreshing] = useState(false);
+  const [parameterRefreshHandler, setParameterRefreshHandler] = useState<(() => void) | null>(null);
   const [isCompareLoading, setIsCompareLoading] = useState(false);
+  const [showSuppliersList, setShowSuppliersList] = useState(false);
+  const [activeSupplierId, setActiveSupplierId] = useState<number | null>(null);
   
   // Получаем userId для Socket.IO
   const userId = useUserId();
@@ -158,13 +176,56 @@ export default function RequestDetails() {
   
   // OPTIMIZED: Simplified auto-selection tracking
   const [hasAutoSelectedFirstEmail, setHasAutoSelectedFirstEmail] = useState(false);
-  
-  // OPTIMIZED: Lazy handler for supplier selection - no automatic parameter extraction
-  const handleSupplierSelect = (responseId: number, response: SupplierResponse) => {
+  const [firstEmailViewStartTime, setFirstEmailViewStartTime] = useState<number | null>(null);
+  const [hasUserManuallySelectedFirstEmail, setHasUserManuallySelectedFirstEmail] = useState(false);
+
+  // OPTIMIZED: Simplified mark as read mutation (moved up so callbacks can depend on it)
+  const markAsReadMutation = useMutation({
+    mutationFn: async (responseId: number) => {
+      return apiRequest('/api/supplier-responses/' + responseId + '/read', 'PATCH');
+    },
+    onSuccess: (_, responseId) => {
+      // Optimistic update - update cache immediately
+      const currentData = queryClient.getQueryData<RequestDetailsData>(['/api/search-requests', 'single', id]);
+      if (currentData?.supplierResponses) {
+        const updatedResponses = currentData.supplierResponses.map(response => 
+          response.id === responseId ? { ...response, isRead: true } : response
+        );
+
+        queryClient.setQueryData(['/api/search-requests', 'single', id], {
+          ...currentData,
+          supplierResponses: updatedResponses
+        });
+      }
+      
+      // Invalidate dashboard cache to sync unread counts
+      queryClient.invalidateQueries({ queryKey: ['/api/search-requests', 'dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/search-requests'] });
+    },
+  });
+
+  // OPTIMIZED: Lazy handler for supplier selection - memoized to avoid re-renders
+  const handleSupplierSelect = useCallback(async (responseId: number, response: SupplierResponse, isFirstEmailAutoSelected = false) => {
     setActiveResponse(response);
-    console.log(`Selected supplier response: ${responseId}`);
+    console.log(`Selected supplier response: ${responseId}, isFirstEmailAutoSelected: ${isFirstEmailAutoSelected}`);
+    
+    // Special logic for first email: don't mark as read immediately if auto-selected
+    if (!response.isRead) {
+      if (isFirstEmailAutoSelected) {
+        console.log(`First email auto-selected, keeping as unread for now: ${responseId}`);
+        // Don't mark as read immediately for auto-selected first email
+      } else {
+        try {
+          console.log(`Marking response ${responseId} as read`);
+          await markAsReadMutation.mutateAsync(responseId);
+        } catch (error) {
+          console.error('Failed to mark as read:', error);
+        }
+      }
+    }
+    
     // NOTE: Parameter extraction will be triggered only when ParameterExtractionStatus component loads
-  };
+  }, [markAsReadMutation]);
 
   // Track last viewed request in localStorage
   useEffect(() => {
@@ -248,7 +309,6 @@ export default function RequestDetails() {
           description: `Найдено ${data.newResponses} новых ответов от поставщиков`,
           variant: "default"
         });
-        setTab("responses");
         
         // Reset auto-selection for new emails
         setHasAutoSelectedFirstEmail(false);
@@ -271,18 +331,50 @@ export default function RequestDetails() {
     }
   });
 
-  // OPTIMIZED: Simplified auto-selection - only when switching to responses tab
+  // OPTIMIZED: Simplified auto-selection - when data loads
   useEffect(() => {
-    if (tab === "responses" && !hasAutoSelectedFirstEmail && data?.supplierResponses && data.supplierResponses.length > 0) {
+    if (!hasAutoSelectedFirstEmail && data?.supplierResponses && data.supplierResponses.length > 0) {
       const firstResponse = data.supplierResponses[0];
       
       // Use simplified selection without automatic parameter extraction
-      handleSupplierSelect(firstResponse.id, firstResponse);
+      handleSupplierSelect(firstResponse.id, firstResponse, true); // true = isFirstEmailAutoSelected
       setHasAutoSelectedFirstEmail(true);
+      setFirstEmailViewStartTime(Date.now());
       
       console.log("Auto-selected first email:", firstResponse.id);
     }
-  }, [tab, data?.supplierResponses, hasAutoSelectedFirstEmail, handleSupplierSelect]);
+  }, [data?.supplierResponses, hasAutoSelectedFirstEmail, handleSupplierSelect]);
+
+  // Reset auto-select flag when request id changes to avoid loops across requests
+  useEffect(() => {
+    setHasAutoSelectedFirstEmail(false);
+    setFirstEmailViewStartTime(null);
+    setHasUserManuallySelectedFirstEmail(false);
+  }, [id]);
+
+  // Handle first email read logic
+  useEffect(() => {
+    if (!activeResponse || !data?.supplierResponses) return;
+    
+    const firstResponse = data.supplierResponses[0];
+    if (activeResponse.id !== firstResponse.id) return;
+    
+    // If this is the first email and it's unread
+    if (!firstResponse.isRead) {
+      // If user manually selected it (not auto-selected), mark as read immediately
+      if (hasUserManuallySelectedFirstEmail) {
+        console.log(`User manually selected first email, marking as read: ${firstResponse.id}`);
+        markAsReadMutation.mutate(firstResponse.id);
+        return;
+      }
+      
+      // If auto-selected, check if 10 seconds have passed
+      if (firstEmailViewStartTime && Date.now() - firstEmailViewStartTime > 10000) {
+        console.log(`10 seconds passed for first email, marking as read: ${firstResponse.id}`);
+        markAsReadMutation.mutate(firstResponse.id);
+      }
+    }
+  }, [activeResponse, data?.supplierResponses, hasUserManuallySelectedFirstEmail, firstEmailViewStartTime, markAsReadMutation]);
 
   // Удалена автоматическая проверка email - теперь только по кнопке
 
@@ -299,26 +391,7 @@ export default function RequestDetails() {
     },
   });
 
-  // OPTIMIZED: Simplified mark as read mutation
-  const markAsReadMutation = useMutation({
-    mutationFn: async (responseId: number) => {
-      return apiRequest('/api/supplier-responses/' + responseId + '/read', 'PATCH');
-    },
-    onSuccess: (_, responseId) => {
-      // Optimistic update - update cache immediately
-      const currentData = queryClient.getQueryData<RequestDetailsData>(['/api/search-requests', 'single', id]);
-      if (currentData?.supplierResponses) {
-        const updatedResponses = currentData.supplierResponses.map(response => 
-          response.id === responseId ? { ...response, isRead: true } : response
-        );
-
-        queryClient.setQueryData(['/api/search-requests', 'single', id], {
-          ...currentData,
-          supplierResponses: updatedResponses
-        });
-      }
-    },
-  });
+  // (definition moved above)
 
   // Clone request mutation
   const cloneRequestMutation = useMutation({
@@ -381,6 +454,7 @@ export default function RequestDetails() {
     supplierResponses = [] 
   } = data || {};
 
+
   const unreadResponsesCount = supplierResponses.filter(r => !r.isRead).length;
   // Считаем только уникальных поставщиков по email (первые запросы)
   const uniqueContactedSuppliers = new Set(requestSuppliers.map(rs => rs.supplierEmail)).size;
@@ -392,232 +466,171 @@ export default function RequestDetails() {
 
   return (
     <div className="bg-background">
-      <div className="container mx-auto px-4 pt-1 pb-1">
-        <div className="flex items-center gap-4 mb-2">
-          <Button variant="outline" asChild>
-            <Link href="/dashboard">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
-                <path d="M19 12H5M12 19l-7-7 7-7" />
-              </svg>
-              Назад
-            </Link>
-          </Button>
-          <Tabs value={tab} onValueChange={setTab}>
-            <TabsList>
-                <TabsTrigger value="overview">Общее</TabsTrigger>
-                <TabsTrigger value="responses" className="relative">
-                  Ответы поставщиков ({uniqueSupplierEmails})
-                  {unreadResponsesCount > 0 && (
-                    <Badge variant="destructive" className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0">
-                      {unreadResponsesCount}
-                    </Badge>
-                  )}
-                </TabsTrigger>
-                <TabsTrigger value="suppliers">Лист поставщиков</TabsTrigger>
-                <TabsTrigger value="analysis" className="hidden">Анализ результатов</TabsTrigger>
-              </TabsList>
-          </Tabs>
-          <h1 className="text-2xl font-bold">
-            {request?.productName || '-'}
-          </h1>
+      <div className="container mx-auto px-4 pt-0.5 pb-0.5">
+
+        {/* Request signature only */}
+        <div className="flex justify-end items-center pt-2 pb-2">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <span className="text-sm text-muted-foreground truncate max-w-[200px] sm:max-w-none">{request?.productName || '-'}</span>
+            <RequestOverviewModal
+              request={request}
+              requestSuppliers={requestSuppliers}
+              supplierResponses={supplierResponses}
+              onStatusUpdate={(id, status) => updateStatusMutation.mutate({ id, status })}
+              isUpdatingStatus={updateStatusMutation.isPending}
+            />
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div className="md:col-span-3 h-full">
-            <Tabs value={tab} onValueChange={setTab}>
-              <TabsContent value="overview" className="mt-2">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>{request.productName}</CardTitle>
-                    <CardDescription>Создано: {formattedDate}</CardDescription>
-                    <CardDescription>Запрос: № {request?.id || 'N/A'}</CardDescription>
-                    <CardDescription>Код запроса: REQ-{request?.orderNumber || 'N/A'}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <Separator />
-                    <div>
-                      <h3 className="font-medium">Статус</h3>
-                      <div className="flex items-center gap-4 mt-2">
-                        <Badge className="px-3 py-1">
-                          {request.status === "completed" ? "completed" : "active"}
-                        </Badge>
-                        <div className="flex gap-2">
-                          {request.status !== "completed" ? (
-                            <Button 
-                              size="sm" 
-                              variant="default"
-                              onClick={() => updateStatusMutation.mutate({ id: request.id, status: "completed" })}
-                              disabled={updateStatusMutation.isPending}
-                            >
-                              Отметить как завершенное
-                            </Button>
-                          ) : (
-                            <Button 
-                              size="sm" 
-                              variant="outline"
-                              onClick={() => updateStatusMutation.mutate({ id: request.id, status: "active" })}
-                              disabled={updateStatusMutation.isPending}
-                            >
-                              Сделать активным
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
 
-                <Card className="mt-3">
-                  <CardHeader>
-                    <CardTitle>Статистика</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-3 gap-4 text-center">
-                      <div className="p-4 bg-muted rounded-lg">
-                        <p className="text-2xl font-bold">{uniqueContactedSuppliers}</p>
-                        <p className="text-sm text-muted-foreground">Отправлено запросов</p>
-                      </div>
-                      <div className="p-4 bg-muted rounded-lg">
-                        <p className="text-2xl font-bold">{uniqueSupplierEmails}</p>
-                        <p className="text-sm text-muted-foreground">Получено ответов</p>
-                      </div>
-                      <div className="p-4 bg-muted rounded-lg">
-                        <p className="text-2xl font-bold">{responseRate}%</p>
-                        <p className="text-sm text-muted-foreground">конверсия</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="responses" className="mt-2">
-                <ResponsePanel
-                  supplierResponses={supplierResponses}
-                  selectedResponses={selectedResponses}
-                  setSelectedResponses={setSelectedResponses}
-                  markAsReadMutation={markAsReadMutation}
-                  requestId={request?.id}
-                  onActiveResponseChange={handleSupplierSelect}
-                  onExtractParameters={() => {
-                    if (activeResponse) {
-                      setForceParameterExtraction(true);
-                    }
-                  }}
-                  onCheckNewOffers={() => checkEmailsMutation.mutate()}
-                  isCheckingOffers={checkEmailsMutation.isPending}
-                  onCompare={() => {
-                    if (selectedResponses.length < 1) {
+            {/* Main content - show ResponsePanel or Suppliers list */}
+            {!showSuppliersList ? (
+              <ResponsePanel
+                supplierResponses={supplierResponses}
+                selectedResponses={selectedResponses}
+                setSelectedResponses={setSelectedResponses}
+                markAsReadMutation={markAsReadMutation}
+                requestId={request?.id}
+                onActiveResponseChange={(responseId, response) => {
+                  // Check if this is the first email and user is manually selecting it
+                  const firstResponse = data?.supplierResponses?.[0];
+                  if (firstResponse && responseId === firstResponse.id) {
+                    setHasUserManuallySelectedFirstEmail(true);
+                    setFirstEmailViewStartTime(Date.now()); // Reset timer for manual selection
+                  }
+                  handleSupplierSelect(responseId, response, false); // false = not auto-selected
+                }}
+                onExtractParameters={() => {
+                  if (activeResponse) {
+                    setForceParameterExtraction(true);
+                  }
+                }}
+                onCheckNewOffers={() => checkEmailsMutation.mutate()}
+                isCheckingOffers={checkEmailsMutation.isPending}
+                onShowSuppliers={() => setShowSuppliersList(true)}
+                unreadCount={unreadResponsesCount}
+                requestName={request?.productName}
+                request={request}
+                requestSuppliers={requestSuppliers}
+                onStatusUpdate={(id, status) => updateStatusMutation.mutate({ id, status })}
+                isUpdatingStatus={updateStatusMutation.isPending}
+                onCompare={() => {
+                  if (selectedResponses.length < 1) {
+                    toast({
+                      title: "Выберите поставщиков",
+                      description: "Выберите хотя бы одного поставщика для анализа",
+                      variant: "destructive"
+                    });
+                    return;
+                  }
+                  
+                  const selectedSupplierResponses = supplierResponses.filter(
+                    r => selectedResponses.includes(r.id)
+                  );
+                  
+                  const processComparison = async () => {
+                    try {
+                      setIsCompareLoading(true);
+                      localStorage.setItem("compareSuppliers", JSON.stringify(selectedSupplierResponses));
+                      
+                      // Добавляем информацию о сортировке по цене за единицу без НДС
+                      localStorage.setItem("compareSortBy", "Цена за единицу без НДС");
+                      localStorage.setItem("compareSortOrder", "asc");
+                      
+                      if (request?.id) {
+                        localStorage.setItem("compareRequestId", request.id.toString());
+                        navigate(`/compare-results/${request.id}`);
+                      }
+                    } catch (error) {
+                      console.error("Error preparing comparison:", error);
                       toast({
-                        title: "Выберите поставщиков",
-                        description: "Выберите хотя бы одного поставщика для анализа",
+                        title: "Ошибка",
+                        description: "Не удалось подготовить сравнение поставщиков",
                         variant: "destructive"
                       });
-                      return;
+                    } finally {
+                      setIsCompareLoading(false);
                     }
-                    
-                    const selectedSupplierResponses = supplierResponses.filter(
-                      r => selectedResponses.includes(r.id)
-                    );
-                    
-                    const processComparison = async () => {
-                      try {
-                        setIsCompareLoading(true);
-                        localStorage.setItem("compareSuppliers", JSON.stringify(selectedSupplierResponses));
-                        
-                        // Добавляем информацию о сортировке по цене за единицу без НДС
-                        localStorage.setItem("compareSortBy", "Цена за единицу без НДС");
-                        localStorage.setItem("compareSortOrder", "asc");
-                        
-                        if (request?.id) {
-                          localStorage.setItem("compareRequestId", request.id.toString());
-                          navigate(`/compare-results/${request.id}`);
-                        }
-                      } catch (error) {
-                        console.error("Error preparing comparison:", error);
-                        toast({
-                          title: "Ошибка",
-                          description: "Не удалось подготовить сравнение поставщиков",
-                          variant: "destructive"
-                        });
-                      } finally {
-                        setIsCompareLoading(false);
-                      }
-                    };
-                    
-                    processComparison();
-                  }}
-                />
-              </TabsContent>
-
-              <TabsContent value="suppliers" className="mt-2">
-                <ScrollArea className="h-[600px] rounded-md border p-4">
-                  <div className="space-y-4">
-                    {requestSuppliers.map((supplier) => (
-                      <Card key={supplier.id} className={`${supplier.hasResponded ? "border-primary/50" : ""} mb-3`}>
-                        <div className="p-4">
-                          <div className="flex justify-between items-center mb-2">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <h3 className="text-base font-semibold">{supplier.supplierName}</h3>
-                                {supplier.hasResponded && (
-                                  <Badge className="bg-primary/20 text-primary h-5">
-                                    Есть ответ
-                                  </Badge>
-                                )}
-                              </div>
-                              <p className="text-xs text-muted-foreground mt-0.5">{supplier.supplierEmail}</p>
-                              <div className="flex flex-wrap gap-x-4 mt-1 text-xs text-muted-foreground">
-                                {(supplier as any).supplierWebsite && (
-                                  <a href={(supplier as any).supplierWebsite} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs">
-                                    {(supplier as any).supplierWebsite}
-                                  </a>
-                                )}
-                                {(supplier as any).supplierPhone && (
-                                  <span className="text-xs">
-                                    {(supplier as any).supplierPhone}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          <Accordion type="single" collapsible className="mt-2">
-                            <AccordionItem value="messages" className="border-b-0">
-                              <AccordionTrigger className="py-2 text-sm">История сообщений</AccordionTrigger>
-                              <AccordionContent>
-                                <div className="pt-2">
-                                  <SupplierMessages 
-                                    supplierId={supplier.id} 
-                                    supplierName={supplier.supplierName}
-                                    supplierEmail={supplier.supplierEmail}
-                                    isRequestSupplierId={true}
-                                    isInSuppliersList={true}
-                                  />
-                                </div>
-                              </AccordionContent>
-                            </AccordionItem>
-                          </Accordion>
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </TabsContent>
-
-              <TabsContent value="analysis" className="mt-2">
-                <AnalysisResultsTab requestId={request.id} />
-              </TabsContent>
-            </Tabs>
+                  };
+                  
+                  processComparison();
+                }}
+              />
+            ) : (
+              /* Sent emails panel */
+              <SentEmailsPanel
+                requestSuppliers={requestSuppliers}
+                onEmailSelect={(supplier) => setActiveSupplierId(supplier.id)}
+                activeSupplierId={activeSupplierId}
+                onToggleBack={() => {
+                  setShowSuppliersList(false);
+                  setActiveSupplierId(null);
+                }}
+                request={request}
+              />
+            )}
           </div>
 
           <div className="flex flex-col justify-end">
             {/* OPTIMIZED: Parameter extraction panel - loads only when response is selected and there are responses */}
-            {tab === 'responses' && supplierResponses.length > 0 && (
-              <Card className="border-primary/30 h-[600px] overflow-hidden flex flex-col">
-                <CardHeader className="bg-primary/5 flex-shrink-0">
-                  <CardTitle className="font-semibold normal-case">Извлеченные параметры</CardTitle>
+            {!showSuppliersList && supplierResponses.length > 0 && (
+              <Card className="border-primary/30 h-[600px] overflow-hidden flex flex-col rounded-md">
+                <CardHeader className="bg-primary/5 flex-shrink-0 py-3">
+                  <CardTitle className="text-sm font-medium normal-case h-6 flex items-center justify-between">
+                    <span>Извлеченные параметры</span>
+                    <div className="flex items-center space-x-2">
+                      {parameterStatus === 'success' && (
+                        <>
+                          <div className="relative group">
+                            <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center">
+                              <svg 
+                                xmlns="http://www.w3.org/2000/svg" 
+                                width="12" 
+                                height="12" 
+                                viewBox="0 0 24 24" 
+                                fill="none" 
+                                stroke="currentColor" 
+                                strokeWidth="3" 
+                                strokeLinecap="round" 
+                                strokeLinejoin="round" 
+                                className="text-green-600"
+                              >
+                                <path d="M20 6L9 17l-5-5" />
+                              </svg>
+                            </div>
+                            {/* Tooltip on hover */}
+                            <div className="absolute top-full right-0 transform-none mt-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10 shadow">
+                              Параметры найдены
+                            </div>
+                          </div>
+                          <div className="relative group">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="p-1.5 h-8 w-8 hover:bg-slate-100 rounded-full transition-colors duration-200"
+                              onClick={parameterRefreshHandler || (() => {})}
+                              disabled={isParameterRefreshing}
+                              tabIndex={0}
+                            >
+                              <RefreshCw 
+                                size={14} 
+                                className={`text-slate-500 hover:text-slate-700 transition-colors duration-200 ${isParameterRefreshing ? 'animate-spin' : ''}`}
+                              />
+                            </Button>
+                            {/* Tooltip on hover */}
+                            <div className="absolute top-full right-0 transform-none mt-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10 shadow">
+                              Обновить параметры
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </CardTitle>
                 </CardHeader>
                 <CardContent className="flex-1 overflow-hidden min-h-0">
-                  <div className="space-y-3 h-full min-h-0">
+                  <div className="flex flex-col h-full min-h-0">
                     {activeResponse ? (
                       <ParameterExtractionStatus
                         key={`parameters-${activeResponse.id}`} // Force re-render when responseId changes
@@ -641,6 +654,11 @@ export default function RequestDetails() {
                           } catch (error) {
                             console.error('❌ Failed to refresh data after parameter extraction:', error);
                           }
+                        }}
+                        onStatusChange={(status, isRefreshing, onRefresh) => {
+                          setParameterStatus(status);
+                          setIsParameterRefreshing(isRefreshing);
+                          setParameterRefreshHandler(() => onRefresh);
                         }}
                       />
                     ) : (
