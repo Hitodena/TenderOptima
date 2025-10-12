@@ -1194,6 +1194,7 @@ export function ResponsePanel({
                               updateActiveResponse(updatedResponse);
                               setReplyText('');
                               setAttachments([]);
+                              setMessageSent(true);
                               
                               toast({
                                 title: "Ответ отправлен",
