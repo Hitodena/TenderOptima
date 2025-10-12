@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 
 interface UseSocketOptions {
@@ -8,6 +8,12 @@ interface UseSocketOptions {
 
 export const useSocket = ({ userId, onNewEmail }: UseSocketOptions) => {
   const socketRef = useRef<Socket | null>(null);
+  const onNewEmailRef = useRef(onNewEmail);
+  
+  // Update ref when callback changes
+  useEffect(() => {
+    onNewEmailRef.current = onNewEmail;
+  }, [onNewEmail]);
 
   useEffect(() => {
     if (!userId) {
@@ -51,12 +57,12 @@ export const useSocket = ({ userId, onNewEmail }: UseSocketOptions) => {
     });
 
     // Обрабатываем новые email
-    if (onNewEmail) {
-      socket.on('newEmail', (data) => {
-        console.log('📧 Socket.IO: Received new email notification:', data);
-        onNewEmail(data);
-      });
-    }
+    socket.on('newEmail', (data) => {
+      console.log('📧 Socket.IO: Received new email notification:', data);
+      if (onNewEmailRef.current) {
+        onNewEmailRef.current(data);
+      }
+    });
 
     return () => {
       console.log('🔌 Socket.IO: Cleaning up connection');
@@ -64,7 +70,7 @@ export const useSocket = ({ userId, onNewEmail }: UseSocketOptions) => {
         socket.disconnect();
       }
     };
-  }, [userId, onNewEmail]);
+  }, [userId]);
 
   return socketRef.current;
 };

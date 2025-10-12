@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, X, UserPlus, Users, ChevronDown, ChevronUp, Check } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@/components/ui/toast";
 import { Supplier } from "@shared/schema";
 import { getContactGroups, createContactGroup, addContactsToGroup, type ContactGroup, type ContactItem } from "@/api/contact-groups";
 import {

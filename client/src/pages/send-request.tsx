@@ -38,7 +38,7 @@ const convertToTooltipSupplier = (extended: ExtendedSupplier) => ({
 });
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@/components/ui/toast";
 import { useSubscription } from "@/hooks/useSubscription";
 import { useLocation, Link } from "wouter";
 import { Badge } from "@/components/ui/badge";

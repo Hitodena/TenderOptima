@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-query";
 import { User } from "@shared/schema";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@/components/ui/toast";
 
 type UserData = {
   id: number;

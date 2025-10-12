@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Send, X } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@/components/ui/toast";
 import { EmailTemplateManager } from "./email-template-manager";
 import { BusinessCardPreview } from "./business-card-preview";
 import { useAuth } from "@/hooks/use-auth";

@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Plus, Trash2, Edit, Loader2, Users } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@/components/ui/toast";
 import { SubscriptionGuard } from "@/components/SubscriptionGuard";
 import { useSubscription } from "@/hooks/useSubscription";
 import { Button } from "@/components/ui/button";

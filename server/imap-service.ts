@@ -6,7 +6,6 @@ import { REQ_PATTERNS, TID_PATTERNS, EmailPatternMatcher } from './utils/email-p
 
 // ES modules workaround for requiring CommonJS modules
 const require = createRequire(import.meta.url);
-const apiAttachmentBridge = require('./file-processing/api_bridge.cjs');
 
 // Interface for detailed email processing results
 interface EmailProcessingResult {
@@ -1063,33 +1062,76 @@ export class ImapService {
                 let hasAttachmentData = false;
                 
                 if (attachments && attachments.length > 0) {
-                  console.log(`🔄 Step 1: Analyzing ${attachments.length} attachments for response ${response.id}`);
+                  console.log(`🔄 Step 1: Processing ${attachments.length} attachments for response ${response.id} using AsyncEmailProcessor`);
                   try {
-                    // Сначала обрабатываем вложения для извлечения текста
-                    const { apiAttachmentBridge } = await import('./file-processing/api_bridge.cjs');
-                    const attachmentResult = await apiAttachmentBridge.analyzeSupplierResponseAttachments(response);
+                    // Используем AsyncEmailProcessor для обработки вложений
+                    const { AsyncEmailProcessor } = await import('./async-processing/email-processor');
+                    const processor = AsyncEmailProcessor.getInstance();
+                    await processor.processNewEmail(response);
+                    console.log(`✅ Step 1: AsyncEmailProcessor started for response ${response.id}`);
                     
-                    console.log(`📎 Attachment processing result:`, attachmentResult);
+                    // Ждем завершения обработки вложений
+                    console.log(`⏳ Waiting for attachment processing to complete for response ${response.id}`);
+                    let attempts = 0;
+                    const maxAttempts = 20; // Максимум 60 секунд ожидания
                     
-                    if (attachmentResult && attachmentResult.parameters && Object.keys(attachmentResult.parameters).length > 0) {
-                      attachmentParameters = attachmentResult.parameters;
-                      hasAttachmentData = true;
-                      console.log(`✅ Step 1: Successfully extracted parameters from attachments:`, attachmentParameters);
-                    } else {
-                      console.log(`⚠️ Step 1: No parameters found in attachments, will try email body`);
+                    while (attempts < maxAttempts) {
+                      const updatedResponse = await storage.getSupplierResponseById(response.id);
+                      if (updatedResponse && updatedResponse.attachments && Array.isArray(updatedResponse.attachments)) {
+                        const hasProcessedAttachments = updatedResponse.attachments.some((att: any) => att.extractedText);
+                        if (hasProcessedAttachments) {
+                          console.log(`✅ Attachments processed for response ${response.id}`);
+                          break;
+                        }
+                      }
+                      
+                      console.log(`⏳ Waiting for attachments... attempt ${attempts + 1}/${maxAttempts}`);
+                      await new Promise(resolve => setTimeout(resolve, 3000)); // Ждем 3 секунды
+                      attempts++;
+                    }
+                    
+                    if (attempts >= maxAttempts) {
+                      console.warn(`⚠️ Timeout waiting for attachment processing for response ${response.id}`);
+                      // Даже если таймаут, продолжаем - возможно, вложения обработались, но не сохранились
                     }
                   } catch (error) {
-                    console.warn(`⚠️ Step 1: Attachment analysis error:`, error);
+                    console.error(`❌ Step 1: Error processing attachments with AsyncEmailProcessor:`, error);
+                    // Продолжаем обработку даже если анализ вложений не удался
                   }
                 }
                 
-                // ШАГ 2: Извлечение из тела письма
-                console.log(`🔄 Step 2: Extracting parameters from email body for response ${response.id}`);
+                // ШАГ 2: Извлечение из тела письма и вложений
+                console.log(`🔄 Step 2: Extracting parameters from email body and attachments for response ${response.id}`);
                 try {
-                  // Ждем немного, чтобы вложения успели обработаться
-                  await new Promise(resolve => setTimeout(resolve, 2000));
+                  // Ждем завершения обработки вложений
+                  if (attachments && attachments.length > 0) {
+                    console.log(`⏳ Waiting for attachment processing to complete for response ${response.id}`);
+                    // Проверяем, что вложения действительно обработаны и сохранены
+                    let attempts = 0;
+                    const maxAttempts = 20; // Максимум 60 секунд ожидания
+                    
+                    while (attempts < maxAttempts) {
+                      const updatedResponse = await storage.getSupplierResponseById(response.id);
+                      if (updatedResponse && updatedResponse.attachments && Array.isArray(updatedResponse.attachments)) {
+                        const hasProcessedAttachments = updatedResponse.attachments.some((att: any) => att.extractedText);
+                        if (hasProcessedAttachments) {
+                          console.log(`✅ Attachments processed for response ${response.id}`);
+                          break;
+                        }
+                      }
+                      
+                      console.log(`⏳ Waiting for attachments... attempt ${attempts + 1}/${maxAttempts}`);
+                      await new Promise(resolve => setTimeout(resolve, 3000)); // Ждем 3 секунды
+                      attempts++;
+                    }
+                    
+                    if (attempts >= maxAttempts) {
+                      console.warn(`⚠️ Timeout waiting for attachment processing for response ${response.id}`);
+                      // Даже если таймаут, продолжаем - возможно, вложения обработались, но не сохранились
+                    }
+                  }
                   
-                  // Используем прямую функцию извлечения параметров
+                  // Теперь извлекаем параметры, когда вложения точно обработаны
                   const { extractParametersFromResponse } = await import('./routes/extract-parameters');
                   const bodyResult = await extractParametersFromResponse(
                     response.id,
@@ -1110,21 +1152,26 @@ export class ImapService {
                     });
                   }
                   
-                  // Применяем правила приоритета: Вложения > Тело письма
+                  // Применяем правила приоритета: Вложения > Тело письма + Дополнение
                   parameters.forEach(paramName => {
+                    // 1. ПРИОРИТЕТ: Если данные есть во вложении - используем их
                     if (hasAttachmentData && attachmentParameters[paramName] && 
                         attachmentParameters[paramName] !== '-' && 
                         attachmentParameters[paramName] !== '' && 
                         attachmentParameters[paramName] !== null) {
                       finalParameters[paramName] = String(attachmentParameters[paramName]);
                       console.log(`Priority rule: Using attachment value for ${paramName}: ${attachmentParameters[paramName]}`);
-                    } else if (bodyParameters[paramName] && 
-                               bodyParameters[paramName] !== '-' && 
-                               bodyParameters[paramName] !== '' && 
-                               bodyParameters[paramName] !== null) {
+                    } 
+                    // 2. ДОПОЛНЕНИЕ: Если во вложении данных нет, но есть в теле письма - используем из тела
+                    else if (bodyParameters[paramName] && 
+                             bodyParameters[paramName] !== '-' && 
+                             bodyParameters[paramName] !== '' && 
+                             bodyParameters[paramName] !== null) {
                       finalParameters[paramName] = String(bodyParameters[paramName]);
-                      console.log(`Priority rule: Using body value for ${paramName}: ${bodyParameters[paramName]}`);
-                    } else {
+                      console.log(`Priority rule: Using body value for ${paramName}: ${bodyParameters[paramName]} (attachment data not found)`);
+                    } 
+                    // 3. НЕТ ДАННЫХ: Если нигде не найдено
+                    else {
                       finalParameters[paramName] = '-';
                       console.log(`Priority rule: No value found for ${paramName}, using default '-'`);
                     }
@@ -1156,54 +1203,16 @@ export class ImapService {
           }
         }
         
-        // Automatically process attachments if any exist
+        // Automatically process attachments if any exist using AsyncEmailProcessor
         if (filteredAttachments && filteredAttachments.length > 0) {
+          console.log(`🔄 Starting automatic attachment processing for response ${response.id} with ${filteredAttachments.length} attachments`);
           try {
-            console.log(`⚙️ Automatically analyzing ${filteredAttachments.length} attachments in response ${response.id}...`);
-            
-            // Use the attachment analyzer to process the attachments
-            const analysisResult = await apiAttachmentBridge.analyzeSupplierResponseAttachments(response);
-            
-            // Update the attachments with extracted text
-            let attachmentsUpdated = false;
-            
-            if (analysisResult.processed_attachments && Array.isArray(analysisResult.processed_attachments)) {
-              // Map the processed attachments back to the original attachments
-              for (let i = 0; i < filteredAttachments.length; i++) {
-                if (i < analysisResult.processed_attachments.length) {
-                  const processedAttachment = analysisResult.processed_attachments[i];
-                  
-                  // Update the attachment with extracted text
-                  if (processedAttachment.extracted_text) {
-                    filteredAttachments[i].extractedText = processedAttachment.extracted_text;
-                    console.log(`✅ Updated attachment ${filteredAttachments[i].filename} with extracted text (${processedAttachment.extracted_text.length} chars)`);
-                    attachmentsUpdated = true;
-                  }
-                }
-              }
-              
-              // Update the response in the database with the updated attachments if needed
-              if (attachmentsUpdated && response.id) {
-                try {
-                  console.log(`🔄 Updating supplier response ${response.id} with extracted text in attachments`);
-                  await storage.updateSupplierResponse(response.id, {
-                    attachments: filteredAttachments
-                  });
-                  console.log(`✅ Successfully updated supplier response ${response.id} with extracted text in attachments`);
-                } catch (dbError) {
-                  console.error(`❌ Error updating supplier response ${response.id} with extracted text:`, dbError);
-                }
-              }
-            }
-            
-            console.log(`✅ Successfully analyzed attachments for response ${response.id}:`, {
-              processedAttachments: analysisResult.processed_attachments?.length || 0,
-              extractedText: analysisResult.extracted_text_preview ? 'Yes (First 100 chars: ' + 
-                analysisResult.extracted_text_preview.substring(0, 100) + '...)' : 'None'
-            });
+            const { AsyncEmailProcessor } = await import('./async-processing/email-processor');
+            const processor = AsyncEmailProcessor.getInstance();
+            await processor.processNewEmail(response);
+            console.log(`✅ Automatic attachment processing started for response ${response.id}`);
           } catch (error) {
-            console.error(`❌ Error analyzing attachments for response ${response.id}:`, error);
-            // Continue despite error - we don't want to block the email processing
+            console.error(`❌ Failed to start automatic attachment processing for response ${response.id}:`, error);
           }
         }
 
@@ -1217,53 +1226,14 @@ export class ImapService {
         result.attachmentsProcessed = true; // По умолчанию считаем успешным
         
         if (filteredAttachments && filteredAttachments.length > 0) {
+          console.log(`🔄 [ATTACHMENTS] Starting automatic attachment processing for response ${response.id} with ${filteredAttachments.length} attachments using AsyncEmailProcessor`);
           try {
-            console.log(`⚙️ [ATTACHMENTS] Automatically analyzing ${filteredAttachments.length} attachments in response ${response.id}...`);
-            
-            // Используем attachment analyzer для обработки вложений
-            const analysisResult = await apiAttachmentBridge.analyzeSupplierResponseAttachments(response);
-            
-            // Обновляем вложения извлеченным текстом
-            let attachmentsUpdated = false;
-            
-            if (analysisResult.processed_attachments && Array.isArray(analysisResult.processed_attachments)) {
-              // Сопоставляем обработанные вложения с оригинальными
-              for (let i = 0; i < filteredAttachments.length; i++) {
-                if (i < analysisResult.processed_attachments.length) {
-                  const processedAttachment = analysisResult.processed_attachments[i];
-                  
-                  // Обновляем вложение извлеченным текстом
-                  if (processedAttachment.extracted_text) {
-                    filteredAttachments[i].extractedText = processedAttachment.extracted_text;
-                    console.log(`✅ [ATTACHMENTS] Updated attachment ${filteredAttachments[i].filename} with extracted text (${processedAttachment.extracted_text.length} chars)`);
-                    attachmentsUpdated = true;
-                  }
-                }
-              }
-              
-              // Обновляем ответ в базе данных с обновленными вложениями при необходимости
-              if (attachmentsUpdated && response.id) {
-                try {
-                  console.log(`🔄 [DATABASE] Updating supplier response ${response.id} with extracted text in attachments`);
-                  await storage.updateSupplierResponse(response.id, {
-                    attachments: filteredAttachments
-                  });
-                  console.log(`✅ [DATABASE] Successfully updated supplier response ${response.id} with extracted text`);
-                } catch (dbError) {
-                  console.error(`❌ [DATABASE] Error updating supplier response ${response.id} with extracted text:`, dbError);
-                  attachmentErrors.push(`Database update error: ${dbError instanceof Error ? dbError.message : String(dbError)}`);
-                  result.attachmentsProcessed = false;
-                }
-              }
-            }
-            
-            console.log(`✅ [ATTACHMENTS] Successfully analyzed attachments for response ${response.id}:`, {
-              processedAttachments: analysisResult.processed_attachments?.length || 0,
-              extractedText: analysisResult.extracted_text_preview ? 'Yes (First 100 chars: ' + 
-                analysisResult.extracted_text_preview.substring(0, 100) + '...)' : 'None'
-            });
+            const { AsyncEmailProcessor } = await import('./async-processing/email-processor');
+            const processor = AsyncEmailProcessor.getInstance();
+            await processor.processNewEmail(response);
+            console.log(`✅ [ATTACHMENTS] Automatic attachment processing started for response ${response.id}`);
           } catch (error) {
-            console.error(`❌ [ATTACHMENTS] Error analyzing attachments for response ${response.id}:`, error);
+            console.error(`❌ [ATTACHMENTS] Failed to start automatic attachment processing for response ${response.id}:`, error);
             attachmentErrors.push(`Attachment processing error: ${error instanceof Error ? error.message : String(error)}`);
             result.attachmentsProcessed = false;
           }

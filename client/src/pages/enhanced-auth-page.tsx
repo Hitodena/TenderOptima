@@ -35,7 +35,7 @@ import {
   Heart
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@/components/ui/toast";
 
 // Enhanced login form schema with better validation
 const loginSchema = z.object({

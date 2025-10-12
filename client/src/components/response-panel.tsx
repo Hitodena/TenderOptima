@@ -1176,7 +1176,7 @@ export function ResponsePanel({
                               },
                               credentials: 'include',
                               body: JSON.stringify({
-                                replyText: replyTextToSend,
+                                content: replyTextToSend,
                                 attachments: attachments.map(file => ({
                                   filename: file.filename,
                                   content: file.content,

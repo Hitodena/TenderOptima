@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { X, Plus, Users } from "lucide-react";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useQuery } from "@tanstack/react-query";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@/components/ui/toast";
 import { 
   getContactGroups,
   type ContactGroup,

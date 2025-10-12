@@ -11,8 +11,6 @@ declare module 'node-imap' {
         rejectUnauthorized: boolean;
       };
       authTimeout?: number;
-      connTimeout?: number;
-      keepalive?: boolean;
       debug?: any;
     });
 

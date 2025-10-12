@@ -217,7 +217,10 @@ export default function RequestDetails() {
       } else {
         try {
           console.log(`Marking response ${responseId} as read`);
-          await markAsReadMutation.mutateAsync(responseId);
+          // Add protection against duplicate calls
+          if (!markAsReadMutation.isPending) {
+            await markAsReadMutation.mutateAsync(responseId);
+          }
         } catch (error) {
           console.error('Failed to mark as read:', error);
         }
@@ -267,8 +270,8 @@ export default function RequestDetails() {
     },
     enabled: !!id,
     refetchInterval: false,
-    staleTime: 10000, // 10 seconds - shorter caching for more frequent updates
-    refetchOnWindowFocus: true, // Refetch when window gains focus
+    staleTime: 30000, // 30 seconds - longer caching to reduce requests
+    refetchOnWindowFocus: false, // Disable refetch on window focus to prevent loops
     refetchOnMount: true
   });
 
@@ -343,7 +346,7 @@ export default function RequestDetails() {
       
       console.log("Auto-selected first email:", firstResponse.id);
     }
-  }, [data?.supplierResponses, hasAutoSelectedFirstEmail, handleSupplierSelect]);
+  }, [data?.supplierResponses, hasAutoSelectedFirstEmail]);
 
   // Reset auto-select flag when request id changes to avoid loops across requests
   useEffect(() => {
@@ -374,7 +377,7 @@ export default function RequestDetails() {
         markAsReadMutation.mutate(firstResponse.id);
       }
     }
-  }, [activeResponse, data?.supplierResponses, hasUserManuallySelectedFirstEmail, firstEmailViewStartTime, markAsReadMutation]);
+  }, [activeResponse, data?.supplierResponses, hasUserManuallySelectedFirstEmail, firstEmailViewStartTime]);
 
   // Удалена автоматическая проверка email - теперь только по кнопке
 

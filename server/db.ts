@@ -97,25 +97,18 @@ export async function testDatabaseConnection() {
 // Graceful shutdown function to clean up connections
 export async function closeDatabasePool() {
   try {
-    await pool.end();
-    console.log('Database pool closed successfully');
+    if (pool && typeof pool.end === 'function') {
+      await pool.end();
+      console.log('Database pool closed successfully');
+    } else {
+      console.log('Database pool already closed or not initialized');
+    }
   } catch (err) {
     console.error('Error closing database pool:', err instanceof Error ? err.message : String(err));
   }
 }
 
-// Add process handlers for graceful shutdown
-process.on('SIGINT', async () => {
-  console.log('Received SIGINT, closing database connections...');
-  await closeDatabasePool();
-  process.exit(0);
-});
-
-process.on('SIGTERM', async () => {
-  console.log('Received SIGTERM, closing database connections...');
-  await closeDatabasePool();
-  process.exit(0);
-});
+// Process handlers are managed in server/index.ts to avoid conflicts
 
 // Test the connection on server startup with minimal logging
 if (process.env.NODE_ENV === 'development') {

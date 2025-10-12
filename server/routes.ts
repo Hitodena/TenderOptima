@@ -379,13 +379,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: `Response with ID ${id} not found` });
       }
 
-      res.json({
+      return res.json({
         success: true,
         response
       });
     } catch (error) {
       console.error(`Error marking response ${req.params.id} as read:`, error);
-      res.status(500).json({ message: "Failed to mark response as read", error: String(error) });
+      return res.status(500).json({ message: "Failed to mark response as read", error: String(error) });
     }
   });
 
@@ -402,7 +402,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: `Ответ с ID ${id} не найден` });
       }
 
-      res.json({
+      return res.json({
         success: true,
         isFavorite: response.isFavorite,
         message: response.isFavorite ? "Добавлено в избранное" : "Удалено из избранного",
@@ -410,7 +410,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error(`Ошибка при изменении статуса избранного для ответа ${req.params.id}:`, error);
-      res.status(500).json({ 
+      return res.status(500).json({ 
         message: "Не удалось изменить статус избранного", 
         error: String(error) 
       });

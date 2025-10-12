@@ -14,7 +14,7 @@ import { SubscriptionGuard } from "@/components/SubscriptionGuard";
 import { SubscriptionAlerts } from "@/components/subscription-alerts";
 import { useSubscription } from "@/hooks/useSubscription";
 import { useAuth } from "@/hooks/use-auth";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@/components/ui/toast";
 import { type SearchRequest, type SupplierResponse } from "@shared/schema";
 import { Check, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";

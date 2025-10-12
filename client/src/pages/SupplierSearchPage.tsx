@@ -5,7 +5,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormDescription } fr
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@/components/ui/toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Plus, Globe, Search } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";

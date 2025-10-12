@@ -6,7 +6,6 @@ import { REQ_PATTERNS, TID_PATTERNS, EmailPatternMatcher } from './utils/email-p
 
 // ES modules workaround for requiring CommonJS modules
 const require = createRequire(import.meta.url);
-const apiAttachmentBridge = require('./file-processing/api_bridge.cjs');
 
 // Interface for detailed email processing results
 interface PersonalEmailProcessingResult {
@@ -715,23 +714,41 @@ export class PersonalImapService {
                 let hasAttachmentData = false;
                 
                 if (attachments && attachments.length > 0) {
-                  console.log(`🔄 Step 1: Analyzing ${attachments.length} attachments for response ${savedResponse.id}`);
+                  console.log(`🔄 Step 1: Processing ${attachments.length} attachments for response ${savedResponse.id} using AsyncEmailProcessor`);
                   try {
-                    // Сначала обрабатываем вложения для извлечения текста
-                    const { apiAttachmentBridge } = await import('./file-processing/api_bridge.cjs');
-                    const attachmentResult = await apiAttachmentBridge.analyzeSupplierResponseAttachments(savedResponse);
+                    // Используем AsyncEmailProcessor для обработки вложений
+                    const { AsyncEmailProcessor } = await import('./async-processing/email-processor');
+                    const processor = AsyncEmailProcessor.getInstance();
+                    await processor.processNewEmail(savedResponse);
+                    console.log(`✅ Step 1: AsyncEmailProcessor started for response ${savedResponse.id}`);
                     
-                    console.log(`📎 Attachment processing result:`, attachmentResult);
+                    // Ждем завершения обработки вложений
+                    console.log(`⏳ Waiting for attachment processing to complete for response ${savedResponse.id}`);
+                    let attempts = 0;
+                    const maxAttempts = 20; // Максимум 60 секунд ожидания
                     
-                    if (attachmentResult && attachmentResult.parameters && Object.keys(attachmentResult.parameters).length > 0) {
-                      attachmentParameters = attachmentResult.parameters;
-                      hasAttachmentData = true;
-                      console.log(`✅ Step 1: Successfully extracted parameters from attachments:`, attachmentParameters);
-                    } else {
-                      console.log(`⚠️ Step 1: No parameters found in attachments, will try email body`);
+                    while (attempts < maxAttempts) {
+                      const updatedResponse = await storage.getSupplierResponseById(savedResponse.id);
+                      if (updatedResponse && updatedResponse.attachments && Array.isArray(updatedResponse.attachments)) {
+                        const hasProcessedAttachments = updatedResponse.attachments.some((att: any) => att.extractedText);
+                        if (hasProcessedAttachments) {
+                          console.log(`✅ Attachments processed for response ${savedResponse.id}`);
+                          break;
+                        }
+                      }
+                      
+                      console.log(`⏳ Waiting for attachments... attempt ${attempts + 1}/${maxAttempts}`);
+                      await new Promise(resolve => setTimeout(resolve, 3000)); // Ждем 3 секунды
+                      attempts++;
+                    }
+                    
+                    if (attempts >= maxAttempts) {
+                      console.warn(`⚠️ Timeout waiting for attachment processing for response ${savedResponse.id}`);
+                      // Даже если таймаут, продолжаем - возможно, вложения обработались, но не сохранились
                     }
                   } catch (error) {
-                    console.warn(`⚠️ Step 1: Attachment analysis error:`, error);
+                    console.error(`❌ Step 1: Error processing attachments with AsyncEmailProcessor:`, error);
+                    // Продолжаем обработку даже если анализ вложений не удался
                   }
                 }
                 

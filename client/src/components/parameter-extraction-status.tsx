@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { getExtractedParameters, getRequestParameters, extractParameters } from "@/api/parameters";
 import { extractParametersFromResponse } from "@/api/extract-parameters";
 import { apiRequest } from "@/lib/queryClient";
@@ -178,7 +178,7 @@ export function ParameterExtractionStatus({
     };
     
     loadPreProcessedParameters();
-  }, [responseId, requestId, onParametersExtracted, isRefreshing]);
+  }, [responseId, requestId, onParametersExtracted]);
   // Note: Do not early-return before hooks to avoid changing hook order between renders
 
   // Function to try extracting parameters using DeepSeek API
@@ -358,10 +358,10 @@ export function ParameterExtractionStatus({
     if (onStatusChange) {
       onStatusChange(status, isRefreshing, handleRefresh);
     }
-  }, [status, isRefreshing, onStatusChange, handleRefresh]);
+  }, [status, isRefreshing, onStatusChange]);
 
   // Function to extract parameter values and convert them to a displayable format
-  const displayableParameters = () => {
+  const displayableParameters = useMemo(() => {
     // If no parameters were selected for this request, return empty array
     if (!requestParametersList || requestParametersList.length === 0) {
       return [];
@@ -385,7 +385,8 @@ export function ParameterExtractionStatus({
       });
     }
     
-    console.log('Parameters extracted in supplier status section:', mergedParameters);
+    // Убираем console.log из useMemo - он вызывается при каждом рендере!
+    // console.log('Parameters extracted in supplier status section:', mergedParameters);
     
     // Convert to array maintaining the exact database order (from requestParametersList)
     const paramArray = requestParametersList.map(paramName => ({
@@ -395,7 +396,7 @@ export function ParameterExtractionStatus({
     
     // Return parameters in the exact order they were stored in database
     return paramArray;
-  };
+  }, [requestParametersList, parameters]);
   
 
 
@@ -473,8 +474,8 @@ export function ParameterExtractionStatus({
             )} */}
             <div className="flex-1 pr-2 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
               <div className="space-y-1.5 text-sm pb-2">
-                {displayableParameters().length > 0 ? (
-                  displayableParameters().map((param, index) => (
+                {displayableParameters.length > 0 ? (
+                  displayableParameters.map((param, index) => (
                     <div key={index} className="bg-white/50 rounded-lg p-1.5 border border-slate-200/50 hover:border-slate-300 transition-colors duration-200">
                       <div className="space-y-1">
                         <div className="font-normal text-xs text-gray-500 normal-case">{param.name}</div>

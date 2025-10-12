@@ -686,9 +686,20 @@ export async function extractParametersFromResponse(
             }
           }
           
-          // Если нет текста, выводим предупреждение
+          // Если нет текста, выводим предупреждение и пытаемся подождать
           if (!attachmentTextFound) {
             console.warn('WARNING: No extractedText found in any attachments, AI extraction may not work');
+            console.log('This might indicate that attachments are still being processed...');
+            
+            // Дополнительная проверка: возможно, вложения еще обрабатываются
+            console.log('Checking if attachments are still being processed...');
+            const currentResponse = await storage.getSupplierResponseById(responseId);
+            if (currentResponse && currentResponse.attachments && Array.isArray(currentResponse.attachments)) {
+              console.log('Current response attachments:');
+              currentResponse.attachments.forEach((att: any, index: number) => {
+                console.log(`  ${index + 1}. ${att.filename}: ${att.extractedText ? 'Yes' : 'No'} (${att.extractedText ? att.extractedText.length : 0} chars)`);
+              });
+            }
           }
           
           // Собираем текст из всех вложений ПЕРВЫМИ (ПРИОРИТЕТ)
