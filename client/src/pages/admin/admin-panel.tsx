@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertTriangleIcon, ShieldIcon, UsersIcon, CreditCardIcon, CheckSquareIcon, Building2Icon, BanIcon, FileSearchIcon, MailIcon } from "lucide-react";
 import { Redirect } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
 
 // Lazy load admin features
 const SubscriptionsPage = React.lazy(() => import('./subscriptions-page'));
@@ -17,27 +18,8 @@ const UnprocessedEmailsPage = React.lazy(() => import('./unprocessed-emails'));
 
 export default function AdminPanel() {
   const { t } = useTranslation();
+  const { user, isLoading, isAuthenticated } = useAuth();
   const [activeSection, setActiveSection] = useState<string>("subscriptions");
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [adminUsername, setAdminUsername] = useState("");
-
-  useEffect(() => {
-    // Check for admin access using localStorage
-    const checkAdminStatus = () => {
-      const isAdminValue = localStorage.getItem('isAdmin');
-      const username = localStorage.getItem('adminUsername');
-      
-      if (isAdminValue === 'true') {
-        setIsAdmin(true);
-        setAdminUsername(username || 'admin');
-      }
-      
-      setIsLoading(false);
-    };
-    
-    checkAdminStatus();
-  }, []);
 
   // Show loading state
   if (isLoading) {
@@ -48,13 +30,19 @@ export default function AdminPanel() {
     );
   }
   
-  // Redirect non-admin users
-  if (!isAdmin) {
-    console.error("Unauthorized access attempt to admin panel");
-    return <Redirect to="/admin-login" />;
+  // Redirect non-authenticated users
+  if (!isAuthenticated || !user) {
+    console.log("User not authenticated, redirecting to login");
+    return <Redirect to="/auth" />;
   }
   
-  console.log("Admin panel accessed by admin user:", adminUsername);
+  // Check if user is admin
+  if (user.role !== 'admin') {
+    console.log("User is not admin, redirecting to main app");
+    return <Redirect to="/" />;
+  }
+  
+  console.log("Admin panel accessed by admin user:", user.username);
 
   return (
     <div className="admin-panel bg-background min-h-screen">
@@ -68,16 +56,14 @@ export default function AdminPanel() {
             </div>
             <div className="flex items-center gap-3">
               <span className="text-sm text-muted-foreground">
-                {adminUsername}
+                {user.username}
               </span>
               <Button 
                 variant="outline" 
                 size="sm"
                 onClick={() => {
-                  localStorage.removeItem('isAdmin');
-                  localStorage.removeItem('adminUsername');
-                  localStorage.removeItem('adminToken');
-                  window.location.href = '/';
+                  // Use standard logout - redirect to auth page
+                  window.location.href = '/auth';
                 }}
               >
                 Выйти

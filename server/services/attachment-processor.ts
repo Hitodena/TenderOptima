@@ -41,7 +41,7 @@ export class AttachmentProcessor {
   private static instance: AttachmentProcessor;
   private tempDir: string;
   private readonly defaultOptions: ProcessingOptions = {
-    timeout: 60000, // 60 seconds
+    timeout: 120000, // 120 seconds (OCR может занимать больше времени)
     maxFileSize: 50 * 1024 * 1024, // 50MB
     allowedTypes: [
       // PDF files
@@ -512,9 +512,19 @@ export class AttachmentProcessor {
       pythonProcess.on('close', (code) => {
         clearTimeout(timeout);
         
+        console.log(`[AttachmentProcessor] Simple extractor finished with code: ${code}`);
+        console.log(`[AttachmentProcessor] Output: ${output.substring(0, 500)}...`);
+        console.log(`[AttachmentProcessor] Error output: ${errorOutput.substring(0, 500)}...`);
+        
         if (code === 0) {
           try {
             const result = JSON.parse(output);
+            console.log(`[AttachmentProcessor] Parsed result:`, {
+              success: result.success,
+              text_length: result.text_length,
+              file_type: result.file_type,
+              filename: result.filename
+            });
             if (result.success) {
               resolve({
                 extractedText: result.text || '',

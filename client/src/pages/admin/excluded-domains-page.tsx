@@ -24,6 +24,8 @@ interface ExcludedDomain {
 
 const reasonOptions = [
   'Маркетплейс/Агрегатор',
+  'Магазин-агрегатор',
+  'Бизнес-справочник',
   'Информационный сайт/Блог',
   'Форум/Социальная сеть',
   'Спам/Низкое качество',
@@ -87,7 +89,7 @@ export default function ExcludedDomainsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['excluded-domains'] });
       setDomain('');
-      setSelectedReason('');
+      // Не сбрасываем причину исключения - оставляем выбранную
       setCustomReason('');
       toast({
         title: "Успех",

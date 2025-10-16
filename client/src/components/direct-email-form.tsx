@@ -53,7 +53,9 @@ export function DirectEmailForm({ searchRequest }: Props) {
         <>
           <div className="flex flex-wrap gap-4">
             <CustomSupplierInput onSupplierAdded={handleAddSupplier} />
-            <UploadSuppliersExcel onSuppliersUploaded={handleBulkUpload} />
+            <div className="hidden">
+              <UploadSuppliersExcel onSuppliersUploaded={handleBulkUpload} />
+            </div>
           </div>
 
           <Card>

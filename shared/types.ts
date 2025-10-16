@@ -40,6 +40,7 @@ export interface SupplierResponse {
   content: string;
   responseDate?: Date;
   isRead?: boolean;
+  isRepliedTo?: boolean; // Track whether this response has been replied to
   attachments?: SupplierResponseAttachment[];
   analysisId?: number;
   createdAt?: Date;

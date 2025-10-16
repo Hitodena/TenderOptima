@@ -283,9 +283,9 @@ export class ImapService {
       throw new Error("IMAP connection is not initialized");
     }
 
-    // Используем только INBOX и Spam (для mail.ru)
+    // Используем только INBOX (временно отключили Spam)
     // '[Gmail]/Spam' не работает на mail.ru
-    const foldersToCheck = ['INBOX', 'Spam'];
+    const foldersToCheck = ['INBOX'];
     console.log('🔍 [GENERAL IMAP] Folders to check:', foldersToCheck);
 
     for (const folder of foldersToCheck) {
@@ -310,9 +310,9 @@ export class ImapService {
       throw new Error("IMAP connection is not initialized");
     }
 
-    // Используем только INBOX и Spam (для mail.ru)
+    // Используем только INBOX (временно отключили Spam)
     // '[Gmail]/Spam' не работает на mail.ru
-    const foldersToCheck = ['INBOX', 'Spam'];
+    const foldersToCheck = ['INBOX'];
 
     for (const folder of foldersToCheck) {
       console.log(`Checking folder: ${folder} for messages with order number: ${orderNumber}`);
@@ -936,8 +936,9 @@ export class ImapService {
         }
       }
 
-      // Требуются И REQ И TID для успешной обработки
-      if (requestId && extractedInfo.trackingId) {
+      // Создаем supplier response для всех email (не только с tracking ID)
+      console.log(`🔍 Final requestId: ${requestId}, trackingId: ${extractedInfo.trackingId}, orderNumber: ${extractedInfo.orderNumber}`);
+      if (requestId) {
         if (extractedInfo.orderNumber) {
           console.log(`🔍 Looking up request by extracted order number: ${extractedInfo.orderNumber}`);
           const request = await storage.getSearchRequestByOrderNumber(extractedInfo.orderNumber);
@@ -1048,9 +1049,15 @@ export class ImapService {
         // Запускаем автоматическое извлечение параметров (ТОЧНО КАК В РУЧНОЙ РЕАЛИЗАЦИИ)
         if (response && response.requestId) {
           console.log(`🔄 Starting automatic parameter extraction for response ${response.id}`);
+          console.log(`📋 Response details: ID=${response.id}, RequestID=${response.requestId}, SupplierEmail=${response.supplierEmail}`);
           try {
             // Получаем параметры запроса
+            console.log(`🔍 Fetching parameters for request ID: ${response.requestId}`);
             const requestParams = await storage.getParametersForRequest(response.requestId);
+            console.log(`📊 Request parameters result:`, requestParams ? 'Found' : 'Not found');
+            if (requestParams) {
+              console.log(`📋 Parameters data:`, requestParams.parameters);
+            }
             if (requestParams && requestParams.parameters) {
               const parameters = Array.isArray(requestParams.parameters) 
                 ? requestParams.parameters 
@@ -1103,31 +1110,74 @@ export class ImapService {
                 // ШАГ 2: Извлечение из тела письма и вложений
                 console.log(`🔄 Step 2: Extracting parameters from email body and attachments for response ${response.id}`);
                 try {
-                  // Ждем завершения обработки вложений
+                  // Ждем завершения обработки вложений ТОЛЬКО для документов (не для изображений)
                   if (attachments && attachments.length > 0) {
-                    console.log(`⏳ Waiting for attachment processing to complete for response ${response.id}`);
-                    // Проверяем, что вложения действительно обработаны и сохранены
-                    let attempts = 0;
-                    const maxAttempts = 20; // Максимум 60 секунд ожидания
+                    console.log(`⏳ Checking attachment types for response ${response.id}`);
                     
-                    while (attempts < maxAttempts) {
-                      const updatedResponse = await storage.getSupplierResponseById(response.id);
-                      if (updatedResponse && updatedResponse.attachments && Array.isArray(updatedResponse.attachments)) {
-                        const hasProcessedAttachments = updatedResponse.attachments.some((att: any) => att.extractedText);
-                        if (hasProcessedAttachments) {
-                          console.log(`✅ Attachments processed for response ${response.id}`);
-                          break;
-                        }
-                      }
+                    // Проверяем, есть ли документы, которые нужно обработать
+                    const updatedResponse = await storage.getSupplierResponseById(response.id);
+                    if (updatedResponse && updatedResponse.attachments && Array.isArray(updatedResponse.attachments)) {
+                      const documentAttachments = updatedResponse.attachments.filter((att: any) => 
+                        att.contentType && (
+                          att.contentType.includes('pdf') || 
+                          att.contentType.includes('doc') || 
+                          att.contentType.includes('xls') || 
+                          att.contentType.includes('txt') ||
+                          att.contentType.includes('rtf')
+                        )
+                      );
                       
-                      console.log(`⏳ Waiting for attachments... attempt ${attempts + 1}/${maxAttempts}`);
-                      await new Promise(resolve => setTimeout(resolve, 3000)); // Ждем 3 секунды
-                      attempts++;
-                    }
-                    
-                    if (attempts >= maxAttempts) {
-                      console.warn(`⚠️ Timeout waiting for attachment processing for response ${response.id}`);
-                      // Даже если таймаут, продолжаем - возможно, вложения обработались, но не сохранились
+                      const imageAttachments = updatedResponse.attachments.filter((att: any) => 
+                        att.contentType && (
+                          att.contentType.includes('image') || 
+                          att.contentType.includes('jpeg') || 
+                          att.contentType.includes('jpg') || 
+                          att.contentType.includes('png') ||
+                          att.contentType.includes('gif')
+                        )
+                      );
+                      
+                      console.log(`📄 Document attachments: ${documentAttachments.length}, 🖼️ Image attachments: ${imageAttachments.length}`);
+                      
+                      // Ждем обработки для документов И изображений
+                      const totalAttachmentsToProcess = documentAttachments.length + imageAttachments.length;
+                      if (totalAttachmentsToProcess > 0) {
+                        console.log(`⏳ Waiting for attachment processing to complete for response ${response.id} (${documentAttachments.length} documents, ${imageAttachments.length} images)`);
+                        let attempts = 0;
+                        const maxAttempts = 40; // Максимум 120 секунд ожидания (40 × 3 сек)
+                        
+                        while (attempts < maxAttempts) {
+                          const currentResponse = await storage.getSupplierResponseById(response.id);
+                          if (currentResponse && currentResponse.attachments && Array.isArray(currentResponse.attachments)) {
+                            // Проверяем обработку документов
+                            const hasProcessedDocuments = documentAttachments.length === 0 || documentAttachments.some((docAtt: any) => {
+                              const currentAtt = currentResponse.attachments.find((att: any) => att.id === docAtt.id);
+                              return currentAtt && currentAtt.extractedText;
+                            });
+                            
+                            // Проверяем обработку изображений
+                            const hasProcessedImages = imageAttachments.length === 0 || imageAttachments.some((imgAtt: any) => {
+                              const currentAtt = currentResponse.attachments.find((att: any) => att.id === imgAtt.id);
+                              return currentAtt && currentAtt.extractedText;
+                            });
+                            
+                            if (hasProcessedDocuments && hasProcessedImages) {
+                              console.log(`✅ All attachments processed for response ${response.id}`);
+                              break;
+                            }
+                          }
+                          
+                          console.log(`⏳ Waiting for attachment processing... attempt ${attempts + 1}/${maxAttempts}`);
+                          await new Promise(resolve => setTimeout(resolve, 2000)); // Ждем 2 секунды (более частые проверки)
+                          attempts++;
+                        }
+                        
+                        if (attempts >= maxAttempts) {
+                          console.warn(`⚠️ Timeout waiting for attachment processing for response ${response.id}`);
+                        }
+                      } else {
+                        console.log(`✅ No attachments to process for response ${response.id}, proceeding with parameter extraction`);
+                      }
                     }
                   }
                   
@@ -1194,13 +1244,23 @@ export class ImapService {
                 }
               } else {
                 console.log(`⚠️ No parameters found for request ${response.requestId}, skipping parameter extraction`);
+                console.log(`📋 Parameters array was empty or invalid:`, parameters);
               }
             } else {
               console.log(`⚠️ No request parameters found for request ${response.requestId}, skipping parameter extraction`);
+              console.log(`📋 RequestParams object:`, requestParams);
             }
           } catch (error) {
             console.error(`❌ Failed to start automatic parameter extraction for response ${response.id}:`, error);
           }
+        } else {
+          console.log(`⚠️ No requestId found for response ${response.id}, skipping automatic parameter extraction`);
+          console.log(`📋 Response object:`, {
+            id: response.id,
+            requestId: response.requestId,
+            supplierEmail: response.supplierEmail,
+            hasRequestId: !!response.requestId
+          });
         }
         
         // Automatically process attachments if any exist using AsyncEmailProcessor

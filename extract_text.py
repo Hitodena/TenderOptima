@@ -41,7 +41,11 @@ def extract_text_from_pdf(file_path):
         if not text.strip():
             images = convert_from_path(file_path)
             for page_num, image in enumerate(images, 1):
-                ocr_text = pytesseract.image_to_string(image, lang='rus+eng')
+                ocr_text = pytesseract.image_to_string(
+                    image, 
+                    lang='rus+eng',
+                    config='--oem 3 --psm 1'
+                )
                 if ocr_text.strip():
                     text += f"\n[PAGE:{page_num}]\n{ocr_text}\n"
     
@@ -292,7 +296,11 @@ def extract_text_from_image(file_path):
     
     try:
         image = Image.open(file_path)
-        text = pytesseract.image_to_string(image, lang='rus+eng')
+        text = pytesseract.image_to_string(
+            image, 
+            lang='rus+eng',
+            config='--oem 3 --psm 6'
+        )
     except Exception as e:
         print(f"Error extracting from image: {e}", file=sys.stderr)
     

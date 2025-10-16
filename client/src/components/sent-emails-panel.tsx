@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +15,8 @@ import { type RequestSupplier, type SearchRequest } from "@shared/schema";
 import { cleanEmailSubject } from "@/lib/email-utils";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { apiRequest } from "@/lib/queryClient";
-import { Paperclip, Download } from "lucide-react";
+import { Paperclip, Download, Info, RefreshCw } from "lucide-react";
+import { SupplierDetailsModal } from "@/components/supplier-details-modal";
 
 interface SentEmailsPanelProps {
   requestSuppliers: RequestSupplier[];
@@ -23,6 +24,7 @@ interface SentEmailsPanelProps {
   activeSupplierId?: number | null;
   onToggleBack?: () => void;
   request?: SearchRequest;
+  forceRefresh?: boolean; // Флаг для принудительного обновления
 }
 
 export function SentEmailsPanel({
@@ -30,42 +32,109 @@ export function SentEmailsPanel({
   onEmailSelect,
   activeSupplierId,
   onToggleBack,
-  request
+  request,
+  forceRefresh = false
 }: SentEmailsPanelProps) {
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [selectedSupplierForDetails, setSelectedSupplierForDetails] = useState<{
+    requestSupplierId: number;
+    email: string;
+    name?: string;
+  } | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastRefreshTime, setLastRefreshTime] = useState(0);
+  const [selectedMessageId, setSelectedMessageId] = useState<number | null>(null);
   
-  // Получаем сообщения для выбранного поставщика
-  console.log('activeSupplierId:', activeSupplierId);
-  const { data: messages, isLoading, error } = useQuery({
-    queryKey: ['/api/request-suppliers', activeSupplierId, 'messages'],
+  const queryClient = useQueryClient();
+  
+  // Функция для принудительного обновления данных
+  const refreshMessages = async () => {
+    const now = Date.now();
+    
+    if (isRefreshing) {
+      console.log('SentEmailsPanel: refreshMessages already in progress, skipping');
+      return; // Защита от множественных вызовов
+    }
+    
+    // Защита от частых вызовов - не чаще чем раз в 2 секунды
+    if (now - lastRefreshTime < 2000) {
+      console.log('SentEmailsPanel: refreshMessages called too frequently, skipping');
+      return;
+    }
+    
+    console.log('SentEmailsPanel: Starting refreshMessages');
+    setLastRefreshTime(now);
+    setIsRefreshing(true);
+    try {
+      await refetchMessages();
+      // Также инвалидируем кэш для всех связанных запросов
+      queryClient.invalidateQueries({ queryKey: ['/api/search-requests', 'all-messages', request?.id, 'v3'] });
+    } finally {
+      console.log('SentEmailsPanel: Finished refreshMessages');
+      setIsRefreshing(false);
+    }
+  };
+  
+  // Экспортируем функцию обновления через window для доступа извне
+  useEffect(() => {
+    (window as any).refreshSentEmails = refreshMessages;
+    return () => {
+      delete (window as any).refreshSentEmails;
+    };
+  }, [refreshMessages]);
+
+  // Принудительное обновление при изменении forceRefresh
+  useEffect(() => {
+    if (forceRefresh && !isRefreshing) {
+      console.log('SentEmailsPanel: forceRefresh triggered');
+      refreshMessages();
+    }
+  }, [forceRefresh, isRefreshing]);
+  
+  // Получаем все сообщения для всех поставщиков запроса одним запросом
+  const { data: allMessages, isLoading: messagesLoading, error: messagesError, refetch: refetchMessages } = useQuery({
+    queryKey: ['/api/search-requests', 'all-messages', request?.id, 'v3'],
     queryFn: async () => {
-      console.log('Query function called with activeSupplierId:', activeSupplierId);
-      if (!activeSupplierId) {
-        console.log('No activeSupplierId, returning empty array');
+      if (!request?.id) {
         return [];
       }
-      console.log('Making API request to:', `/api/request-suppliers/${activeSupplierId}/messages`);
-      const data = await apiRequest('GET', `/api/request-suppliers/${activeSupplierId}/messages`);
-      console.log('API response data:', data);
-      return data;
+      
+      // Получаем все сообщения запроса одним запросом
+      const data = await apiRequest('GET', `/api/search-requests/${request.id}/all-messages`);
+      return Array.isArray(data) ? data : [];
     },
-    enabled: !!activeSupplierId
+    enabled: !!request?.id && requestSuppliers.length > 0,
+    staleTime: 10 * 60 * 1000, // Данные актуальны 10 минут
+    gcTime: 30 * 60 * 1000, // Кэшируем данные 30 минут
+    refetchOnWindowFocus: false, // Не обновляем при фокусе окна
+    refetchOnMount: false // Не обновляем при монтировании, если данные свежие
   });
   
-  console.log('useQuery result:', { messages, isLoading, error });
-  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
 
-  // Автоматически выбираем первое письмо при загрузке
+  // Сортируем все сообщения по дате (новые вверху)
+  const sortedMessages = allMessages ? [...allMessages].sort((a, b) => {
+    const dateA = new Date(a.sentDate).getTime();
+    const dateB = new Date(b.sentDate).getTime();
+    return dateB - dateA; // Newest first
+  }) : [];
+
+
+  // Автоматически выбираем первое сообщение при загрузке
   useEffect(() => {
-    if (requestSuppliers.length > 0 && !activeSupplierId && onEmailSelect) {
-      console.log('Auto-selecting first supplier:', requestSuppliers[0]);
-      onEmailSelect(requestSuppliers[0]);
+    if (sortedMessages.length > 0 && !selectedMessageId) {
+      // Выбираем первое сообщение
+      const firstMessage = sortedMessages[0];
+      setSelectedMessageId(firstMessage.id);
+      
+      // Также уведомляем родительский компонент о выборе поставщика
+      if (onEmailSelect) {
+        const supplier = requestSuppliers.find(s => s.id === firstMessage.requestSupplierId);
+        if (supplier) {
+          onEmailSelect(supplier);
+        }
+      }
     }
-  }, [requestSuppliers, activeSupplierId, onEmailSelect]);
-
-  // Filter suppliers based on favorites (if needed)
-  const filteredSuppliers = showFavoritesOnly 
-    ? requestSuppliers.filter(supplier => (supplier as any).isFavorite)
-    : requestSuppliers;
+  }, [sortedMessages, selectedMessageId, onEmailSelect, requestSuppliers]);
 
   return (
     <div>
@@ -77,60 +146,117 @@ export function SentEmailsPanel({
           <div className="p-3 bg-muted/20 border-b">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">Отправленные</span>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <ToggleSwitch
-                      checked={true}
-                      onCheckedChange={(checked) => {
-                        if (!checked && onToggleBack) {
-                          onToggleBack();
-                        }
-                      }}
-                      size="sm"
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Переключить на Входящие</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <div className="flex items-center gap-2">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0"
+                        onClick={refreshMessages}
+                        disabled={isRefreshing}
+                      >
+                        <RefreshCw 
+                          size={12} 
+                          className={isRefreshing ? 'animate-spin' : ''} 
+                        />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{isRefreshing ? 'Обновление...' : 'Обновить сообщения'}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <ToggleSwitch
+                        checked={true}
+                        onCheckedChange={(checked) => {
+                          if (!checked && onToggleBack) {
+                            onToggleBack();
+                          }
+                        }}
+                        size="sm"
+                      />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Переключить на Входящие</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
             </div>
           </div>
 
-          {/* Emails list */}
-          <ScrollArea className="h-[calc(600px-60px)]">
-            {filteredSuppliers.length > 0 ? (
+          {/* Messages list */}
+          <ScrollArea className="h-[calc(600px-100px)]">
+            {messagesLoading ? (
+              <div className="p-4 text-center text-muted-foreground">
+                <p className="text-sm">Загрузка сообщений...</p>
+              </div>
+            ) : sortedMessages.length > 0 ? (
               <div className="space-y-1">
-                {filteredSuppliers.map((supplier) => {
-                  const isActive = activeSupplierId === supplier.id;
+                {sortedMessages.map((message) => {
+                  const isActive = selectedMessageId === message.id;
+                  
+                  // Проверяем, ответил ли поставщик (используем hasResponded из данных поставщика)
+                  const supplier = requestSuppliers.find(s => s.id === message.requestSupplierId);
+                  const hasResponded = supplier?.hasResponded || false;
                   
                   return (
                     <div 
-                      key={supplier.id}
+                      key={`${message.supplierId}-${message.id}`}
                       className={`
                         p-3 border-b cursor-pointer flex items-start gap-2 hover:bg-muted/20 transition-colors
                         ${isActive ? "bg-primary/10 hover:bg-primary/15" : ""}
                       `}
-                      onClick={() => onEmailSelect?.(supplier)}
+                      onClick={() => {
+                        setSelectedMessageId(message.id);
+                        
+                        // Также уведомляем родительский компонент о выборе поставщика
+                        const supplier = requestSuppliers.find(s => s.id === message.requestSupplierId);
+                        if (supplier && onEmailSelect) {
+                          onEmailSelect(supplier);
+                        }
+                      }}
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
-                          <div className="font-medium text-sm truncate">{supplier.supplierName}</div>
-                          {supplier.hasResponded && (
-                            <Badge variant="outline" className="bg-primary/10 text-primary ml-2 flex-shrink-0">
-                              Ответ
-                            </Badge>
-                          )}
+                          <div className="font-medium text-sm truncate">{message.supplierName}</div>
                         </div>
-                        <div className="text-xs text-muted-foreground truncate mt-1">
-                          {supplier.supplierEmail}
+                        <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
+                          <span className="truncate flex-1">{message.supplierEmail}</span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-5 w-5 p-0 rounded-full hover:bg-muted"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedSupplierForDetails({
+                                requestSupplierId: message.requestSupplierId,
+                                email: message.supplierEmail,
+                                name: message.supplierName
+                              });
+                            }}
+                          >
+                            <Info className={`h-3 w-3 ${hasResponded ? 'text-green-600' : ''}`} />
+                          </Button>
                         </div>
                         <div className="text-xs mt-1 flex justify-between items-center">
-                           <span className="text-muted-foreground">
-                             {(supplier as any).emailSentDate ? format(new Date((supplier as any).emailSentDate), "dd.MM.yyyy HH:mm") : "Неизвестно"}
-                           </span>
+                          <span className="text-muted-foreground">
+                            {format(new Date(message.sentDate), "dd.MM.yyyy HH:mm")}
+                          </span>
+                          {message.attachments && message.attachments.length > 0 && (
+                            <Paperclip className="h-3 w-3 text-muted-foreground" />
+                          )}
                         </div>
+                        {message.subject && (
+                          <div className="text-xs text-muted-foreground mt-1 truncate">
+                            {message.subject}
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -138,18 +264,52 @@ export function SentEmailsPanel({
               </div>
             ) : (
               <div className="p-4 text-center text-muted-foreground">
-                <p className="text-sm">Нет отправленных писем</p>
+                <p className="text-sm">Нет сообщений</p>
               </div>
             )}
           </ScrollArea>
         </div>
 
-        {/* Right panel - Selected email content */}
+        {/* Right panel - Selected message content */}
         <div className="md:col-span-4 overflow-hidden flex flex-col">
-          {activeSupplierId ? (
+          {selectedMessageId ? (
             (() => {
-              const selectedSupplier = requestSuppliers.find(s => s.id === activeSupplierId);
+              // Находим выбранное сообщение
+              const selectedMessage = sortedMessages.find(m => m.id === selectedMessageId);
+              if (!selectedMessage) return null;
+              
+              const selectedSupplier = requestSuppliers.find(s => s.id === selectedMessage.requestSupplierId);
               if (!selectedSupplier) return null;
+              
+              // Находим все сообщения для выбранного поставщика
+              const supplierMessages = sortedMessages.filter(m => m.requestSupplierId === selectedMessage.requestSupplierId);
+              
+              // Показываем конкретное выбранное сообщение и связанное с ним входящее письмо
+              const messagesToShow = [];
+              
+              if (selectedMessage.direction === 'outbound') {
+                // Если выбрано исходящее сообщение, ищем входящее письмо, на которое был дан ответ
+                const inboundMessages = supplierMessages.filter(m => m.direction === 'inbound');
+                const relatedInboundMessage = inboundMessages.find(inbound => 
+                  new Date(inbound.sentDate) < new Date(selectedMessage.sentDate)
+                ) || inboundMessages[0]; // Если не найдено, берем самое последнее входящее
+                
+                if (relatedInboundMessage) messagesToShow.push(relatedInboundMessage);
+                messagesToShow.push(selectedMessage);
+              } else {
+                // Если выбрано входящее сообщение, ищем исходящий ответ на него
+                const outboundMessages = supplierMessages.filter(m => m.direction === 'outbound');
+                const relatedOutboundMessage = outboundMessages.find(outbound => 
+                  new Date(outbound.sentDate) > new Date(selectedMessage.sentDate)
+                ) || outboundMessages[0]; // Если не найдено, берем самое последнее исходящее
+                
+                messagesToShow.push(selectedMessage);
+                if (relatedOutboundMessage) messagesToShow.push(relatedOutboundMessage);
+              }
+              
+              // Сортируем по дате (старые сверху, новые снизу)
+              messagesToShow.sort((a, b) => new Date(a.sentDate).getTime() - new Date(b.sentDate).getTime());
+              
               
               return (
                 <>
@@ -157,124 +317,88 @@ export function SentEmailsPanel({
                     <div className="flex justify-between items-start">
                       <div className="flex-1 space-y-0">
                         <div className="text-muted-foreground text-sm">
-                          <span className="font-bold">Кому:</span> {selectedSupplier.supplierName} &lt;{selectedSupplier.supplierEmail}&gt; • {(selectedSupplier as any).sentAt ? format(new Date((selectedSupplier as any).sentAt), "dd.MM.yyyy HH:mm") : ""}
+                          <span className="font-bold">Кому:</span> {selectedSupplier.supplierName} &lt;{selectedSupplier.supplierEmail}&gt;
                         </div>
-                        <div className="text-muted-foreground text-sm">
-                          <span className="font-bold">Тема:</span> {(selectedSupplier as any).emailSubject || '(No subject)'}
-                        </div>
+                        {selectedMessage && (
+                          <div className="text-muted-foreground text-sm">
+                            <span className="font-bold">Тема:</span> {selectedMessage.subject || '(No subject)'} • {format(new Date(selectedMessage.sentDate), "dd.MM.yyyy HH:mm")}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
                   
                   <ScrollArea className="flex-1 p-3">
                     <div className="space-y-3">
-                      {/* Блок 1: Содержимое отправленного письма */}
-                      <div className="border rounded p-3">
-                        <h4 className="font-medium text-sm mb-2">Содержимое отправленного письма</h4>
-                        <div className="whitespace-pre-line text-sm">
-                          {(request as any)?.emailTemplate || (selectedSupplier as any).emailContent || 'Содержимое письма не найдено'}
+                      {/* Показываем только последний ответ и входящее письмо */}
+                      {messagesToShow.length > 0 ? (
+                        messagesToShow.map((message, index) => (
+                          <div key={message.id} className={`border rounded p-3 ${message.direction === 'outbound' ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'}`}>
+                            <div className="flex items-center justify-between mb-2">
+                              <h4 className="font-medium text-sm">
+                                {message.direction === 'outbound' ? 'Отправленное сообщение' : 'Полученное сообщение'}
+                              </h4>
+                              <span className="text-xs text-muted-foreground">
+                                {format(new Date(message.sentDate), "dd.MM.yyyy HH:mm")}
+                              </span>
+                            </div>
+                            
+                            {message.subject && (
+                              <div className="text-sm font-medium mb-2">
+                                Тема: {message.subject}
+                              </div>
+                            )}
+                            
+                            <div className="whitespace-pre-line text-sm mb-3">
+                              {message.content}
+                            </div>
+                            
+                            {message.attachments && message.attachments.length > 0 && (
+                              <div className="mt-2">
+                                <div className="text-xs text-muted-foreground mb-1">
+                                  Вложения ({message.attachments.length}):
+                                </div>
+                                <div className="flex flex-wrap gap-1">
+                                  {message.attachments.map((attachment: any, attIndex: number) => (
+                                    <Button
+                                      key={attIndex}
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-6 px-2 text-xs"
+                                      onClick={() => {
+                                        const link = document.createElement('a');
+                                        link.href = `data:${attachment.contentType};base64,${attachment.content}`;
+                                        link.download = attachment.filename || `attachment-${attIndex}`;
+                                        link.target = '_blank';
+                                        document.body.appendChild(link);
+                                        link.click();
+                                        document.body.removeChild(link);
+                                      }}
+                                    >
+                                      <Paperclip className="h-3 w-3 mr-1" />
+                                      {attachment.filename}
+                                    </Button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))
+                      ) : (
+                        <div className="border rounded p-3">
+                          <h4 className="font-medium text-sm mb-2">Содержимое отправленного письма</h4>
+                          <div className="whitespace-pre-line text-sm">
+                            {(request as any)?.emailTemplate || (selectedSupplier as any).emailContent || 'Содержимое письма не найдено'}
+                          </div>
                         </div>
-                      </div>
+                      )}
                       
-                      {/* Блок 2: Визитка на момент отправки (без заголовка) */}
+                      {/* Визитка на момент отправки */}
                       <div className="border rounded p-3">
+                        <h4 className="font-medium text-sm mb-2">Визитка на момент отправки</h4>
                         <div className="whitespace-pre-line text-sm">
                           {selectedSupplier.businessCard || 'Визитка не найдена'}
                         </div>
-                      </div>
-                      
-                      {/* Блок 3: Вложения отправленных писем */}
-                      <div className="border rounded p-3">
-                        <h4 className="font-medium text-sm mb-2">Отправленные вложения</h4>
-                        {(() => {
-                          console.log('Messages data:', messages);
-                          console.log('Messages type:', typeof messages);
-                          console.log('Messages length:', messages?.length);
-                          console.log('isLoading:', isLoading);
-                          console.log('error:', error);
-                          
-                          if (isLoading) {
-                            return <div className="text-sm text-muted-foreground">Загрузка данных о вложениях...</div>;
-                          }
-                          
-                          if (error) {
-                            return <div className="text-sm text-red-500">Ошибка загрузки: {String(error)}</div>;
-                          }
-                          
-                          if (!messages) {
-                            return <div className="text-sm text-muted-foreground">Нет данных</div>;
-                          }
-                          
-                          if (!Array.isArray(messages)) {
-                            console.log('Messages is not an array:', messages);
-                            return <div className="text-sm text-muted-foreground">Ошибка загрузки данных</div>;
-                          }
-                          
-                          // Находим все исходящие сообщения с вложениями
-                          const outboundMessages = messages.filter((msg: any) => {
-                            console.log('Checking message:', msg);
-                            console.log('Direction:', msg.direction);
-                            console.log('Has attachments:', !!msg.attachments);
-                            console.log('Attachments length:', msg.attachments?.length);
-                            return msg.direction === 'outbound' && msg.attachments && msg.attachments.length > 0;
-                          });
-                          
-                          console.log('Outbound messages with attachments:', outboundMessages);
-                          
-                          if (outboundMessages.length === 0) {
-                            return <div className="text-sm text-muted-foreground">Нет отправленных вложений</div>;
-                          }
-                          
-                          // Собираем все вложения из всех исходящих сообщений
-                          const allAttachments = outboundMessages.flatMap((msg: any) => 
-                            msg.attachments.map((att: any, index: number) => ({
-                              ...att,
-                              messageId: msg.id,
-                              attachmentIndex: index
-                            }))
-                          );
-                          
-                          console.log('All attachments:', allAttachments);
-                          
-                          return (
-                            <div>
-                              <div className="text-xs text-muted-foreground mb-2">
-                                Найдено вложений: {allAttachments.length}
-                              </div>
-                              <div className="flex flex-wrap gap-2">
-                                {allAttachments.map((attachment: any, index: number) => (
-                                  <Button
-                                    key={`${attachment.messageId}-${attachment.attachmentIndex}`}
-                                    variant="outline"
-                                    size="sm"
-                                    className="inline-flex items-center gap-2 px-3 py-2 hover:bg-primary/5 hover:border-primary/40 transition-colors"
-                                    onClick={() => {
-                                      // Создаем ссылку для скачивания
-                                      const link = document.createElement('a');
-                                      link.href = `data:${attachment.contentType};base64,${attachment.content}`;
-                                      link.download = attachment.filename || `attachment-${index}`;
-                                      link.target = '_blank';
-                                      document.body.appendChild(link);
-                                      link.click();
-                                      document.body.removeChild(link);
-                                    }}
-                                  >
-                                    <Paperclip className="h-3 w-3" />
-                                    <div className="flex flex-col items-start">
-                                      <span className="text-sm font-medium truncate max-w-[150px]">
-                                        {attachment.filename}
-                                      </span>
-                                      <span className="text-xs text-muted-foreground">
-                                        {attachment.size ? `${Math.round(attachment.size / 1024)} KB` : 'Unknown size'}
-                                      </span>
-                                    </div>
-                                    <Download className="h-3 w-3 ml-1" />
-                                  </Button>
-                                ))}
-                              </div>
-                            </div>
-                          );
-                        })()}
                       </div>
                     </div>
                   </ScrollArea>
@@ -283,14 +407,23 @@ export function SentEmailsPanel({
             })()
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-              <p className="mb-2">Выберите отправленное письмо</p>
+              <p className="mb-2">Выберите сообщение</p>
               <p className="text-sm">
-                Выберите письмо из списка, чтобы просмотреть его содержимое
+                Выберите сообщение из списка, чтобы просмотреть его содержимое
               </p>
             </div>
           )}
         </div>
       </div>
+
+      {/* Модальное окно с детальной информацией о поставщике */}
+      <SupplierDetailsModal
+        isOpen={!!selectedSupplierForDetails}
+        onClose={() => setSelectedSupplierForDetails(null)}
+        requestSupplierId={selectedSupplierForDetails?.requestSupplierId || 0}
+        supplierEmail={selectedSupplierForDetails?.email}
+        supplierName={selectedSupplierForDetails?.name}
+      />
     </div>
   );
 }

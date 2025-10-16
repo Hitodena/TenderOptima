@@ -69,17 +69,31 @@ export const sendWinnerNotification = async (req: Request, res: Response) => {
     
     // Insert the footer before the business card if it exists in content
     let fullContent = content;
-    if (content.includes('С уважением,') || content.includes('С Уважением,')) {
-      // Find the position where business card starts and insert footer before it
-      const businessCardStart = content.lastIndexOf('С уважением,');
-      if (businessCardStart !== -1) {
-        const beforeBusinessCard = content.substring(0, businessCardStart);
-        const businessCard = content.substring(businessCardStart);
-        // Add one space before business card
-        fullContent = beforeBusinessCard + referenceFooter + '\n' + businessCard;
-      } else {
-        fullContent = content + referenceFooter;
+    
+    // Search for business card patterns (case insensitive)
+    const businessCardPatterns = [
+      'С уважением,',
+      'С Уважением,',
+      'с уважением,',
+      'с Уважением,'
+    ];
+    
+    let businessCardStart = -1;
+    let foundPattern = '';
+    
+    for (const pattern of businessCardPatterns) {
+      const index = content.lastIndexOf(pattern);
+      if (index > businessCardStart) {
+        businessCardStart = index;
+        foundPattern = pattern;
       }
+    }
+    
+    if (businessCardStart !== -1) {
+      const beforeBusinessCard = content.substring(0, businessCardStart);
+      const businessCard = content.substring(businessCardStart);
+      // Add footer before business card
+      fullContent = beforeBusinessCard + referenceFooter + '\n' + businessCard;
     } else {
       fullContent = content + referenceFooter;
     }

@@ -62,14 +62,14 @@ const DataRequestButton: React.FC<DataRequestButtonProps> = ({ supplier, missing
   // Initialize email content when dialog opens
   const openEmailDialog = () => {
     const defaultSubject = `Уточнение предложения по заказу`;
-    const defaultMessage = `Уважаемый ${supplier.name}.
+    const defaultMessage = `Добрый день.
 
 Ваше предложение в процессе рассмотрения.
 Просим вас предоставить недостающую информацию:
 
 ${missingParams.map(param => `• ${param}`).join('\n')}
 
-В ожидании вашего ответа. 
+В ожидании вашего оперативного ответа. 
 ${getBusinessCardSignature()}`;
 
     setSubject(defaultSubject);
@@ -139,10 +139,7 @@ ${getBusinessCardSignature()}`;
           className="text-xs px-3 py-1 h-auto"
           title="Отправить запрос по недостающим данным"
         >
-          <div className="flex items-center gap-1">
-            <Send className="w-3 h-3" />
-            <span>Запросить</span>
-          </div>
+          <span>Запросить</span>
         </Button>
       </div>
 
@@ -265,16 +262,13 @@ const ImprovementRequestButton: React.FC<ImprovementRequestButtonProps> = ({ sup
             className="text-xs px-3 py-1 h-auto"
             title="Отправить запрос на улучшение условий"
           >
-            <div className="flex items-center gap-1">
-              <TrendingUp className="w-3 h-3" />
-              <span>{isEmailSent ? "Отправлено" : "Улучшить"}</span>
-            </div>
+            <span>{isEmailSent ? "Отправлено" : "Улучшить"}</span>
           </Button>
           
           {/* Circle indicator with improvement count - only show when > 0 */}
           {improvementCount > 0 && (
             <div 
-              className="absolute -top-2 -right-2 bg-blue-600 text-white text-xs rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-bold shadow-sm cursor-help"
+              className="absolute -top-2 -right-2 bg-primary text-white text-xs rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-bold shadow-sm cursor-help"
               title={`Количество ранее отправленных запросов на улучшение условий данному поставщику: ${improvementCount}`}
             >
               {improvementCount}
@@ -2445,11 +2439,11 @@ export default function CompareResultsPage() {
         {isLoading && (
           <div className="flex items-center justify-center py-20">
             <div className="text-center">
-              <Spinner className="h-12 w-12 mx-auto mb-4 text-blue-600" />
+              <Spinner className="h-12 w-12 mx-auto mb-4 text-primary" />
               <p className="text-lg font-medium">Выполняем сравнение...</p>
               <p className="text-sm text-gray-500 mt-2">
                 Пожалуйста, подождите, мы анализируем предложения поставщиков 
-                и формируем сравнительный отчет
+                и формируем сравнительный отчет.
               </p>
             </div>
           </div>
@@ -2605,15 +2599,7 @@ export default function CompareResultsPage() {
                                 <th className="px-6 py-3 text-left text-xs font-normal text-gray-500 uppercase tracking-wider w-48 sticky left-0 bg-gray-50 z-10">
                                   <div className="flex items-center justify-between">
                                     <span>Поставщик</span>
-                                    <div className="relative sort-dropdown-container">
-                                      <button
-                                        onClick={() => setShowSortDropdown(!showSortDropdown)}
-                                        className="p-1 rounded hover:bg-gray-200 transition-colors"
-                                        title="Сортировать поставщиков"
-                                      >
-                                        <ArrowUpDown className="h-4 w-4 text-gray-400" />
-                                      </button>
-                                    </div>
+                                    {/* Sort button hidden as requested */}
                                   </div>
                                 </th>
                                 {sortedSuppliers.map((supplier, index) => {
@@ -2648,7 +2634,7 @@ export default function CompareResultsPage() {
                                         {displayName}
                                       </div>
                                       {supplier.email && (
-                                        <div className="text-xs font-medium text-blue-600 normal-case mt-1">
+                                        <div className="text-xs font-medium text-primary normal-case mt-1">
                                           <span className="inline-flex items-center">
                                             <Mail className="h-3 w-3 mr-1" />
                                             <span className="truncate" title={supplier.email}>{supplier.email}</span>
@@ -2764,18 +2750,28 @@ export default function CompareResultsPage() {
 
                                     // Determine arrow direction and color based on parameter type and improvement
                                     const getArrowDisplay = (paramName: string, currentVal: string, previousVal: string) => {
-                                      if (!currentVal || !previousVal || currentVal === previousVal) return null;
-                                      
-                                      const param = paramName.toLowerCase();
-                                      let isImprovement = false;
-                                      let arrowDirection = '↑';
-                                      let colorClass = 'text-blue-600'; // neutral
+ё                                      if (!currentVal || !previousVal) return null;
                                       
                                       // Parse numeric values for comparison
                                       const parseNumeric = (val: string) => {
                                         const numStr = val.replace(/[^\d.,]/g, '').replace(',', '.');
                                         return parseFloat(numStr) || 0;
                                       };
+                                      
+                                      // Check if values are actually the same (both string and numeric comparison)
+                                      if (currentVal === previousVal) return null;
+                                      
+                                      // For numeric parameters, also check if the numeric values are the same
+                                      const param = paramName.toLowerCase();
+                                      if (param.includes('стоимость') || param.includes('цена') || param.includes('срок') || param.includes('гарантия')) {
+                                        const currentNum = parseNumeric(currentVal);
+                                        const previousNum = parseNumeric(previousVal);
+                                        if (currentNum === previousNum) return null; // No arrow if numeric values are the same
+                                      }
+                                      
+                                      let isImprovement = false;
+                                      let arrowDirection = '↑';
+                                      let colorClass = 'text-blue-600'; // neutral
                                       
                                       // Cost/Price parameters (lower is better)
                                       if (param.includes('стоимость') || param.includes('цена')) {
@@ -2908,10 +2904,12 @@ export default function CompareResultsPage() {
                                 </tr>
                               ))}
                               
+                              {/* Processing Sections - Now directly in main table with enhanced separation */}
+                              
                               {/* Compliance Check Row - Hide when winner is selected */}
                               {!selectedWinner && (
-                                <tr className="bg-blue-50 border-t-2 border-blue-200">
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 w-48 sticky left-0 bg-blue-50 z-10">
+                                <tr className="bg-gray-50 mt-4">
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 w-48 sticky left-0 bg-gray-50 z-10 border-t-2 border-primary">
                                     Проверка соответствия
                                   </td>
                                 {sortedSuppliers.map((supplier, supplierIndex) => {
@@ -2954,23 +2952,20 @@ export default function CompareResultsPage() {
                                   const isComplete = missingParams.length === 0;
                                   
                                   return (
-                                    <td key={supplierIndex} className="px-3 py-4 text-center min-w-[240px] max-w-[240px] w-[240px]">
+                                    <td key={supplierIndex} className="px-3 py-4 text-center min-w-[240px] max-w-[240px] w-[240px] border-t-2 border-primary">
                                       {isComplete ? (
                                         <div 
                                           className="flex items-center justify-center cursor-help"
                                           title="Все запрашиваемые данные предоставлены"
                                         >
-                                          <div className="bg-green-100 text-green-800 p-2 rounded-full">
-                                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                          <div className="bg-green-100 text-green-800 p-1 rounded-full">
+                                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                                               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                                             </svg>
                                           </div>
                                         </div>
                                       ) : (
                                         <div className="flex flex-col items-center space-y-2">
-                                          <div className="text-xs text-gray-600 text-center">
-                                            Не все данные предоставлены
-                                          </div>
                                           <DataRequestButton
                                             supplier={supplier}
                                             missingParams={missingParams}
@@ -2980,23 +2975,20 @@ export default function CompareResultsPage() {
                                       )}
                                     </td>
                                   );
-                                })}
+                                  })}
                                 </tr>
                               )}
                               
                               {/* Process Improvement Row - Hide when winner is selected */}
                               {!selectedWinner && (
-                                <tr className="bg-orange-50 border-t-2 border-orange-200">
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 w-48 sticky left-0 bg-orange-50 z-10">
+                                <tr className="bg-gray-50">
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 w-48 sticky left-0 bg-gray-50 z-10">
                                     Процесс улучшения условий
                                   </td>
                                 {sortedSuppliers.map((supplier, supplierIndex) => {
                                   return (
                                     <td key={supplierIndex} className="px-3 py-4 text-center min-w-[240px] max-w-[240px] w-[240px]">
                                       <div className="flex flex-col items-center space-y-2">
-                                        <div className="text-xs text-gray-600 text-center">
-                                          Запросить улучшение предложения
-                                        </div>
                                         <ImprovementRequestButton
                                           supplier={supplier}
                                           requestId={requestId}
@@ -3005,15 +2997,14 @@ export default function CompareResultsPage() {
                                       </div>
                                     </td>
                                   );
-                                })}
+                                  })}
                                 </tr>
                               )}
                               
                               {/* Winner Selection Row */}
-                              <tr className={`border-t-2 ${selectedWinner ? 'bg-green-10 border-green-200' : 'bg-yellow-50 border-yellow-200'}`}>
-                                <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 w-48 sticky left-0 z-10 ${selectedWinner ? 'bg-green-50' : 'bg-yellow-50'}`}>
+                              <tr className={`bg-gray-50 ${selectedWinner ? 'border-t-2 border-gray-200' : 'border-t-2 border-gray-200'}`}>
+                                <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 w-48 sticky left-0 z-10 bg-gray-50`}>
                                   <div className="flex items-center space-x-2">
-                                    
                                     <span>Определение победителя</span>
                                   </div>
                                 </td>
@@ -3058,9 +3049,6 @@ export default function CompareResultsPage() {
                                           </div>
                                         ) : (
                                           <div className="text-center">
-                                            <div className="text-xs text-gray-600 text-center mb-2">
-                                              Выбрать поставщика победителем
-                                            </div>
                                             <Button
                                               size="sm"
                                               variant="outline"
@@ -3070,10 +3058,7 @@ export default function CompareResultsPage() {
                                               }}
                                               className="text-xs px-3 py-1 h-auto"
                                             >
-                                              <div className="flex items-center gap-1">
-                                                <Crown className="w-3 h-3" />
-                                                <span>Выбрать победителем</span>
-                                              </div>
+                                              <span>Выбрать победителем</span>
                                             </Button>
                                           </div>
                                         )}
@@ -3095,7 +3080,7 @@ export default function CompareResultsPage() {
                   <div className="flex gap-2">
                     <Button 
                       variant="default" 
-                      className="gap-1 bg-blue-500 hover:bg-blue-700"
+                      className="gap-1 bg-primary hover:bg-primary/90"
                       onClick={generateAnalysis}
                       disabled={isGeneratingAnalysis || !comparisonData?.supplierDetails?.length}
                     >
@@ -3117,7 +3102,7 @@ export default function CompareResultsPage() {
                     <div className="flex items-center justify-center space-x-3">
                       <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
                       <div className="text-blue-800 font-medium">
-                        Идет анализ и формирование выводов. Ориентировочное время ожидания - менее 1 минуты
+                        Идет анализ и формирование выводов. Ориентировочное время ожидания -  1 минута.
                       </div>
                     </div>
                   </CardContent>

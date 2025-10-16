@@ -58,6 +58,9 @@ export async function apiRequest<T = Response>(
       const accessToken = localStorage.getItem('accessToken');
       const tokenExpiry = localStorage.getItem('tokenExpiry');
       
+      // For admin panel requests, also check for admin token
+      const isAdminRequest = url.includes('/api/admin/');
+      
       console.log(`=== ПРОВЕРКА ТОКЕНА ДЛЯ ${url} ===`);
       console.log(`[Auth] apiRequest: Проверяем токен для ${url}:`, {
         hasAccessToken: !!accessToken,
@@ -89,6 +92,9 @@ export async function apiRequest<T = Response>(
         console.log(`[Auth] apiRequest: Добавляем токен авторизации для ${url}`);
       } else {
         console.log(`[Auth] apiRequest: Токен отсутствует для ${url}`);
+        if (isAdminRequest) {
+          console.log(`[Auth] apiRequest: ВНИМАНИЕ! Админ запрос без токена - может не работать`);
+        }
       }
       
       // Форматируем URL правильно (добавляем базовый URL API если нужно)
@@ -216,6 +222,8 @@ export async function apiRequest<T = Response>(
           if (errorData && errorData.error) {
             throw new Error(errorData.error);
           }
+          // If no specific error message, throw generic error
+          throw new Error(`API request failed: ${res.status} ${res.statusText}`);
         } catch (jsonError) {
           // If can't parse JSON or no error message, fall back to status text
           throw new Error(`API request failed: ${res.status} ${res.statusText}`);

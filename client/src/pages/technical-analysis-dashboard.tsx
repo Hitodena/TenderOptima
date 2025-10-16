@@ -45,6 +45,7 @@ export function TechnicalAnalysisDashboard() {
   const [newRequestName, setNewRequestName] = useState('');
   const [activeTab, setActiveTab] = useState<string>('active');
   const [isCreating, setIsCreating] = useState(false);
+  const [animatingItems, setAnimatingItems] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     loadRequests();
@@ -188,6 +189,9 @@ export function TechnicalAnalysisDashboard() {
 
   const completeRequest = async (requestId: number) => {
     try {
+      // Start animation
+      setAnimatingItems(prev => new Set(prev).add(requestId));
+      
       const response = await fetch(`/api/analysis-requests/${requestId}`, {
         method: 'PATCH',
         headers: {
@@ -198,10 +202,18 @@ export function TechnicalAnalysisDashboard() {
       });
 
       if (response.ok) {
-        const updatedRequest = await response.json();
-        setRequests(prev => prev.map(req => 
-          req.id === requestId ? { ...req, status: 'completed' } : req
-        ));
+        // Wait for animation to complete before updating data
+        setTimeout(() => {
+          setRequests(prev => prev.map(req => 
+            req.id === requestId ? { ...req, status: 'completed' } : req
+          ));
+          setAnimatingItems(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(requestId);
+            return newSet;
+          });
+        }, 300); // Match animation duration
+        
         toast({
           title: "Запрос завершен",
           description: "Запрос перенесен в раздел \"Завершенные запросы\""
@@ -211,6 +223,12 @@ export function TechnicalAnalysisDashboard() {
       }
     } catch (error) {
       console.error('Error completing request:', error);
+      // Remove from animating items on error
+      setAnimatingItems(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(requestId);
+        return newSet;
+      });
       toast({
         title: "Ошибка завершения",
         description: "Не удалось завершить запрос",
@@ -221,6 +239,9 @@ export function TechnicalAnalysisDashboard() {
 
   const activateRequest = async (requestId: number) => {
     try {
+      // Start animation
+      setAnimatingItems(prev => new Set(prev).add(requestId));
+      
       const response = await fetch(`/api/analysis-requests/${requestId}`, {
         method: 'PATCH',
         headers: {
@@ -231,10 +252,18 @@ export function TechnicalAnalysisDashboard() {
       });
 
       if (response.ok) {
-        const updatedRequest = await response.json();
-        setRequests(prev => prev.map(req => 
-          req.id === requestId ? { ...req, status: 'in_progress' } : req
-        ));
+        // Wait for animation to complete before updating data
+        setTimeout(() => {
+          setRequests(prev => prev.map(req => 
+            req.id === requestId ? { ...req, status: 'in_progress' } : req
+          ));
+          setAnimatingItems(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(requestId);
+            return newSet;
+          });
+        }, 300); // Match animation duration
+        
         toast({
           title: "Запрос активирован",
           description: "Запрос перенесен в раздел \"Активные запросы\""
@@ -244,6 +273,12 @@ export function TechnicalAnalysisDashboard() {
       }
     } catch (error) {
       console.error('Error activating request:', error);
+      // Remove from animating items on error
+      setAnimatingItems(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(requestId);
+        return newSet;
+      });
       toast({
         title: "Ошибка активации",
         description: "Не удалось активировать запрос",
@@ -376,8 +411,13 @@ export function TechnicalAnalysisDashboard() {
                 </Card>
               ) : (
                 <div className="grid gap-4">
-                  {activeRequests.map((request) => (
-                    <div key={request.id} className="bg-white border border-gray-300 rounded-md overflow-hidden mb-1 hover:shadow-sm transition-shadow">
+                  {activeRequests.map((request, index) => (
+                    <div 
+                      key={request.id} 
+                      className={`bg-white border border-gray-300 rounded-md overflow-hidden mb-1 hover:shadow-sm transition-shadow ${
+                        animatingItems.has(request.id) ? 'animate-slide-out' : ''
+                      }`}
+                    >
                       <div className="flex items-center justify-between p-3 h-14">
                         <div className="flex flex-col gap-1">
                           <div className="font-medium">
@@ -388,34 +428,45 @@ export function TechnicalAnalysisDashboard() {
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-gray-500 hover:text-gray-600 border-gray-300 hover:border-gray-400"
+                          {/* Анимированная линия */}
+                          <div 
+                            className="relative flex-1 h-px bg-gray-200 animate-draw-line"
+                            style={{ animationDelay: `${(activeRequests.length + index) * 100}ms` }}
+                          ></div>
+                          
+                          <div 
+                            className="flex items-center gap-3 animate-fade-in-element"
+                            style={{ animationDelay: `${(activeRequests.length + index) * 100 + 400}ms` }}
                           >
-                            Черновик
-                          </Button>
-                          <Button
-                            onClick={() => {
-                              console.log(`[Dashboard] Opening active request ID: ${request.id}, Name: ${request.name}, Project ID: ${request.project_id}`);
-                              setLocation(`/analyze/technical/${request.project_id || request.id}/workspace`);
-                            }}
-                            variant="outline"
-                            size="sm"
-                            className="text-slate-600 hover:text-slate-700 border-slate-600 hover:border-slate-700 hover:bg-slate-50"
-                          >
-                            <Eye className="w-4 h-4 mr-1" />
-                            Открыть
-                          </Button>
-                          <Button
-                            onClick={() => completeRequest(request.id)}
-                            variant="outline"
-                            size="sm"
-                            className="text-gray-500 hover:text-gray-600 border-gray-300 hover:border-gray-400"
-                          >
-                            <Check className="w-4 h-4 mr-1" />
-                            Завершить
-                          </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-gray-500 hover:text-gray-600 border-gray-300 hover:border-gray-400"
+                            >
+                              Черновик
+                            </Button>
+                            <Button
+                              onClick={() => {
+                                console.log(`[Dashboard] Opening active request ID: ${request.id}, Name: ${request.name}, Project ID: ${request.project_id}`);
+                                setLocation(`/analyze/technical/${request.project_id || request.id}/workspace`);
+                              }}
+                              variant="outline"
+                              size="sm"
+                              className="text-slate-600 hover:text-slate-700 border-slate-600 hover:border-slate-700 hover:bg-slate-50"
+                            >
+                              <Eye className="w-4 h-4 mr-1" />
+                              Открыть
+                            </Button>
+                            <Button
+                              onClick={() => completeRequest(request.id)}
+                              variant="outline"
+                              size="sm"
+                              className="text-gray-500 hover:text-gray-600 border-gray-300 hover:border-gray-400"
+                            >
+                              <Check className="w-4 h-4 mr-1" />
+                              Завершить
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -439,8 +490,13 @@ export function TechnicalAnalysisDashboard() {
                 </Card>
               ) : (
                 <div className="grid gap-4">
-                  {completedRequests.map((request) => (
-                    <div key={request.id} className="bg-white border border-gray-300 rounded-md overflow-hidden mb-1 hover:shadow-sm transition-shadow">
+                  {completedRequests.map((request, index) => (
+                    <div 
+                      key={request.id} 
+                      className={`bg-white border border-gray-300 rounded-md overflow-hidden mb-1 hover:shadow-sm transition-shadow ${
+                        animatingItems.has(request.id) ? 'animate-slide-out' : ''
+                      }`}
+                    >
                       <div className="flex items-center justify-between p-3 h-14">
                         <div className="flex flex-col gap-1">
                           <div className="font-medium">
@@ -451,33 +507,44 @@ export function TechnicalAnalysisDashboard() {
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-gray-500 hover:text-gray-600 border-gray-300 hover:border-gray-400"
+                          {/* Анимированная линия */}
+                          <div 
+                            className="relative flex-1 h-px bg-gray-200 animate-draw-line"
+                            style={{ animationDelay: `${(activeRequests.length + index) * 100}ms` }}
+                          ></div>
+                          
+                          <div 
+                            className="flex items-center gap-3 animate-fade-in-element"
+                            style={{ animationDelay: `${(activeRequests.length + index) * 100 + 400}ms` }}
                           >
-                            Черновик
-                          </Button>
-                          <Button
-                            onClick={() => {
-                              console.log(`[Dashboard] Opening completed request ID: ${request.id}, Name: ${request.name}, Project ID: ${request.project_id}`);
-                              setLocation(`/analyze/technical/${request.project_id || request.id}/workspace`);
-                            }}
-                            variant="outline"
-                            size="sm"
-                            className="text-slate-600 hover:text-slate-700 border-slate-600 hover:border-slate-700 hover:bg-slate-50"
-                          >
-                            <Eye className="w-4 h-4 mr-1" />
-                            Открыть
-                          </Button>
-                          <Button
-                            onClick={() => activateRequest(request.id)}
-                            variant="outline"
-                            size="sm"
-                            className="text-gray-500 hover:text-gray-600 border-gray-300 hover:border-gray-400"
-                          >
-                            Сделать активным
-                          </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-gray-500 hover:text-gray-600 border-gray-300 hover:border-gray-400"
+                            >
+                              Черновик
+                            </Button>
+                            <Button
+                              onClick={() => {
+                                console.log(`[Dashboard] Opening completed request ID: ${request.id}, Name: ${request.name}, Project ID: ${request.project_id}`);
+                                setLocation(`/analyze/technical/${request.project_id || request.id}/workspace`);
+                              }}
+                              variant="outline"
+                              size="sm"
+                              className="text-slate-600 hover:text-slate-700 border-slate-600 hover:border-slate-700 hover:bg-slate-50"
+                            >
+                              <Eye className="w-4 h-4 mr-1" />
+                              Открыть
+                            </Button>
+                            <Button
+                              onClick={() => activateRequest(request.id)}
+                              variant="outline"
+                              size="sm"
+                              className="text-gray-500 hover:text-gray-600 border-gray-300 hover:border-gray-400"
+                            >
+                              Сделать активным
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </div>

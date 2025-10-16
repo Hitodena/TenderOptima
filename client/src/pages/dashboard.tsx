@@ -23,6 +23,7 @@ export default function Dashboard() {
   const [showActiveRequests, setShowActiveRequests] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const [animatingItems, setAnimatingItems] = useState<Set<number>>(new Set());
   const { isActiveOrLoading } = useSubscription();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -63,6 +64,9 @@ export default function Dashboard() {
   // Status management functions
   const completeRequest = async (requestId: number) => {
     try {
+      // Start animation
+      setAnimatingItems(prev => new Set(prev).add(requestId));
+      
       const response = await fetch(`/api/search-requests/${requestId}/status`, {
         method: 'PATCH',
         headers: {
@@ -73,8 +77,16 @@ export default function Dashboard() {
       });
 
       if (response.ok) {
-        // Invalidate and refetch the search requests query
-        queryClient.invalidateQueries({ queryKey: ['/api/search-requests', 'dashboard', user?.id] });
+        // Wait for animation to complete before updating data
+        setTimeout(() => {
+          queryClient.invalidateQueries({ queryKey: ['/api/search-requests', 'dashboard', user?.id] });
+          setAnimatingItems(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(requestId);
+            return newSet;
+          });
+        }, 300); // Match animation duration
+        
         toast({
           title: "Запрос завершен",
           description: "Запрос перенесен в раздел \"Завершенные запросы\""
@@ -84,6 +96,12 @@ export default function Dashboard() {
       }
     } catch (error) {
       console.error('Error completing request:', error);
+      // Remove from animating items on error
+      setAnimatingItems(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(requestId);
+        return newSet;
+      });
       toast({
         title: "Ошибка завершения",
         description: "Не удалось завершить запрос",
@@ -94,6 +112,9 @@ export default function Dashboard() {
 
   const activateRequest = async (requestId: number) => {
     try {
+      // Start animation
+      setAnimatingItems(prev => new Set(prev).add(requestId));
+      
       const response = await fetch(`/api/search-requests/${requestId}/status`, {
         method: 'PATCH',
         headers: {
@@ -104,8 +125,16 @@ export default function Dashboard() {
       });
 
       if (response.ok) {
-        // Invalidate and refetch the search requests query
-        queryClient.invalidateQueries({ queryKey: ['/api/search-requests', 'dashboard', user?.id] });
+        // Wait for animation to complete before updating data
+        setTimeout(() => {
+          queryClient.invalidateQueries({ queryKey: ['/api/search-requests', 'dashboard', user?.id] });
+          setAnimatingItems(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(requestId);
+            return newSet;
+          });
+        }, 300); // Match animation duration
+        
         toast({
           title: "Запрос активирован",
           description: "Запрос перенесен в раздел \"Активные запросы\""
@@ -115,6 +144,12 @@ export default function Dashboard() {
       }
     } catch (error) {
       console.error('Error activating request:', error);
+      // Remove from animating items on error
+      setAnimatingItems(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(requestId);
+        return newSet;
+      });
       toast({
         title: "Ошибка активации",
         description: "Не удалось активировать запрос",
@@ -177,16 +212,22 @@ export default function Dashboard() {
           <div className="max-w-4xl mx-auto">
             <Card>
               <CardHeader className="pb-4">
-                {/* Header with toggle and search in one line */}
+                {/* Header with title, toggle and search */}
                 <div className="flex items-center justify-between max-w-full">
-                  {/* Left side - Title */}
-                  <div className="flex items-center flex-shrink-0">
+                  {/* Left side - Title and Toggle */}
+                  <div className="flex items-center gap-4 flex-shrink-0">
                     <h2 className="text-lg font-medium text-gray-900">
                       {showActiveRequests ? 'Активные запросы' : 'Завершенные запросы'}
                     </h2>
+                    
+                    {/* Toggle switch */}
+                    <ToggleSwitch
+                      checked={showActiveRequests}
+                      onCheckedChange={setShowActiveRequests}
+                    />
                   </div>
 
-                  {/* Right side - Search and Toggle */}
+                  {/* Right side - Search */}
                   <div className="flex items-center gap-4 flex-shrink-0">
                     {/* Search bar */}
                     <div className="relative">
@@ -199,12 +240,6 @@ export default function Dashboard() {
                         className="pl-10 pr-4 py-2 w-48 border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </div>
-
-                    {/* Toggle switch */}
-                    <ToggleSwitch
-                      checked={showActiveRequests}
-                      onCheckedChange={setShowActiveRequests}
-                    />
                   </div>
                 </div>
               </CardHeader>
@@ -222,13 +257,15 @@ export default function Dashboard() {
                 ) : filteredRequests && filteredRequests.length > 0 ? (
                   <div>
                     <div className="grid gap-4">
-                      {filteredRequests.map((request) => (
+                      {filteredRequests.map((request, index) => (
                         <RequestCard 
                           key={request.id} 
                           request={request} 
                           tab={showActiveRequests ? "active" : "completed"}
                           onComplete={completeRequest}
                           onActivate={activateRequest}
+                          isAnimating={animatingItems.has(request.id)}
+                          animationDelay={index * 100}
                         />
                       ))}
                     </div>
@@ -319,9 +356,11 @@ interface RequestCardProps {
   tab: string;
   onComplete: (requestId: number) => void;
   onActivate: (requestId: number) => void;
+  isAnimating?: boolean;
+  animationDelay?: number;
 }
 
-function RequestCard({ request, tab, onComplete, onActivate }: RequestCardProps) {
+function RequestCard({ request, tab, onComplete, onActivate, isAnimating = false, animationDelay = 0 }: RequestCardProps) {
   // Format the created date
   const formattedDate = request.createdAt 
     ? formatDistanceToNow(new Date(request.createdAt), { addSuffix: true }) 
@@ -383,7 +422,9 @@ function RequestCard({ request, tab, onComplete, onActivate }: RequestCardProps)
 
   return (
     <div 
-      className="overflow-hidden mb-1 hover:shadow-sm transition-all duration-200 cursor-pointer hover:bg-gray-50 rounded-md"
+      className={`overflow-hidden mb-1 hover:shadow-sm transition-all duration-200 cursor-pointer hover:bg-gray-50 rounded-md ${
+        isAnimating ? 'animate-slide-out' : ''
+      }`}
       onClick={handleRowClick}
     >
       <div className="flex items-center justify-between p-3 h-14 relative">
@@ -401,61 +442,72 @@ function RequestCard({ request, tab, onComplete, onActivate }: RequestCardProps)
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Кружок с количеством входящих email */}
-          {responseCount > 0 && (
-            <div className="relative">
-              <div className="flex items-center justify-center w-8 h-8 border border-gray-300 rounded-full bg-white">
-                <span className="text-sm font-semibold text-gray-700">
-                  {responseCount}
-                </span>
-              </div>
-              {/* Красная циферка для новых email */}
-              {newResponseCount > 0 && (
-                <div className="absolute -top-1 -right-1 flex items-center justify-center w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full border-2 border-white">
-                  {newResponseCount}
-                </div>
-              )}
-            </div>
-          )}
+          {/* Анимированная линия */}
+          <div 
+            className="relative flex-1 h-px bg-gray-200 animate-draw-line"
+            style={{ animationDelay: `${animationDelay}ms` }}
+          ></div>
           
-          <Button
-            asChild
-            size="sm"
-            variant="outline"
-            className="bg-white text-primary border-primary hover:bg-white hover:text-primary"
-            onClick={(e) => e.stopPropagation()}
+          <div 
+            className="flex items-center gap-3 animate-fade-in-element"
+            style={{ animationDelay: `${animationDelay + 400}ms` }}
           >
-            <Link href={`/requests/${request.id}?tab=responses`}>Смотреть</Link>
-          </Button>
-          
-          {/* Context-specific status buttons */}
-          {tab === "active" && (
+            {/* Кружок с количеством входящих email */}
+            {responseCount > 0 && (
+              <div className="relative">
+                <div className="flex items-center justify-center w-8 h-8 border border-gray-300 rounded-full bg-white">
+                  <span className="text-sm font-semibold text-gray-700">
+                    {responseCount}
+                  </span>
+                </div>
+                {/* Красная циферка для новых email */}
+                {newResponseCount > 0 && (
+                  <div className="absolute -top-1 -right-1 flex items-center justify-center w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full border-2 border-white">
+                    {newResponseCount}
+                  </div>
+                )}
+              </div>
+            )}
+            
             <Button
-              onClick={(e) => {
-                e.stopPropagation();
-                onComplete(request.id);
-              }}
-              variant="outline"
+              asChild
               size="sm"
-              className="text-gray-500 hover:text-gray-600 border-gray-300 hover:border-gray-400"
-            >
-              Завершить
-            </Button>
-          )}
-          
-          {tab === "completed" && (
-            <Button
-              onClick={(e) => {
-                e.stopPropagation();
-                onActivate(request.id);
-              }}
               variant="outline"
-              size="sm"
-              className="text-gray-500 hover:text-gray-600 border-gray-300 hover:border-gray-400"
+              className="bg-white text-primary border-primary hover:bg-white hover:text-primary"
+              onClick={(e) => e.stopPropagation()}
             >
-              Сделать активным
+              <Link href={`/requests/${request.id}?tab=responses`}>Смотреть</Link>
             </Button>
-          )}
+            
+            {/* Context-specific status buttons */}
+            {tab === "active" && (
+              <Button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onComplete(request.id);
+                }}
+                variant="outline"
+                size="sm"
+                className="text-gray-500 hover:text-gray-600 border-gray-300 hover:border-gray-400"
+              >
+                Завершить
+              </Button>
+            )}
+            
+            {tab === "completed" && (
+              <Button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onActivate(request.id);
+                }}
+                variant="outline"
+                size="sm"
+                className="text-gray-500 hover:text-gray-600 border-gray-300 hover:border-gray-400"
+              >
+                Сделать активным
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -184,8 +184,12 @@ async def parse(
             item["phones"] = info.get("phones", [])
             item["dateOfSearch"] = timestamp
             enriched_results.append(item)
+            logger.info(f"Домен '{domain}' добавлен с email: {info['emails']}")
         else:
-            logger.info(f"Отбрасываем домен '{domain}', так как не найдены email.")
+            if info:
+                logger.info(f"Отбрасываем домен '{domain}', так как не найдены email. URL: {info.get('url', 'N/A')}")
+            else:
+                logger.info(f"Отбрасываем домен '{domain}', так как не удалось получить информацию о контактах.")
 
     # 5. Сохранение обогащенных результатов в БД
     if enriched_results:

@@ -61,12 +61,23 @@ export class AsyncEmailProcessor {
       console.log(`[AsyncEmailProcessor] Обрабатываем ${attachments.length} вложений для email ID: ${responseId}`);
       
       const processedAttachments = await attachmentProcessor.processAttachments(attachments, {
-        timeout: 60000, // 60 секунд
+        timeout: 120000, // 120 секунд (OCR может занимать больше времени)
         maxFileSize: 50 * 1024 * 1024, // 50MB
         retryCount: 3
       });
       
       console.log(`[AsyncEmailProcessor] Обработано ${processedAttachments.length} вложений для email ID: ${responseId}`);
+      
+      // Детальное логирование результатов обработки
+      processedAttachments.forEach((attachment, index) => {
+        console.log(`[AsyncEmailProcessor] Attachment ${index + 1}: ${attachment.filename}`);
+        console.log(`[AsyncEmailProcessor] - ContentType: ${attachment.contentType}`);
+        console.log(`[AsyncEmailProcessor] - Has extractedText: ${!!attachment.extractedText}`);
+        console.log(`[AsyncEmailProcessor] - ExtractedText length: ${attachment.extractedText?.length || 0}`);
+        if (attachment.extractedText && attachment.extractedText.length > 0) {
+          console.log(`[AsyncEmailProcessor] - ExtractedText preview: ${attachment.extractedText.substring(0, 200)}...`);
+        }
+      });
       
       // Используем batch обновление для оптимизации
       const batchResult = await batchDatabaseService.batchUpdateResponses([{

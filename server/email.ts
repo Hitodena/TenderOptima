@@ -281,7 +281,7 @@ class EmailService {
         subject: options.subject,
         text: options.text,
         html: options.html || options.text.replace(/\n/g, '<br/>'),
-        replyTo: options.replyTo,
+        replyTo: options.replyTo || fromAddress, // Если replyTo не указан, используем from адрес
         attachments: options.attachments,
         headers: options.headers || {}
       };

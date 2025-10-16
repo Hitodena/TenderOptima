@@ -225,7 +225,7 @@ ${generateParameterList()}
     const updateEmailTemplate = () => {
       // Regenerate the default message with current data
       const updatedDefaultMessage = `
-Добрый день,
+Добрый день.
 
 Направляем запрос для получения вашего коммерческого предложения на:
 
@@ -499,10 +499,19 @@ ${generateParameterList()}
       };
 
       // Add the full supplier details for API-sourced suppliers that are selected
+      const apiSuppliers = selectedSuppliers.filter(s => {
+        // Include suppliers that have negative IDs or are from search engines
+        if (typeof s.id === 'number' && s.id < 0) return true;
+        if (typeof s.id === 'string' && s.id.startsWith('api-')) return true;
+        // Check for search engine properties (these might be on extended supplier objects)
+        if ((s as any).searchEngine || (s as any).allEmails || (s as any).allPhones) return true;
+        return false;
+      });
+      
       const formData = {
         ...data,
         suppliers: currentSupplierIds, // Override with the latest selected IDs
-        apiSuppliers: selectedSuppliers.filter(s => typeof s.id === 'number' && s.id < 0),
+        apiSuppliers: apiSuppliers,
         fromContactGroup: isFromContactGroup, // Добавляем флаг для определения источника контактов
         parameters: getSelectedParameters() // Include selected parameters
       };
@@ -520,6 +529,9 @@ ${generateParameterList()}
       console.log("КРИТИЧЕСКАЯ ОТЛАДКА - suppliers array:", formData.suppliers);
       console.log("КРИТИЧЕСКАЯ ОТЛАДКА - suppliers length:", formData.suppliers.length);
       console.log("КРИТИЧЕСКАЯ ОТЛАДКА - selected suppliers length:", selectedSuppliers.length);
+      console.log("КРИТИЧЕСКАЯ ОТЛАДКА - apiSuppliers:", apiSuppliers);
+      console.log("КРИТИЧЕСКАЯ ОТЛАДКА - apiSuppliers length:", apiSuppliers.length);
+      console.log("КРИТИЧЕСКАЯ ОТЛАДКА - fromContactGroup:", isFromContactGroup);
       
       // Убедимся, что у нас есть подтверждение отправки от сервера, добавим дополнительные проверки
       try {
@@ -585,7 +597,7 @@ ${generateParameterList()}
       queryClient.invalidateQueries({ queryKey: ["subscription", "status"] });
       
       // Проверяем реальный успех отправки
-      if (data.success && data.successCount > 0) {
+      if (data.success && (data.successCount || 0) > 0) {
         // Показываем детальную информацию об успешности
         toast({
           title: "Успешно",

@@ -21,7 +21,38 @@ export const regionsData: Country[] = [
   { name: "Австралия", googleCode: "au", yandexId: 129, regions: [] },
   { name: "Австрия", googleCode: "at", yandexId: 130, regions: [] },
   { name: "Армения", googleCode: "am", yandexId: 169, regions: [] },
-  { name: "Беларусь", googleCode: "by", yandexId: 149, regions: [] },
+  { name: "Беларусь", googleCode: "by", yandexId: 149, regions: [
+      { name: "г. Минск", yandexId: 157, cities: [] },
+      { name: "Брестская область", yandexId: 150, cities: [
+          { name: "Брест", yandexId: 151 },
+          { name: "Барановичи", yandexId: 152 },
+          { name: "Пинск", yandexId: 153 }
+        ]},
+      { name: "Витебская область", yandexId: 154, cities: [
+          { name: "Витебск", yandexId: 155 },
+          { name: "Новополоцк", yandexId: 156 },
+          { name: "Орша", yandexId: 157 },
+          { name: "Полоцк", yandexId: 158 }
+        ]},
+      { name: "Гомельская область", yandexId: 159, cities: [
+          { name: "Гомель", yandexId: 160 },
+          { name: "Мозырь", yandexId: 161 },
+          { name: "Жлобин", yandexId: 162 }
+        ]},
+      { name: "Гродненская область", yandexId: 163, cities: [
+          { name: "Гродно", yandexId: 164 },
+          { name: "Лида", yandexId: 165 }
+        ]},
+      { name: "Минская область", yandexId: 166, cities: [
+          { name: "Борисов", yandexId: 167 },
+          { name: "Солигорск", yandexId: 168 },
+          { name: "Молодечно", yandexId: 169 }
+        ]},
+      { name: "Могилёвская область", yandexId: 170, cities: [
+          { name: "Могилёв", yandexId: 171 },
+          { name: "Бобруйск", yandexId: 172 }
+        ]}
+    ]},
   { name: "Бельгия", googleCode: "be", yandexId: 131, regions: [] },
   { name: "Болгария", googleCode: "bg", yandexId: 132, regions: [] },
   { name: "Бразилия", googleCode: "br", yandexId: 233, regions: [] },

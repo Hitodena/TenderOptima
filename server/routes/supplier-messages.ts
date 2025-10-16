@@ -138,3 +138,37 @@ export async function getSupplierMessages(req: Request, res: Response) {
     });
   }
 }
+
+// Функция для получения всех сообщений запроса одним запросом
+export async function getAllRequestMessages(req: Request, res: Response) {
+  try {
+    const requestId = parseInt(req.params.id);
+    const userId = req.user?.id;
+
+    if (isNaN(requestId)) {
+      console.error('[supplier-messages] Недопустимый ID запроса:', req.params.id);
+      return res.status(400).json({ message: 'Invalid request ID' });
+    }
+
+    if (!userId) {
+      console.error('[supplier-messages] Пользователь не авторизован');
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    console.log(`[supplier-messages] Получение всех сообщений для запроса ${requestId} и пользователя ${userId}`);
+
+    // Получаем сообщения для всех поставщиков одним запросом
+    const allMessages = await storage.getAllRequestMessages(requestId, userId);
+    
+    console.log(`[supplier-messages] Найдено ${allMessages.length} сообщений для запроса ${requestId}`);
+    
+    // Отправляем сообщения клиенту
+    return res.json(allMessages);
+  } catch (error) {
+    console.error('[supplier-messages] Ошибка при получении всех сообщений запроса:', error);
+    return res.status(500).json({ 
+      message: 'Failed to get all request messages', 
+      error: String(error) 
+    });
+  }
+}

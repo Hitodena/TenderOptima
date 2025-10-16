@@ -18,12 +18,7 @@ try:
     from pdf2image import convert_from_path
     from PIL import Image
     import pytesseract
-    # Указываем pytesseract путь к исполняемому файлу Tesseract для Windows
-    # Это решает ошибку "Tesseract is not installed or it's not in your PATH"
-    try:
-        pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-    except Exception as e:
-        print(f"DEBUG: Не удалось установить путь к tesseract, возможно, система не Windows. Ошибка: {e}")
+    # Tesseract должен быть в PATH - не устанавливаем принудительный путь
     from docx import Document
     import pandas as pd
     import openpyxl
@@ -55,23 +50,102 @@ def extract_text_from_pdf(file_path):
                 except Exception as e:
                     continue
         
-        # Шаг 2: Если текст не извлечен или очень короткий, считаем PDF отсканированным
-        if not text.strip() or len(text.strip()) < 100:
+        # Шаг 2: Если текст не извлечен, используем OCR
+        if not text.strip():
             try:
                 # Конвертируем PDF в изображения
                 images = convert_from_path(file_path)
                 
                 # Обрабатываем каждую страницу с помощью OCR
                 for i, image in enumerate(images, 1):
-                    # Предобработка изображения для улучшения качества OCR
-                    processed_image = preprocess_image_for_ocr(image)
+                    page_text = ""
                     
-                    # Извлекаем текст с помощью pytesseract
-                    page_text = pytesseract.image_to_string(
-                        processed_image, 
-                        lang='rus+eng',
-                        config='--oem 3 --psm 6'
-                    )
+                    # Пробуем разные PSM режимы и языки для лучшего распознавания
+                    configs = [
+                        ('rus+eng', '--oem 3 --psm 1'),
+                        ('rus+eng', '--oem 3 --psm 3'),
+                        ('rus+eng', '--oem 3 --psm 6'),
+                        ('rus+eng', '--oem 3 --psm 8'),
+                        ('rus', '--oem 3 --psm 1'),
+                        ('eng', '--oem 3 --psm 1'),
+                    ]
+                    
+                    # Сначала пробуем EasyOCR для страницы
+                    temp_path = f"temp_page_{i}.png"
+                    try:
+                        image.save(temp_path, 'PNG')  # Явно указываем формат PNG
+                        
+                        easyocr_text = extract_text_with_easyocr(temp_path)
+                        if easyocr_text and not easyocr_text.startswith("Error") and len(easyocr_text.strip()) > 10:
+                            page_text = easyocr_text
+                        else:
+                            # Fallback на Tesseract с разными конфигурациями
+                            for lang, config in configs:
+                                try:
+                                    # Предобработка изображения для лучшего OCR
+                                    processed_image = preprocess_image_for_ocr(image)
+                                    
+                                    # Извлекаем текст с помощью pytesseract
+                                    page_text = pytesseract.image_to_string(
+                                        processed_image, 
+                                        lang=lang,
+                                        config=config
+                                    )
+                                    
+                                    # Убеждаемся, что текст в правильной кодировке
+                                    if isinstance(page_text, bytes):
+                                        page_text = page_text.decode('utf-8', errors='replace')
+                                    
+                                    # Если получили осмысленный текст, используем его
+                                    if page_text.strip() and len(page_text.strip()) > 10:
+                                        # Проверяем, что в тексте есть русские символы или цифры
+                                        has_meaningful_content = any(
+                                            char.isalpha() or char.isdigit() or char in '.,!?;:()[]{}"\'«»№%+-= '
+                                            for char in page_text
+                                        )
+                                        if has_meaningful_content:
+                                            break
+                                        
+                                except Exception as config_error:
+                                    continue
+                    except Exception as temp_error:
+                        # Если не удалось сохранить временный файл, используем только Tesseract
+                        page_text = ""
+                        for lang, config in configs:
+                            try:
+                                # Предобработка изображения для лучшего OCR
+                                processed_image = preprocess_image_for_ocr(image)
+                                
+                                # Извлекаем текст с помощью pytesseract
+                                page_text = pytesseract.image_to_string(
+                                    processed_image, 
+                                    lang=lang,
+                                    config=config
+                                )
+                                
+                                # Убеждаемся, что текст в правильной кодировке
+                                if isinstance(page_text, bytes):
+                                    page_text = page_text.decode('utf-8', errors='replace')
+                                
+                                # Если получили осмысленный текст, используем его
+                                if page_text.strip() and len(page_text.strip()) > 10:
+                                    # Проверяем, что в тексте есть русские символы или цифры
+                                    has_meaningful_content = any(
+                                        char.isalpha() or char.isdigit() or char in '.,!?;:()[]{}"\'«»№%+-= '
+                                        for char in page_text
+                                    )
+                                    if has_meaningful_content:
+                                        break
+                                    
+                            except Exception as config_error:
+                                continue
+                    finally:
+                        # Удаляем временный файл
+                        if os.path.exists(temp_path):
+                            try:
+                                os.remove(temp_path)
+                            except Exception:
+                                pass  # Игнорируем ошибки удаления
                     
                     if page_text.strip():
                         text += f"\n[PAGE:{i}]\n{page_text}\n"
@@ -199,6 +273,7 @@ def extract_text_from_excel(file_path):
     except Exception as e:
         return f"Error extracting from Excel: {e}"
 
+
 def preprocess_image_for_ocr(image):
     """
     Предобработка изображения для улучшения качества OCR
@@ -220,14 +295,22 @@ def preprocess_image_for_ocr(image):
         # Преобразование в оттенки серого
         gray = cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY)
         
-        # Применение бинаризации для улучшения контраста
-        _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # Увеличение контраста
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+        enhanced = clahe.apply(gray)
         
         # Удаление шума
-        denoised = cv2.medianBlur(binary, 3)
+        denoised = cv2.medianBlur(enhanced, 3)
+        
+        # Морфологические операции для улучшения текста
+        kernel = np.ones((1,1), np.uint8)
+        processed = cv2.morphologyEx(denoised, cv2.MORPH_CLOSE, kernel)
+        
+        # Адаптивная бинаризация
+        binary = cv2.adaptiveThreshold(processed, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
         
         # Конвертируем обратно в PIL Image
-        processed_image = Image.fromarray(denoised)
+        processed_image = Image.fromarray(binary)
         
         return processed_image
         
@@ -235,26 +318,87 @@ def preprocess_image_for_ocr(image):
         # Если предобработка не удалась, возвращаем оригинальное изображение
         return image
 
+def extract_text_with_easyocr(file_path):
+    """
+    Извлекает текст с помощью EasyOCR (лучше для русского текста)
+    """
+    try:
+        import easyocr
+        # Инициализируем EasyOCR с поддержкой русского и английского
+        reader = easyocr.Reader(['ru', 'en'], gpu=False)
+        
+        # Читаем изображение
+        results = reader.readtext(file_path)
+        
+        # Объединяем все найденные тексты
+        text_parts = []
+        for (bbox, text, confidence) in results:
+            if confidence > 0.3:  # Более низкий порог для лучшего распознавания
+                text_parts.append(text)
+        
+        return '\n'.join(text_parts)
+        
+    except Exception as e:
+        return f"Error with EasyOCR: {e}"
+
 def extract_text_from_image(file_path):
     """
-    Извлекает текст из изображений (JPG, PNG) с использованием pytesseract
+    Извлекает текст из изображений (JPG, PNG) с использованием EasyOCR и Tesseract
     Поддерживает русский и английский языки
     """
     try:
-        # Открываем изображение с помощью Pillow
+        # Сначала пробуем EasyOCR (лучше для русского текста)
+        easyocr_text = extract_text_with_easyocr(file_path)
+        
+        # Если EasyOCR дал хороший результат, используем его
+        if easyocr_text and len(easyocr_text.strip()) > 5 and not easyocr_text.startswith("Error"):
+            return easyocr_text
+        
+        # Иначе пробуем Tesseract как fallback
         image = Image.open(file_path)
         
-        # Предобработка изображения для улучшения качества OCR
-        processed_image = preprocess_image_for_ocr(image)
+        # Пробуем разные конфигурации Tesseract
+        configs = [
+            ('rus+eng', '--oem 3 --psm 6'),
+            ('rus+eng', '--oem 3 --psm 1'),
+            ('rus+eng', '--oem 3 --psm 3'),
+            ('rus', '--oem 3 --psm 6'),
+            ('eng', '--oem 3 --psm 6'),
+        ]
         
-        # Извлекаем текст с поддержкой русского и английского языков
-        text = pytesseract.image_to_string(
-            processed_image, 
-            lang='rus+eng',
-            config='--oem 3 --psm 6'
-        )
+        best_tesseract_text = ""
+        for lang, config in configs:
+            try:
+                processed_image = preprocess_image_for_ocr(image)
+                
+                tesseract_text = pytesseract.image_to_string(
+                    processed_image, 
+                    lang=lang,
+                    config=config
+                )
+                
+                # Убеждаемся, что текст в правильной кодировке
+                if isinstance(tesseract_text, bytes):
+                    tesseract_text = tesseract_text.decode('utf-8', errors='replace')
+                
+                # Если получили осмысленный текст, используем его
+                if tesseract_text.strip() and len(tesseract_text.strip()) > len(best_tesseract_text.strip()):
+                    # Проверяем, что в тексте есть русские символы или цифры
+                    has_meaningful_content = any(
+                        char.isalpha() or char.isdigit() or char in '.,!?;:()[]{}"\'«»№%+-= '
+                        for char in tesseract_text
+                    )
+                    if has_meaningful_content:
+                        best_tesseract_text = tesseract_text.strip()
+                        
+            except Exception as config_error:
+                continue
         
-        return text.strip()
+        # Выбираем лучший результат
+        if len(best_tesseract_text.strip()) > len(easyocr_text.strip()):
+            return best_tesseract_text
+        
+        return easyocr_text if easyocr_text else best_tesseract_text
     
     except Exception as e:
         return f"Error extracting from image: {e}"

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,7 +33,8 @@ import {
   ListFilter,
   RefreshCw,
   Reply,
-  Info
+  Info,
+  Reply as ReplyIcon
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -123,6 +125,7 @@ export function ResponsePanel({
   isUpdatingStatus = false
 }: ResponsePanelProps) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [isSending, setIsSending] = useState<boolean>(false);
   const [messageSent, setMessageSent] = useState<boolean>(false);
   const [activeResponseId, setActiveResponseId] = useState<number | null>(
@@ -856,7 +859,7 @@ export function ResponsePanel({
             </div>
           </div>
 
-          <ScrollArea className="h-[calc(100%-95px)]">
+          <ScrollArea className="h-[calc(600px-160px)]">
             {getSortedResponses().map((response) => {
               // Check if this response is currently selected for viewing
               const isActive = activeResponseId === response.id;
@@ -888,17 +891,31 @@ export function ResponsePanel({
                       <div className={`text-sm truncate ${!response.isRead ? 'font-semibold' : ''}`}>
                         {response.supplierName}
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 p-0"
-                        onClick={(e) => handleToggleFavorite(response.id, e)}
-                        disabled={favoriteLoadingStates.has(response.id)}
-                      >
-                        <Star 
-                          className={`h-4 w-4 ${response.isFavorite ? 'text-yellow-500 fill-yellow-500' : 'text-muted-foreground'} ${favoriteLoadingStates.has(response.id) ? 'opacity-50' : ''}`} 
-                        />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        {response.isRepliedTo && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <ReplyIcon className="h-3 w-3 text-red-800 flex-shrink-0" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="bg-gray-800 text-white border-0">
+                                <p>Отвечено</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 p-0 flex-shrink-0"
+                          onClick={(e) => handleToggleFavorite(response.id, e)}
+                          disabled={favoriteLoadingStates.has(response.id)}
+                        >
+                          <Star 
+                            className={`h-4 w-4 ${response.isFavorite ? 'text-yellow-500 fill-yellow-500' : 'text-muted-foreground'} ${favoriteLoadingStates.has(response.id) ? 'opacity-50' : ''}`} 
+                          />
+                        </Button>
+                      </div>
                     </div>
                     <TooltipProvider>
                       <Tooltip>
@@ -940,7 +957,7 @@ export function ResponsePanel({
         </div>
 
         {/* Right panel - Email content with fixed reply section */}
-        <div className="md:col-span-4 flex flex-col h-full overflow-hidden" style={{ height: '100%' }}>
+        <div className="md:col-span-4 flex flex-col h-full overflow-hidden">
           {activeResponse ? (
             <>
               {/* Email header - fixed */}
@@ -1015,7 +1032,7 @@ export function ResponsePanel({
               </div>
 
               {/* Email content - scrollable area */}
-              <ScrollArea className="flex-1 p-4 min-h-0" style={{ flex: '1 1 0%', minHeight: '0' }}>
+              <ScrollArea className="flex-1 p-4" style={{ flex: '1 1 0%', minHeight: '0' }}>
                 <div className="space-y-4">
                   {/* Parameter Extraction Status Card removed - now shown in the main request details layout */}
 
@@ -1194,7 +1211,6 @@ export function ResponsePanel({
                               updateActiveResponse(updatedResponse);
                               setReplyText('');
                               setAttachments([]);
-                              setMessageSent(true);
                               
                               toast({
                                 title: "Ответ отправлен",
@@ -1202,12 +1218,21 @@ export function ResponsePanel({
                               });
                               
                               // Refresh the responses to show the new reply
-                              // queryClient.invalidateQueries({ queryKey: ['/api/supplier-responses', activeResponse.requestId] });
+                              queryClient.invalidateQueries({ queryKey: ['/api/supplier-responses', activeResponse.requestId] });
+                              
+                              // Обновляем список отправленных сообщений
+                              if ((window as any).refreshSentEmails) {
+                                (window as any).refreshSentEmails();
+                              }
+                              
+                              // Только после всех успешных операций показываем сообщение об успехе
+                              setMessageSent(true);
                             } else {
                               throw new Error('Failed to send reply');
                             }
                           } catch (error) {
                             console.error('Error sending reply:', error);
+                            setMessageSent(false); // Сбрасываем состояние при ошибке
                             toast({
                               title: "Ошибка отправки",
                               description: "Не удалось отправить ответ. Попробуйте еще раз.",

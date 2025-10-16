@@ -203,6 +203,9 @@ export default function ClientRequestResults() {
                     <TableHead>Название компании</TableHead>
                     <TableHead>Сайт</TableHead>
                     <TableHead>Email</TableHead>
+                    <TableHead>Описание</TableHead>
+                    <TableHead>Телефон</TableHead>
+                    <TableHead>ГЕО</TableHead>
                     <TableHead>Статус модерации</TableHead>
                     <TableHead>Источник</TableHead>
                     <TableHead>Дата</TableHead>
@@ -211,7 +214,7 @@ export default function ClientRequestResults() {
                 <TableBody>
                   {!data?.results || data.results.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                         Результаты не найдены
                       </TableCell>
                     </TableRow>
@@ -224,20 +227,54 @@ export default function ClientRequestResults() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Button
-                            variant="link"
-                            size="sm"
-                            className="h-auto p-0 text-blue-600 hover:text-blue-800"
-                            onClick={() => window.open(result.rawUrl, '_blank')}
-                          >
-                            Перейти
-                            <ExternalLinkIcon className="ml-1 h-3 w-3" />
-                          </Button>
+                          {result.rawUrl ? (
+                            <Button
+                              variant="link"
+                              size="sm"
+                              className="h-auto p-0 text-blue-600 hover:text-blue-800"
+                              onClick={() => window.open(result.rawUrl, '_blank')}
+                            >
+                              {result.rawUrl}
+                              <ExternalLinkIcon className="ml-1 h-3 w-3" />
+                            </Button>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">Не указан</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           {result.rawEmails && result.rawEmails.length > 0 ? (
                             <div className="text-sm">
                               {result.rawEmails.join(', ')}
+                            </div>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">Не указан</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {result.rawDescription ? (
+                            <div 
+                              className="text-sm text-gray-600 max-w-xs truncate"
+                              title={result.rawDescription}
+                            >
+                              {result.rawDescription}
+                            </div>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">Не указано</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {result.rawPhones && result.rawPhones.length > 0 ? (
+                            <div className="text-sm">
+                              {result.rawPhones.join(', ')}
+                            </div>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">Не указан</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {result.region ? (
+                            <div className="text-sm">
+                              {result.region}
                             </div>
                           ) : (
                             <span className="text-sm text-muted-foreground">Не указан</span>

@@ -142,6 +142,17 @@ export default function RequestDetails() {
   const [isCompareLoading, setIsCompareLoading] = useState(false);
   const [showSuppliersList, setShowSuppliersList] = useState(false);
   const [activeSupplierId, setActiveSupplierId] = useState<number | null>(null);
+  const [forceRefreshSentEmails, setForceRefreshSentEmails] = useState(false);
+  
+  // Сброс флага forceRefresh после использования
+  useEffect(() => {
+    if (forceRefreshSentEmails) {
+      const timer = setTimeout(() => {
+        setForceRefreshSentEmails(false);
+      }, 1000); // Сбрасываем через 1 секунду
+      return () => clearTimeout(timer);
+    }
+  }, [forceRefreshSentEmails]);
   
   // Получаем userId для Socket.IO
   const userId = useUserId();
@@ -355,6 +366,26 @@ export default function RequestDetails() {
     setHasUserManuallySelectedFirstEmail(false);
   }, [id]);
 
+  // Update activeResponse when supplierResponses change (new emails arrive)
+  useEffect(() => {
+    if (!data?.supplierResponses || !activeResponse) return;
+    
+    // Check if the currently active response still exists in the updated list
+    const currentActiveResponse = data.supplierResponses.find(r => r.id === activeResponse.id);
+    
+    if (!currentActiveResponse) {
+      // If the active response no longer exists, select the first one
+      console.log('Active response no longer exists, selecting first response');
+      const firstResponse = data.supplierResponses[0];
+      if (firstResponse) {
+        setActiveResponse(firstResponse);
+      }
+    } else {
+      // Update the active response with fresh data from the server
+      setActiveResponse(currentActiveResponse);
+    }
+  }, [data?.supplierResponses, activeResponse]);
+
   // Handle first email read logic
   useEffect(() => {
     if (!activeResponse || !data?.supplierResponses) return;
@@ -512,7 +543,10 @@ export default function RequestDetails() {
                 }}
                 onCheckNewOffers={() => checkEmailsMutation.mutate()}
                 isCheckingOffers={checkEmailsMutation.isPending}
-                onShowSuppliers={() => setShowSuppliersList(true)}
+                onShowSuppliers={() => {
+                  setShowSuppliersList(true);
+                  setForceRefreshSentEmails(true); // Принудительно обновляем отправленные сообщения
+                }}
                 unreadCount={unreadResponsesCount}
                 requestName={request?.productName}
                 request={request}
@@ -572,6 +606,7 @@ export default function RequestDetails() {
                   setActiveSupplierId(null);
                 }}
                 request={request}
+                forceRefresh={forceRefreshSentEmails}
               />
             )}
           </div>

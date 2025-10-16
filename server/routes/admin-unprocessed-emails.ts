@@ -116,7 +116,8 @@ router.post('/unprocessed-emails/:id/reply', requireAuth, requireAdmin, async (r
       {
         html: content.replace(/\n/g, '<br>'),
         userId: email.userId, // Use the user who received the email
-        hideBusinessCard: true // Hide business card for admin replies
+        hideBusinessCard: true, // Hide business card for admin replies
+        replyTo: undefined // Не устанавливаем replyTo - будет использован from адрес пользователя
       }
     );
     
@@ -204,6 +205,61 @@ router.delete('/email-reply-templates/:id', requireAuth, requireAdmin, async (re
   } catch (error) {
     console.error('[Admin Unprocessed Emails] Error deleting template:', error);
     res.status(500).json({ error: 'Failed to delete template' });
+  }
+});
+
+// Download attachment from unprocessed email
+router.get('/unprocessed-emails/:id/attachments/:attachmentIndex', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { id, attachmentIndex } = req.params;
+    const emailId = parseInt(id);
+    const index = parseInt(attachmentIndex);
+    
+    if (isNaN(emailId) || isNaN(index)) {
+      return res.status(400).json({ error: 'Invalid email ID or attachment index' });
+    }
+    
+    // Get the unprocessed email
+    const email = await storage.getUnprocessedEmailById(emailId);
+    if (!email) {
+      return res.status(404).json({ error: 'Unprocessed email not found' });
+    }
+    
+    // Check if email has attachments
+    if (!email.attachments || !Array.isArray(email.attachments)) {
+      return res.status(404).json({ error: 'No attachments found for this email' });
+    }
+    
+    if (index < 0 || index >= email.attachments.length) {
+      return res.status(404).json({ error: 'Attachment index out of bounds' });
+    }
+    
+    const attachment = email.attachments[index];
+    
+    // Validate attachment data
+    if (!attachment.content) {
+      return res.status(404).json({ error: 'Attachment content not found' });
+    }
+    
+    const filename = attachment.filename || `attachment_${index + 1}.bin`;
+    const contentType = attachment.contentType || 'application/octet-stream';
+    
+    // Set headers for file download
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    
+    // Send the file content (assuming it's base64 encoded)
+    const buffer = Buffer.from(attachment.content, 'base64');
+    res.setHeader('Content-Length', buffer.length);
+    res.send(buffer);
+    
+    console.log(`[Admin Unprocessed Emails] Successfully served attachment "${filename}" for email ${emailId}`);
+  } catch (error) {
+    console.error('[Admin Unprocessed Emails] Error downloading attachment:', error);
+    res.status(500).json({ error: 'Failed to download attachment' });
   }
 });
 

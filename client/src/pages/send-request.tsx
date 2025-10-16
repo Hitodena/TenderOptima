@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { MainNavigation } from "@/components/main-navigation";
 import { CustomSupplierInput } from "@/components/custom-supplier-input";
 import { UploadSuppliersExcel } from "@/components/upload-suppliers-excel";
 import { LoadFromContacts } from "@/components/load-from-contacts";
+import { apiRequest } from "@/lib/queryClient";
 
 import { EmailForm } from "@/components/email-form";
 import { SubscriptionGuard } from "@/components/SubscriptionGuard";
@@ -38,7 +40,7 @@ const convertToTooltipSupplier = (extended: ExtendedSupplier) => ({
 });
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useToast } from "@/components/ui/toast";
+import { useToast } from "@/hooks/use-toast";
 import { useSubscription } from "@/hooks/useSubscription";
 import { useLocation, Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
@@ -65,10 +67,13 @@ export default function SendRequest() {
   const [errorMessageShown, setErrorMessageShown] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   
-  
   const { toast } = useToast();
   const [location, setLocation] = useLocation();
   const { isActiveOrLoading } = useSubscription();
+
+  // Function to load full supplier data from database - REMOVED
+  // This was causing 404 errors by trying to fetch suppliers from main table
+  // when they only exist in staging_suppliers table
 
   // Helper function to apply trial limitations to suppliers
   const applyTrialLimitations = async (suppliers: ExtendedSupplier[]) => {
@@ -152,10 +157,14 @@ export default function SendRequest() {
 
   const handleAddSupplier = (supplier: ExtendedSupplier) => {
     setSuppliers(prev => [...prev, supplier]);
+    // Автоматически выбираем нового поставщика
+    setSelectedSuppliers(prev => [...prev, supplier]);
   };
 
   const handleBulkUpload = (newSuppliers: ExtendedSupplier[]) => {
     setSuppliers(prev => [...prev, ...newSuppliers]);
+    // Автоматически выбираем всех новых поставщиков
+    setSelectedSuppliers(prev => [...prev, ...newSuppliers]);
   };
 
   const handleRemoveSupplier = (id: number | string) => {
@@ -429,7 +438,6 @@ export default function SendRequest() {
     }
     return null;
   };
-  
 
   // Типы для разных источников данных
   type ServerKeyData = {
@@ -695,11 +703,14 @@ export default function SendRequest() {
               } as ExtendedSupplier;
             });
             
+            // Use suppliers directly without trying to enrich from database
+            console.log('Using suppliers directly from staging_suppliers data');
+            
             const limitedSuppliers = await applyTrialLimitations(processedSuppliers);
             setSuppliers(limitedSuppliers);
-            // ИСПРАВЛЕНИЕ: Не выбираем всех поставщиков автоматически
-            setSelectedSuppliers([]);
-            console.log(`Loaded ${limitedSuppliers.length} suppliers from localStorage (search results)`);
+            // Автоматически выбираем всех поставщиков из результатов поиска
+            setSelectedSuppliers(limitedSuppliers);
+            console.log(`Loaded ${limitedSuppliers.length} suppliers from localStorage (search results) with full DB data`);
           } catch (error) {
             console.error('Error processing suppliers:', error);
           }
@@ -718,7 +729,8 @@ export default function SendRequest() {
         // If we have a request ID, load that request
         if (requestIdFromSearch) {
           const requestId = parseInt(requestIdFromSearch);
-          if (!isNaN(requestId)) {
+          // Skip if requestId looks like a timestamp (too large)
+          if (!isNaN(requestId) && requestId < 100000) {
             const loadRequestData = async () => {
               try {
                 const response = await fetch(`/api/search-requests/${requestId}`);
@@ -882,7 +894,8 @@ export default function SendRequest() {
       if (savedRequestId) {
         try {
           const requestId = parseInt(savedRequestId);
-          if (!isNaN(requestId)) {
+          // Skip if requestId looks like a timestamp (too large)
+          if (!isNaN(requestId) && requestId < 100000) {
             // Загружаем данные запроса по ID
             const loadRequestData = async () => {
               try {
@@ -920,7 +933,8 @@ export default function SendRequest() {
       if (requestIdParam) {
         try {
           const requestId = parseInt(requestIdParam);
-          if (!isNaN(requestId)) {
+          // Skip if requestId looks like a timestamp (too large)
+          if (!isNaN(requestId) && requestId < 100000) {
             // Загружаем данные запроса по ID
             const loadRequestData = async () => {
               try {
@@ -1070,6 +1084,9 @@ export default function SendRequest() {
               
               // Apply trial limitations and update state
               const processContactSuppliers = async () => {
+                // Use contact suppliers directly without trying to enrich from database
+                console.log('Using contact suppliers directly from contact data');
+                
                 const limitedSuppliers = await applyTrialLimitations(suppliersFromContacts);
                 setSuppliers(limitedSuppliers);
                 setSelectedSuppliers(limitedSuppliers);
@@ -1338,29 +1355,11 @@ export default function SendRequest() {
         <div className="container mx-auto px-4 py-8">
        
         <div className="mt-4">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-semibold">
-                {getSearchParam('requestId') && (
-                  <span className="text-sm font-normal text-muted-foreground mr-2">3/3</span>
-                )}
-                Отправить запрос поставщикам
-              </h2>
-              <div className="text-m text-gray-400">
-                Выберите поставщиков и отправьте запрос на получение коммерческих предложений
-              </div>
+          <div className="grid grid-cols-1">
+            <h2 className="text-2xl font-semibold">Отправить запрос поставщикам</h2>
+            <div className="text-m text-gray-400">
+              Выберите поставщиков и отправьте запрос на получение коммерческих предложений
             </div>
-            {selectedSuppliers.length > 0 && (
-              <div className="text-right">
-                <div className="text-sm font-medium text-gray-900">
-                  Выбрано поставщиков: {selectedSuppliers.length}
-                </div>
-                <div className="text-xs text-gray-500">
-                  Запрос будет отправлен всем выбранным поставщикам
-                </div>
-              </div>
-            )}
-          </div>
             {comingFromGroup && groupName && (
       
               <div className="flex items-center gap-2">
@@ -1516,6 +1515,7 @@ export default function SendRequest() {
                                 <th className="text-left px-3 py-2 text-sm font-medium">Компания</th>
                                 <th className="text-left px-3 py-2 text-sm font-medium">Email</th>
                                 <th className="text-left px-3 py-2 text-sm font-medium">Сайт</th>
+                                <th className="text-left px-3 py-2 text-sm font-medium">Описание</th>
                                 <th className="w-[40px] px-3 py-2"></th>
                                 <th className="w-[60px] px-3 py-2"></th>
                               </tr>
@@ -1592,6 +1592,15 @@ export default function SendRequest() {
                                       <span className="text-sm text-muted-foreground">—</span>
                                     )}
                                   </td>
+                                  <td className="px-3 py-1">
+                                    {supplier.description ? (
+                                      <p className="text-sm text-muted-foreground max-w-xs truncate" title={supplier.description}>
+                                        {supplier.description}
+                                      </p>
+                                    ) : (
+                                      <span className="text-sm text-muted-foreground">—</span>
+                                    )}
+                                  </td>
                                   <td className="px-3 py-1 text-center">
                                     <SupplierTooltip supplier={convertToTooltipSupplier(supplier)}>
                                       <Dialog>
@@ -1642,17 +1651,9 @@ export default function SendRequest() {
                                               {supplier.website && (
                                                 <div>
                                                   <Label className="text-sm font-medium">Веб-сайт</Label>
-                                                  <div className="mt-1">
-                                                    <a 
-                                                      href={supplier.website.startsWith('http') ? supplier.website : `http://${supplier.website}`}
-                                                      target="_blank" 
-                                                      rel="noopener noreferrer"
-                                                      className="text-sm text-blue-600 hover:text-blue-800 hover:underline break-all"
-                                                      onClick={(e) => e.stopPropagation()}
-                                                    >
-                                                      {supplier.website}
-                                                    </a>
-                                                  </div>
+                                                  <p className="text-sm break-all">
+                                                    {supplier.website.startsWith('http') ? supplier.website : `http://${supplier.website}`}
+                                                  </p>
                                                 </div>
                                               )}
                                               {supplier.description && (
@@ -1701,6 +1702,12 @@ export default function SendRequest() {
               </div>
               {selectedSuppliers.length > 0 ? (
                 <div>
+                  <Alert className="mb-4">
+                    <AlertTitle>Выбрано поставщиков:  {selectedSuppliers.length}</AlertTitle>
+                    <AlertDescription>
+                      Запрос будет отправлен всем выбранным поставщикам.
+                    </AlertDescription>
+                  </Alert>
                   <EmailForm 
                     suppliers={suppliers.map(convertToSupplier)} 
                     selectedSuppliers={selectedSuppliers.map(convertToSupplier)} 
@@ -1716,6 +1723,7 @@ export default function SendRequest() {
               )}
             </div>
           )}
+          </div>
         </div>
       </SubscriptionGuard>
       </div>

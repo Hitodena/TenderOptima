@@ -68,9 +68,9 @@ export default function LoginLanding() {
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
-      <div className="flex gap-8 container mx-auto px-4 max-w-6xl">
+      <div className="flex gap-12 container mx-auto px-4 max-w-8xl">
         {/* Main content area */}
-        <div className="flex-1">
+        <div className="flex-1 max-w-5xl mx-auto ml-64">
           {/* Header */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-4">
@@ -201,7 +201,7 @@ export default function LoginLanding() {
         </div>
         
         {/* Recent queries sidebar inline (no background) */}
-        <aside className="hidden lg:block w-[300px] mt-24">
+        <aside className="hidden lg:block w-[300px] mt-24 ml-16">
           <RecentQueriesSidebar />
         </aside>
       </div>

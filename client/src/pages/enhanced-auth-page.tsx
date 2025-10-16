@@ -238,6 +238,11 @@ export default function EnhancedAuthPage() {
   
   // Redirect if already logged in
   if (user && !isLoading) {
+    // Check if user is admin and redirect to admin panel
+    if (user.role === 'admin') {
+      return <Redirect to="/admpanel" />;
+    }
+    // Regular users go to main page
     return <Redirect to="/" />;
   }
   

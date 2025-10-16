@@ -94,8 +94,20 @@ async def crawl_for_contact_page(session: aiohttp.ClientSession, base_url: str) 
     return None
 
 async def find_contact_page(session: aiohttp.ClientSession, domain: str) -> str:
-    """Основная функция поиска: sitemap -> стандартные пути -> умный паук."""
+    """Основная функция поиска: проверка главной -> sitemap -> стандартные пути -> умный паук."""
     base_url = sanitize_url(domain)
+    
+    # 0. Сначала проверим главную страницу на наличие email
+    try:
+        async with session.get(base_url, timeout=7) as response:
+            if response.status == 200:
+                html = await response.text(errors='ignore')
+                contacts = extract_contacts(html, "ru")
+                if contacts.get("emails"):
+                    logger.info(f"Found emails on main page: {base_url}")
+                    return base_url
+    except Exception as e:
+        logger.debug(f"Failed to check main page for emails: {e}")
     
     # 1. Поиск через sitemap.xml
     if (sitemap_urls := await fetch_and_parse_sitemap(session, base_url.rstrip('/') + '/sitemap.xml', set())):
@@ -111,10 +123,17 @@ async def find_contact_page(session: aiohttp.ClientSession, domain: str) -> str:
     # 2. Проверка стандартных путей
     for path in CONTACT_PATHS:
         try:
-            async with session.head(base_url.rstrip('/') + path, timeout=3, allow_redirects=True) as r:
+            contact_url = base_url.rstrip('/') + path
+            async with session.get(contact_url, timeout=5, allow_redirects=True) as r:
                 if 200 <= r.status < 300:
-                    logger.info(f"Found contact page at standard path: {str(r.url)}")
-                    return str(r.url)
+                    # Проверяем, есть ли email на этой странице
+                    html = await r.text(errors='ignore')
+                    contacts = extract_contacts(html, "ru")
+                    if contacts.get("emails"):
+                        logger.info(f"Found contact page with emails at standard path: {str(r.url)}")
+                        return str(r.url)
+                    else:
+                        logger.debug(f"Contact page found but no emails: {str(r.url)}")
         except Exception: continue
     
     # 3. Запуск "умного паука"
@@ -122,7 +141,7 @@ async def find_contact_page(session: aiohttp.ClientSession, domain: str) -> str:
     if (crawled_url := await crawl_for_contact_page(session, base_url)):
         return crawled_url
             
-    # 4. Возврат главной страницы
+    # 4. Возврат главной страницы (даже если email не найден)
     logger.debug(f"No contact page found for {domain}. Defaulting to base URL.")
     return base_url
 
@@ -133,23 +152,57 @@ def normalize_email(raw: str) -> str:
 
 def extract_contacts(html: str, region: str) -> Dict[str, List[str]]:
     tree = HTMLParser(html)
-    text = tree.text(separator=" ")
     emails, phones = set(), set()
+    
+    # 1. Поиск в mailto ссылках (приоритетный)
     for link in tree.css('a[href^="mailto:"]'):
         if (href := link.attributes.get("href")) and is_valid_email(email := normalize_email(href)):
             emails.add(email)
+    
+    # 2. Детальный поиск email в ключевых областях страницы
+    # Поиск в футере (footer)
+    footer_elements = tree.css('footer, .footer, #footer, [class*="footer"], [id*="footer"]')
+    for footer in footer_elements:
+        footer_text = footer.text(separator=" ")
+        for match in EMAIL_RE.finditer(footer_text):
+            if is_valid_email(email := match.group(0)):
+                emails.add(email.lower())
+    
+    # Поиск в навигации/меню (header, nav, menu)
+    nav_elements = tree.css('header, nav, .header, .nav, .menu, .navigation, [class*="header"], [class*="nav"], [class*="menu"]')
+    for nav in nav_elements:
+        nav_text = nav.text(separator=" ")
+        for match in EMAIL_RE.finditer(nav_text):
+            if is_valid_email(email := match.group(0)):
+                emails.add(email.lower())
+    
+    # Поиск в контактных блоках
+    contact_elements = tree.css('.contact, .contacts, .info, [class*="contact"], [class*="info"]')
+    for contact in contact_elements:
+        contact_text = contact.text(separator=" ")
+        for match in EMAIL_RE.finditer(contact_text):
+            if is_valid_email(email := match.group(0)):
+                emails.add(email.lower())
+    
+    # 3. Общий поиск по всему тексту страницы (как fallback)
+    text = tree.text(separator=" ")
     for match in EMAIL_RE.finditer(text):
         if is_valid_email(email := match.group(0)):
             emails.add(email.lower())
+    
+    # 4. Поиск телефонов в tel ссылках
     for link in tree.css('a[href^="tel:"]'):
         if (phone := link.attributes.get("href")):
             try:
                 num = phonenumbers.parse(phone.split(":", 1)[-1], region.upper())
                 if phonenumbers.is_valid_number(num): phones.add(phonenumbers.format_number(num, phonenumbers.PhoneNumberFormat.E164))
             except Exception: continue
+    
+    # 5. Поиск телефонов в тексте
     for match in phonenumbers.PhoneNumberMatcher(text, region.upper()):
         if phonenumbers.is_valid_number(match.number):
             phones.add(phonenumbers.format_number(match.number, phonenumbers.PhoneNumberFormat.E164))
+    
     return {"emails": sorted(emails), "phones": sorted(phones)}
 
 async def fetch_contacts(domain: str, session: aiohttp.ClientSession, semaphore: asyncio.Semaphore) -> Dict:

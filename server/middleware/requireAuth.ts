@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken } from '../auth';
+import { storage } from '../storage';
 
 // Переменные окружения для режима разработки
 const SKIP_AUTH = process.env.SKIP_AUTH === 'true';
@@ -21,13 +22,15 @@ if (process.env.NODE_ENV === 'production') {
  * Поддерживает DEV_MODE и SKIP_AUTH для режима разработки
  * Также поддерживает Bearer token authentication
  */
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
+export async function requireAuth(req: Request, res: Response, next: NextFunction) {
+  
   // Check if authentication should be bypassed in development mode
   // ИСПРАВЛЕНО: Убрана автоматическая подмена на админа
   if (SKIP_AUTH && DEV_MODE) {
     console.log('[Auth] DEV_MODE enabled but not auto-setting admin user');
     // Не устанавливаем автоматически админа - пусть пользователь аутентифицируется нормально
   }
+  
   
   // Check for admin token in header for admin panel requests
   const adminToken = req.headers && (req.headers['x-admin-token'] || req.headers['X-Admin-Token']) || '';
@@ -46,10 +49,30 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
       const tokenVerification = verifyToken(token);
       if (tokenVerification.valid) {
         console.log('[Auth] Bearer token authentication successful for user:', tokenVerification.userId);
+        
+        // Fetch full user data from database
+        try {
+          const user = await storage.getUserById(tokenVerification.userId);
+          if (user) {
+            req.user = { 
+              id: user.id, 
+              username: user.username,
+              role: user.role
+            };
+            console.log('[Auth] User data loaded from DB:', { id: user.id, username: user.username, role: user.role });
+            return next();
+          } else {
+            console.log('[Auth] User not found in database for ID:', tokenVerification.userId);
+          }
+        } catch (dbError) {
+          console.log('[Auth] Error fetching user from database:', dbError);
+        }
+        
+        // Fallback to basic user data if DB fetch fails
         req.user = { 
           id: tokenVerification.userId, 
-          username: undefined, // We'll need to fetch this from DB if needed
-          role: undefined // We'll need to fetch this from DB if needed
+          username: undefined,
+          role: undefined
         };
         return next();
       } else {
@@ -65,6 +88,21 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   // Check if user is authenticated via session
   if (req.isAuthenticated && req.isAuthenticated() && req.user) {
     console.log(`[Auth] Authenticated request from user ${req.user?.username || req.user?.id || 'unknown'}`);
+    
+    // If user data is incomplete, fetch from database
+    if (req.user && !req.user.role) {
+      try {
+        const user = await storage.getUserById(req.user.id);
+        if (user) {
+          req.user.role = user.role;
+          req.user.username = user.username;
+          console.log(`[Auth] User data completed from DB: ${user.username} (${user.role})`);
+        }
+      } catch (dbError) {
+        console.log('[Auth] Error fetching user from database:', dbError);
+      }
+    }
+    
     return next();
   }
   

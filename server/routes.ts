@@ -21,7 +21,7 @@ import { generateComparisonHandler } from "./routes/compare";
 import { handleFixedCompareRequest } from "./routes/compare-fixed";
 import { sendFollowUp } from "./routes/follow-up";
 import { downloadAttachment } from "./routes/attachments";
-import { addSupplierMessage, getSupplierMessages } from "./routes/supplier-messages";
+import { addSupplierMessage, getSupplierMessages, getAllRequestMessages } from "./routes/supplier-messages";
 import supplierAttachmentRoutes, { downloadSupplierAttachment } from "./routes/supplier-attachments";
 import { downloadSupplierMessageAttachment } from "./routes/supplier-message-attachments";
 import extractParametersRoutes from "./routes/extract-parameters";
@@ -35,6 +35,13 @@ import analysisRequestsRoutes from './routes/analysis-requests';
 import supplierSearchRoutes from './routes/supplier-search';
 import universalSearchRoutes from './routes/universal-search';
 import { sendImprovementRequest } from "./routes/improvement-request";
+import { 
+  getEmailImprovementTemplates, 
+  createEmailImprovementTemplate, 
+  updateEmailImprovementTemplate, 
+  deleteEmailImprovementTemplate,
+  resetEmailImprovementTemplatesToDefaults
+} from "./routes/email-improvement-templates";
 import { sendWinnerNotification, getWinnerInfo, cancelWinnerSelection } from "./routes/winner-notification";
 import { setupAuth, requireAdmin, tokenAuthMiddleware, getImprovementRequestCounts, saveImprovementRequest, generateToken, comparePasswords } from "./auth";
 import { requireAuth } from "./middleware/requireAuth";
@@ -178,6 +185,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Improvement request endpoint
   app.post("/api/improvement-request", requireAuth, sendImprovementRequest);
+
+  // Email improvement templates routes
+  app.get("/api/email-improvement-templates", requireAuth, getEmailImprovementTemplates);
+  app.post("/api/email-improvement-templates", requireAuth, createEmailImprovementTemplate);
+  app.put("/api/email-improvement-templates/:id", requireAuth, updateEmailImprovementTemplate);
+  app.delete("/api/email-improvement-templates/:id", requireAuth, deleteEmailImprovementTemplate);
+  app.post("/api/email-improvement-templates/reset-to-defaults", requireAuth, resetEmailImprovementTemplatesToDefaults);
 
   // Winner notification endpoints
   app.post("/api/winner-notification", requireAuth, sendWinnerNotification);
@@ -548,6 +562,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get supplier by email
+  app.get("/api/suppliers/by-email/:email", requireAuth, async (req, res) => {
+    try {
+      const email = decodeURIComponent(req.params.email);
+      
+      if (!email) {
+        return res.status(400).json({ message: "Email parameter is required" });
+      }
+
+      const supplier = await storage.getSupplierByEmail(email);
+      if (!supplier) {
+        return res.status(404).json({ message: `Supplier with email ${email} not found` });
+      }
+
+      res.json(supplier);
+    } catch (error) {
+      console.error(`Error fetching supplier by email ${req.params.email}:`, error);
+      res.status(500).json({ message: "Failed to fetch supplier", error: String(error) });
+    }
+  });
+
+  // Get request supplier details by requestSupplierId
+  app.get("/api/request-suppliers/:id/details", requireAuth, async (req, res) => {
+    try {
+      const requestSupplierId = parseInt(req.params.id);
+      
+      if (isNaN(requestSupplierId)) {
+        return res.status(400).json({ message: "Invalid request supplier ID format" });
+      }
+
+      const requestSupplier = await storage.getRequestSupplierById(requestSupplierId);
+      if (!requestSupplier) {
+        return res.status(404).json({ message: `Request supplier with ID ${requestSupplierId} not found` });
+      }
+
+      res.json(requestSupplier);
+    } catch (error) {
+      console.error(`Error fetching request supplier details ${req.params.id}:`, error);
+      res.status(500).json({ message: "Failed to fetch request supplier details", error: String(error) });
+    }
+  });
+
   // Endpoint to perform supplier search and processing
   app.post("/api/search-requests", requireAuth, async (req, res) => {
     try {
@@ -704,6 +760,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       console.log(`[email] Processing send-email request for user ${userId}`);
+      console.log(`[email] Request body keys:`, Object.keys(req.body));
+      console.log(`[email] Request body suppliers:`, req.body.suppliers);
+      console.log(`[email] Request body apiSuppliers:`, req.body.apiSuppliers ? req.body.apiSuppliers.length : 'none');
+      console.log(`[email] Full request body:`, JSON.stringify(req.body, null, 2));
 
       // Check subscription status and increment request count for email sending
       const subscriptionStatus = await subscriptionService.checkSubscriptionStatus(userId);
@@ -727,7 +787,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`[send-email] Request count incremented for user ${userId}`);
       
       // Extract and validate basic fields
-      const { suppliers: supplierIds, subject, message, requestId, attachments } = emailTemplateSchema.parse(req.body);
+      console.log(`[email] Parsing request body with emailTemplateSchema...`);
+      let parsedData;
+      try {
+        parsedData = emailTemplateSchema.parse(req.body);
+        console.log(`[email] Schema validation successful`);
+      } catch (validationError) {
+        console.error(`[email] Schema validation failed:`, validationError);
+        return res.status(400).json({ 
+          error: "Validation failed", 
+          details: validationError.errors || validationError.message 
+        });
+      }
+      
+      const { 
+        suppliers: supplierIds, 
+        subject, 
+        message, 
+        requestId, 
+        attachments,
+        apiSuppliers = [],
+        fromContactGroup = false,
+        parameters = []
+      } = parsedData;
+      
+      console.log(`[email] Parsed suppliers:`, supplierIds);
+      console.log(`[email] Parsed subject:`, subject);
+      console.log(`[email] Parsed requestId:`, requestId);
+      console.log(`[email] Parsed apiSuppliers:`, apiSuppliers?.length || 0);
+      console.log(`[email] Parsed fromContactGroup:`, fromContactGroup);
+      console.log(`[email] Parsed parameters:`, parameters);
 
       // Handle search request - either get existing or create a temporary one for direct emails
       let searchRequest: SearchRequest;
@@ -790,14 +879,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get all suppliers from database
       const databaseSuppliers = await storage.getSuppliers();
+      console.log(`[email] Found ${databaseSuppliers.length} database suppliers`);
       
-      // Проверим, пришли ли ID из групп контактов (не поставщиков)
-      const isFromContactGroup = req.body.fromContactGroup === true;
+      // Get staging suppliers for API suppliers
+      const stagingSuppliers = await storage.getStagingSuppliers();
+      console.log(`[email] Found ${stagingSuppliers.length} staging suppliers`);
       
       // Handle both database suppliers (positive IDs) and API suppliers (negative IDs)
       let selectedSuppliers = [];
 
-      if (isFromContactGroup) {
+      if (fromContactGroup) {
         // Получаем контакты из групп по ID
         const contactIds = supplierIds.filter(id => typeof id === 'number' || (typeof id === 'string' && !id.startsWith('api-')));
         console.log("Contact group IDs:", contactIds);
@@ -826,62 +917,99 @@ export async function registerRoutes(app: Express): Promise<Server> {
         selectedSuppliers.push(...groupContacts);
       } else {
         // Стандартная обработка поставщиков
-        console.log("Database supplier IDs:", supplierIds.filter(id => typeof id === 'number' || (typeof id === 'string' && !id.startsWith('api-'))));
+        console.log(`[email] Processing standard suppliers...`);
         
-        const dbSelectedSuppliers = databaseSuppliers.filter(s => {
-          // Convert both to strings for comparison
-          const sIdString = String(s.id);
-          const included = supplierIds.some(id => String(id) === sIdString);
-          console.log(`Checking DB supplier ${s.name} (ID: ${s.id}): Selected = ${included}`);
-          return included;
-        });
-      
-      console.log(`Selected ${dbSelectedSuppliers.length} database suppliers from ${databaseSuppliers.length} available`);
-      selectedSuppliers.push(...dbSelectedSuppliers);
-
-      // Process API suppliers if they exist - these will be included directly in the request
-      if (req.body.apiSuppliers && Array.isArray(req.body.apiSuppliers)) {
-        // Already have full supplier objects from the frontend
-        const apiSuppliers = req.body.apiSuppliers;
-        
-        // Check if suppliers with api- prefix are in the supplierIds array
-        const apiPrefixIds = supplierIds.filter(id => typeof id === 'string' && id.startsWith('api-'));
-        
-        console.log(`API supplier IDs selected (${apiPrefixIds.length}):`, apiPrefixIds);
-        
-        // Only include API suppliers that were actually selected (with api- prefix in supplierIds)
-        const selectedApiSuppliers = apiSuppliers.filter((supplier: Supplier) => {
-          // Convert negative ID to positive for string comparison
-          const supplierIdStr = String(supplier.id);
-          const apiId = `api-${Math.abs(typeof supplier.id === 'number' ? supplier.id : parseInt(supplierIdStr))}`;
-          
-          // Check both the formatted api-ID and the raw supplier ID string
-          const includedByApiId = apiPrefixIds.includes(apiId);
-          const includedByRawId = supplierIds.some(id => String(id) === supplierIdStr);
-          const included = includedByApiId || includedByRawId;
-          
-          console.log(`Checking API supplier ${supplier.name} (ID: ${supplier.id}): API ID = ${apiId}, Selected = ${included}`);
-          return included;
+        // Разделяем ID на database и API поставщиков
+        const dbSupplierIds = supplierIds.filter(id => {
+          if (typeof id === 'number') return true;
+          if (typeof id === 'string') {
+            // Проверяем, что это не API ID (не начинается с 'api-')
+            return !id.startsWith('api-');
+          }
+          return false;
         });
         
-        // Double-check if we found all the suppliers that should be included
-        if (selectedApiSuppliers.length !== apiPrefixIds.length) {
-          console.warn(`Warning: Found ${selectedApiSuppliers.length} API suppliers, but ${apiPrefixIds.length} were selected. This might indicate a mismatch.`);
-          
-          // Log the IDs that couldn't be matched
-          const foundIds = selectedApiSuppliers.map((s: Supplier) => {
-            return `api-${Math.abs(typeof s.id === 'number' ? s.id : parseInt(s.id as string))}`;
+        const apiSupplierIds = supplierIds.filter(id => {
+          if (typeof id === 'string') {
+            return id.startsWith('api-');
+          }
+          return false;
+        });
+        
+        console.log(`[email] Database supplier IDs (${dbSupplierIds.length}):`, dbSupplierIds);
+        console.log(`[email] API supplier IDs (${apiSupplierIds.length}):`, apiSupplierIds);
+        
+        // Обрабатываем database поставщиков
+        if (dbSupplierIds.length > 0) {
+          const dbSelectedSuppliers = databaseSuppliers.filter(s => {
+            const sIdString = String(s.id);
+            const included = dbSupplierIds.some(id => {
+              const idString = String(id);
+              const match = idString === sIdString;
+              console.log(`[email] Comparing DB supplier ID: "${idString}" === "${sIdString}" = ${match}`);
+              return match;
+            });
+            console.log(`[email] Checking DB supplier ${s.name} (ID: ${s.id}): Selected = ${included}`);
+            return included;
           });
           
-          const missingIds = apiPrefixIds.filter(id => !foundIds.includes(id));
-          if (missingIds.length > 0) {
-            console.warn(`Missing supplier IDs: ${missingIds.join(', ')}`);
-          }
+          console.log(`[email] Selected ${dbSelectedSuppliers.length} database suppliers from ${databaseSuppliers.length} available`);
+          selectedSuppliers.push(...dbSelectedSuppliers);
+          
+          // Также ищем в staging suppliers для API поставщиков
+          const stagingSelectedSuppliers = stagingSuppliers.filter(s => {
+            const sIdString = String(s.id);
+            const included = dbSupplierIds.some(id => {
+              const idString = String(id);
+              const match = idString === sIdString;
+              console.log(`[email] Comparing staging supplier ID: "${idString}" === "${sIdString}" = ${match}`);
+              return match;
+            });
+            console.log(`[email] Checking staging supplier ${s.rawTitle} (ID: ${s.id}): Selected = ${included}`);
+            return included;
+          });
+          
+          console.log(`[email] Selected ${stagingSelectedSuppliers.length} staging suppliers from ${stagingSuppliers.length} available`);
+          
+          // Преобразуем staging suppliers в формат для отправки email
+          const convertedStagingSuppliers = stagingSelectedSuppliers.map(s => ({
+            id: s.id,
+            name: s.rawTitle,
+            email: s.rawEmails && s.rawEmails[0] ? s.rawEmails[0] : '',
+            phone: s.rawPhones && s.rawPhones[0] ? s.rawPhones[0] : '',
+            website: s.rawUrl,
+            description: s.rawDescription,
+            categories: [s.searchQuery],
+            searchEngine: s.sourceEngine,
+            allEmails: s.rawEmails || [],
+            allPhones: s.rawPhones || [],
+            searchDate: s.createdAt?.toISOString()
+          }));
+          
+          selectedSuppliers.push(...convertedStagingSuppliers);
         }
-        
-        console.log(`Selected ${selectedApiSuppliers.length} API suppliers from ${apiSuppliers.length} available`);
-        selectedSuppliers.push(...selectedApiSuppliers);
-      }
+
+        // Обрабатываем API поставщиков
+        if (apiSupplierIds.length > 0 && apiSuppliers && Array.isArray(apiSuppliers)) {
+          console.log(`[email] Processing ${apiSuppliers.length} API suppliers...`);
+          
+          const selectedApiSuppliers = apiSuppliers.filter((supplier: any) => {
+            // Создаем API ID для сравнения
+            const supplierIdNum = typeof supplier.id === 'number' ? supplier.id : parseInt(String(supplier.id));
+            const apiId = `api-${Math.abs(supplierIdNum)}`;
+            
+            // Проверяем, есть ли этот API ID в списке выбранных
+            const included = apiSupplierIds.includes(apiId);
+            
+            console.log(`[email] Checking API supplier ${supplier.name} (ID: ${supplier.id}): API ID = ${apiId}, Selected = ${included}`);
+            return included;
+          });
+          
+          console.log(`[email] Selected ${selectedApiSuppliers.length} API suppliers from ${apiSuppliers.length} available`);
+          selectedSuppliers.push(...selectedApiSuppliers);
+        } else if (apiSupplierIds.length > 0) {
+          console.warn(`[email] Warning: ${apiSupplierIds.length} API supplier IDs selected but no apiSuppliers provided in request`);
+        }
       }
 
       // selectedSuppliers already contains all suppliers from the logic above
@@ -903,11 +1031,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (selectedSuppliers.length === 0) {
         console.error("No valid suppliers found. Available supplier IDs:", supplierIds);
+        console.error("Database suppliers available:", databaseSuppliers.map(s => ({ id: s.id, name: s.name })));
+        console.error("API suppliers provided:", apiSuppliers?.length || 0);
         return res.status(400).json({ 
           message: "No valid suppliers found to send emails to",
           debug: {
             requestedIds: supplierIds,
-            totalSuppliersFound: selectedSuppliers.length
+            totalSuppliersFound: selectedSuppliers.length,
+            databaseSuppliersCount: databaseSuppliers.length,
+            apiSuppliersCount: apiSuppliers?.length || 0
           }
         });
       }
@@ -2158,7 +2290,7 @@ app.post("/api/check-emails", requireAuth, async (req, res) => {
             attachments: sanitizedAttachments, // Use sanitized attachments instead of raw ones
             userId: userId, // Добавляем ID пользователя для включения бизнес-карточки
             requestId: response.requestId, // Добавляем requestId 
-            replyTo: response.supplierEmail, // Используем email как replyTo
+            replyTo: undefined, // Не устанавливаем replyTo - будет использован from адрес пользователя
             messageHistory: messageHistory // Добавляем историю сообщений для вставки после бизнес-карточки
           }
         );
@@ -2179,6 +2311,7 @@ app.post("/api/check-emails", requireAuth, async (req, res) => {
             await storage.addSupplierMessage({
               requestSupplierId: requestSupplier.id,
               content: content,
+              subject: `Re: ${response.subject}`,
               direction: 'outbound', // отправлено пользователем системы, не поставщиком
               sentDate: new Date(),
               attachments: sanitizedAttachments // Use sanitized attachments here too
@@ -2448,6 +2581,7 @@ app.post("/api/check-emails", requireAuth, async (req, res) => {
   // API для сообщений поставщиков
   app.post("/api/request-suppliers/:id/add-message", requireAuth, addSupplierMessage);
   app.get("/api/request-suppliers/:id/messages", requireAuth, getSupplierMessages);
+  app.get("/api/search-requests/:id/all-messages", requireAuth, getAllRequestMessages);
 
   // Register supplier attachment analysis routes
   app.use(supplierAttachmentRoutes);

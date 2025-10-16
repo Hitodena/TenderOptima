@@ -109,6 +109,33 @@ function extractParameterFromText(text: string, parameter: string): ExtractionRe
     // Debug logging
     console.log(`Extracting parameter: "${parameter}" from text length: ${text.length}`);
     
+    // SPECIAL HANDLING: Check for structured responses with numbered points
+    // This handles cases like:
+    // 1. Описание товара: — Поддон плоский деревянный...
+    // 2. Общая стоимость без НДС: — 800,00 руб.
+    // 3. Цена за единицу без НДС: 8,00 руб
+    const structuredPatterns = [
+      // Pattern for numbered points with parameter name
+      new RegExp(`\\d+\\.\\s*${parameter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*[\\:\\-]?\\s*([^\\n]{2,200})`, 'i'),
+      // Pattern for numbered points with parameter name and em dash
+      new RegExp(`\\d+\\.\\s*${parameter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*[\\:\\-]?\\s*[—–-]\\s*([^\\n]{2,200})`, 'i'),
+      // Pattern for numbered points with parameter name (case insensitive with common variations)
+      new RegExp(`\\d+\\.\\s*${parameter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/и/gi, '[Ии]').replace(/н/gi, '[Нн]').replace(/п/gi, '[Пп]')}\\s*[\\:\\-]?\\s*([^\\n]{2,200})`, 'i'),
+    ];
+    
+    for (const pattern of structuredPatterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        const value = match[1].trim();
+        console.log(`Found structured response for "${parameter}": ${value}`);
+        return {
+          value: value,
+          source: 'content',
+          confidence: 0.95 // High confidence for structured responses
+        };
+      }
+    }
+    
     // Use direct pattern matching for common parameters - this is most reliable
     // Patterns based on the successful extraction seen in previous runs
     
@@ -584,6 +611,43 @@ export async function extractParametersFromResponse(
       // Store original length for logging
       const originalLength = emailContent.length;
       
+      // SPECIAL HANDLING: Extract structured responses enclosed in various delimiters
+      // This handles cases where suppliers send structured responses like:
+      // >>> 
+      // 1. Описание товара: ...
+      // 2. Цена: ...
+      // >>>
+      // OR
+      // >---------------------------------------------
+      // >1. Описание товара: ...
+      // >2. Цена: ...
+      // >---------------------------------------------
+      let structuredResponse = '';
+      
+      // Try different delimiter patterns
+      const delimiterPatterns = [
+        // Pattern 1: >>> delimiters
+        />>>\s*([\s\S]*?)\s*>>>/,
+        // Pattern 2: > with dashes (like >---------------------------------------------)
+        />-{10,}\s*([\s\S]*?)\s*>-{10,}/,
+        // Pattern 3: > with equals (like >=============================================)
+        />={10,}\s*([\s\S]*?)\s*>={10,}/,
+        // Pattern 4: > with underscores (like >________________________________________)
+        />_{10,}\s*([\s\S]*?)\s*>_{10,}/,
+        // Pattern 5: Multiple > symbols (like >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>)
+        />{10,}\s*([\s\S]*?)\s*>{10,}/,
+      ];
+      
+      for (const pattern of delimiterPatterns) {
+        const match = emailContent.match(pattern);
+        if (match && match[1]) {
+          structuredResponse = match[1].trim();
+          console.log(`Found structured response enclosed in delimiters (pattern: ${pattern}): ${structuredResponse.length} chars`);
+          console.log(`Structured response preview: ${structuredResponse.substring(0, 200)}...`);
+          break; // Use the first match found
+        }
+      }
+      
       // 1. Remove sections that start with common reply indicators
       const replyMarkers = [
         // Russian email markers
@@ -608,8 +672,7 @@ export async function extractParametersFromResponse(
         /\s*On.*?wrote:[\s\S]*$/mi,                  // "On [date] [name] wrote:" format
         /\s*\d{1,2}[\.\/]\d{1,2}[\.\/]\d{2,4}.*?wrote:[\s\S]*$/mi, // Date format with "wrote:"
         
-        // Universal markers
-        /\s*>{2,}[\s\S]*$/m,              // Multiple > quotes (common in many email clients)
+        // Universal markers (but NOT the >>> delimiters for structured responses)
         /\s*_{10,}[\s\S]*$/m,              // Underscores used as separators 
         /\s*={10,}[\s\S]*$/m,              // Equal signs used as separators
       ];
@@ -618,19 +681,39 @@ export async function extractParametersFromResponse(
         emailContent = emailContent.replace(marker, '');
       }
       
-      // 2. Remove ALL quoted lines (starting with > or multiple quotes)
+      // 2. Remove quoted lines, but preserve structured responses
       // Focus only on new email content, not historical quoted content
       emailContent = emailContent.split('\n')
                                .filter(line => {
                                  const trimmedLine = line.trim();
-                                 // Remove any line that starts with quote markers
-                                 return !trimmedLine.startsWith('>') && 
-                                        !trimmedLine.startsWith('>>') && 
-                                        !trimmedLine.startsWith('>>>');
+                                 // Remove lines that start with quote markers, but preserve structured responses
+                                 if (trimmedLine.startsWith('>')) {
+                                   // Check if this line is part of a structured response
+                                   const isStructuredResponse = 
+                                     trimmedLine.startsWith('>>>') ||
+                                     /^-{10,}$/.test(trimmedLine.substring(1)) || // > with dashes
+                                     /^={10,}$/.test(trimmedLine.substring(1)) || // > with equals
+                                     /^_{10,}$/.test(trimmedLine.substring(1)) || // > with underscores
+                                     /^>{9,}$/.test(trimmedLine.substring(1)) ||  // multiple >
+                                     /^\d+\./.test(trimmedLine.substring(1));     // numbered points
+                                   
+                                   if (isStructuredResponse) {
+                                     return true; // Keep structured response lines
+                                   } else {
+                                     return false; // Remove regular quoted lines
+                                   }
+                                 }
+                                 return true; // Keep everything else
                                })
                                .join('\n');
       
-      // 3. Additional cleaning for email signatures and other noise
+      // 3. If we found a structured response, use it as the primary content
+      if (structuredResponse) {
+        console.log(`Using structured response as primary content for parameter extraction`);
+        emailContent = structuredResponse;
+      }
+      
+      // 4. Additional cleaning for email signatures and other noise
       emailContent = emailContent.replace(/\s*--\s*[\s\S]*$/, '') // Remove signatures
                                .replace(/\s*С уважением,[\s\S]*$/, '') // Remove Russian "Regards,"
                                .replace(/\s*С наилучшими пожеланиями[\s\S]*$/, '') // Another Russian regards
@@ -768,7 +851,15 @@ export async function extractParametersFromResponse(
               - "условия поставки": ищи "доставка" "самовывоз" "франко". Включай адрес если указан
               - "условия оплаты": ищи "предоплата" "аванс" "отсрочка" "% предоплаты"
               - "товар": полное название с характеристиками
-              - "поставщик": полное название компании с формой собственности и страной
+              
+              КРИТИЧЕСКИ ВАЖНО - РЕКВИЗИТЫ ПОСТАВЩИКА:
+              Для параметров "наименование поставщика" и "ИНН / УНП" ВНИМАТЕЛЬНО ищи реквизиты ОТПРАВИТЕЛЯ письма:
+              1. СНАЧАЛА проверь ШАПКУ письма/документа - там обычно указаны реквизиты отправителя
+              2. ЗАТЕМ проверь ПОДВАЛ письма/документа - там могут быть дополнительные реквизиты
+              3. НЕ ПУТАЙ отправителя с получателем! Ищи реквизиты того, кто ОТПРАВЛЯЕТ предложение
+              4. "наименование поставщика": ищи полное название компании отправителя (ООО, ИП, ЧУП и т.д.)
+              5. "ИНН / УНП": ищи налоговые номера отправителя (УНП, ИНН, ОГРН и т.д.)
+              6. ВАЖНО: получатель письма НЕ является поставщиком! Поставщик - это отправитель коммерческого предложения
               
               ВАЖНО - СИНОНИМЫ ДЛЯ ЦЕН И СТОИМОСТИ:
               Слова "цена" и "стоимость" являются СИНОНИМАМИ и означают одно и то же!

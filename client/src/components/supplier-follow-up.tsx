@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Loader2, Send } from "lucide-react";
+import { Loader2, Send, FileText } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -31,6 +32,14 @@ interface SupplierFollowUpProps {
   onCancel?: () => void;
 }
 
+interface EmailTemplate {
+  id: number;
+  name: string;
+  subject: string;
+  content: string;
+  isDefault: boolean;
+}
+
 export function SupplierFollowUp({ 
   supplierId, 
   supplierName = "Поставщик",
@@ -41,8 +50,18 @@ export function SupplierFollowUp({
   onCancel 
 }: SupplierFollowUpProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
+
+  // Fetch email templates from API
+  const { data: templates = [] } = useQuery<EmailTemplate[]>({
+    queryKey: ['/api/email-improvement-templates'],
+    queryFn: async () => {
+      return await apiRequest<EmailTemplate[]>('/api/email-improvement-templates', 'GET');
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
   
   // Debug logging
   console.log('[SupplierFollowUp] Initializing with props:', {
@@ -66,17 +85,10 @@ export function SupplierFollowUp({
     return '';
   };
   
-  // Define default form values
+  // Define default form values - will be set by template selection
   const defaultValues: Partial<FollowUpFormValues> = {
-    subject: `Предложение об улучшении условий`,
-    message: `В рамках процедуры закупки предлагаем улучшить условия вашего предложения и предоставить финальную цену 
- 
-Просим предоставить улучшенное предложение в течение 3 рабочих дней.
-
-С уважением,
-Отдел закупок
-
-! При ответе на наш запрос не изменяйте название письма (Subject), иначе мы не сможем обработать ваш ответ!${getBusinessCardSignature()}`
+    subject: "",
+    message: ""
   };
 
   // Initialize form with validation
@@ -84,6 +96,24 @@ export function SupplierFollowUp({
     resolver: zodResolver(followUpSchema),
     defaultValues,
   });
+
+  // Apply template to form
+  const applyTemplate = (template: EmailTemplate) => {
+    setSelectedTemplate(template);
+    form.setValue('subject', template.subject);
+    form.setValue('message', `${template.content}${getBusinessCardSignature()}`);
+  };
+
+  // Update form when templates load - apply default template automatically
+  useEffect(() => {
+    if (templates.length > 0 && !selectedTemplate) {
+      const defaultTemplate = templates.find(t => t.isDefault) || templates[0];
+      if (defaultTemplate) {
+        console.log('[SupplierFollowUp] Auto-applying default template:', defaultTemplate.name);
+        applyTemplate(defaultTemplate);
+      }
+    }
+  }, [templates, selectedTemplate]);
 
   // Form submission handler
   async function onSubmit(data: FollowUpFormValues) {
@@ -152,6 +182,31 @@ export function SupplierFollowUp({
         <div><strong>Email:</strong> {supplierEmail}</div>
         {supplierPhone && <div><strong>Телефон:</strong> {supplierPhone}</div>}
       </div>
+
+      {/* Template Selection */}
+      {templates.length > 0 && (
+        <div className="mb-4 space-y-2">
+          <label className="text-sm font-medium">Выберите шаблон:</label>
+          <div className="flex flex-wrap gap-2">
+            {templates.map((template) => (
+              <Button
+                key={template.id}
+                type="button"
+                variant={selectedTemplate?.id === template.id ? "default" : "outline"}
+                size="sm"
+                onClick={() => applyTemplate(template)}
+                className="text-xs"
+              >
+                <FileText className="w-3 h-3 mr-1" />
+                {template.name}
+                {template.isDefault && (
+                  <span className="ml-1 text-xs bg-blue-100 text-blue-800 px-1 rounded">По умолчанию</span>
+                )}
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">

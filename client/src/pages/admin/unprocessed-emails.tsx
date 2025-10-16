@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/use-auth';
+import { Redirect } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -16,7 +18,9 @@ import {
   Reply, 
   CheckCircle,
   Search,
-  RefreshCw
+  RefreshCw,
+  Paperclip,
+  Download
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
@@ -44,13 +48,14 @@ interface UnprocessedEmail {
   userEmailConfigured?: boolean;
 }
 
-const defaultReplyTemplate = `Ваше письмо НЕ было обработано автоматически. 
+const defaultReplyTemplate = `Ваше письмо НЕ было доставлено!
 ПЕРЕШЛИТЕ письмо повторно УКАЗАВ в ТЕМЕ ПИСЬМА ТЕГИ ( REQ-XXXX TID YYYY), которые были во входящем письме.
 Тема вашего письма должна выглядеть примерно так: "RE: Запрос  - [REQ-2520-00674] [TID:rIy1ks]"`;
 
 export default function UnprocessedEmailsPage() {
   const { t } = useTranslation();
   const { toast } = useToast();
+  const { user, isLoading: authLoading, isAuthenticated } = useAuth();
   const [emails, setEmails] = useState<UnprocessedEmail[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -58,6 +63,23 @@ export default function UnprocessedEmailsPage() {
   const [selectedEmail, setSelectedEmail] = useState<UnprocessedEmail | null>(null);
   const [replyContent, setReplyContent] = useState<{ [key: number]: string }>({});
   const [sendingReply, setSendingReply] = useState<{ [key: number]: boolean }>({});
+
+  // Check authentication and admin role
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin h-10 w-10 border-4 border-primary border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated || !user) {
+    return <Redirect to="/auth" />;
+  }
+
+  if (user.role !== 'admin') {
+    return <Redirect to="/" />;
+  }
 
   // Load emails on component mount
   useEffect(() => {
@@ -111,6 +133,11 @@ export default function UnprocessedEmailsPage() {
       // Update email status to replied
       await updateEmailStatus(emailId, 'replied');
       
+      // Обновляем список отправленных сообщений
+      if ((window as any).refreshSentEmails) {
+        (window as any).refreshSentEmails();
+      }
+      
     } catch (error) {
       console.error('Error sending reply:', error);
       toast({
@@ -145,14 +172,40 @@ export default function UnprocessedEmailsPage() {
     ));
   };
 
+  const handleDownloadAttachment = async (emailId: number, attachmentIndex: number, filename: string) => {
+    try {
+      const response = await fetch(`/api/admin/unprocessed-emails/${emailId}/attachments/${attachmentIndex}`);
+      if (!response.ok) {
+        throw new Error('Failed to download attachment');
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Error downloading attachment:', error);
+      toast({
+        title: "Ошибка скачивания",
+        description: "Не удалось скачать вложение",
+        variant: "destructive"
+      });
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'new':
-        return <Badge variant="default">Новое</Badge>;
+        return <Badge variant="default" className="text-xs px-2 py-0.5">Новое</Badge>;
       case 'replied':
-        return <Badge variant="secondary">Отвечено</Badge>;
+        return <Badge variant="secondary" className="text-xs px-2 py-0.5">Отвечено</Badge>;
       default:
-        return <Badge variant="default">Новое</Badge>;
+        return <Badge variant="default" className="text-xs px-2 py-0.5">Новое</Badge>;
     }
   };
 
@@ -282,57 +335,59 @@ export default function UnprocessedEmailsPage() {
                 </div>
               ) : (
                 filteredEmails.map((email) => (
-                  <Card key={email.id} className="p-3">
+                  <Card key={email.id} className="p-2">
                     <div className="flex items-center justify-between">
                       {/* Left side - All info in one line */}
-                      <div className="flex-1 flex items-center gap-4">
-                        <span className="text-sm text-gray-600">
+                      <div className="flex-1 flex items-center gap-2">
+                        <span className="text-xs text-gray-600">
                           {format(new Date(email.receivedAt), 'dd.MM.yyyy', { locale: ru })}
                         </span>
-                        <span className="text-sm font-medium">ID {email.userId}</span>
-                        <div className="flex items-center gap-2">
-                          <Mail className="h-4 w-4 text-gray-500" />
-                          <span className="text-sm">
+                        <span className="text-xs font-medium">ID {email.userId}</span>
+                        <div className="flex items-center gap-1">
+                          <Mail className="h-3 w-3 text-gray-500" />
+                          <span className="text-xs">
                             <strong>От:</strong> {email.senderName ? `${email.senderName} <${email.senderEmail.split(' <')[0]}>` : email.senderEmail.split(' <')[0]}
                           </span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">Тема:</span>
-                          <span className="text-sm">{email.subject}</span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs font-medium">Тема:</span>
+                          <span className="text-xs">{email.subject}</span>
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => setSelectedEmail(email)}
-                            className="h-6 w-6 p-0"
+                            className="h-5 w-5 p-0"
                           >
-                            <Eye className="h-4 w-4" />
+                            <Eye className="h-3 w-3" />
                           </Button>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
                           <label className="text-xs font-medium text-gray-600">Ответ поставщику:</label>
                           <Textarea
                             placeholder={defaultReplyTemplate}
                             value={replyContent[email.id] || defaultReplyTemplate}
                             onChange={(e) => setReplyContent(prev => ({ ...prev, [email.id]: e.target.value }))}
-                            className="min-h-[24px] max-h-[24px] overflow-hidden resize-none w-80"
+                            className="min-h-[16px] max-h-[120px] overflow-y-auto resize-y w-60"
                             style={{ 
-                              lineHeight: '1.2',
-                              fontSize: '11px'
+                              lineHeight: '1.1',
+                              fontSize: '10px',
+                              height: '16px'
                             }}
                           />
                         </div>
                       </div>
 
                       {/* Right side - Status and Actions */}
-                      <div className="flex items-center gap-2 ml-4">
+                      <div className="flex items-center gap-1 ml-2">
                         {getStatusBadge(email.status)}
                         <Button
                           onClick={() => handleReply(email.id)}
                           disabled={sendingReply[email.id] || email.status === 'replied'}
                           size="sm"
                           variant="outline"
+                          className="h-7 px-2 text-xs"
                         >
-                          <Reply className="h-4 w-4 mr-1" />
+                          <Reply className="h-3 w-3 mr-1" />
                           {sendingReply[email.id] ? 'Отправка...' : 'Ответить'}
                         </Button>
                       </div>
@@ -367,6 +422,38 @@ export default function UnprocessedEmailsPage() {
               <div className="mt-2 text-xs text-gray-500">
                 💡 Перетащите уголок окна для изменения размера
               </div>
+              
+              {/* Attachments section */}
+              {selectedEmail?.attachments && selectedEmail.attachments.length > 0 && (
+                <div className="mt-4">
+                  <h4 className="font-medium mb-2 flex items-center gap-2">
+                    <Paperclip className="h-4 w-4" />
+                    Вложения ({selectedEmail.attachments.length})
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedEmail.attachments.map((attachment: any, index: number) => (
+                      <Button
+                        key={index}
+                        variant="outline"
+                        size="sm"
+                        className="inline-flex items-center gap-2 px-3 py-2 hover:bg-primary/5 hover:border-primary/40 transition-colors"
+                        onClick={() => handleDownloadAttachment(selectedEmail.id, index, attachment.filename || `attachment_${index + 1}`)}
+                      >
+                        <Paperclip className="h-3 w-3" />
+                        <div className="flex flex-col items-start">
+                          <span className="text-sm font-medium truncate max-w-[150px]">
+                            {attachment.filename || `Вложение ${index + 1}`}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {attachment.size ? `${Math.round(attachment.size / 1024)} KB` : 'Unknown size'}
+                          </span>
+                        </div>
+                        <Download className="h-3 w-3 ml-1" />
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </DialogContent>
         </Dialog>

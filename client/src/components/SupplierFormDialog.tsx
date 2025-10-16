@@ -84,7 +84,6 @@ export default function SupplierFormDialog({
     legalName: "",
     taxId: "",
     legalAddress: "",
-    bankDetails: "",
     contactPerson: ""
   });
 
@@ -106,7 +105,6 @@ export default function SupplierFormDialog({
         legalName: supplier.legalName || "",
         taxId: supplier.taxId || "",
         legalAddress: supplier.legalAddress || "",
-        bankDetails: supplier.bankDetails || "",
         contactPerson: supplier.contactPerson || ""
       });
     } else if (!supplier && isOpen) {
@@ -122,7 +120,6 @@ export default function SupplierFormDialog({
         legalName: "",
         taxId: "",
         legalAddress: "",
-        bankDetails: "",
         contactPerson: ""
       });
     }
@@ -162,7 +159,6 @@ export default function SupplierFormDialog({
       legalName: "",
       taxId: "",
       legalAddress: "",
-      bankDetails: "",
       contactPerson: ""
     });
   };
@@ -205,7 +201,6 @@ export default function SupplierFormDialog({
       legalName: supplierForm.legalName || null,
       taxId: supplierForm.taxId || null,
       legalAddress: supplierForm.legalAddress || null,
-      bankDetails: supplierForm.bankDetails || null,
       contactPerson: supplierForm.contactPerson || null
     };
 
@@ -435,25 +430,14 @@ export default function SupplierFormDialog({
 
             <div>
               <Label htmlFor="legalAddress">Юридический адрес</Label>
-              <Textarea
+              <Input
                 id="legalAddress"
                 value={supplierForm.legalAddress}
                 onChange={(e) => handleSupplierFormChange('legalAddress', e.target.value)}
                 placeholder="Полный юридический адрес"
-                rows={2}
               />
             </div>
 
-            <div>
-              <Label htmlFor="bankDetails">Банковские реквизиты</Label>
-              <Textarea
-                id="bankDetails"
-                value={supplierForm.bankDetails}
-                onChange={(e) => handleSupplierFormChange('bankDetails', e.target.value)}
-                placeholder="Банковские реквизиты"
-                rows={2}
-              />
-            </div>
 
             <div>
               <Label htmlFor="contactPerson">Контактное лицо</Label>

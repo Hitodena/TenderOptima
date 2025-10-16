@@ -106,6 +106,11 @@ export default function AuthPage() {
   
   // Redirect if already logged in - moved after all hook calls
   if (user && !isLoading) {
+    // Check if user is admin and redirect to admin panel
+    if (user.role === 'admin') {
+      return <Redirect to="/admpanel" />;
+    }
+    // Regular users go to main page
     return <Redirect to="/" />;
   }
   

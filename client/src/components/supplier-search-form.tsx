@@ -230,6 +230,22 @@ export function SupplierSearchForm({ onComplete }: Props) {
       } else {
         console.log("=== USING GOOGLE/YANDEX SEARCH API ===");
         
+        // Сначала создаем searchRequest для отслеживания
+        const searchRequestData = {
+          productName: searchKeywords,
+          productDescription: "",
+          timeline: form.getValues("timeline"),
+          additionalRequirements: "",
+          useDbSearch: useRegistrySearch,
+          useApiSearch: true
+        };
+        
+        console.log("[Frontend] Creating search request first...");
+        const searchRequest = await apiRequest<SearchRequestResponse>("/api/search-requests", "POST", searchRequestData);
+        console.log("[Frontend] Search request created:", searchRequest);
+        console.log("[Frontend] Search request ID:", searchRequest.id);
+        console.log("[Frontend] Search request type:", typeof searchRequest.id);
+        
         // Преобразуем ключевые слова в массив для параллельного поиска
         const keywordsArray = searchKeywords
           .split(',')
@@ -238,9 +254,11 @@ export function SupplierSearchForm({ onComplete }: Props) {
         
         console.log(`[Frontend] Sending ${keywordsArray.length} keywords for parallel search:`, keywordsArray);
         
+        console.log("[Frontend] Sending supplier search request with requestId:", searchRequest.id);
         const response: any = await apiRequest("/api/supplier-search", "POST", {
           queries: keywordsArray, // Отправляем массив запросов для параллельного поиска
           query: searchKeywords,  // Оставляем для обратной совместимости
+          requestId: searchRequest.id, // Передаем ID созданного запроса
           sources: {
             registry: useRegistrySearch,
             google: searchGoogle,

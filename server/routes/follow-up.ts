@@ -102,17 +102,31 @@ async function processSupplierFollowUp(
         
         // Insert the footer before the business card if it exists in content
         let msgFullContent = message;
-        if (message.includes('С уважением,') || message.includes('С Уважением,')) {
-          // Find the position where business card starts and insert footer before it
-          const businessCardStart = message.lastIndexOf('С уважением,');
-          if (businessCardStart !== -1) {
-            const beforeBusinessCard = message.substring(0, businessCardStart);
-            const businessCard = message.substring(businessCardStart);
-            // Add one space before business card
-            msgFullContent = beforeBusinessCard + referenceFooter + '\n' + businessCard;
-          } else {
-            msgFullContent = message + referenceFooter;
+        
+        // Search for business card patterns (case insensitive)
+        const businessCardPatterns = [
+          'С уважением,',
+          'С Уважением,',
+          'с уважением,',
+          'с Уважением,'
+        ];
+        
+        let businessCardStart = -1;
+        let foundPattern = '';
+        
+        for (const pattern of businessCardPatterns) {
+          const index = message.lastIndexOf(pattern);
+          if (index > businessCardStart) {
+            businessCardStart = index;
+            foundPattern = pattern;
           }
+        }
+        
+        if (businessCardStart !== -1) {
+          const beforeBusinessCard = message.substring(0, businessCardStart);
+          const businessCard = message.substring(businessCardStart);
+          // Add footer before business card
+          msgFullContent = beforeBusinessCard + referenceFooter + '\n' + businessCard;
         } else {
           msgFullContent = message + referenceFooter;
         }
@@ -145,17 +159,31 @@ async function processSupplierFollowUp(
     
     // Insert the footer before the business card if it exists in content
     let fullMessage = message;
-    if (message.includes('С уважением,') || message.includes('С Уважением,')) {
-      // Find the position where business card starts and insert footer before it
-      const businessCardStart = message.lastIndexOf('С уважением,');
-      if (businessCardStart !== -1) {
-        const beforeBusinessCard = message.substring(0, businessCardStart);
-        const businessCard = message.substring(businessCardStart);
-        // Add one space before business card
-        fullMessage = beforeBusinessCard + referenceFooter + '\n' + businessCard;
-      } else {
-        fullMessage = message + referenceFooter;
+    
+    // Search for business card patterns (case insensitive)
+    const businessCardPatterns = [
+      'С уважением,',
+      'С Уважением,',
+      'с уважением,',
+      'с Уважением,'
+    ];
+    
+    let businessCardStart = -1;
+    let foundPattern = '';
+    
+    for (const pattern of businessCardPatterns) {
+      const index = message.lastIndexOf(pattern);
+      if (index > businessCardStart) {
+        businessCardStart = index;
+        foundPattern = pattern;
       }
+    }
+    
+    if (businessCardStart !== -1) {
+      const beforeBusinessCard = message.substring(0, businessCardStart);
+      const businessCard = message.substring(businessCardStart);
+      // Add footer before business card
+      fullMessage = beforeBusinessCard + referenceFooter + '\n' + businessCard;
     } else {
       fullMessage = message + referenceFooter;
     }

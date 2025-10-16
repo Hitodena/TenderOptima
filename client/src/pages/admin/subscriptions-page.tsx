@@ -20,6 +20,8 @@ import { CalendarIcon, EditIcon, PlusCircleIcon, RefreshCwIcon, XCircleIcon } fr
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Switch } from "@/components/ui/switch";
+import { useAuth } from "@/hooks/use-auth";
+import { Redirect } from "wouter";
 
 interface Subscription {
   id: number;
@@ -56,18 +58,7 @@ interface SubscriptionFormData {
 export default function SubscriptionsPage() {
   const { t } = useTranslation();
   const { toast } = useToast();
-  const [isAdmin, setIsAdmin] = useState(false);
-  
-  useEffect(() => {
-    // Check if user is admin using localStorage
-    const isAdminValue = localStorage.getItem('isAdmin');
-    setIsAdmin(isAdminValue === 'true');
-    
-    // Auto-refresh data when admin accesses the page
-    if (isAdminValue === 'true') {
-      console.log("Admin access detected, auto-refreshing data");
-    }
-  }, []);
+  const { user, isLoading: authLoading, isAuthenticated } = useAuth();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [selectedSubscription, setSelectedSubscription] = useState<Subscription | null>(null);
@@ -101,15 +92,15 @@ export default function SubscriptionsPage() {
     queryKey: ["admin-subscriptions"],
     queryFn: async () => {
       try {
-        // Create headers object with admin token and cache busting
-        const adminToken = localStorage.getItem('adminToken');
-        if (!adminToken) {
-          throw new Error('Admin token not found. Please login again.');
+        // Create headers object with Bearer token and cache busting
+        const accessToken = localStorage.getItem('accessToken');
+        if (!accessToken) {
+          throw new Error('Access token not found. Please login again.');
         }
         const timestamp = new Date().getTime();
         const headers = {
           "Content-Type": "application/json",
-          "X-Admin-Token": adminToken,
+          "Authorization": `Bearer ${accessToken}`,
           "Cache-Control": "no-cache",
           "Pragma": "no-cache"
         };
@@ -150,7 +141,7 @@ export default function SubscriptionsPage() {
         throw err;
       }
     },
-    enabled: isAdmin,
+    enabled: user?.role === 'admin',
     staleTime: 0, // Data is always stale, forcing fresh requests
     refetchOnWindowFocus: true, // Refresh when window regains focus
     refetchOnMount: true // Always refetch on mount
@@ -215,14 +206,14 @@ export default function SubscriptionsPage() {
     queryKey: ["admin-users"],
     queryFn: async () => {
       try {
-        // Create headers object with admin token
-        const adminToken = localStorage.getItem('adminToken');
-        if (!adminToken) {
-          throw new Error('Admin token not found. Please login again.');
+        // Create headers object with Bearer token
+        const accessToken = localStorage.getItem('accessToken');
+        if (!accessToken) {
+          throw new Error('Access token not found. Please login again.');
         }
         const headers = {
           "Content-Type": "application/json",
-          "X-Admin-Token": adminToken
+          "Authorization": `Bearer ${accessToken}`
         };
         
         // Pass headers as part of request options
@@ -244,7 +235,7 @@ export default function SubscriptionsPage() {
         return [];
       }
     },
-    enabled: isAdmin
+    enabled: user?.role === 'admin'
   });
 
   // Create subscription mutation
@@ -252,14 +243,14 @@ export default function SubscriptionsPage() {
     mutationFn: async (data: SubscriptionFormData) => {
       console.log("Creating subscription with data:", data);
       
-      // Create headers object with admin token
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
-        throw new Error('Admin token not found. Please login again.');
+      // Create headers object with Bearer token
+      const accessToken = localStorage.getItem('accessToken');
+      if (!accessToken) {
+        throw new Error('Access token not found. Please login again.');
       }
       const headers = {
         "Content-Type": "application/json",
-        "X-Admin-Token": adminToken
+        "Authorization": `Bearer ${accessToken}`
       };
       
       // If creating new user, send userEmail instead of userId
@@ -293,7 +284,7 @@ export default function SubscriptionsPage() {
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
     },
     onError: (error: Error) => {
-      if (error.message.includes('Admin token not found')) {
+      if (error.message.includes('Access token not found')) {
         toast({
           title: "Ошибка аутентификации",
           description: "Сессия истекла. Пожалуйста, войдите в систему заново.",
@@ -316,14 +307,14 @@ export default function SubscriptionsPage() {
     mutationFn: async (data: { id: number, data: Partial<SubscriptionFormData> }) => {
       console.log(`Updating subscription ${data.id} with data:`, data.data);
       
-      // Create headers object with admin token
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
-        throw new Error('Admin token not found. Please login again.');
+      // Create headers object with Bearer token
+      const accessToken = localStorage.getItem('accessToken');
+      if (!accessToken) {
+        throw new Error('Access token not found. Please login again.');
       }
       const headers = {
         "Content-Type": "application/json",
-        "X-Admin-Token": adminToken
+        "Authorization": `Bearer ${accessToken}`
       };
       
       // Use fetch directly for proper admin authentication
@@ -352,7 +343,7 @@ export default function SubscriptionsPage() {
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
     },
     onError: (error: Error) => {
-      if (error.message.includes('Admin token not found')) {
+      if (error.message.includes('Access token not found')) {
         toast({
           title: "Ошибка аутентификации",
           description: "Сессия истекла. Пожалуйста, войдите в систему заново.",
@@ -373,14 +364,14 @@ export default function SubscriptionsPage() {
   // Reset all subscription counts
   const resetSubscriptionsMutation = useMutation({
     mutationFn: async () => {
-      // Create headers object with admin token
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
-        throw new Error('Admin token not found. Please login again.');
+      // Create headers object with Bearer token
+      const accessToken = localStorage.getItem('accessToken');
+      if (!accessToken) {
+        throw new Error('Access token not found. Please login again.');
       }
       const headers = {
         "Content-Type": "application/json",
-        "X-Admin-Token": adminToken
+        "Authorization": `Bearer ${accessToken}`
       };
       
       // Use fetch directly for proper admin authentication
@@ -407,7 +398,7 @@ export default function SubscriptionsPage() {
       queryClient.invalidateQueries({ queryKey: ["admin-subscriptions"] });
     },
     onError: (error: Error) => {
-      if (error.message.includes('Admin token not found')) {
+      if (error.message.includes('Access token not found')) {
         toast({
           title: "Ошибка аутентификации",
           description: "Сессия истекла. Пожалуйста, войдите в систему заново.",
@@ -481,16 +472,16 @@ export default function SubscriptionsPage() {
     if (!selectedSubscription || !formData.systemPassword) return;
     
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
-        throw new Error('Admin token not found. Please login again.');
+      const accessToken = localStorage.getItem('accessToken');
+      if (!accessToken) {
+        throw new Error('Access token not found. Please login again.');
       }
       
       const response = await fetch(`/api/admin/users/${selectedSubscription.userId}/system-password`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          "X-Admin-Token": adminToken
+          "Authorization": `Bearer ${accessToken}`
         },
         credentials: "include",
         body: JSON.stringify({
@@ -558,9 +549,9 @@ export default function SubscriptionsPage() {
     
     // Load user system data and email configuration
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
-        throw new Error('Admin token not found. Please login again.');
+      const accessToken = localStorage.getItem('accessToken');
+      if (!accessToken) {
+        throw new Error('Access token not found. Please login again.');
       }
       
       // Load system data
@@ -568,7 +559,7 @@ export default function SubscriptionsPage() {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
-          "X-Admin-Token": adminToken
+          "Authorization": `Bearer ${accessToken}`
         },
         credentials: "include"
       });
@@ -592,7 +583,7 @@ export default function SubscriptionsPage() {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
-          "X-Admin-Token": adminToken
+          "Authorization": `Bearer ${accessToken}`
         },
         credentials: "include"
       });
@@ -607,7 +598,7 @@ export default function SubscriptionsPage() {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
-          "X-Admin-Token": adminToken
+          "Authorization": `Bearer ${accessToken}`
         },
         credentials: "include"
       });
@@ -658,17 +649,21 @@ export default function SubscriptionsPage() {
     return formatted;
   };
 
-  if (!isAdmin) {
+  // Check authentication and admin role
+  if (authLoading) {
     return (
-      <Layout>
-        <div className="container mx-auto py-8">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold">{t("subscription.accessDenied")}</h1>
-            <p className="mt-2">{t("subscription.adminOnly")}</p>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin h-10 w-10 border-4 border-primary border-t-transparent rounded-full"></div>
           </div>
-        </div>
-      </Layout>
     );
+  }
+
+  if (!isAuthenticated || !user) {
+    return <Redirect to="/auth" />;
+  }
+
+  if (user.role !== 'admin') {
+    return <Redirect to="/" />;
   }
 
   return (

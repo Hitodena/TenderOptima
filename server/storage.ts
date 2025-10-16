@@ -30,6 +30,7 @@ import {
   type EmailReplyTemplate,
   type InsertEmailReplyTemplate,
   suppliers,
+  stagingSuppliers,
   searchRequests,
   requestSuppliers,
   supplierResponses,
@@ -89,6 +90,7 @@ export interface IStorage {
   getSupplierMessageById(id: number): Promise<SupplierMessage | undefined>;
   getSupplierMessages(requestSupplierId: number, userId?: number): Promise<SupplierMessage[]>;
   addSupplierMessage(message: InsertSupplierMessage): Promise<SupplierMessage>;
+  getAllRequestMessages(requestId: number, userId?: number): Promise<SupplierMessage[]>;
   updateSupplierGroups(supplierId: number, groupIds: number[]): Promise<{ success: boolean }>;
   
   // Search request operations
@@ -350,6 +352,23 @@ export class DatabaseStorage implements IStorage {
     
     // Otherwise return all suppliers (admin use case)
     return await db.select().from(suppliers);
+  }
+
+  // Get staging suppliers (API suppliers from search engines)
+  async getStagingSuppliers(userId?: number): Promise<any[]> {
+    try {
+      // If userId is provided, filter by user
+      if (userId) {
+        console.log(`[storage] getStagingSuppliers filtering by userId: ${userId}`);
+        return await db.select().from(stagingSuppliers).where(eq(stagingSuppliers.userId, userId));
+      }
+      
+      // Otherwise return all staging suppliers
+      return await db.select().from(stagingSuppliers);
+    } catch (error) {
+      console.error(`Error getting staging suppliers:`, error);
+      return [];
+    }
   }
   
   async getSupplier(id: number): Promise<Supplier | undefined> {
@@ -2305,11 +2324,109 @@ export class DatabaseStorage implements IStorage {
       const messages = await messageQuery.orderBy(desc(requestSupplierMessages.sentDate));
       
       console.log(`[storage] Found ${messages.length} messages for requestSupplierId ${requestSupplierId}${userId ? ` and userId ${userId}` : ''}`);
+      console.log(`[storage] Messages data:`, messages.map(m => ({ id: m.id, direction: m.direction, sentDate: m.sentDate, subject: m.subject })));
       
-      // Возвращаем сообщения как есть
+      // Возвращаем сообщения как есть, отсортированные по дате (новые вверху)
       return messages as SupplierMessage[];
     } catch (error) {
       console.error(`[storage] Error getting supplier messages for requestSupplierId ${requestSupplierId}:`, error);
+      return [];
+    }
+  }
+
+  async getAllRequestMessages(requestId: number, userId?: number): Promise<SupplierMessage[]> {
+    try {
+      console.log(`[storage] Fetching all messages for requestId ${requestId}${userId ? ` and userId ${userId}` : ''}`);
+      
+      // Получаем все сообщения для всех поставщиков этого запроса одним запросом
+      const messagesQuery = db
+        .select({
+          id: requestSupplierMessages.id,
+          userId: requestSupplierMessages.userId,
+          requestSupplierId: requestSupplierMessages.requestSupplierId,
+          content: requestSupplierMessages.content,
+          subject: requestSupplierMessages.subject,
+          direction: requestSupplierMessages.direction,
+          sentDate: requestSupplierMessages.sentDate,
+          attachments: requestSupplierMessages.attachments,
+          // Добавляем информацию о поставщике
+          supplierId: requestSuppliers.supplierId,
+          supplierName: requestSuppliers.supplierName,
+          supplierEmail: requestSuppliers.supplierEmail
+        })
+        .from(requestSupplierMessages)
+        .innerJoin(requestSuppliers, eq(requestSupplierMessages.requestSupplierId, requestSuppliers.id))
+        .where(eq(requestSuppliers.requestId, requestId));
+
+      // Если передан userId, добавляем проверку на принадлежность запроса пользователю
+      if (userId) {
+        const messagesWithUserQuery = db
+          .select({
+            id: requestSupplierMessages.id,
+            userId: requestSupplierMessages.userId,
+            requestSupplierId: requestSupplierMessages.requestSupplierId,
+            content: requestSupplierMessages.content,
+            subject: requestSupplierMessages.subject,
+            direction: requestSupplierMessages.direction,
+            sentDate: requestSupplierMessages.sentDate,
+            attachments: requestSupplierMessages.attachments,
+            // Добавляем информацию о поставщике
+            supplierId: requestSuppliers.supplierId,
+            supplierName: requestSuppliers.supplierName,
+            supplierEmail: requestSuppliers.supplierEmail
+          })
+          .from(requestSupplierMessages)
+          .innerJoin(requestSuppliers, eq(requestSupplierMessages.requestSupplierId, requestSuppliers.id))
+          .innerJoin(searchRequests, eq(requestSuppliers.requestId, searchRequests.id))
+          .where(
+            and(
+              eq(requestSuppliers.requestId, requestId),
+              eq(searchRequests.userId, userId)
+            )
+          );
+
+        const messages = await messagesWithUserQuery.orderBy(desc(requestSupplierMessages.sentDate));
+        
+        console.log(`[storage] Found ${messages.length} messages for requestId ${requestId} and userId ${userId}`);
+        
+        // Преобразуем в формат SupplierMessage с дополнительной информацией о поставщике
+        return messages.map(msg => ({
+          id: msg.id,
+          userId: msg.userId,
+          requestSupplierId: msg.requestSupplierId,
+          content: msg.content,
+          subject: msg.subject,
+          direction: msg.direction,
+          sentDate: msg.sentDate,
+          attachments: msg.attachments,
+          // Добавляем информацию о поставщике для совместимости с клиентом
+          supplierId: msg.supplierId,
+          supplierName: msg.supplierName,
+          supplierEmail: msg.supplierEmail
+        })) as SupplierMessage[];
+      } else {
+        const messages = await messagesQuery.orderBy(desc(requestSupplierMessages.sentDate));
+        
+        console.log(`[storage] Found ${messages.length} messages for requestId ${requestId}`);
+        
+        // Преобразуем в формат SupplierMessage с дополнительной информацией о поставщике
+        return messages.map(msg => ({
+          id: msg.id,
+          userId: msg.userId,
+          requestSupplierId: msg.requestSupplierId,
+          content: msg.content,
+          subject: msg.subject,
+          direction: msg.direction,
+          sentDate: msg.sentDate,
+          attachments: msg.attachments,
+          // Добавляем информацию о поставщике для совместимости с клиентом
+          supplierId: msg.supplierId,
+          supplierName: msg.supplierName,
+          supplierEmail: msg.supplierEmail
+        })) as SupplierMessage[];
+      }
+    } catch (error) {
+      console.error(`[storage] Error getting all request messages for requestId ${requestId}:`, error);
       return [];
     }
   }
@@ -2355,10 +2472,11 @@ export class DatabaseStorage implements IStorage {
         }
       }
       
-      // Создаем объект с данными, исключая поле subject, которого нет в базе данных
+      // Создаем объект с данными
       const messageData = {
         requestSupplierId: message.requestSupplierId,
         content: message.content,
+        subject: message.subject || '',
         direction: message.direction,
         sentDate: message.sentDate,
         attachments: message.attachments || [],

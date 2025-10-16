@@ -25,8 +25,10 @@ interface SearchResult {
  */
 router.post('/', requireAuth, async (req, res) => {
   try {
-    const { query, queries, sources, maxResults = 50, regions = ["ru"], language = "ru" } = req.body;
+    const { query, queries, sources, maxResults = 50, regions = ["ru"], language = "ru", requestId } = req.body;
     const userId = req.user?.id;
+    
+    console.log('[SupplierSearch] Request body:', { query, queries, requestId, userId });
     
     if (!userId) {
       console.log('[SupplierSearch] No authenticated user found');
@@ -131,7 +133,7 @@ router.post('/', requireAuth, async (req, res) => {
       const results = uniqueResults;
 
       // 3. Сохранение результатов в БД (логика осталась прежней)
-      const savedSuppliers = await saveSearchResults(results, regionObjects[0]?.googleCode || "ru", parseInt(userId));
+      const savedSuppliers = await saveSearchResults(results, regionObjects[0]?.googleCode || "ru", parseInt(userId), requestId);
 
       console.log(`[SupplierSearch] Successfully found and saved ${savedSuppliers.length} suppliers`);
 
@@ -284,7 +286,8 @@ async function callPythonParser(query: string, elements: number, userId: string,
 /**
  * Функция сохранения результатов в staging_suppliers
  */
-async function saveSearchResults(results: SearchResult[], region: string, userId?: number): Promise<any[]> {
+async function saveSearchResults(results: SearchResult[], region: string, userId?: number, requestId?: number): Promise<any[]> {
+    console.log('[saveSearchResults] Called with:', { resultsCount: results.length, region, userId, requestId });
     const savedSuppliers = [];
     for (const result of results) {
         // Ensure emails and phones are arrays (moved outside try block for use in catch block)
@@ -295,8 +298,10 @@ async function saveSearchResults(results: SearchResult[], region: string, userId
             const domain = result.domain.replace(/^https?:\/\//, '').replace(/^www\./, '');
             const supplierName = domain.split('.')[0].charAt(0).toUpperCase() + domain.split('.')[0].slice(1);
 
+            console.log('[saveSearchResults] Inserting supplier with requestId:', requestId);
             const [saved] = await db.insert(stagingSuppliers).values({
                 userId: userId, // Добавляем userId для связи с пользователем
+                requestId: requestId, // Добавляем requestId для связи с конкретным запросом
                 sourceEngine: result.engine,
                 searchQuery: result.query,
                 region: result.region || region, // Используем region из результата или fallback на переменную
@@ -307,6 +312,8 @@ async function saveSearchResults(results: SearchResult[], region: string, userId
                 rawPhones: phonesArray,
                 status: 'new'
             }).returning();
+            
+            console.log('[saveSearchResults] Saved supplier:', { id: saved.id, requestId: saved.requestId });
 
             if (saved) {
                 // Адаптируем данные для совместимости с фронтендом

@@ -78,10 +78,6 @@ export default function AdminLogin() {
           const currentUser = await apiRequest<{ role: string }>("/api/auth/me", "GET");
           
           if (currentUser.role === 'admin') {
-            // Store admin credentials in localStorage
-            localStorage.setItem('isAdmin', 'true');
-            localStorage.setItem('adminUsername', username);
-            
             toast({
               title: "Успешный вход",
               description: "Вы вошли как администратор"

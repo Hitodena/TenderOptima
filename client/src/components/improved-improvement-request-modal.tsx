@@ -1,19 +1,25 @@
 import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Send, X } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
-import { EmailTemplateManager } from "./email-template-manager";
+import { EmailImprovementTemplateManager } from "./email-improvement-template-manager";
 import { BusinessCardPreview } from "./business-card-preview";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
 
 interface EmailTemplate {
-  id: string;
+  id: number;
+  userId: number;
   name: string;
   subject: string;
-  message: string;
+  content: string;
+  type: string;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface ImprovedImprovementRequestModalProps {
@@ -34,32 +40,36 @@ export function ImprovedImprovementRequestModal({
   onClose,
   onSuccess
 }: ImprovedImprovementRequestModalProps) {
-  const [subject, setSubject] = useState("Предложение об улучшении условий");
+  const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
 
-  // Initialize with default message
+  // Fetch templates to auto-apply default template
+  const { data: templates = [] } = useQuery<EmailTemplate[]>({
+    queryKey: ['/api/email-improvement-templates'],
+    queryFn: async () => {
+      return await apiRequest<EmailTemplate[]>('/api/email-improvement-templates', 'GET');
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
+  // Auto-apply default template when templates load
   useEffect(() => {
-    if (!message) {
-      const defaultMessage = `В рамках процедуры закупки предлагаем улучшить условия вашего предложения и предоставить финальную цену.
-
-Просим предоставить улучшенное предложение в течение 3 рабочих дней.
-
-С уважением,
-Отдел закупок
-
-! При ответе на наш запрос не изменяйте название письма (Subject), иначе мы не сможем обработать ваш ответ!${user?.businessCard ? `\n\n${user.businessCard}` : ''}`;
-      setMessage(defaultMessage);
+    if (templates.length > 0 && !selectedTemplate) {
+      const defaultTemplate = templates.find(t => t.isDefault) || templates[0];
+      if (defaultTemplate) {
+        handleTemplateSelect(defaultTemplate);
+      }
     }
-  }, [user?.businessCard]);
+  }, [templates, selectedTemplate]);
 
   const handleTemplateSelect = (template: EmailTemplate) => {
     setSelectedTemplate(template);
     setSubject(template.subject);
-    setMessage(template.message + (user?.businessCard ? `\n\n${user.businessCard}` : ''));
+    setMessage(template.content + (user?.businessCard ? `\n\n${user.businessCard}` : ''));
   };
 
   const handleSendEmail = async () => {
@@ -214,7 +224,7 @@ export function ImprovedImprovementRequestModal({
 
           {/* Right column - Template manager */}
           <div className="w-80 border-l bg-gray-50 p-4 flex flex-col">
-            <EmailTemplateManager
+            <EmailImprovementTemplateManager
               onTemplateSelect={handleTemplateSelect}
               selectedTemplate={selectedTemplate}
             />

@@ -90,6 +90,7 @@ export const suppliers = pgTable("suppliers", {
 export const stagingSuppliers = pgTable("staging_suppliers", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id), // Связь с пользователем
+  requestId: integer("request_id").references(() => searchRequests.id), // Связь с конкретным запросом
   searchSessionId: text("search_session_id"), // Уникальный идентификатор сессии поиска
   sourceEngine: text("source_engine").notNull(), // 'google' или 'yandex'
   searchQuery: text("search_query").notNull(),   // Исходный поисковый запрос
@@ -213,12 +214,12 @@ export const analysisProjects = pgTable("analysis_projects", {
 });
 
 // Table to store requirement sections for analysis projects
-export const requirementSections = pgTable("requirement_sections", {
+export const requirementSections: any = pgTable("requirement_sections", {
   id: serial("id").primaryKey(),
   projectId: integer("project_id").notNull().references(() => analysisProjects.id),
   sectionNumber: varchar("section_number", { length: 10 }).notNull(), // e.g., "3", "4", "4.1"
   sectionTitle: text("section_title").notNull(), // e.g., "Комплект технологического оборудования линии"
-  parentSectionId: integer("parent_section_id").references(() => requirementSections.id),
+  parentSectionId: integer("parent_section_id").references((): any => requirementSections.id),
   orderIndex: integer("order_index").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -629,6 +630,27 @@ export const emailTemplateSchema = z.object({
     }),
   message: z.string().min(1, "Сообщение не может быть пустым"),
   requestId: z.number().optional().default(0), // ID of the search request
+  // Support for API suppliers from search engines
+  apiSuppliers: z.array(z.object({
+    id: z.union([z.number(), z.string()]),
+    name: z.string(),
+    email: z.string().email(),
+    phone: z.string().optional(),
+    website: z.string().optional(),
+    description: z.string().optional(),
+    categories: z.array(z.string()).optional(),
+    searchEngine: z.string().optional(),
+    allEmails: z.array(z.string()).optional(),
+    allPhones: z.array(z.string()).optional(),
+    searchDate: z.string().optional(),
+  })).optional().default([]),
+  // Support for contact groups
+  fromContactGroup: z.boolean().optional().default(false),
+  // User-selected parameters for email templates
+  parameters: z.array(z.union([z.string(), z.object({
+    label: z.string(),
+    value: z.string().optional()
+  })])).optional().default([]),
   attachments: z.array(z.object({
     filename: z.string(),
     contentType: z.string(),
@@ -720,13 +742,14 @@ export const unprocessedEmails = pgTable("unprocessed_emails", {
 export type UnprocessedEmail = typeof unprocessedEmails.$inferSelect;
 export type InsertUnprocessedEmail = typeof unprocessedEmails.$inferInsert;
 
-// Email reply templates table
+// Email templates table (unified for both reply and improvement templates)
 export const emailReplyTemplates = pgTable("email_reply_templates", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").references(() => users.id),
+  userId: integer("user_id").references(() => users.id).notNull(),
   name: text("name").notNull(),
   subject: text("subject").notNull(),
   content: text("content").notNull(),
+  type: text("type").notNull().default('reply'), // 'reply' or 'improvement'
   isDefault: boolean("is_default").default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

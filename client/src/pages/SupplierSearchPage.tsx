@@ -4,6 +4,7 @@ import { searchRequestFormSchema, type SearchRequest, type Supplier } from "@sha
 import { Form, FormControl, FormField, FormItem, FormLabel, FormDescription } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { ProgressButton } from "@/components/ui/progress-button";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/components/ui/toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -111,6 +112,21 @@ export function SupplierSearchForm({ onComplete }: Props) {
 
         console.log("=== MIXED SEARCH ===");
         
+        // Сначала создаем searchRequest для отслеживания
+        const searchRequestData = {
+            productName: searchKeywords,
+            productDescription: "",
+            timeline: form.getValues("timeline"),
+            additionalRequirements: "",
+            useDbSearch: useRegistrySearch,
+            useApiSearch: true
+        };
+        
+        console.log("[Frontend] Creating search request first...");
+        const searchRequest = await apiRequest("/api/search-requests", "POST", searchRequestData);
+        console.log("[Frontend] Search request created:", searchRequest);
+        console.log("[Frontend] Search request ID:", (searchRequest as any).id);
+        
         // Преобразуем ключевые слова в массив для параллельного поиска
         const keywordsArray = searchKeywords
             .split(',')
@@ -126,9 +142,11 @@ export function SupplierSearchForm({ onComplete }: Props) {
             includeAds: includeAds,
         };
         
+        console.log("[Frontend] Sending supplier search request with requestId:", (searchRequest as any).id);
         return await apiRequest("/api/supplier-search", "POST", {
             queries: keywordsArray, // Отправляем массив запросов
             query: searchKeywords, // Оставляем для совместимости назад
+            requestId: (searchRequest as any).id, // Передаем ID созданного запроса
             sources, 
             maxResults: 50,
             regions: regionsToSubmit, 
@@ -146,7 +164,9 @@ export function SupplierSearchForm({ onComplete }: Props) {
             }
             toast({ title: "Поиск завершен", description: successMessage });
             const searchRequest: SearchRequest = {
-                id: Date.now(), orderNumber: `REQ-${Date.now()}`,
+                id: Date.now(), 
+                orderNumber: `REQ-${Date.now()}`,
+                searchSessionId: null,
                 productName: displayedKeywords || form.getValues("productName"),
                 productDescription: "", 
                 quantity: null,
@@ -154,15 +174,24 @@ export function SupplierSearchForm({ onComplete }: Props) {
                 timeline: new Date().toISOString(), 
                 additionalRequirements: "",
                 matchedSuppliers: data.suppliers || data.matchedSuppliers,
-                createdAt: new Date(), status: 'active', userId: null,
-                useDbSearch: true, useApiSearch: true,
+                createdAt: new Date(), 
+                status: 'active', 
+                userId: null,
+                useDbSearch: true, 
+                useApiSearch: true,
             };
             onComplete(searchRequest);
         } else {
             toast({ title: "Результаты не найдены", variant: "destructive" });
         }
     },
-    onError: () => toast({ title: "Ошибка поиска", variant: "destructive" })
+    onError: () => {
+        toast({ title: "Ошибка поиска", variant: "destructive" });
+    },
+    onSettled: () => {
+        // Сбрасываем состояние загрузки после завершения (успешного или с ошибкой)
+        // Это позволит кнопке сбросить свой внутренний прогресс
+    }
   });
 
   const handleUnifiedSearch = () => {
@@ -238,6 +267,7 @@ export function SupplierSearchForm({ onComplete }: Props) {
                       ).filter(Boolean);
                       
                       return topCountriesData.map((country) => (
+                        country && (
                         <AccordionItem value={country.name} key={country.name}>
                           <div className="flex items-center space-x-2 py-0.5">
                             <Checkbox 
@@ -300,7 +330,8 @@ export function SupplierSearchForm({ onComplete }: Props) {
                           </div>
                         </AccordionContent>
                       </AccordionItem>
-                      ));
+                        ))
+                      );
                     })()}
                     
                     
@@ -396,9 +427,15 @@ export function SupplierSearchForm({ onComplete }: Props) {
           </Dialog>
         </div>
 
-        <Button type="button" className="w-full" onClick={handleUnifiedSearch} disabled={unifiedSearchMutation.isPending}>
-            {unifiedSearchMutation.isPending ? "Поиск..." : "Найти поставщиков"}
-        </Button>
+        <ProgressButton 
+          onClick={handleUnifiedSearch} 
+          disabled={unifiedSearchMutation.isPending}
+          externalLoading={unifiedSearchMutation.isPending}
+          loadingText="Поиск поставщиков..."
+          className="w-full"
+        >
+          Найти поставщиков
+        </ProgressButton>
       </form>
     </Form>
   );

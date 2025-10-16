@@ -27,6 +27,47 @@ import {
   BanIcon
 } from "lucide-react";
 
+// CSS стили для анимации удаления
+const slideOutStyles = `
+  @keyframes slideOut {
+    0% {
+      transform: translateX(0) scaleY(1);
+      opacity: 1;
+      max-height: 100px;
+      margin-bottom: 0;
+    }
+    50% {
+      transform: translateX(20px) scaleY(0.8);
+      opacity: 0.7;
+      max-height: 80px;
+      margin-bottom: 0;
+    }
+    100% {
+      transform: translateX(100px) scaleY(0);
+      opacity: 0;
+      max-height: 0;
+      margin-bottom: -1px;
+      padding-top: 0;
+      padding-bottom: 0;
+    }
+  }
+  
+  .animate-slide-out {
+    animation: slideOut 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    overflow: hidden;
+  }
+`;
+
+// Добавляем стили в head документа
+if (typeof document !== 'undefined') {
+  const styleElement = document.createElement('style');
+  styleElement.textContent = slideOutStyles;
+  if (!document.head.querySelector('style[data-moderation-animation]')) {
+    styleElement.setAttribute('data-moderation-animation', 'true');
+    document.head.appendChild(styleElement);
+  }
+}
+
 /**
  * Нормализация URL для унифицированного поиска и сохранения
  * Удаляет протокол, www, путь и параметры, оставляя только домен
@@ -82,6 +123,7 @@ export default function ModerationPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [processingIds, setProcessingIds] = useState<Set<number>>(new Set());
+  const [removingIds, setRemovingIds] = useState<Set<number>>(new Set());
   const [historyModal, setHistoryModal] = useState<{
     isOpen: boolean;
     supplierId: number;
@@ -121,7 +163,6 @@ export default function ModerationPage() {
     legalName: "",
     taxId: "",
     legalAddress: "",
-    bankDetails: "",
     contactPerson: ""
   });
 
@@ -222,7 +263,7 @@ export default function ModerationPage() {
         title: "Поставщик одобрен",
         description: `Поставщик "${data.data?.supplierName}" успешно одобрен`,
       });
-      queryClient.invalidateQueries({ queryKey: ["staging-suppliers"] });
+      // Данные обновятся только после анимации в обработчике
     },
     onError: (error: Error) => {
       toast({
@@ -259,7 +300,7 @@ export default function ModerationPage() {
         title: "Поставщик отклонен",
         description: `Поставщик "${data.data?.supplierName}" отклонен`,
       });
-      queryClient.invalidateQueries({ queryKey: ["staging-suppliers"] });
+      // Данные обновятся только после анимации в обработчике
     },
     onError: (error: Error) => {
       toast({
@@ -296,7 +337,7 @@ export default function ModerationPage() {
         title: "Поставщик привязан",
         description: `Поставщик привязан к "${data.data?.supplierName}"`,
       });
-      queryClient.invalidateQueries({ queryKey: ["staging-suppliers"] });
+      // Данные обновятся только после анимации в обработчике
     },
     onError: (error: Error) => {
       toast({
@@ -375,11 +416,21 @@ export default function ModerationPage() {
       });
       setStopListDialog(false);
       setStopListSupplier(null);
-      setStopListReason('');
+      // Не сбрасываем причину исключения - оставляем выбранную для следующих добавлений
       setStopListCustomReason('');
       // Также отклоняем поставщика после добавления в стоп-лист
       if (stopListSupplier) {
-        rejectMutation.mutate(stopListSupplier.id);
+        // Не вызываем rejectMutation.mutate здесь, чтобы избежать двойного обновления
+        // Удаляем из списка анимации и обновляем данные через 800ms
+        setTimeout(() => {
+          setRemovingIds(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(stopListSupplier.id);
+            return newSet;
+          });
+          // Обновляем данные после завершения анимации
+          queryClient.invalidateQueries({ queryKey: ["staging-suppliers"] });
+        }, 800);
       }
     },
     onError: (error: Error) => {
@@ -482,7 +533,6 @@ export default function ModerationPage() {
         regions: [],
         legalName: "",
         legalAddress: "",
-        bankDetails: "",
         contactPerson: ""
       });
       
@@ -511,7 +561,6 @@ export default function ModerationPage() {
         legalName: initialFormData.legalName || "",
         taxId: initialFormData.taxId || "",
         legalAddress: initialFormData.legalAddress || "",
-        bankDetails: initialFormData.bankDetails || "",
         contactPerson: initialFormData.contactPerson || ""
       });
     }
@@ -529,6 +578,18 @@ export default function ModerationPage() {
     setProcessingIds(prev => new Set(prev).add(stagingId));
     try {
       await approveMutation.mutateAsync(stagingId);
+      // Добавляем анимацию удаления
+      setRemovingIds(prev => new Set(prev).add(stagingId));
+      // Обновляем данные и удаляем из списка анимации через 800ms
+      setTimeout(() => {
+        setRemovingIds(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(stagingId);
+          return newSet;
+        });
+        // Обновляем данные после завершения анимации
+        queryClient.invalidateQueries({ queryKey: ["staging-suppliers"] });
+      }, 800);
     } finally {
       setProcessingIds(prev => {
         const newSet = new Set(prev);
@@ -544,6 +605,18 @@ export default function ModerationPage() {
     setProcessingIds(prev => new Set(prev).add(stagingId));
     try {
       await rejectMutation.mutateAsync(stagingId);
+      // Добавляем анимацию удаления
+      setRemovingIds(prev => new Set(prev).add(stagingId));
+      // Обновляем данные и удаляем из списка анимации через 800ms
+      setTimeout(() => {
+        setRemovingIds(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(stagingId);
+          return newSet;
+        });
+        // Обновляем данные после завершения анимации
+        queryClient.invalidateQueries({ queryKey: ["staging-suppliers"] });
+      }, 800);
     } finally {
       setProcessingIds(prev => {
         const newSet = new Set(prev);
@@ -559,6 +632,18 @@ export default function ModerationPage() {
     setProcessingIds(prev => new Set(prev).add(stagingId));
     try {
       await mergeMutation.mutateAsync({ stagingId, existingSupplierId });
+      // Добавляем анимацию удаления
+      setRemovingIds(prev => new Set(prev).add(stagingId));
+      // Обновляем данные и удаляем из списка анимации через 800ms
+      setTimeout(() => {
+        setRemovingIds(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(stagingId);
+          return newSet;
+        });
+        // Обновляем данные после завершения анимации
+        queryClient.invalidateQueries({ queryKey: ["staging-suppliers"] });
+      }, 800);
     } finally {
       setProcessingIds(prev => {
         const newSet = new Set(prev);
@@ -597,6 +682,9 @@ export default function ModerationPage() {
       return;
     }
 
+    // Добавляем анимацию удаления перед добавлением в стоп-лист
+    setRemovingIds(prev => new Set(prev).add(stopListSupplier.id));
+    
     addToStopListMutation.mutate({
       domain: normalizedDomain,
       reason: finalReason
@@ -631,7 +719,6 @@ export default function ModerationPage() {
       legalName: "",
       taxId: "",
       legalAddress: "",
-      bankDetails: "",
       contactPerson: ""
     });
     setSearchForm({
@@ -732,7 +819,6 @@ export default function ModerationPage() {
       legalName: supplierForm.legalName || null,
       taxId: supplierForm.taxId || null,
       legalAddress: supplierForm.legalAddress || null,
-      bankDetails: supplierForm.bankDetails || null,
       contactPerson: supplierForm.contactPerson || null
     };
 
@@ -835,17 +921,24 @@ export default function ModerationPage() {
                     <TableHead className="w-80">Описание</TableHead>
                     <TableHead>Дата создания</TableHead>
                     <TableHead className="w-40">Статистика</TableHead>
-                    <TableHead className="w-32 sticky right-0 bg-white z-10">Действия</TableHead>
+                    <TableHead className="w-20 sticky right-0 bg-white z-10">Действия</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {stagingSuppliers?.data?.map((supplier, index) => {
                     const isProcessing = processingIds.has(supplier.id);
+                    const isRemoving = removingIds.has(supplier.id);
                     
                     return (
                       <TableRow 
                         key={supplier.id}
-                        className={supplier.isDuplicate ? "bg-yellow-50" : ""}
+                        className={`
+                          ${supplier.isDuplicate ? "bg-yellow-50" : ""} 
+                          ${isRemoving ? "animate-slide-out" : ""}
+                        `}
+                        style={{
+                          transition: isRemoving ? 'all 0.8s cubic-bezier(0.4, 0, 0.2, 1)' : 'all 0.3s ease-in-out'
+                        }}
                       >
                         <TableCell className="text-center text-muted-foreground">
                           {index + 1}
@@ -920,76 +1013,66 @@ export default function ModerationPage() {
                           )}
                         </TableCell>
                         <TableCell className={`sticky right-0 z-10 ${supplier.isDuplicate ? "bg-yellow-50" : "bg-white"}`}>
-                          <div className="flex flex-col gap-2">
-                            <Button
-                              size="sm"
-                              variant="default"
+                          <div className="flex items-center gap-1">
+                            <button
                               onClick={() => handleApprove(supplier.id)}
                               disabled={isProcessing}
-                              className="bg-green-600 hover:bg-green-700 w-full"
+                              className="p-1.5 rounded-md bg-green-50 hover:bg-green-100 border border-green-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Одобрить поставщика"
                             >
                               {isProcessing ? (
                                 <Spinner size="sm" />
                               ) : (
-                                <CheckCircleIcon className="h-4 w-4" />
+                                <CheckCircleIcon className="h-3 w-3 text-green-600" />
                               )}
-                              Одобрить
-                            </Button>
+                            </button>
                             
-                            <Button
-                              size="sm"
-                              variant="destructive"
+                            <button
                               onClick={() => handleReject(supplier.id)}
                               disabled={isProcessing}
-                              className="w-full"
+                              className="p-1.5 rounded-md bg-red-50 hover:bg-red-100 border border-red-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Отклонить поставщика"
                             >
                               {isProcessing ? (
                                 <Spinner size="sm" />
                               ) : (
-                                <XCircleIcon className="h-4 w-4" />
+                                <XCircleIcon className="h-3 w-3 text-red-600" />
                               )}
-                              Отклонить
-                            </Button>
+                            </button>
                             
                             {supplier.isDuplicate && supplier.matchedSupplierId && (
-                              <Button
-                                size="sm"
-                                variant="outline"
+                              <button
                                 onClick={() => handleMerge(supplier.id, supplier.matchedSupplierId!)}
                                 disabled={isProcessing}
-                                className="border-blue-600 text-blue-600 hover:bg-blue-50 w-full"
+                                className="p-1.5 rounded-md bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Привязать к существующему поставщику"
                               >
                                 {isProcessing ? (
                                   <Spinner size="sm" />
                                 ) : (
-                                  <LinkIcon className="h-4 w-4" />
+                                  <LinkIcon className="h-3 w-3 text-blue-600" />
                                 )}
-                                Привязать
-                              </Button>
+                              </button>
                             )}
                             
                             {supplier.matchedSupplierId && (
-                              <Button
-                                size="sm"
-                                variant="outline"
+                              <button
                                 onClick={() => openHistoryModal(supplier.matchedSupplierId!, supplier.rawTitle)}
-                                className="border-purple-600 text-purple-600 hover:bg-purple-50 w-full"
+                                className="p-1.5 rounded-md bg-purple-50 hover:bg-purple-100 border border-purple-200 transition-colors"
+                                title="Просмотреть историю ответов"
                               >
-                                <MessageSquareIcon className="h-4 w-4" />
-                                История ответов
-                              </Button>
+                                <MessageSquareIcon className="h-3 w-3 text-purple-600" />
+                              </button>
                             )}
                             
-                            <Button
-                              size="sm"
-                              variant="outline"
+                            <button
                               onClick={() => handleAddToStopList(supplier)}
                               disabled={isProcessing}
-                              className="border-red-600 text-red-600 hover:bg-red-50 w-full"
+                              className="p-1.5 rounded-md bg-orange-50 hover:bg-orange-100 border border-orange-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Добавить в стоп-лист"
                             >
-                              <BanIcon className="h-4 w-4" />
-                              В стоп лист
-                            </Button>
+                              <BanIcon className="h-3 w-3 text-orange-600" />
+                            </button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -1242,25 +1325,14 @@ export default function ModerationPage() {
 
               <div>
                 <Label htmlFor="legalAddress">Юридический адрес</Label>
-                <Textarea
+                <Input
                   id="legalAddress"
                   value={supplierForm.legalAddress}
                   onChange={(e) => handleSupplierFormChange('legalAddress', e.target.value)}
                   placeholder="123456, г. Москва, ул. Примерная, д. 1"
-                  rows={2}
                 />
               </div>
 
-              <div>
-                <Label htmlFor="bankDetails">Банковские реквизиты</Label>
-                <Textarea
-                  id="bankDetails"
-                  value={supplierForm.bankDetails}
-                  onChange={(e) => handleSupplierFormChange('bankDetails', e.target.value)}
-                  placeholder="Банк: ПАО 'Сбербанк', БИК: 044525225, К/с: 30101810400000000225, Р/с: 40702810100000000000"
-                  rows={3}
-                />
-              </div>
             </div>
 
             {/* Кнопки действий */}
@@ -1313,6 +1385,8 @@ export default function ModerationPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Маркетплейс/Агрегатор">Маркетплейс/Агрегатор</SelectItem>
+                  <SelectItem value="Магазин-агрегатор">Магазин-агрегатор</SelectItem>
+                  <SelectItem value="Бизнес-справочник">Бизнес-справочник</SelectItem>
                   <SelectItem value="Информационный сайт/Блог">Информационный сайт/Блог</SelectItem>
                   <SelectItem value="Форум/Социальная сеть">Форум/Социальная сеть</SelectItem>
                   <SelectItem value="Спам/Низкое качество">Спам/Низкое качество</SelectItem>

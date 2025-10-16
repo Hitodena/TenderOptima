@@ -68,12 +68,12 @@ export class PersonalImapService {
     if (this.personalImapConnections.has(userId)) {
       const existingConnection = this.personalImapConnections.get(userId)!;
       console.log(`[PERSONAL IMAP] Removing existing connection for user ${userId} to prevent state issues`);
-      try {
-        (existingConnection as any).end();
-      } catch (error) {
+        try {
+          (existingConnection as any).end();
+        } catch (error) {
         console.log(`[PERSONAL IMAP] Error closing existing connection:`, error);
-      }
-      this.personalImapConnections.delete(userId);
+        }
+        this.personalImapConnections.delete(userId);
     }
 
     try {
@@ -211,12 +211,12 @@ export class PersonalImapService {
 
       // Connect to user's personal IMAP
       const connected = await this.connectToPersonalImap(personalImap, userId);
-      if (!connected) {
-        return {
-          success: false,
+        if (!connected) {
+          return {
+            success: false,
           message: "Failed to connect to personal email server - check credentials",
-          newResponses: 0
-        };
+            newResponses: 0
+          };
       }
 
       // Count responses before checking
@@ -282,9 +282,9 @@ export class PersonalImapService {
   private async checkPersonalEmails(imap: Imap, userId: number): Promise<void> {
     console.log(`[PERSONAL EMAIL] Starting personal email check for user ${userId}`);
     
-    // Проверяем INBOX и Spam (для mail.ru)
+    // Проверяем только INBOX (временно отключили Spam)
     // '[Gmail]/Spam' не работает на mail.ru, используем просто 'Spam'
-    const foldersToCheck = ['INBOX', 'Spam'];
+    const foldersToCheck = ['INBOX'];
     console.log(`[PERSONAL EMAIL] Folders to check for user ${userId}:`, foldersToCheck);
     
     for (const folder of foldersToCheck) {
@@ -304,9 +304,9 @@ export class PersonalImapService {
   private async checkPersonalEmailsForOrderNumber(imap: Imap, orderNumber: string, userId: number): Promise<void> {
     console.log(`[PERSONAL EMAIL] Starting targeted email check for order ${orderNumber}, user ${userId}`);
     
-    // Проверяем INBOX и Spam (для mail.ru)
+    // Проверяем только INBOX (временно отключили Spam)
     // '[Gmail]/Spam' не работает на mail.ru, используем просто 'Spam'
-    const foldersToCheck = ['INBOX', 'Spam'];
+    const foldersToCheck = ['INBOX'];
     console.log(`[PERSONAL EMAIL] Folders to check for order ${orderNumber}, user ${userId}:`, foldersToCheck);
     
     for (const folder of foldersToCheck) {
@@ -788,9 +788,9 @@ export class PersonalImapService {
                       finalParameters[paramName] = String(attachmentParameters[paramName]);
                       console.log(`Priority rule: Using attachment value for ${paramName}: ${attachmentParameters[paramName]}`);
                     } else if (bodyParameters[paramName] && 
-                               bodyParameters[paramName] !== '-' && 
-                               bodyParameters[paramName] !== '' && 
-                               bodyParameters[paramName] !== null) {
+                             bodyParameters[paramName] !== '-' && 
+                             bodyParameters[paramName] !== '' && 
+                             bodyParameters[paramName] !== null) {
                       finalParameters[paramName] = String(bodyParameters[paramName]);
                       console.log(`Priority rule: Using body value for ${paramName}: ${bodyParameters[paramName]}`);
                     } else {
