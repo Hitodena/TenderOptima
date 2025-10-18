@@ -287,8 +287,8 @@ export default function SendRequest() {
           const emailsB = Array.isArray(b.email) ? b.email : [b.email];
           
           // Find best email for each supplier
-          const bestEmailA = findBestEmail(emailsA);
-          const bestEmailB = findBestEmail(emailsB);
+          const bestEmailA = findBestEmail(emailsA, a.website);
+          const bestEmailB = findBestEmail(emailsB, b.website);
           
           const salesKeywords = ['sales', 'продажи', 'заказ', 'order', 'commercial', 'коммерческий', 'info'];
           const aHasSalesKeyword = salesKeywords.some(keyword => cleanEmail(bestEmailA).toLowerCase().includes(keyword));
@@ -302,7 +302,7 @@ export default function SendRequest() {
         // Select the best supplier and set their best email
         const bestSupplier = sortedGroup[0];
         const allEmails = Array.isArray(bestSupplier.email) ? bestSupplier.email : [bestSupplier.email];
-        const bestEmail = findBestEmail(allEmails);
+        const bestEmail = findBestEmail(allEmails, bestSupplier.website);
         selected.push({ ...bestSupplier, email: allEmails, selectedEmail: bestEmail });
       }
     });
@@ -319,32 +319,134 @@ export default function SendRequest() {
   };
 
   // Helper function to find the best email from a list
-  const findBestEmail = (emails: string[]): string => {
+  const findBestEmail = (emails: string[], website?: string): string => {
     if (!emails || emails.length === 0) return '';
     if (emails.length === 1) return emails[0];
     
-    const salesKeywords = ['sales', 'продажи', 'заказ', 'order', 'commercial', 'коммерческий', 'info'];
+    // Filter out suspicious/strange email addresses
+    const suspiciousDomains = [
+      'sentry-next.wixpress.com',
+      'wixpress.com',
+      'sentry.io',
+      'noreply',
+      'no-reply',
+      'donotreply',
+      'mailer-daemon',
+      'postmaster',
+      'webmaster',
+      'admin',
+      'root',
+      'system'
+    ];
     
-    // First priority: sales-related emails
-    for (const email of emails) {
+    const suspiciousPatterns = [
+      /^[a-f0-9]{32}@/, // 32-character hex strings (like sentry IDs)
+      /^[a-f0-9]{24}@/, // 24-character hex strings
+      /^[a-f0-9]{16}@/, // 16-character hex strings
+      /^[a-f0-9]{8}@/,  // 8-character hex strings
+      /^[a-z0-9]{20,}@/ // Very long random-looking usernames
+    ];
+    
+    // Filter out suspicious emails
+    const cleanEmails = emails.filter(email => {
+      if (!email) return false;
+      const cleanEmailLower = cleanEmail(email).toLowerCase();
+      const domain = cleanEmailLower.split('@')[1];
+      
+      // Check for suspicious domains
+      if (suspiciousDomains.some(suspicious => domain?.includes(suspicious))) {
+        return false;
+      }
+      
+      // Check for suspicious patterns
+      if (suspiciousPatterns.some(pattern => pattern.test(cleanEmailLower))) {
+        return false;
+      }
+      
+      return true;
+    });
+    
+    // If no clean emails left, fall back to original list
+    const emailsToCheck = cleanEmails.length > 0 ? cleanEmails : emails;
+    
+    // Extract website domain for matching
+    let websiteDomain = '';
+    if (website) {
+      try {
+        const url = new URL(website.startsWith('http') ? website : `https://${website}`);
+        websiteDomain = url.hostname.replace(/^www\./, '').toLowerCase();
+      } catch (e) {
+        // If URL parsing fails, try to extract domain manually
+        websiteDomain = website.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0].toLowerCase();
+      }
+    }
+    
+    const salesKeywords = ['sales', 'продажи', 'заказ', 'order', 'commercial', 'коммерческий'];
+    const infoKeywords = ['info'];
+    
+    // First priority: sales-related emails from the same domain as website
+    if (websiteDomain) {
+      for (const email of emailsToCheck) {
+        if (!email) continue;
+        const cleanEmailLower = cleanEmail(email).toLowerCase();
+        const emailDomain = cleanEmailLower.split('@')[1];
+        const emailUser = cleanEmailLower.split('@')[0];
+        
+        if (emailDomain === websiteDomain && salesKeywords.some(keyword => emailUser.includes(keyword))) {
+          return email;
+        }
+      }
+    }
+    
+    // Second priority: sales-related emails (any domain)
+    for (const email of emailsToCheck) {
       if (!email) continue;
       const cleanEmailLower = cleanEmail(email).toLowerCase();
-      if (salesKeywords.some(keyword => cleanEmailLower.includes(keyword))) {
+      const emailUser = cleanEmailLower.split('@')[0];
+      if (salesKeywords.some(keyword => emailUser.includes(keyword))) {
         return email;
       }
     }
     
-    // Second priority: info emails
-    for (const email of emails) {
+    // Third priority: info emails from the same domain as website
+    if (websiteDomain) {
+      for (const email of emailsToCheck) {
+        if (!email) continue;
+        const cleanEmailLower = cleanEmail(email).toLowerCase();
+        const emailDomain = cleanEmailLower.split('@')[1];
+        const emailUser = cleanEmailLower.split('@')[0];
+        
+        if (emailDomain === websiteDomain && infoKeywords.some(keyword => emailUser.includes(keyword))) {
+          return email;
+        }
+      }
+    }
+    
+    // Fourth priority: info emails (any domain)
+    for (const email of emailsToCheck) {
       if (!email) continue;
       const cleanEmailLower = cleanEmail(email).toLowerCase();
-      if (cleanEmailLower.includes('info')) {
+      const emailUser = cleanEmailLower.split('@')[0];
+      if (infoKeywords.some(keyword => emailUser.includes(keyword))) {
         return email;
       }
     }
     
-    // Default: return first non-empty email
-    return emails.find(email => email && email.trim()) || emails[0];
+    // Fifth priority: emails from the same domain as website
+    if (websiteDomain) {
+      for (const email of emailsToCheck) {
+        if (!email) continue;
+        const cleanEmailLower = cleanEmail(email).toLowerCase();
+        const emailDomain = cleanEmailLower.split('@')[1];
+        
+        if (emailDomain === websiteDomain) {
+          return email;
+        }
+      }
+    }
+    
+    // Default: return first non-empty email from clean list
+    return emailsToCheck.find(email => email && email.trim()) || emails[0];
   };
 
   // Function to handle email selection within a supplier

@@ -25,6 +25,7 @@ interface SentEmailsPanelProps {
   onToggleBack?: () => void;
   request?: SearchRequest;
   forceRefresh?: boolean; // Флаг для принудительного обновления
+  sentCount?: number; // Количество отправленных сообщений
 }
 
 export function SentEmailsPanel({
@@ -33,7 +34,8 @@ export function SentEmailsPanel({
   activeSupplierId,
   onToggleBack,
   request,
-  forceRefresh = false
+  forceRefresh = false,
+  sentCount = 0
 }: SentEmailsPanelProps) {
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [selectedSupplierForDetails, setSelectedSupplierForDetails] = useState<{
@@ -145,7 +147,7 @@ export function SentEmailsPanel({
           {/* Folder toggle header */}
           <div className="p-3 bg-muted/20 border-b">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">Отправленные</span>
+              <span className="text-sm font-medium">Отправленные ({sentCount})</span>
               <div className="flex items-center gap-2">
                 <TooltipProvider>
                   <Tooltip>

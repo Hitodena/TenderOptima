@@ -137,6 +137,8 @@ export default function RequestDetails() {
   const [activeResponse, setActiveResponse] = useState<SupplierResponse | null>(null);
   const [forceParameterExtraction, setForceParameterExtraction] = useState(false);
   const [parameterStatus, setParameterStatus] = useState<string>('idle');
+  const [hasFilledParameters, setHasFilledParameters] = useState<boolean>(false);
+  const [hasAttachmentParameters, setHasAttachmentParameters] = useState<boolean>(false);
   const [isParameterRefreshing, setIsParameterRefreshing] = useState(false);
   const [parameterRefreshHandler, setParameterRefreshHandler] = useState<(() => void) | null>(null);
   const [isCompareLoading, setIsCompareLoading] = useState(false);
@@ -240,6 +242,11 @@ export default function RequestDetails() {
     
     // NOTE: Parameter extraction will be triggered only when ParameterExtractionStatus component loads
   }, [markAsReadMutation]);
+
+  // Function to clear active response (for when responses are deleted)
+  const clearActiveResponse = useCallback(() => {
+    setActiveResponse(null);
+  }, []);
 
   // Track last viewed request in localStorage
   useEffect(() => {
@@ -548,11 +555,13 @@ export default function RequestDetails() {
                   setForceRefreshSentEmails(true); // Принудительно обновляем отправленные сообщения
                 }}
                 unreadCount={unreadResponsesCount}
+                sentCount={requestSuppliers.length}
                 requestName={request?.productName}
                 request={request}
                 requestSuppliers={requestSuppliers}
                 onStatusUpdate={(id, status) => updateStatusMutation.mutate({ id, status })}
                 isUpdatingStatus={updateStatusMutation.isPending}
+                onClearActiveResponse={clearActiveResponse}
                 onCompare={() => {
                   if (selectedResponses.length < 1) {
                     toast({
@@ -607,6 +616,7 @@ export default function RequestDetails() {
                 }}
                 request={request}
                 forceRefresh={forceRefreshSentEmails}
+                sentCount={requestSuppliers.length}
               />
             )}
           </div>
@@ -622,7 +632,13 @@ export default function RequestDetails() {
                       {parameterStatus === 'success' && (
                         <>
                           <div className="relative group">
-                            <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center">
+                            <div className={`w-5 h-5 rounded-full flex items-center justify-center ${
+                              !hasFilledParameters 
+                                ? 'bg-red-100' 
+                                : hasAttachmentParameters 
+                                  ? 'bg-yellow-100' 
+                                  : 'bg-green-100'
+                            }`}>
                               <svg 
                                 xmlns="http://www.w3.org/2000/svg" 
                                 width="12" 
@@ -633,14 +649,30 @@ export default function RequestDetails() {
                                 strokeWidth="3" 
                                 strokeLinecap="round" 
                                 strokeLinejoin="round" 
-                                className="text-green-600"
+                                className={
+                                  !hasFilledParameters 
+                                    ? 'text-red-600' 
+                                    : hasAttachmentParameters 
+                                      ? 'text-yellow-600' 
+                                      : 'text-green-600'
+                                }
                               >
-                                <path d="M20 6L9 17l-5-5" />
+                                {!hasFilledParameters ? (
+                                  <path d="M18 6L6 18M6 6l12 12" />
+                                ) : hasAttachmentParameters ? (
+                                  <path d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                                ) : (
+                                  <path d="M20 6L9 17l-5-5" />
+                                )}
                               </svg>
                             </div>
                             {/* Tooltip on hover */}
                             <div className="absolute top-full right-0 transform-none mt-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10 shadow">
-                              Параметры найдены
+                              {!hasFilledParameters 
+                                ? 'Параметры не заполнены' 
+                                : hasAttachmentParameters 
+                                  ? 'Параметры из OCR/картинок - проверьте данные' 
+                                  : 'Параметры заполнены'}
                             </div>
                           </div>
                           <div className="relative group">
@@ -682,21 +714,27 @@ export default function RequestDetails() {
                           console.log('Parameters extracted:', parameters);
                           setForceParameterExtraction(false);
                           
-                          // Обновляем данные после извлечения параметров
+                          // Обновляем кэш для отображения новых параметров в UI
                           try {
-                            console.log('🔄 Refreshing data after parameter extraction...');
+                            console.log('🔄 Refreshing cache after parameter extraction...');
                             await queryClient.invalidateQueries({ queryKey: ['/api/search-requests', 'single', id] });
                             await queryClient.invalidateQueries({ queryKey: ['/api/supplier-responses', id] });
-                            await refetch();
-                            console.log('✅ Data refreshed after parameter extraction');
+                            // НЕ вызываем refetch() - это может вызвать бесконечный цикл
+                            console.log('✅ Cache refreshed after parameter extraction');
                           } catch (error) {
-                            console.error('❌ Failed to refresh data after parameter extraction:', error);
+                            console.error('❌ Failed to refresh cache after parameter extraction:', error);
                           }
                         }}
                         onStatusChange={(status, isRefreshing, onRefresh) => {
                           setParameterStatus(status);
                           setIsParameterRefreshing(isRefreshing);
                           setParameterRefreshHandler(() => onRefresh);
+                        }}
+                        onParametersFilledChange={(hasFilled) => {
+                          setHasFilledParameters(hasFilled);
+                        }}
+                        onAttachmentParametersChange={(hasAttachment) => {
+                          setHasAttachmentParameters(hasAttachment);
                         }}
                       />
                     ) : (

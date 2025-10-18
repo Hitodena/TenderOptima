@@ -34,7 +34,8 @@ import {
   RefreshCw,
   Reply,
   Info,
-  Reply as ReplyIcon
+  Reply as ReplyIcon,
+  Trash2
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -98,11 +99,13 @@ interface ResponsePanelProps {
   isCheckingOffers?: boolean; // Loading state for checking offers
   onShowSuppliers?: () => void; // Callback for showing suppliers list
   unreadCount?: number; // Number of unread responses
+  sentCount?: number; // Number of sent emails
   requestName?: string; // Request product name
   request?: any; // Full request object for detailed info
   requestSuppliers?: any[]; // Request suppliers for statistics
   onStatusUpdate?: (id: number, status: string) => void; // Callback for status update
   isUpdatingStatus?: boolean; // Loading state for status update
+  onClearActiveResponse?: () => void; // Callback to clear active response
 }
 
 export function ResponsePanel({
@@ -118,11 +121,13 @@ export function ResponsePanel({
   isCheckingOffers = false,
   onShowSuppliers,
   unreadCount = 0,
+  sentCount = 0,
   requestName,
   request,
   requestSuppliers,
   onStatusUpdate,
-  isUpdatingStatus = false
+  isUpdatingStatus = false,
+  onClearActiveResponse
 }: ResponsePanelProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -138,6 +143,7 @@ export function ResponsePanel({
   const [replyButtonClicked, setReplyButtonClicked] = useState<boolean>(false);
   const [showSentEmails, setShowSentEmails] = useState<boolean>(false);
   const [replyText, setReplyText] = useState<string>('');
+  const [showDeleteDialog, setShowDeleteDialog] = useState<boolean>(false);
   
   // Sorting options
   type SortField = 'date' | 'sender' | 'status' | 'favorite';
@@ -234,6 +240,7 @@ export function ResponsePanel({
     }
   }, [activeResponse]);
 
+
   // Function to update the active response (for reply drafts, etc.)
   const updateActiveResponse = (updatedResponse: SupplierResponse) => {
     setLocalResponses(prevResponses => 
@@ -292,6 +299,60 @@ export function ResponsePanel({
         const newSet = new Set(prev);
         newSet.delete(responseId);
         return newSet;
+      });
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedResponses.length === 0) return;
+    
+    try {
+      // Call API to mark responses as bulk deleted
+      const response = await fetch('/api/supplier-responses/bulk-delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          responseIds: selectedResponses
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete responses');
+      }
+
+      // Remove deleted responses from local state
+      setLocalResponses(prev => 
+        prev.filter(r => !selectedResponses.includes(r.id))
+      );
+      
+      // Clear active response if it was deleted
+      if (activeResponseId && selectedResponses.includes(activeResponseId)) {
+        setActiveResponseId(null);
+        if (onClearActiveResponse) {
+          onClearActiveResponse();
+        }
+      }
+      
+      // Clear selection
+      setSelectedResponses([]);
+      
+      // Close dialog
+      setShowDeleteDialog(false);
+      
+      // Show success message
+      toast({
+        title: "Сообщения удалены",
+        description: `Удалено ${selectedResponses.length} сообщений`,
+      });
+      
+    } catch (error) {
+      console.error('Error deleting responses:', error);
+      toast({
+        title: "Ошибка",
+        description: "Не удалось удалить сообщения",
+        variant: "destructive",
       });
     }
   };
@@ -627,7 +688,7 @@ export function ResponsePanel({
             <div className="flex items-center justify-between h-6">
               <div className="flex items-center gap-1">
                 <span className="text-sm font-medium">
-                  {showSentEmails ? "Отправленные" : "Входящие"}
+                  {showSentEmails ? `Отправленные (${sentCount})` : `Входящие (${supplierResponses.length})`}
                 </span>
                 {!showSentEmails && unreadCount > 0 && (
                   <Badge 
@@ -769,17 +830,17 @@ export function ResponsePanel({
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-8 px-2 text-xs">
-                      <span className="mr-1">
-                         
-                      </span>
-                      {sortDirection === 'asc' 
-                        ? <ArrowUpNarrowWide className="w-3 h-3" /> 
-                        : <ArrowDownNarrowWide className="w-3 h-3" />}
-                    </Button>
-                  </DropdownMenuTrigger>
+                 <TooltipProvider>
+                   <Tooltip>
+                     <TooltipTrigger asChild>
+                       <DropdownMenu>
+                         <DropdownMenuTrigger asChild>
+                           <Button variant="outline" size="icon" className="h-8 w-8">
+                             {sortDirection === 'asc' 
+                               ? <ArrowUpNarrowWide className="w-3.5 h-3.5" /> 
+                               : <ArrowDownNarrowWide className="w-3.5 h-3.5" />}
+                           </Button>
+                         </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-48">
                     <DropdownMenuLabel>Сортировка</DropdownMenuLabel>
                     <DropdownMenuSeparator />
@@ -845,7 +906,35 @@ export function ResponsePanel({
                       {sortDirection === 'asc' ? 'По возрастанию' : 'По убыванию'}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
-                </DropdownMenu>
+                         </DropdownMenu>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="bg-gray-800 text-white border-0">
+                      <p>Сортировка</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                
+                {/* Кнопка корзины */}
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button 
+                        variant="outline" 
+                        size="icon" 
+                        className="h-8 w-8"
+                        onClick={() => {
+                          setShowDeleteDialog(true);
+                        }}
+                        disabled={selectedResponses.length === 0}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="bg-gray-800 text-white border-0">
+                      <p>Удалить выбранные</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
             </div>
 
@@ -1374,6 +1463,37 @@ export function ResponsePanel({
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsRequestInfoOpen(false)}>
                 Закрыть
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Диалог подтверждения удаления */}
+        <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Подтверждение удаления</DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              <p className="text-sm text-muted-foreground">
+                Вы уверены, что хотите удалить выбранные сообщения? Восстановление невозможно.
+              </p>
+              <p className="text-sm font-medium mt-2">
+                Будет удалено: {selectedResponses.length} сообщений
+              </p>
+            </div>
+            <DialogFooter className="flex gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setShowDeleteDialog(false)}
+              >
+                Отмена
+              </Button>
+              <Button 
+                variant="destructive" 
+                onClick={handleDeleteSelected}
+              >
+                Да, удалить
               </Button>
             </DialogFooter>
           </DialogContent>

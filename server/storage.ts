@@ -115,6 +115,7 @@ export interface IStorage {
   getSupplierResponseById(id: number): Promise<SupplierResponse | undefined>;
   markSupplierResponseAsRead(id: number): Promise<SupplierResponse | undefined>;
   toggleFavoriteResponse(id: number): Promise<SupplierResponse | undefined>;
+  bulkDeleteSupplierResponses(responseIds: number[], userId: number): Promise<{ deletedCount: number }>;
   getSupplierResponseWithMessage(responseId: number): Promise<any>;
   getSupplierResponsesWithMessages(requestId: number): Promise<any[]>;
   checkExistingSupplierResponseByMessageId(messageId: string): Promise<SupplierResponse | undefined>;
@@ -836,6 +837,15 @@ export class DatabaseStorage implements IStorage {
         userFilter;
     }
     
+    // Exclude bulk deleted responses (bulk = false or null)
+    const bulkFilter = or(
+      eq(supplierResponses.bulk, false),
+      isNull(supplierResponses.bulk)
+    );
+    conditions = conditions ? 
+      and(conditions, bulkFilter) : 
+      bulkFilter;
+    
     // Apply conditions if any
     if (conditions) {
       query = query.where(conditions);
@@ -1088,7 +1098,12 @@ export class DatabaseStorage implements IStorage {
     // Build the query with both request IDs and user ID filters
     const conditions = and(
       inArray(supplierResponses.requestId, requestIds),
-      eq(supplierResponses.userId, userId)
+      eq(supplierResponses.userId, userId),
+      // Exclude bulk deleted responses
+      or(
+        eq(supplierResponses.bulk, false),
+        isNull(supplierResponses.bulk)
+      )
     );
     
     const results = await db
@@ -1205,6 +1220,31 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error(`Error updating supplier response with ID ${id}:`, error);
       return undefined;
+    }
+  }
+
+  async bulkDeleteSupplierResponses(responseIds: number[], userId: number): Promise<{ deletedCount: number }> {
+    try {
+      console.log(`[storage] Bulk deleting ${responseIds.length} supplier responses for user ${userId}`);
+      
+      // Mark responses as bulk deleted (set bulk = true)
+      const result = await db
+        .update(supplierResponses)
+        .set({ bulk: true })
+        .where(
+          and(
+            inArray(supplierResponses.id, responseIds),
+            eq(supplierResponses.userId, userId) // Ensure user can only delete their own responses
+          )
+        )
+        .returning({ id: supplierResponses.id });
+
+      console.log(`[storage] Successfully marked ${result.length} responses as bulk deleted`);
+      
+      return { deletedCount: result.length };
+    } catch (error) {
+      console.error(`[storage] Error bulk deleting supplier responses:`, error);
+      throw error;
     }
   }
 

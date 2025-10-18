@@ -6,12 +6,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ProgressButton } from "@/components/ui/progress-button";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useToast } from "@/components/ui/toast";
+import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Plus, Globe, Search } from "lucide-react";
+import { Plus, Globe, Search, Info } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useState, useMemo } from "react";
@@ -29,8 +30,9 @@ export function SupplierSearchForm({ onComplete }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [keywordDialogOpen, setKeywordDialogOpen] = useState(false);
-  const [keywords, setKeywords] = useState<string[]>(Array(10).fill(""));
+  const [keywords, setKeywords] = useState<string[]>(Array(5).fill(""));
   const [displayedKeywords, setDisplayedKeywords] = useState("");
+  const [infoPopoverOpen, setInfoPopoverOpen] = useState(false);
 
   const [selectedRegions, setSelectedRegions] = useState<SelectedRegion[]>([]);
   const [showRegionDialog, setShowRegionDialog] = useState(false);
@@ -53,6 +55,11 @@ export function SupplierSearchForm({ onComplete }: Props) {
   });
 
   const handleKeywordChange = (index: number, value: string) => {
+    // Проверяем, есть ли запятые в значении
+    if (value.includes(',')) {
+      toast({ title: "Ошибка ввода", description: "В отдельных полях запятые недопустимы", variant: "destructive" });
+      return;
+    }
     const newKeywords = [...keywords];
     newKeywords[index] = value;
     setKeywords(newKeywords);
@@ -60,6 +67,10 @@ export function SupplierSearchForm({ onComplete }: Props) {
 
   const handleKeywordConfirm = () => {
     const filteredKeywords = keywords.filter(k => k.trim() !== "");
+    if (filteredKeywords.length > 5) {
+      toast({ title: "Превышен лимит", description: "Можно ввести не более 5 ключевых запросов", variant: "destructive" });
+      return;
+    }
     setDisplayedKeywords(filteredKeywords.join(", "));
     form.setValue("productName", filteredKeywords.join(", "));
     setKeywordDialogOpen(false);
@@ -208,10 +219,57 @@ export function SupplierSearchForm({ onComplete }: Props) {
           control={form.control} name="productName"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Ключевые слова</FormLabel>
+              <div className="flex items-center gap-2">
+                <FormLabel>Ключевые слова</FormLabel>
+                <Popover open={infoPopoverOpen} onOpenChange={setInfoPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                      <Info className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[768px] p-4" align="start">
+                    <div className="space-y-3">
+                      <h4 className="font-medium text-sm">Правила составления запросов</h4>
+                      <div className="text-sm space-y-3">
+                        <p>Чтобы получить наиболее точные результаты, используйте следующие рекомендации при вводе ключевых слов:</p>
+                        
+                        <div className="space-y-2">
+                          <p className="font-medium">Выбирайте одну группу товара.</p>
+                          <div className="pl-2 space-y-1">
+                            <p className="text-gray-700">✓ Правильно: картон купить от производителя</p>
+                            <p className="text-gray-700">✗ Неправильно: картон купить от производителя, флаконы купить от производителя</p>
+                            <p className="text-xs text-gray-500">(в этом случае получите смешанную выдачу результата для разных групп товаров).</p>
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <p className="font-medium">Вы можете указать несколько однотипных запросов, перечислив их через запятую. Каждый запрос будет обработан как отдельный.</p>
+                          <p className="text-xs text-gray-500">Например: картонные коробки от производителя, картонные коробки оптом купить.</p>
+                          <p className="text-xs text-gray-500">Можно указать до 5-ти однотипных вариаций в одном запросе.</p>
+                        </div>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
               <div className="flex items-center gap-2">
                 <FormControl>
-                  <Input placeholder="Введите ключевые слова" value={displayedKeywords || field.value} onChange={(e) => { field.onChange(e); setDisplayedKeywords(e.target.value); }} />
+                  <Input 
+                    placeholder="Введите ключевые слова" 
+                    value={displayedKeywords || field.value} 
+                    onChange={(e) => { 
+                      const value = e.target.value;
+                      const commaCount = (value.match(/,/g) || []).length;
+                      console.log("Input value:", value, "Comma count:", commaCount);
+                      if (commaCount > 4) {
+                        console.log("Showing toast for limit exceeded");
+                        toast({ title: "Превышен лимит", description: "Можно ввести не более 5 ключевых запросов (максимум 4 запятые)", variant: "destructive" });
+                        return;
+                      }
+                      field.onChange(e); 
+                      setDisplayedKeywords(value); 
+                    }} 
+                  />
                 </FormControl>
                 <Dialog open={keywordDialogOpen} onOpenChange={setKeywordDialogOpen}>
                   <DialogTrigger asChild>
@@ -220,11 +278,17 @@ export function SupplierSearchForm({ onComplete }: Props) {
                    <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Добавление ключевых слов</DialogTitle>
-                        <DialogDescription>Введите до 10 слов для смешанного поиска.</DialogDescription>
+                        <DialogDescription>Выберете до 5 ключевых запросов</DialogDescription>
                     </DialogHeader>
                     <div className="py-4 space-y-2 max-h-[380px] overflow-y-auto pr-1">
                         {keywords.map((keyword, index) => (
-                          <Input key={index} value={keyword} onChange={(e) => handleKeywordChange(index, e.target.value)} placeholder={`Слово ${index + 1}`} />
+                          <Input 
+                            key={index} 
+                            value={keyword} 
+                            onChange={(e) => handleKeywordChange(index, e.target.value)} 
+                            placeholder={`Запрос ${index + 1}`}
+                            className="focus-visible:ring-1 focus-visible:ring-offset-0"
+                          />
                         ))}
                     </div>
                     <DialogFooter><Button type="button" onClick={handleKeywordConfirm}>Подтвердить</Button></DialogFooter>

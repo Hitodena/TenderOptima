@@ -2750,7 +2750,7 @@ export default function CompareResultsPage() {
 
                                     // Determine arrow direction and color based on parameter type and improvement
                                     const getArrowDisplay = (paramName: string, currentVal: string, previousVal: string) => {
-ё                                      if (!currentVal || !previousVal) return null;
+                                      if (!currentVal || !previousVal) return null;
                                       
                                       // Parse numeric values for comparison
                                       const parseNumeric = (val: string) => {
@@ -2908,8 +2908,8 @@ export default function CompareResultsPage() {
                               
                               {/* Compliance Check Row - Hide when winner is selected */}
                               {!selectedWinner && (
-                                <tr className="bg-gray-50 mt-4">
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 w-48 sticky left-0 bg-gray-50 z-10 border-t-2 border-primary">
+                                <tr className="bg-blue-50 mt-4">
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 w-48 sticky left-0 bg-blue-50 z-10 border-t-2 border-primary">
                                     Проверка соответствия
                                   </td>
                                 {sortedSuppliers.map((supplier, supplierIndex) => {
@@ -2981,8 +2981,8 @@ export default function CompareResultsPage() {
                               
                               {/* Process Improvement Row - Hide when winner is selected */}
                               {!selectedWinner && (
-                                <tr className="bg-gray-50">
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 w-48 sticky left-0 bg-gray-50 z-10">
+                                <tr className="bg-blue-50">
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 w-48 sticky left-0 bg-blue-50 z-10">
                                     Процесс улучшения условий
                                   </td>
                                 {sortedSuppliers.map((supplier, supplierIndex) => {
@@ -3002,8 +3002,8 @@ export default function CompareResultsPage() {
                               )}
                               
                               {/* Winner Selection Row */}
-                              <tr className={`bg-gray-50 ${selectedWinner ? 'border-t-2 border-gray-200' : 'border-t-2 border-gray-200'}`}>
-                                <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 w-48 sticky left-0 z-10 bg-gray-50`}>
+                              <tr className={`bg-blue-50 ${selectedWinner ? 'border-t-2 border-blue-200' : 'border-t-2 border-blue-200'}`}>
+                                <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 w-48 sticky left-0 z-10 bg-blue-50`}>
                                   <div className="flex items-center space-x-2">
                                     <span>Определение победителя</span>
                                   </div>

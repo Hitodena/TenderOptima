@@ -185,7 +185,8 @@ export const supplierResponses = pgTable("supplier_responses", {
   processingStatus: text("processing_status").default("pending"), // pending, processing, completed, failed
   processingStartedAt: timestamp("processing_started_at"),
   processingCompletedAt: timestamp("processing_completed_at"),
-  processingError: text("processing_error")
+  processingError: text("processing_error"),
+  bulk: boolean("bulk").default(false) // Флаг для пометки сообщений как удаленных (bulk delete)
 });
 
 // Table to store extracted parameters from supplier responses

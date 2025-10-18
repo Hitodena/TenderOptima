@@ -23,6 +23,8 @@ interface ParameterExtractionStatusProps {
   supplierName?: string;
   onParametersExtracted?: (parameters: any) => void;
   onStatusChange?: (status: string, isRefreshing: boolean, onRefresh: () => void) => void;
+  onParametersFilledChange?: (hasFilledParameters: boolean) => void;
+  onAttachmentParametersChange?: (hasAttachmentParameters: boolean) => void;
   forceExtract?: boolean;
   requestParameters?: string[]; // Добавляем параметры как пропс
 }
@@ -39,6 +41,8 @@ export function ParameterExtractionStatus({
   supplierName,
   onParametersExtracted,
   onStatusChange,
+  onParametersFilledChange,
+  onAttachmentParametersChange,
   forceExtract = false,
   requestParameters = [] // Используем переданные параметры
 }: ParameterExtractionStatusProps) {
@@ -53,7 +57,11 @@ export function ParameterExtractionStatus({
   const [editingParam, setEditingParam] = useState<string | null>(null);
   const [editedValue, setEditedValue] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
+  
 
+  // Use ref to store the latest onParametersExtracted callback
+  const onParametersExtractedRef = useRef(onParametersExtracted);
+  onParametersExtractedRef.current = onParametersExtracted;
 
   // Обновляем параметры когда они изменяются
   useEffect(() => {
@@ -120,56 +128,48 @@ export function ParameterExtractionStatus({
         // Check if parameters already exist in the database (pre-processed)
         console.log(`Checking for existing pre-processed parameters for response ${responseId}`);
         const result = await getExtractedParameters(responseId);
+        console.log('Full API result:', result);
         
-        // Check if the response has status "no_parameters_found"
+        // If parameters exist in database (even with '-' values), show them
+        if (result && result.parameters) {
+          console.log('Parameters found in database for response:', responseId);
+          console.log('Parameters received for display:', result.parameters);
+          
+          // Handle both object and array format of parameters
+          if (Array.isArray(result.parameters)) {
+            // Convert array format to object format for UI display
+            const paramObj: Record<string, string> = {};
+            result.parameters.forEach((param: any) => {
+              paramObj[param.name] = param.value || '-';
+            });
+            setParameters(paramObj);
+            console.log('Converted array parameters to object format:', paramObj);
+            
+            if (onParametersExtractedRef.current) {
+              onParametersExtractedRef.current(paramObj);
+            }
+          } else {
+            setParameters(result.parameters);
+            
+            if (onParametersExtractedRef.current) {
+              onParametersExtractedRef.current(result.parameters);
+            }
+          }
+          
+          setStatus('success');
+          return;
+        }
+        
+        // If no parameters found, check if it's explicitly marked as "no_parameters_found"
         if (result && typeof result === 'object' && 'status' in result && result.status === 'no_parameters_found') {
           console.log(`Response ${responseId} has status "no_parameters_found"`);
           setParameters({});
           setStatus('no-parameters');
-          return;
+        } else {
+          console.log(`No parameters found for response ${responseId} - parameters should be pre-processed on backend`);
+          setParameters({});
+          setStatus('no-parameters');
         }
-        
-        // Only consider it successful if we have actual parameter values (not just "-")
-        if (result && result.parameters) {
-          const hasValidParameters = 
-            Array.isArray(result.parameters) 
-              ? result.parameters.some(p => p.value && p.value !== '-')
-              : Object.values(result.parameters).some(v => v && v !== '-');
-              
-          if (hasValidParameters) {
-            console.log('Valid parameters found for response:', responseId);
-            console.log('Parameters received for display:', result.parameters);
-            
-            // Handle both object and array format of parameters
-            if (Array.isArray(result.parameters)) {
-              // Convert array format to object format for UI display
-              const paramObj: Record<string, string> = {};
-              result.parameters.forEach((param: any) => {
-                paramObj[param.name] = param.value || '-';
-              });
-              setParameters(paramObj);
-              console.log('Converted array parameters to object format:', paramObj);
-              
-              if (onParametersExtracted) {
-                onParametersExtracted(paramObj);
-              }
-            } else {
-              setParameters(result.parameters);
-              
-              if (onParametersExtracted) {
-                onParametersExtracted(result.parameters);
-              }
-            }
-            
-            setStatus('success');
-            return;
-          }
-        }
-        
-        // If no parameters found, show no-parameters status (no automatic extraction)
-        console.log(`No valid parameters found for response ${responseId} - parameters should be pre-processed on backend`);
-        setParameters({});
-        setStatus('no-parameters');
       } catch (error) {
         console.error('Error loading parameters from database:', error);
         // Set status to idle so the user can manually trigger extraction
@@ -178,7 +178,7 @@ export function ParameterExtractionStatus({
     };
     
     loadPreProcessedParameters();
-  }, [responseId, requestId, onParametersExtracted]);
+  }, [responseId, requestId]);
   // Note: Do not early-return before hooks to avoid changing hook order between renders
 
   // Function to try extracting parameters using DeepSeek API
@@ -303,18 +303,18 @@ export function ParameterExtractionStatus({
           setStatus('success');
           setErrorMessage(null);
           
-          if (onParametersExtracted) {
+          if (onParametersExtractedRef.current) {
             console.log('Parameters extracted in supplier status section:', filteredParams);
-            onParametersExtracted(filteredParams);
+            onParametersExtractedRef.current(filteredParams);
           }
         } else {
           console.log('No valid parameters were found in extraction, saving empty parameters to database');
           // Still save empty parameters to database so we don't re-extract
           setStatus('no-parameters');
           
-          if (onParametersExtracted) {
+          if (onParametersExtractedRef.current) {
             console.log('Saving empty parameters in database to avoid re-analysis');
-            onParametersExtracted(filteredParams);
+            onParametersExtractedRef.current(filteredParams);
           }
         }
       } else {
@@ -329,9 +329,9 @@ export function ParameterExtractionStatus({
         setParameters(emptyParams);
         setStatus('error');
         
-        if (onParametersExtracted) {
+        if (onParametersExtractedRef.current) {
           console.log('Saving empty parameters in database to avoid re-analysis');
-          onParametersExtracted(emptyParams);
+          onParametersExtractedRef.current(emptyParams);
         }
       }
     } catch (error) {
@@ -341,7 +341,7 @@ export function ParameterExtractionStatus({
     } finally {
       setIsRefreshing(false);
     }
-  }, [responseId, requestId, requestParametersList, onParametersExtracted]);
+  }, [responseId, requestId, requestParametersList]);
 
   // Function to handle refresh/retry
   const handleRefresh = useCallback(() => {
@@ -400,10 +400,50 @@ export function ParameterExtractionStatus({
   
 
 
+  // Helper function to check if any parameters are filled
+  const hasFilledParameters = useMemo(() => {
+    if (!parameters || Object.keys(parameters).length === 0) {
+      return false;
+    }
+    
+    // Check if any parameter has a value other than '-' or empty
+    return Object.values(parameters).some(value => 
+      value && value !== '-' && String(value).trim() !== ''
+    );
+  }, [parameters]);
+
+  // Helper function to check if any parameters are from attachments (OCR/images)
+  const hasAttachmentParameters = useMemo(() => {
+    if (!parameters || Object.keys(parameters).length === 0) {
+      return false;
+    }
+    
+    // For now, we'll assume parameters are from text content by default
+    // Yellow indicator will only show when we have explicit source information
+    // TODO: Implement proper source detection when API provides source information
+    // For now, return false to show green indicator by default
+    return false;
+  }, [parameters]);
+
+  // Notify parent component about parameters filled status
+  useEffect(() => {
+    if (onParametersFilledChange) {
+      onParametersFilledChange(hasFilledParameters);
+    }
+  }, [hasFilledParameters, onParametersFilledChange]);
+
+  // Notify parent component about attachment parameters status
+  useEffect(() => {
+    if (onAttachmentParametersChange) {
+      onAttachmentParametersChange(hasAttachmentParameters);
+    }
+  }, [hasAttachmentParameters, onAttachmentParametersChange]);
+
   // Functions for inline editing
   const startEditing = (paramName: string, currentValue: string) => {
     setEditingParam(paramName);
-    setEditedValue(currentValue);
+    // If current value is '-', start with empty field for better UX
+    setEditedValue(currentValue === '-' ? '' : currentValue);
   };
 
   const cancelEditing = () => {
@@ -417,21 +457,24 @@ export function ParameterExtractionStatus({
     setIsSaving(true);
     try {
       // Create updated parameters object with the new value
+      // If edited value is empty, save as '-' to show "Не указано"
       const updatedParameters = {
         ...parameters,
-        [editingParam]: editedValue
+        [editingParam]: editedValue.trim() === '' ? '-' : editedValue.trim()
       };
 
-      await apiRequest('PUT', `/api/extracted-parameters/${responseId}`, {
+      console.log('Saving parameter update:', updatedParameters);
+      const response = await apiRequest('PUT', `/api/extracted-parameters/${responseId}`, {
         parameters: updatedParameters
       });
+      console.log('API response for parameter update:', response);
 
       // Update local state
       setParameters(updatedParameters);
 
       // Notify parent component if callback exists
-      if (onParametersExtracted) {
-        onParametersExtracted(updatedParameters);
+      if (onParametersExtractedRef.current) {
+        onParametersExtractedRef.current(updatedParameters);
       }
 
       // Show success notification
@@ -446,6 +489,41 @@ export function ParameterExtractionStatus({
       setIsSaving(false);
     }
   };
+
+  // Functions for manual input mode
+  const startManualInput = async () => {
+    // Initialize parameters with empty values for all request parameters
+    const initialParams: Record<string, string> = {};
+    requestParametersList.forEach(param => {
+      initialParams[param] = '-'; // Use '-' to show "Не указано"
+    });
+    
+    try {
+      console.log('Saving empty parameters to database:', initialParams);
+      // Save empty parameters to database so they persist
+      const response = await apiRequest('PUT', `/api/extracted-parameters/${responseId}`, {
+        parameters: initialParams
+      });
+      console.log('API response for saving parameters:', response);
+      
+      // Update local state
+      setParameters(initialParams);
+      setStatus('success');
+      
+      // Notify parent component
+      if (onParametersExtractedRef.current) {
+        onParametersExtractedRef.current(initialParams);
+      }
+      
+      console.log('Empty parameters saved to database for manual input');
+    } catch (error) {
+      console.error('Error saving empty parameters:', error);
+      // Still show the UI even if save fails
+      setParameters(initialParams);
+      setStatus('success');
+    }
+  };
+
 
   // Return different UI based on status
   if (status === 'loading' || isRefreshing) {
@@ -571,7 +649,15 @@ export function ParameterExtractionStatus({
         <Card className="bg-muted/30 mt-2">
           <CardContent className="p-4">
             <div className="flex flex-col items-center justify-center text-muted-foreground text-sm text-center py-6 bg-gray-50 rounded-md">
-              <p className="mb-2">В данном емайле нет параметров для извлечения</p>
+              <p className="mb-2">
+                В данном емайле нет параметров для извлечения.{' '}
+                <button 
+                  onClick={startManualInput}
+                  className="text-muted-foreground hover:text-foreground underline cursor-pointer transition-colors"
+                >
+                  Внести вручную
+                </button>
+              </p>
               <Button 
                 variant="ghost" 
                 size="sm" 
@@ -647,6 +733,7 @@ export function ParameterExtractionStatus({
       </div>
     );
   }
+
 
   // Default: idle or waiting
   return (

@@ -130,6 +130,8 @@ export default function RequestDetails() {
               requestId={request?.id}
               onActiveResponseChange={(responseId, response) => setActiveResponse(response)}
               onCompare={() => { /* Логика сравнения */ }}
+              unreadCount={unreadResponsesCount}
+              sentCount={requestSuppliers.length}
             />
           </TabsContent>
           

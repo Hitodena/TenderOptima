@@ -467,6 +467,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Bulk delete supplier responses (mark as bulk deleted)
+  app.post("/api/supplier-responses/bulk-delete", requireAuth, async (req, res) => {
+    try {
+      const { responseIds } = req.body;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      if (!responseIds || !Array.isArray(responseIds) || responseIds.length === 0) {
+        return res.status(400).json({ message: "Response IDs array is required" });
+      }
+
+      // Validate that all IDs are numbers
+      const validIds = responseIds.filter(id => typeof id === 'number' && !isNaN(id));
+      if (validIds.length !== responseIds.length) {
+        return res.status(400).json({ message: "All response IDs must be valid numbers" });
+      }
+
+      console.log(`Bulk deleting ${validIds.length} supplier responses for user ${userId}`);
+
+      // Mark responses as bulk deleted
+      const result = await storage.bulkDeleteSupplierResponses(validIds, userId);
+
+      res.json({ 
+        message: `Successfully marked ${result.deletedCount} responses as deleted`,
+        deletedCount: result.deletedCount,
+        responseIds: validIds
+      });
+
+    } catch (error) {
+      console.error("Error bulk deleting supplier responses:", error);
+      res.status(500).json({ message: "Failed to delete supplier responses", error: String(error) });
+    }
+  });
+
   // Get all suppliers
   app.get("/api/suppliers", requireAuth, async (_req, res) => {
     try {
