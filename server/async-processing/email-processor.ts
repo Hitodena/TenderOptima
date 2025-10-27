@@ -76,6 +76,14 @@ export class AsyncEmailProcessor {
         console.log(`[AsyncEmailProcessor] - ExtractedText length: ${attachment.extractedText?.length || 0}`);
         if (attachment.extractedText && attachment.extractedText.length > 0) {
           console.log(`[AsyncEmailProcessor] - ExtractedText preview: ${attachment.extractedText.substring(0, 200)}...`);
+          
+          // Проверяем качество извлеченного текста
+          const hasErrors = attachment.extractedText.includes('Error extracting') || 
+                           attachment.extractedText.includes('Ошибка') ||
+                           attachment.extractedText.includes('No text found');
+          console.log(`[AsyncEmailProcessor] - Text quality: ${hasErrors ? 'POOR (has errors)' : 'GOOD'}`);
+        } else {
+          console.log(`[AsyncEmailProcessor] - WARNING: No text extracted from attachment`);
         }
       });
       

@@ -139,6 +139,7 @@ export default function ModerationPage() {
   const [isEditingMode, setIsEditingMode] = useState(false);
   const [editingSupplierId, setEditingSupplierId] = useState<number | null>(null);
   const [initialFormData, setInitialFormData] = useState<any>(null);
+  const [approvingStagingId, setApprovingStagingId] = useState<number | null>(null);
   
   // Состояние для модального окна стоп-листа
   const [stopListDialog, setStopListDialog] = useState(false);
@@ -388,6 +389,69 @@ export default function ModerationPage() {
     }
   });
 
+  // Мутация для создания поставщика из модерации (с обновлением статуса в staging)
+  const createSupplierFromModerationMutation = useMutation({
+    mutationFn: async ({ supplierData, stagingId }: { supplierData: any; stagingId: number }) => {
+      const adminToken = localStorage.getItem('adminToken') || 'admin-token-123456';
+      
+      // Сначала создаем поставщика
+      const createResponse = await fetch('/api/admin/suppliers', {
+        method: 'POST',
+        headers: {
+          'X-Admin-Token': adminToken,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(supplierData),
+        credentials: 'include'
+      });
+
+      if (!createResponse.ok) {
+        const errorData = await createResponse.json();
+        throw new Error(errorData.details || errorData.error || `Ошибка создания поставщика: ${createResponse.status}`);
+      }
+
+      const createResult = await createResponse.json();
+      
+      // Затем обновляем статус в staging_suppliers
+      const approveResponse = await fetch('/api/admin/approve-supplier', {
+        method: 'POST',
+        headers: {
+          'X-Admin-Token': adminToken,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ stagingId }),
+        credentials: 'include'
+      });
+
+      if (!approveResponse.ok) {
+        const errorData = await approveResponse.json();
+        throw new Error(errorData.details || errorData.error || `Ошибка обновления статуса модерации: ${approveResponse.status}`);
+      }
+
+      return { createResult, approveResult: await approveResponse.json() };
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Поставщик одобрен и создан",
+        description: `Поставщик "${data.createResult.data?.name}" успешно одобрен и добавлен в реестр`,
+      });
+      setFormDialog(false);
+      resetSupplierForm();
+      setApprovingStagingId(null);
+      // Обновляем данные модерации
+      queryClient.invalidateQueries({ queryKey: ["staging-suppliers"] });
+      // Инвалидируем кеш поиска поставщиков
+      queryClient.invalidateQueries({ queryKey: ["find-supplier"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Ошибка одобрения поставщика",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  });
+
   // Мутация для добавления в стоп-лист
   const addToStopListMutation = useMutation({
     mutationFn: async ({ domain, reason }: { domain: string; reason: string }) => {
@@ -573,30 +637,43 @@ export default function ModerationPage() {
 
   // Обработчики действий
   const handleApprove = async (stagingId: number) => {
-    if (processingIds.has(stagingId)) return; // Предотвращаем множественные нажатия
-    
-    setProcessingIds(prev => new Set(prev).add(stagingId));
-    try {
-      await approveMutation.mutateAsync(stagingId);
-      // Добавляем анимацию удаления
-      setRemovingIds(prev => new Set(prev).add(stagingId));
-      // Обновляем данные и удаляем из списка анимации через 800ms
-      setTimeout(() => {
-        setRemovingIds(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(stagingId);
-          return newSet;
-        });
-        // Обновляем данные после завершения анимации
-        queryClient.invalidateQueries({ queryKey: ["staging-suppliers"] });
-      }, 800);
-    } finally {
-      setProcessingIds(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(stagingId);
-        return newSet;
+    // Находим данные поставщика из staging_suppliers
+    const stagingSupplier = stagingSuppliers?.data?.find(s => s.id === stagingId);
+    if (!stagingSupplier) {
+      toast({
+        title: "Ошибка",
+        description: "Данные поставщика не найдены",
+        variant: "destructive"
       });
+      return;
     }
+
+    // Сохраняем stagingId для последующего обновления статуса
+    setApprovingStagingId(stagingId);
+
+    // Подготавливаем данные для FormDialog
+    setInitialFormData({
+      name: stagingSupplier.rawTitle || "",
+      description: stagingSupplier.rawDescription || "",
+      website: stagingSupplier.rawUrl || "",
+      email: stagingSupplier.rawEmails && stagingSupplier.rawEmails[0] ? stagingSupplier.rawEmails[0] : "",
+      phone: stagingSupplier.rawPhones && stagingSupplier.rawPhones[0] ? stagingSupplier.rawPhones[0] : "",
+      categories: stagingSupplier.searchQuery || "",
+      regions: stagingSupplier.region ? [stagingSupplier.region] : [],
+      legalName: "",
+      taxId: "",
+      legalAddress: "",
+      contactPerson: ""
+    });
+    
+    setIsEditingMode(false); // Режим создания нового поставщика
+    setEditingSupplierId(null);
+    setFormDialog(true);
+
+    toast({
+      title: "Одобрение поставщика",
+      description: `Открывается форма для создания поставщика "${stagingSupplier.rawTitle}". Вы можете внести дополнительные данные.`,
+    });
   };
 
   const handleReject = async (stagingId: number) => {
@@ -727,6 +804,7 @@ export default function ModerationPage() {
     });
     setIsEditingMode(false);
     setEditingSupplierId(null);
+    setApprovingStagingId(null);
     setInitialFormData(null);
     setSearchDialog(false);
     setFormDialog(false);
@@ -826,6 +904,7 @@ export default function ModerationPage() {
     console.log('🔍 [DEBUG] handleCreateSupplier:', {
       isEditingMode,
       editingSupplierId,
+      approvingStagingId,
       supplierData
     });
     
@@ -834,6 +913,12 @@ export default function ModerationPage() {
       await updateSupplierMutation.mutateAsync({ 
         supplierId: editingSupplierId, 
         supplierData 
+      });
+    } else if (approvingStagingId) {
+      console.log('✅ [DEBUG] Выполняем создание поставщика из модерации:', approvingStagingId);
+      await createSupplierFromModerationMutation.mutateAsync({ 
+        supplierData, 
+        stagingId: approvingStagingId 
       });
     } else {
       console.log('➕ [DEBUG] Выполняем создание нового поставщика');
@@ -1168,32 +1253,39 @@ export default function ModerationPage() {
 
       {/* FormDialog - окно редактирования/создания поставщика */}
       <Dialog open={formDialog} onOpenChange={setFormDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl max-h-[95vh] overflow-y-auto">
           <DialogHeader>
             <div className="flex items-center gap-3">
               <DialogTitle>
-                {isEditingMode ? 'Редактировать поставщика' : 'Создать поставщика вручную'}
+                {isEditingMode ? 'Редактировать поставщика' : (approvingStagingId ? 'Одобрить поставщика' : 'Создать поставщика вручную')}
               </DialogTitle>
               {isEditingMode && (
                 <Badge variant="secondary" className="bg-blue-100 text-blue-800">
                   Режим редактирования
                 </Badge>
               )}
+              {approvingStagingId && !isEditingMode && (
+                <Badge variant="secondary" className="bg-green-100 text-green-800">
+                  Одобрение поставщика
+                </Badge>
+              )}
             </div>
             <DialogDescription>
               {isEditingMode 
                 ? 'Обновить данные существующего поставщика в реестре'
-                : 'Добавить нового поставщика напрямую в основной реестр'
+                : approvingStagingId 
+                  ? 'Одобрить поставщика и добавить его в основной реестр. Вы можете внести дополнительные данные.'
+                  : 'Добавить нового поставщика напрямую в основной реестр'
               }
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             {/* Обязательные поля */}
-            <div className="space-y-4">
+            <div className="space-y-3">
               <h3 className="text-lg font-semibold">Основная информация</h3>
               
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <Label htmlFor="name">Название компании *</Label>
                   <Input
@@ -1212,20 +1304,6 @@ export default function ModerationPage() {
                     placeholder="https://example.com"
                   />
                 </div>
-              </div>
-
-              <div>
-                <Label htmlFor="description">Описание *</Label>
-                <Textarea
-                  id="description"
-                  value={supplierForm.description}
-                  onChange={(e) => handleSupplierFormChange('description', e.target.value)}
-                  placeholder="Описание деятельности компании"
-                  rows={3}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="email">Email *</Label>
                   <Input
@@ -1236,6 +1314,9 @@ export default function ModerationPage() {
                     placeholder="info@company.com"
                   />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="phone">Телефон *</Label>
                   <Input
@@ -1245,9 +1326,6 @@ export default function ModerationPage() {
                     placeholder="+7 (999) 123-45-67"
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="categories">Категории *</Label>
                   <Input
@@ -1260,14 +1338,28 @@ export default function ModerationPage() {
                     Разделяйте категории запятыми
                   </p>
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="description">Описание *</Label>
+                  <Textarea
+                    id="description"
+                    value={supplierForm.description}
+                    onChange={(e) => handleSupplierFormChange('description', e.target.value)}
+                    placeholder="Описание деятельности компании"
+                    rows={2}
+                  />
+                </div>
+                
                 <div>
                   <Label htmlFor="region">Регионы</Label>
                   
                   {/* Отображение выбранных регионов */}
                   {supplierForm.regions.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-2">
+                    <div className="flex flex-wrap gap-1 mb-2 max-h-16 overflow-y-auto">
                       {supplierForm.regions.map(region => (
-                        <Badge key={region} variant="secondary" className="flex items-center gap-1">
+                        <Badge key={region} variant="secondary" className="flex items-center gap-1 text-xs">
                           {region}
                           <X 
                             className="h-3 w-3 cursor-pointer hover:text-destructive" 
@@ -1289,20 +1381,19 @@ export default function ModerationPage() {
             </div>
 
             {/* Дополнительные поля */}
-            <div className="space-y-4">
+            <div className="space-y-3">
               <h3 className="text-lg font-semibold">Юридическая информация</h3>
               
-              <div>
-                <Label htmlFor="legalName">Юридическое наименование</Label>
-                <Input
-                  id="legalName"
-                  value={supplierForm.legalName}
-                  onChange={(e) => handleSupplierFormChange('legalName', e.target.value)}
-                  placeholder="ООО 'Название компании'"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label htmlFor="legalName">Юридическое наименование</Label>
+                  <Input
+                    id="legalName"
+                    value={supplierForm.legalName}
+                    onChange={(e) => handleSupplierFormChange('legalName', e.target.value)}
+                    placeholder="ООО 'Название компании'"
+                  />
+                </div>
                 <div>
                   <Label htmlFor="taxId">ИНН/УНП</Label>
                   <Input
@@ -1343,22 +1434,22 @@ export default function ModerationPage() {
                   setFormDialog(false);
                   resetSupplierForm();
                 }}
-                disabled={createSupplierMutation.isPending || updateSupplierMutation.isPending}
+                disabled={createSupplierMutation.isPending || updateSupplierMutation.isPending || createSupplierFromModerationMutation.isPending}
               >
                 Отмена
               </Button>
               <Button
                 onClick={handleCreateSupplier}
-                disabled={createSupplierMutation.isPending || updateSupplierMutation.isPending}
+                disabled={createSupplierMutation.isPending || updateSupplierMutation.isPending || createSupplierFromModerationMutation.isPending}
                 className="bg-blue-600 hover:bg-blue-700"
               >
-                {(createSupplierMutation.isPending || updateSupplierMutation.isPending) ? (
+                {(createSupplierMutation.isPending || updateSupplierMutation.isPending || createSupplierFromModerationMutation.isPending) ? (
                   <>
                     <Spinner size="sm" className="mr-2" />
-                    {isEditingMode ? 'Обновление...' : 'Создание...'}
+                    {isEditingMode ? 'Обновление...' : (approvingStagingId ? 'Одобрение...' : 'Создание...')}
                   </>
                 ) : (
-                  isEditingMode ? 'Обновить поставщика' : 'Создать поставщика'
+                  isEditingMode ? 'Обновить поставщика' : (approvingStagingId ? 'Одобрить поставщика' : 'Создать поставщика')
                 )}
               </Button>
             </div>

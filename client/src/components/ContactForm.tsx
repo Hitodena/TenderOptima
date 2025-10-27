@@ -207,7 +207,7 @@ function ContactForm() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-4 hidden">
         <div className="space-y-2">
           <Label htmlFor="subject">{t('contact.form.subject') || 'Тема'}</Label>
           <Input

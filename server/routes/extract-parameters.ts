@@ -10,7 +10,6 @@ import { requireAuth } from '../middleware/requireAuth';
 
 // @ts-ignore - No types available for API bridge
 import * as apiBridge from '../file-processing/api_bridge.cjs';
-import { extractParametersWithAI } from '../services/deepseek-api';
 
 // Create router
 const router = Router();
@@ -73,7 +72,7 @@ function extractCostFromEmailText(text: string): { value: string; confidence: nu
         let value = match[1].trim().replace(/\s+/g, '');
         
         // Look for currency in the surrounding text
-        const currencyMatch = text.substring(match.index, match.index + match[0].length + 10).match(/(BYN|руб|₽|\$|USD|EUR|€)/i);
+        const currencyMatch = text.substring(match.index || 0 || 0, (match.index || 0 || 0) + match[0].length + 10).match(/(BYN|руб|₽|\$|USD|EUR|€)/i);
         if (currencyMatch) {
           value += ' ' + currencyMatch[0];
         } else {
@@ -93,7 +92,7 @@ function extractCostFromEmailText(text: string): { value: string; confidence: nu
 }
 
 // Function to extract parameters from text, improved version
-function extractParameterFromText(text: string, parameter: string): ExtractionResult {
+export function extractParameterFromText(text: string, parameter: string): ExtractionResult {
   // Default result with no value found
   const result: ExtractionResult = {
     value: "-",
@@ -159,10 +158,10 @@ function extractParameterFromText(text: string, parameter: string): ExtractionRe
         const match = text.match(pattern);
         if (match && match[1]) {
           // Ищем валюту после числа
-          const currencyAfter = text.substring(match.index + match[0].length, match.index + match[0].length + 20).match(/(руб\.?|бел\.?руб\.?|BYN|USD|\$|EUR|€|₽)/i);
+          const currencyAfter = text.substring(match.index || 0 + match[0].length, match.index || 0 + match[0].length + 20).match(/(руб\.?|бел\.?руб\.?|BYN|USD|\$|EUR|€|₽)/i);
           
           // Ищем валюту перед числом
-          const currencyBefore = text.substring(Math.max(0, match.index - 20), match.index).match(/(руб\.?|бел\.?руб\.?|BYN|USD|\$|EUR|€|₽)/i);
+          const currencyBefore = text.substring(Math.max(0, match.index || 0 - 20), match.index || 0).match(/(руб\.?|бел\.?руб\.?|BYN|USD|\$|EUR|€|₽)/i);
           
           // Очищаем значение от пробелов и возможных разделителей
           let value = match[1].trim().replace(/\s+/g, '').replace(/,/g, '.');
@@ -198,17 +197,22 @@ function extractParameterFromText(text: string, parameter: string): ExtractionRe
         /стоимость\s*с\s*ндс\s*[\:\-]?\s*(\d[\d\s.,]+)(?:\s*(?:бел\.?руб\.|руб\.|₽|BYN|USD|\$|EUR|€))?/i,
         /сумма\s*с\s*ндс\s*[\:\-]?\s*(\d[\d\s.,]+)(?:\s*(?:бел\.?руб\.|руб\.|₽|BYN|USD|\$|EUR|€))?/i,
         /всего\s*с\s*ндс\s*[\:\-]?\s*(\d[\d\s.,]+)(?:\s*(?:бел\.?руб\.|руб\.|₽|BYN|USD|\$|EUR|€))?/i,
-        /к\s*оплате\s*[\:\-]?\s*(\d[\d\s.,]+)(?:\s*(?:бел\.?руб\.|руб\.|₽|BYN|USD|\$|EUR|€))?/i
+        /к\s*оплате\s*[\:\-]?\s*(\d[\d\s.,]+)(?:\s*(?:бел\.?руб\.|руб\.|₽|BYN|USD|\$|EUR|€))?/i,
+        // Новые паттерны для таблиц и специфичных форматов
+        /цена\s*с\s*ндс\s*[\:\-]?\s*(\d[\d\s.,]+)(?:\s*(?:бел\.?руб\.|руб\.|₽|BYN|USD|\$|EUR|€))?/i,
+        /стоимость\s*с\s*ндс\s*[\:\-]?\s*(\d[\d\s.,]+)(?:\s*(?:бел\.?руб\.|руб\.|₽|BYN|USD|\$|EUR|€))?/i,
+        // Паттерн для таблиц с колонкой "Цена с НДС"
+        /цена\s*с\s*ндс\s*[\:\-]?\s*(\d[\d\s.,]+)(?:\s*(?:бел\.?руб\.|руб\.|₽|BYN|USD|\$|EUR|€))?/i
       ];
       
       for (const pattern of patterns) {
         const match = text.match(pattern);
         if (match && match[1]) {
           // Ищем валюту после числа
-          const currencyAfter = text.substring(match.index + match[0].length, match.index + match[0].length + 20).match(/(руб\.?|бел\.?руб\.?|BYN|USD|\$|EUR|€|₽)/i);
+          const currencyAfter = text.substring(match.index || 0 + match[0].length, match.index || 0 + match[0].length + 20).match(/(руб\.?|бел\.?руб\.?|BYN|USD|\$|EUR|€|₽)/i);
           
           // Ищем валюту перед числом
-          const currencyBefore = text.substring(Math.max(0, match.index - 20), match.index).match(/(руб\.?|бел\.?руб\.?|BYN|USD|\$|EUR|€|₽)/i);
+          const currencyBefore = text.substring(Math.max(0, match.index || 0 - 20), match.index || 0).match(/(руб\.?|бел\.?руб\.?|BYN|USD|\$|EUR|€|₽)/i);
           
           // Очищаем значение от пробелов и возможных разделителей
           let value = match[1].trim().replace(/\s+/g, '').replace(/,/g, '.');
@@ -233,6 +237,44 @@ function extractParameterFromText(text: string, parameter: string): ExtractionRe
       }
     }
     
+    // 2.5. Match for VAT amount (сам НДС) - специальная обработка для НДС
+    if (parameter === 'ндс' || parameter === 'сам ндс' || parameter === 'НДС') {
+      const patterns = [
+        // Паттерн для "20% НДС: 1,80"
+        /(?:20%?\s*)?НДС\s*[\:\-]?\s*(\d[\d\s.,]+)(?:\s*(?:бел\.?руб\.|руб\.|₽|BYN|USD|\$|EUR|€))?/i,
+        // Паттерн для "НДС 20%: 1,80"
+        /НДС\s*(?:20%?)?\s*[\:\-]?\s*(\d[\d\s.,]+)(?:\s*(?:бел\.?руб\.|руб\.|₽|BYN|USD|\$|EUR|€))?/i,
+        // Паттерн для "налог: 1,80"
+        /налог\s*[\:\-]?\s*(\d[\d\s.,]+)(?:\s*(?:бел\.?руб\.|руб\.|₽|BYN|USD|\$|EUR|€))?/i,
+        // Паттерн для "ндс: 1,80"
+        /ндс\s*[\:\-]?\s*(\d[\d\s.,]+)(?:\s*(?:бел\.?руб\.|руб\.|₽|BYN|USD|\$|EUR|€))?/i,
+        // Паттерн для таблиц с колонкой "20% НДС"
+        /20%?\s*НДС\s*[\:\-]?\s*(\d[\d\s.,]+)(?:\s*(?:бел\.?руб\.|руб\.|₽|BYN|USD|\$|EUR|€))?/i
+      ];
+      
+      for (const pattern of patterns) {
+        const match = text.match(pattern);
+        if (match && match[1]) {
+          let value = match[1].trim().replace(/\s+/g, '');
+          
+          // Ищем валюту после числа
+          const currencyMatch = text.substring(match.index || 0 || 0, (match.index || 0 || 0) + match[0].length + 10).match(/(?:бел\.?руб\.|руб\.|₽|BYN|USD|\$|EUR|€)/i);
+          if (currencyMatch) {
+            value += ' ' + currencyMatch[0];
+          } else {
+            value += ' руб.'; // Default currency
+          }
+          
+          console.log(`Found VAT amount for ${parameter}: ${value}`);
+          return {
+            value: value,
+            source: 'content',
+            confidence: 0.9
+          };
+        }
+      }
+    }
+    
     // 3. Цена за единицу без НДС - новый улучшенный шаблон с обязательной валютой
     if (parameter === 'цена за единицу без ндс') {
       const patterns = [
@@ -246,13 +288,13 @@ function extractParameterFromText(text: string, parameter: string): ExtractionRe
         const match = text.match(pattern);
         if (match && match[1]) {
           // Ищем валюту после числа
-          const currencyAfter = text.substring(match.index + match[0].length, match.index + match[0].length + 20).match(/(руб\.?|бел\.?руб\.?|BYN|USD|\$|EUR|€|₽)/i);
+          const currencyAfter = text.substring(match.index || 0 + match[0].length, match.index || 0 + match[0].length + 20).match(/(руб\.?|бел\.?руб\.?|BYN|USD|\$|EUR|€|₽)/i);
           
           // Ищем валюту перед числом
-          const currencyBefore = text.substring(Math.max(0, match.index - 20), match.index).match(/(руб\.?|бел\.?руб\.?|BYN|USD|\$|EUR|€|₽)/i);
+          const currencyBefore = text.substring(Math.max(0, match.index || 0 - 20), match.index || 0).match(/(руб\.?|бел\.?руб\.?|BYN|USD|\$|EUR|€|₽)/i);
           
           // Ищем единицу измерения
-          const unitMatch = text.substring(match.index, match.index + match[0].length + 30).match(/за\s*(шт|ед|единицу|м\.?пог|м2|метр|штуку)/i);
+          const unitMatch = text.substring(match.index || 0, match.index || 0 + match[0].length + 30).match(/за\s*(шт|ед|единицу|м\.?пог|м2|метр|штуку)/i);
           let unit = unitMatch ? unitMatch[1] : 'шт';
           
           // Очищаем значение от пробелов и возможных разделителей
@@ -488,15 +530,40 @@ function extractParameterFromText(text: string, parameter: string): ExtractionRe
         /стоимость:?\s+(\d[\d\s.,]+)(?:\s*(?:руб|₽|BYN|USD|\$|EUR|€))?/i,
       ];
       
+      // Function to validate if a number looks like a price (not INN, OGRN, etc.)
+      const isValidPrice = (value: string): boolean => {
+        const cleanValue = value.replace(/[^\d.,]/g, '');
+        const numValue = parseFloat(cleanValue.replace(',', '.'));
+        
+        // Reject very large numbers that look like INN/OGRN (10+ digits)
+        if (cleanValue.length >= 10) {
+          return false;
+        }
+        
+        // Reject numbers that are too small to be meaningful prices (less than 0.01)
+        if (numValue < 0.01) {
+          return false;
+        }
+        
+        // Accept reasonable price ranges
+        return numValue >= 0.01 && numValue <= 10000000; // Up to 10 million
+      };
+      
       for (const pattern of explicitPricePatterns) {
         const match = text.match(pattern);
         if (match && match[1]) {
           let cleanedPrice = match[1].trim();
           
+          // Validate that this looks like a real price, not INN/OGRN
+          if (!isValidPrice(cleanedPrice)) {
+            console.log(`Rejected potential price "${cleanedPrice}" - looks like INN/OGRN or invalid value`);
+            continue;
+          }
+          
           // Add currency if not present
           if (!cleanedPrice.match(/руб|₽|BYN|USD|\$|EUR|€/)) {
             // Check if currency follows separately
-            const afterMatch = text.substring(match.index + match[0].length, match.index + match[0].length + 20);
+            const afterMatch = text.substring(match.index || 0 + match[0].length, match.index || 0 + match[0].length + 20);
             const currencyMatch = afterMatch.match(/(?:руб|₽|BYN|USD|\$|EUR|€)/i);
             
             if (currencyMatch) {
@@ -520,11 +587,14 @@ function extractParameterFromText(text: string, parameter: string): ExtractionRe
       const matches = text.match(simplePricePattern);
       
       if (matches && matches.length > 0) {
-        // Get the first match that looks substantial
+        // Get the first match that looks substantial and valid
         const significantMatches = matches.filter(m => {
           const numberPart = m.replace(/[^\d.,]/g, '');
           // Must have at least 2 digits and not be a year (2022, 2023, etc)
-          return numberPart.length >= 2 && !(/^20\d\d$/.test(numberPart));
+          const hasMinDigits = numberPart.length >= 2 && !(/^20\d\d$/.test(numberPart));
+          
+          // Also validate that it looks like a real price
+          return hasMinDigits && isValidPrice(m);
         });
         
         if (significantMatches.length > 0) {
@@ -578,7 +648,7 @@ export async function extractParametersFromResponse(
     let largeFilesInfo: string[] = [];
     
     if (hasAttachments) {
-      console.log(`Checking ${response.attachments.length} attachments for size limits...`);
+      console.log(`Checking ${(response.attachments as any[]).length} attachments for size limits...`);
       for (const attachment of response.attachments as any[]) {
         const sizeInMB = (attachment.size / (1024 * 1024)).toFixed(2);
         console.log(`Attachment: ${attachment.filename}, size: ${attachment.size} bytes (${sizeInMB} MB)`);
@@ -651,10 +721,10 @@ export async function extractParametersFromResponse(
       // 1. Remove sections that start with common reply indicators
       const replyMarkers = [
         // Russian email markers
-        /От кого:.*?$/gms,                 // Russian "From:" in replies
-        /Кому:.*?$/gms,                    // Russian "To:" in replies
-        /Дата:.*?$/gms,                    // Russian "Date:" in replies
-        /Тема:.*?$/gms,                    // Russian "Subject:" in replies
+        /От кого:.*?$/gm,                 // Russian "From:" in replies
+        /Кому:.*?$/gm,                    // Russian "To:" in replies
+        /Дата:.*?$/gm,                    // Russian "Date:" in replies
+        /Тема:.*?$/gm,                    // Russian "Subject:" in replies
         /\s*-{3,}Исходное сообщение-{3,}[\s\S]*$/mi, // "Original message" in Russian
         /\s*-{3,}Пересылаемое сообщение-{3,}[\s\S]*$/mi, // "Forwarded message" in Russian
         /\s*Переадресованное сообщение[\s\S]*$/mi,      // Another "Forwarded message" variant
@@ -662,10 +732,10 @@ export async function extractParametersFromResponse(
         /\s*\d{1,2}[\.\/]\d{1,2}[\.\/]\d{2,4}.*?писал\(а\):[\s\S]*$/mi, // Russian date with "wrote:"
         
         // English email markers
-        /From:.*?$/gms,                    // English "From:" in replies
-        /To:.*?$/gms,                      // English "To:" in replies
-        /Date:.*?$/gms,                    // English "Date:" in replies
-        /Subject:.*?$/gms,                 // English "Subject:" in replies
+        /From:.*?$/gm,                    // English "From:" in replies
+        /To:.*?$/gm,                      // English "To:" in replies
+        /Date:.*?$/gm,                    // English "Date:" in replies
+        /Subject:.*?$/gm,                 // English "Subject:" in replies
         /\s*-{3,}Original Message-{3,}[\s\S]*$/mi,   // "Original message" in English
         /\s*-{3,}Forwarded Message-{3,}[\s\S]*$/mi,  // "Forwarded message" in English
         /\s*Begin forwarded message:[\s\S]*$/mi,     // Another forwarded message marker
@@ -843,14 +913,23 @@ export async function extractParametersFromResponse(
               6. Всегда включай валюту в значения цен и стоимости
               
               ПОИСК СТАНДАРТНЫХ ПАРАМЕТРОВ:
-              - "общая стоимость без ндс": ищи "итого" "сумма" "общая стоимость" "общая цена" "цена без ндс" + "без ндс"/"без налога". Добавляй валюту
-              - "общая стоимость с ндс": ищи "итого к оплате" "итого" "с ндс" "с учетом ндс". Добавляй валюту
+              - "общая стоимость без ндс": ищи "итого" "сумма" "общая стоимость" "общая цена" "цена без ндс" + "без ндс"/"без налога". Добавляй валюту. НЕ ИСПОЛЬЗУЙ ИНН или другие номера!
+              - "общая стоимость с ндс": ищи "итого к оплате" "итого" "с ндс" "с учетом ндс" "цена с ндс" "стоимость с ндс". Добавляй валюту. НЕ ИСПОЛЬЗУЙ ИНН или другие номера!
+              - "ндс" или "сам ндс": ищи "НДС" "ндс" "налог" "20% НДС" "НДС 20%" "налог на добавленную стоимость" + числа. Добавляй валюту
               - "контактный телефон для связи": ищи номера телефонов в любом формате
-              - "цена за единицу без ндс": ищи "цена" "стоимость" + "за шт." "за ед." + числа. Добавляй валюту и единицы
+              - "цена за единицу без ндс": ищи "цена" "стоимость" + "за шт." "за ед." + числа. Добавляй валюту и единицы. НЕ ИСПОЛЬЗУЙ ИНН или другие номера!
               - "сроки поставки": ищи цифры + "дней" "недель" "рабочих дней"
               - "условия поставки": ищи "доставка" "самовывоз" "франко". Включай адрес если указан
               - "условия оплаты": ищи "предоплата" "аванс" "отсрочка" "% предоплаты"
               - "товар": полное название с характеристиками
+              
+              КРИТИЧЕСКИ ВАЖНО - РАЗЛИЧЕНИЕ ЦЕН И НОМЕРОВ:
+              - НЕ ИСПОЛЬЗУЙ ИНН, ОГРН, КПП, номера телефонов как цены!
+              - ИНН обычно 10-12 цифр подряд (например: 7713471291)
+              - ОГРН обычно 13-15 цифр подряд
+              - КПП обычно 9 цифр подряд
+              - Цены обычно меньше и содержат запятые или точки (например: 128000, 0,16, 320)
+              - Цены часто сопровождаются словами "руб", "рублей", "₽"
               
               КРИТИЧЕСКИ ВАЖНО - РЕКВИЗИТЫ ПОСТАВЩИКА:
               Для параметров "наименование поставщика" и "ИНН / УНП" ВНИМАТЕЛЬНО ищи реквизиты ОТПРАВИТЕЛЯ письма:
@@ -1028,82 +1107,8 @@ export async function extractParametersFromResponse(
             console.error('Error calling DeepSeek API directly:', aiCallError);
           }
           
-          // If we get here, fallback to the service method
-          try {
-            // Call the AI extraction service as fallback with priority text
-            const aiResults = await extractParametersWithAI(combinedText, parameters);
-            console.log('AI extraction results (fallback method):', aiResults);
-            
-            // Проверяем, что мы получили результаты
-            if (aiResults && aiResults.length > 0) {
-              // Format the results for the API response
-              // Process results to determine likely source
-              const results: ExtractedParameter[] = aiResults.map(result => {
-                // Try to figure out if value comes from email or attachment
-                let source: 'content' | 'attachment' | 'unknown' = 'unknown';
-                
-                // If confidence is high, we'll try to determine the source more precisely
-                if (result.confidence > 0.2) {
-                  // Check if exact match or close variant is in the email content
-                  // Accounting for small formatting differences (spaces, punctuation)
-                  const valueNormalized = result.value.replace(/\s+/g, ' ').toLowerCase().trim();
-                  const emailContentNormalized = emailContent.replace(/\s+/g, ' ').toLowerCase();
-                  
-                  // PRIORITY: Check attachments first, then email content
-                  let foundInAttachment = false;
-                  let foundInEmail = false;
-                  
-                  // Check if the value is present in email content
-                  if (emailContentNormalized.includes(valueNormalized) || 
-                      // Check with fuzzy matching for price values (allowing for slight differences)
-                      (valueNormalized.match(/\d/) && emailContentNormalized.includes(valueNormalized.replace(/[^\d.,]/g, '')))) {
-                    foundInEmail = true;
-                  }
-                  
-                  // Check if the value is present in attachments
-                  if (hasAttachments && Array.isArray(response.attachments)) {
-                    for (const attachment of response.attachments as any[]) {
-                      if (attachment.extractedText) {
-                        const attachmentNormalized = attachment.extractedText.replace(/\s+/g, ' ').toLowerCase();
-                        if (attachmentNormalized.includes(valueNormalized) || 
-                            (valueNormalized.match(/\d/) && 
-                             attachmentNormalized.includes(valueNormalized.replace(/[^\d.,]/g, '')))) {
-                          foundInAttachment = true;
-                          break;
-                        }
-                      }
-                    }
-                  }
-                  
-                  // PRIORITY RULE: Attachments have priority over email content
-                  if (foundInAttachment) {
-                    source = 'attachment';
-                    console.log(`Parameter ${result.name} found in attachment (PRIORITY): "${result.value}"`);
-                  } else if (foundInEmail) {
-                    source = 'content';
-                    console.log(`Parameter ${result.name} found in email content: "${result.value}"`);
-                  } else {
-                    source = attachmentTextFound ? 'attachment' : 'content';
-                    console.log(`Parameter ${result.name} source determined by context: ${source}`);
-                  }
-                }
-                
-                return {
-                  name: result.name,
-                  value: result.value,
-                  source,
-                  confidence: result.confidence
-                };
-              });
-              
-              console.log(`AI extraction complete, found ${results.filter(r => r.value !== "-").length} parameters with values`);
-              return results;
-            } else {
-              console.warn('AI extraction returned no results, falling back to regex extraction');
-            }
-          } catch (fallbackError) {
-            console.error('Error in fallback AI extraction method:', fallbackError);
-          }
+          // If we get here, AI extraction failed - fall back to regex extraction
+          console.warn('Primary AI extraction failed, falling back to regex extraction');
         } else {
           console.warn('No text available for AI extraction, falling back to regex extraction');
         }

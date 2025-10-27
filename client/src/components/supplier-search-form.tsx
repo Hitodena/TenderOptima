@@ -24,6 +24,8 @@ import { universalSearchService } from "@/services/universal-search";
 
 // Структура регионов с подрегионами
 import { regionsData, allRegionsList, type Country, type Region, type City } from "@/data/regions";
+// Импортируем конфигурацию поисковых систем
+import { getSearchSourcesForRegions, searchSourceConfig } from "@/config/search-sources";
 
 interface Props {
   onComplete: (request: SearchRequest) => void;
@@ -40,10 +42,10 @@ export function SupplierSearchForm({ onComplete }: Props) {
   const [infoPopoverOpen, setInfoPopoverOpen] = useState(false);
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
   const [showRegionDialog, setShowRegionDialog] = useState(false);
-  const [useRegistrySearch, setUseRegistrySearch] = useState(true);
-  const [searchYandex, setSearchYandex] = useState(true);
+  const [useRegistrySearch, setUseRegistrySearch] = useState(searchSourceConfig.registryEnabledByDefault);
+  const [searchYandex, setSearchYandex] = useState(false);  // Будет автоматически определяться по регионам
   const [useUniversalSearch, setUseUniversalSearch] = useState(false);
-  const [searchGoogle, setSearchGoogle] = useState(true);
+  const [searchGoogle, setSearchGoogle] = useState(false); // Будет автоматически определяться по регионам
   const [includeAds, setIncludeAds] = useState(false);
   const [language, setLanguage] = useState("русский");
   const [showLanguageDialog, setShowLanguageDialog] = useState(false);
@@ -69,6 +71,53 @@ export function SupplierSearchForm({ onComplete }: Props) {
   useEffect(() => {
     form.setValue("useDbSearch", useRegistrySearch);
   }, [useRegistrySearch, form]);
+
+  // Автоматически определяем поисковые системы на основе выбранных регионов
+  useEffect(() => {
+    // Преобразуем selectedRegions в формат, ожидаемый функцией getSearchSourcesForRegions
+    const regionsForConfig = selectedRegions.map(regionName => {
+      // Найдем регион в данных и получим его информацию
+      for (const country of regionsData) {
+        if (country.name === regionName) {
+          return {
+            name: country.name,
+            googleCode: country.googleCode,
+            yandexId: country.yandexId,
+            type: 'country' as const
+          };
+        }
+        for (const region of country.regions) {
+          if (region.name === regionName) {
+            return {
+              name: region.name,
+              googleCode: country.googleCode,
+              yandexId: region.yandexId,
+              type: 'region' as const
+            };
+          }
+          for (const city of region.cities) {
+            if (city.name === regionName) {
+              return {
+                name: city.name,
+                googleCode: country.googleCode,
+                yandexId: city.yandexId,
+                type: 'city' as const
+              };
+            }
+          }
+        }
+      }
+      return null;
+    }).filter(Boolean);
+
+    const searchSources = getSearchSourcesForRegions(regionsForConfig);
+    setSearchYandex(searchSources.useYandex);
+    setSearchGoogle(searchSources.useGoogle);
+    setUseRegistrySearch(searchSources.useRegistry);
+    
+    console.log('[SearchSources] Auto-detected sources for regions:', selectedRegions);
+    console.log('[SearchSources] Yandex:', searchSources.useYandex, 'Google:', searchSources.useGoogle, 'Registry:', searchSources.useRegistry);
+  }, [selectedRegions]);
 
   // Define response type for better type safety
   interface SearchRequestResponse {
@@ -575,7 +624,8 @@ export function SupplierSearchForm({ onComplete }: Props) {
           )}
         />
 
-        <div className="bg-muted/50 p-4 rounded-lg space-y-3 border">
+        {/* Секция источников поиска скрыта, но код оставлен для будущего использования */}
+        <div className="bg-muted/50 p-4 rounded-lg space-y-3 border hidden">
           <h3 className="font-medium">Источники поиска поставщиков:</h3>
 
           <div className="space-y-3">

@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { extractParameterFromContent, analyzeParameterValues } from '../services/parameter-extraction';
+import { analyzeParameterValues } from '../services/parameter-extraction';
 import { storage } from '../storage';
 import { generateComparisonAnalysis } from '../services/deepseek-api';
 import { analyzeSupplierImprovements } from '../services/deepseek-api';
@@ -489,44 +489,49 @@ ${combinedText}`;
         
         for (const response of supplier.responses) {
           try {
-            // Extract values for each parameter from the response content and attachments
-            for (const param of parameters) {
-              try {
-                // Ensure we have a valid attachments array
-                const attachments = Array.isArray(response.attachments) ? response.attachments : [];
+            // Extract values for each parameter from the response using AI
+            console.log(`[COMPARE] Extracting parameters for response ${response.id} using AI`);
+            
+            // Use the same AI extraction function as in extract-parameters.ts
+            const { extractParametersFromResponse } = await import('./extract-parameters');
+            const extractedParams = await extractParametersFromResponse(
+              response.id,
+              parameters,
+              true // useAI = true
+            );
+            
+            // Process extracted parameters
+            for (const extractedParam of extractedParams) {
+              const param = extractedParam.name;
+              const value = extractedParam.value;
+              const source = extractedParam.source;
+              
+              // Store the value and indicate the source if it's from an attachment
+              if (value !== "-") {
+                // Format value with attachment indicator if needed
+                const formattedValue = source === 'attachment' 
+                  ? `${value} (из вложения)` 
+                  : value;
                 
-                // Use the extraction function that handles both content and attachments
-                const extractionResult = extractParameterFromContent(response.content, attachments, param);
-
-                // Store the value and indicate the source if it's from an attachment
-                if (extractionResult.value !== "-") {
-                  // Format value with attachment indicator if needed
-                  const formattedValue = extractionResult.source === 'attachment' 
-                    ? `${extractionResult.value} (из вложения)` 
-                    : extractionResult.value;
-                  
-                  // Primary storage - using email as key for most reliable mapping
-                  const supplierEmail = supplier.email?.trim().toLowerCase();
-                  if (supplierEmail) {
-                    // Store value indexed by email for reliable lookup
-                    parameterValues[param][`email_${supplierEmail}`] = formattedValue;
-                    console.log(`[EMAIL ISOLATION] Stored parameter "${param}" for email ${supplierEmail}: ${formattedValue}`);
-                  }
-                  
-                  // Also store by supplier name for backward compatibility, but ONLY if the parameter was explicitly requested
-                  if (parameters.includes(param)) {
-                    parameterValues[param][supplier.name] = formattedValue;
-                  } else {
-                    console.log(`[STRICT PARAMETER FILTERING] Skipping parameter "${param}" because it was not requested by user`);
-                  }
-                  
-                  // Log the result
-                  console.log(`Found value for parameter "${param}": ${extractionResult.value} (source: ${extractionResult.source})`);
-                } else {
-                  console.log(`No value found for parameter "${param}"`);
+                // Primary storage - using email as key for most reliable mapping
+                const supplierEmail = supplier.email?.trim().toLowerCase();
+                if (supplierEmail) {
+                  // Store value indexed by email for reliable lookup
+                  parameterValues[param][`email_${supplierEmail}`] = formattedValue;
+                  console.log(`[EMAIL ISOLATION] Stored parameter "${param}" for email ${supplierEmail}: ${formattedValue}`);
                 }
-              } catch (err) {
-                console.log(`Error extracting parameter ${param}:`, err);
+                
+                // Also store by supplier name for backward compatibility, but ONLY if the parameter was explicitly requested
+                if (parameters.includes(param)) {
+                  parameterValues[param][supplier.name] = formattedValue;
+                } else {
+                  console.log(`[STRICT PARAMETER FILTERING] Skipping parameter "${param}" because it was not requested by user`);
+                }
+                
+                // Log the result
+                console.log(`Found value for parameter "${param}": ${value} (source: ${source})`);
+              } else {
+                console.log(`No value found for parameter "${param}"`);
               }
             }
           } catch (responseError) {

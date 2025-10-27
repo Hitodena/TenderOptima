@@ -15,12 +15,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useLocation } from "wouter";
 
 // Импортируем общие данные регионов
 import { regionsData, type Country, type Region, type City, type SelectedRegion } from "@/data/regions";
+// Импортируем конфигурацию поисковых систем
+import { getSearchSourcesForRegions, searchSourceConfig } from "@/config/search-sources";
 
 interface Props {
   onComplete: (request: SearchRequest) => void;
@@ -38,9 +40,9 @@ export function SupplierSearchForm({ onComplete }: Props) {
   const [showRegionDialog, setShowRegionDialog] = useState(false);
   const [regionSearchTerm, setRegionSearchTerm] = useState("");
 
-  const [useRegistrySearch, setUseRegistrySearch] = useState(true);
-  const [searchYandex, setSearchYandex] = useState(true);  // Включить Yandex по умолчанию
-  const [searchGoogle, setSearchGoogle] = useState(false);
+  const [useRegistrySearch, setUseRegistrySearch] = useState(searchSourceConfig.registryEnabledByDefault);
+  const [searchYandex, setSearchYandex] = useState(false);  // Будет автоматически определяться по регионам
+  const [searchGoogle, setSearchGoogle] = useState(false); // Будет автоматически определяться по регионам
   const [language, setLanguage] = useState("русский");
   const [showLanguageDialog, setShowLanguageDialog] = useState(false);
   const [regionError, setRegionError] = useState("");
@@ -90,6 +92,17 @@ export function SupplierSearchForm({ onComplete }: Props) {
       setRegionError("");
     }
   };
+
+  // Автоматически определяем поисковые системы на основе выбранных регионов
+  useEffect(() => {
+    const searchSources = getSearchSourcesForRegions(selectedRegions);
+    setSearchYandex(searchSources.useYandex);
+    setSearchGoogle(searchSources.useGoogle);
+    setUseRegistrySearch(searchSources.useRegistry);
+    
+    console.log('[SearchSources] Auto-detected sources for regions:', selectedRegions.map(r => r.name));
+    console.log('[SearchSources] Yandex:', searchSources.useYandex, 'Google:', searchSources.useGoogle, 'Registry:', searchSources.useRegistry);
+  }, [selectedRegions]);
 
   const filteredRegionsData = useMemo(() => {
     if (!regionSearchTerm) return regionsData;
@@ -206,9 +219,26 @@ export function SupplierSearchForm({ onComplete }: Props) {
   });
 
   const handleUnifiedSearch = () => {
-    if (!displayedKeywords && !form.getValues("productName")) { toast({ title: "Требуются ключевые слова", variant: "destructive" }); return; }
-    if (!useRegistrySearch && !searchGoogle && !searchYandex) { toast({ title: "Выберите источник поиска", variant: "destructive" }); return; }
-    if ((searchGoogle || searchYandex) && selectedRegions.length === 0) { toast({ title: "Для поиска в интернете требуется регион", variant: "destructive" }); return; }
+    if (!displayedKeywords && !form.getValues("productName")) { 
+      toast({ title: "Требуются ключевые слова", variant: "destructive" }); 
+      return; 
+    }
+    
+    // Автоматически определяем поисковые системы на основе регионов
+    const searchSources = getSearchSourcesForRegions(selectedRegions);
+    const hasAnySource = searchSources.useRegistry || searchSources.useGoogle || searchSources.useYandex;
+    
+    if (!hasAnySource) { 
+      toast({ title: "Выберите регион для поиска", variant: "destructive" }); 
+      return; 
+    }
+    
+    // Если выбраны интернет-поиски, но нет регионов
+    if ((searchSources.useGoogle || searchSources.useYandex) && selectedRegions.length === 0) { 
+      toast({ title: "Для поиска в интернете требуется регион", variant: "destructive" }); 
+      return; 
+    }
+    
     unifiedSearchMutation.mutate();
   };
 
@@ -299,7 +329,8 @@ export function SupplierSearchForm({ onComplete }: Props) {
           )}
         />
 
-        <div className="bg-muted/50 p-3 rounded-lg space-y-3 border">
+        {/* Секция источников поиска скрыта, но код оставлен для будущего использования */}
+        <div className="bg-muted/50 p-3 rounded-lg space-y-3 border hidden">
           <FormLabel>Источники поиска</FormLabel>
           <FormItem className="flex items-center space-x-3"><FormControl><Checkbox id="use-registry-search" checked={useRegistrySearch} onCheckedChange={(c) => setUseRegistrySearch(c === true)} /></FormControl><FormLabel htmlFor="use-registry-search" className="cursor-pointer">Поиск по реестру</FormLabel></FormItem>
           <FormItem className="flex items-center space-x-3"><FormControl><Checkbox id="search-yandex" checked={searchYandex} onCheckedChange={(c) => setSearchYandex(c === true)} /></FormControl><FormLabel htmlFor="search-yandex" className="cursor-pointer">Поиск по Yandex</FormLabel></FormItem>

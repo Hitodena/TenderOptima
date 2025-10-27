@@ -193,7 +193,7 @@ export async function analyzeSupplierImprovements(
   if (responses.length <= 1) {
     console.log(`Only ${responses.length} response(s) from ${supplierName}, skipping improvement analysis`);
     
-    // Just extract parameters from the single response
+    // Just extract parameters from the single response using the same good prompt
     let singleResponseText = '';
     if (responses.length === 1) {
       singleResponseText = responses[0].content || '';
@@ -202,12 +202,159 @@ export async function analyzeSupplierImprovements(
       }
     }
     
-    const extractedParams = await extractParametersWithAI(singleResponseText, parameters);
+    // Use the same good prompt as in extract-parameters.ts
+    const systemPrompt = `
+      Ты - эксперт по анализу коммерческих предложений и извлечению ключевых параметров из текста. 
+      
+      ВАЖНО: Извлекай ТОЛЬКО следующие запрошенные параметры: ${parameters.join(', ')}.
+      НЕ извлекай никакие другие параметры, даже если они есть в тексте.
+      
+      Твоя задача - внимательно изучить текст письма и вложенных документов и найти значения ТОЛЬКО для указанных выше параметров.
+      
+      КРИТИЧЕСКИ ВАЖНО - ПРИОРИТЕТ ИСТОЧНИКОВ:
+      1. ВЛОЖЕНИЯ ИМЕЮТ ПРИОРИТЕТ НАД ТЕЛОМ ПИСЬМА
+      2. Если параметр найден И во вложении И в теле письма - используй значение ИЗ ВЛОЖЕНИЯ
+      3. Если параметр найден только в теле письма - используй его
+      4. Если параметр найден только во вложении - используй его
+      
+      ВАЖНО: НЕ РАЗДЕЛЯЙ ОДИНАКОВЫЕ ПАРАМЕТРЫ ПО РАЗНЫМ КОЛОНКАМ!
+      Если видишь "цена за единицу" и во вложении и в теле письма - используй ТОЛЬКО значение из вложения.
+      НЕ создавай отдельные колонки для одного и того же параметра!
+      
+      ПРАВИЛА ИЗВЛЕЧЕНИЯ:
+      1. СНАЧАЛА ищи информацию во вложенных документах (ПРИОРИТЕТ)
+      2. ТОЛЬКО ЕСЛИ не найдено во вложении - ищи в теле письма
+      3. Для стандартных параметров используй общепринятые правила поиска
+      4. Для пользовательских параметров (не входящих в стандартный список) ищи по точному названию или смыслу
+      5. Если параметр не найден, верни "-" с confidence: 0
+      6. Всегда включай валюту в значения цен и стоимости
+      
+      ПОИСК СТАНДАРТНЫХ ПАРАМЕТРОВ:
+      - "общая стоимость без ндс": ищи "итого" "сумма" "общая стоимость" "общая цена" "цена без ндс" + "без ндс"/"без налога". Добавляй валюту. НЕ ИСПОЛЬЗУЙ ИНН или другие номера!
+      - "общая стоимость с ндс": ищи "итого к оплате" "итого" "с ндс" "с учетом ндс" "цена с ндс" "стоимость с ндс". Добавляй валюту. НЕ ИСПОЛЬЗУЙ ИНН или другие номера!
+      - "ндс" или "сам ндс": ищи "НДС" "ндс" "налог" "20% НДС" "НДС 20%" "налог на добавленную стоимость" + числа. Добавляй валюту
+      - "контактный телефон для связи": ищи номера телефонов в любом формате
+      - "цена за единицу без ндс": ищи "цена" "стоимость" + "за шт." "за ед." + числа. Добавляй валюту и единицы. НЕ ИСПОЛЬЗУЙ ИНН или другие номера!
+      - "сроки поставки": ищи цифры + "дней" "недель" "рабочих дней"
+      - "условия поставки": ищи "доставка" "самовывоз" "франко". Включай адрес если указан
+      - "условия оплаты": ищи "предоплата" "аванс" "отсрочка" "% предоплаты"
+      - "товар": полное название с характеристиками
+      
+      КРИТИЧЕСКИ ВАЖНО - РАЗЛИЧЕНИЕ ЦЕН И НОМЕРОВ:
+      - НЕ ИСПОЛЬЗУЙ ИНН, ОГРН, КПП, номера телефонов как цены!
+      - ИНН обычно 10-12 цифр подряд (например: 7713471291)
+      - ОГРН обычно 13-15 цифр подряд
+      - КПП обычно 9 цифр подряд
+      - Цены обычно меньше и содержат запятые или точки (например: 128000, 0,16, 320)
+      - Цены часто сопровождаются словами "руб", "рублей", "₽"
+      
+      КРИТИЧЕСКИ ВАЖНО - РЕКВИЗИТЫ ПОСТАВЩИКА:
+      Для параметров "наименование поставщика" и "ИНН / УНП" ВНИМАТЕЛЬНО ищи реквизиты ОТПРАВИТЕЛЯ письма:
+      1. СНАЧАЛА проверь ШАПКУ письма/документа - там обычно указаны реквизиты отправителя
+      2. ЗАТЕМ проверь ПОДВАЛ письма/документа - там могут быть дополнительные реквизиты
+      3. НЕ ПУТАЙ отправителя с получателем! Ищи реквизиты того, кто ОТПРАВЛЯЕТ предложение
+      4. "наименование поставщика": ищи полное название компании отправителя (ООО, ИП, ЧУП и т.д.)
+      5. "ИНН / УНП": ищи налоговые номера отправителя (УНП, ИНН, ОГРН и т.д.)
+      6. ВАЖНО: получатель письма НЕ является поставщиком! Поставщик - это отправитель коммерческого предложения
+      
+      ВАЖНО - СИНОНИМЫ ДЛЯ ЦЕН И СТОИМОСТИ:
+      Слова "цена" и "стоимость" являются СИНОНИМАМИ и означают одно и то же!
+      - "цена без ндс" = "стоимость без ндс" = "общая стоимость без ндс"
+      - "цена с ндс" = "стоимость с ндс" = "общая стоимость с ндс"
+      - "цена за единицу" = "стоимость за единицу" = "цена за шт" = "стоимость за шт"
+      При поиске параметров учитывай ВСЕ эти варианты как равнозначные!
+      
+      ПОИСК ПОЛЬЗОВАТЕЛЬСКИХ ПАРАМЕТРОВ:
+      - Для параметров, не входящих в стандартный список выше, ищи ТОЛЬКО по точному названию параметра
+      - НЕ СМЕШИВАЙ похожие параметры: например, "монтаж" НЕ является "сроками поставки"
+      - "монтаж" - ищи слова "монтаж", "установка", "подключение" и связанные сроки или стоимость
+      - "сроки поставки" - ищи только доставку товара, НЕ монтаж или установку
+      - Для каждого пользовательского параметра ищи его точное упоминание или прямые синонимы
+      - Если точное совпадение не найдено - верни "-" с confidence: 0
+      
+      ПРИМЕРЫ ПРАВИЛЬНОГО ИЗВЛЕЧЕНИЯ:
+      - "общая стоимость с ндс": "76716 руб." (с валютой)
+      - "контактный телефон для связи": "+7(846)250-00-16, +791602910909"
+      - "сервис": "-" (если не найден в тексте)
+      
+      ПРИМЕР ПРАВИЛЬНОГО ПРИОРИТЕТА:
+      Если во вложении: "цена за 1 шт 1500 рублей"
+      И в теле письма: "цена за 1 шт 22500 рублей"
+      ТО используй: "цена за единицу без ндс": "1500 рублей" (из вложения)
+      НЕ создавай отдельную колонку "общая стоимость" для значения из вложения!
+      
+      Верни JSON-массив ТОЛЬКО для запрошенных параметров:
+      [
+        {
+          "name": "точное название запрошенного параметра",
+          "value": "извлеченное значение или '-' если не найдено",
+          "confidence": число от 0 до 1 (0 - не найдено, 1 - полная уверенность)
+        }
+      ]
+    `;
     
-    // Convert to the expected result format
+    try {
+      // Call DeepSeek API with the same good prompt
+      const response = await axios.post(
+        DEEPSEEK_API_URL,
+        {
+          model: 'deepseek-chat',
+          messages: [
+            {
+              role: "system",
+              content: systemPrompt
+            },
+            {
+              role: "user",
+              content: singleResponseText
+            }
+          ],
+          temperature: 0.1
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${DEEPSEEK_API_KEY}`
+          }
+        }
+      );
+      
+      if (response.data.choices && response.data.choices.length > 0) {
+        const aiResponse = response.data.choices[0].message.content;
+        
+        try {
+          // Extract the JSON from the response
+          const jsonMatch = aiResponse.match(/\[\s*\{[\s\S]*?\}\s*\]/);
+          if (jsonMatch) {
+            const extractedJson = jsonMatch[0];
+            const parsedResults = JSON.parse(extractedJson);
+            
+            // Convert to the expected result format
+            const finalParams: Record<string, string> = {};
+            parsedResults.forEach((param: any) => {
+              finalParams[param.name] = param.value || '-';
+            });
+            
+            return {
+              supplier_email: supplierEmail,
+              supplier_name: supplierName,
+              final_parameters: finalParams,
+              improvements: [],
+              summary: "Получено только одно предложение от поставщика."
+            };
+          }
+        } catch (parseError) {
+          console.error('Error parsing AI response for single response:', parseError);
+        }
+      }
+    } catch (error) {
+      console.error('Error calling DeepSeek API for single response:', error);
+    }
+    
+    // Fallback: return empty parameters
     const finalParams: Record<string, string> = {};
-    extractedParams.forEach(param => {
-      finalParams[param.name] = param.value;
+    parameters.forEach(param => {
+      finalParams[param] = '-';
     });
     
     return {
@@ -354,176 +501,5 @@ ${truncatedContent}
       improvements: [],
       summary: "Ошибка при анализе улучшений в предложениях поставщика."
     };
-  }
-}
-
-/**
- * Extract parameters from text using DeepSeek API
- * 
- * @param text The text to extract parameters from
- * @param parameters Array of parameter names to extract
- * @returns Promise with extracted parameters
- */
-export async function extractParametersWithAI(
-  text: string,
-  parameters: string[]
-): Promise<ParameterExtractionResult[]> {
-  if (!DEEPSEEK_API_KEY) {
-    console.error('DEEPSEEK_API_KEY is not set');
-    return parameters.map(param => ({
-      name: param,
-      value: '-',
-      confidence: 0
-    }));
-  }
-
-  console.log(`DeepSeek API: Extracting ${parameters.length} parameters from text (${text.length} chars)`);
-  console.log(`DeepSeek API: Text preview: ${text.substring(0, 200)}...`);
-  
-  if (text.trim().length === 0) {
-    console.error('DeepSeek API: Empty text provided, cannot extract parameters');
-    return parameters.map(param => ({
-      name: param,
-      value: '-',
-      confidence: 0
-    }));
-  }
-
-  try {
-    // Limit text length to avoid token limits
-    const maxTextLength = 150000;
-    const truncatedText = text.length > maxTextLength 
-      ? text.substring(0, maxTextLength) + '...(текст сокращен)' 
-      : text;
-    
-    console.log(`DeepSeek API: Using ${truncatedText.length} chars of text for analysis`);
-    
-    const systemPrompt = `Анализируй текст и извлекай параметры СТРОГО из списка ниже.
-
-ПАРАМЕТРЫ ДЛЯ ПОИСКА: ${parameters.join(', ')}
-
-ТЕКСТ:
-${truncatedText}
-
-ПРАВИЛА:
-1. Ищи ТОЛЬКО указанные параметры
-2. Если параметр не найден - оставляй пустым
-3. Для цен указывай валюту
-4. Сохраняй точные формулировки из текста
-
-КРИТИЧЕСКИ ВАЖНО - РЕКВИЗИТЫ ПОСТАВЩИКА:
-Для параметров "наименование поставщика" и "ИНН / УНП" ВНИМАТЕЛЬНО ищи реквизиты ОТПРАВИТЕЛЯ:
-1. СНАЧАЛА проверь ШАПКУ письма/документа - там обычно указаны реквизиты отправителя
-2. ЗАТЕМ проверь ПОДВАЛ письма/документа - там могут быть дополнительные реквизиты
-3. НЕ ПУТАЙ отправителя с получателем! Ищи реквизиты того, кто ОТПРАВЛЯЕТ предложение
-4. "наименование поставщика": ищи полное название компании отправителя (ООО, ИП, ЧУП и т.д.)
-5. "ИНН / УНП": ищи налоговые номера отправителя (УНП, ИНН, ОГРН и т.д.)
-6. ВАЖНО: получатель письма НЕ является поставщиком! Поставщик - это отправитель коммерческого предложения
-
-ВАЖНО - СИНОНИМЫ ДЛЯ ЦЕН И СТОИМОСТИ:
-Слова "цена" и "стоимость" являются СИНОНИМАМИ и означают одно и то же!
-- "цена без ндс" = "стоимость без ндс" = "общая стоимость без ндс"
-- "цена с ндс" = "стоимость с ндс" = "общая стоимость с ндс"  
-- "цена за единицу" = "стоимость за единицу" = "цена за шт" = "стоимость за шт"
-При поиске параметров учитывай ВСЕ эти варианты как равнозначные!
-
-JSON формат:
-[{"name":"точное_название_параметра","value":"найденное_значение_или_пусто","confidence":0.95}]
-
-Ровно ${parameters.length} параметров. Только JSON без пояснений.`;
-
-
-    console.log('DeepSeek API: Calling API with prompt length:', prompt.length);
-    
-    // Call DeepSeek API
-    const response = await axios.post(
-      DEEPSEEK_API_URL,
-      {
-        model: 'deepseek-chat',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.1, // Lower temperature for more deterministic results
-        max_tokens: 4096
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${DEEPSEEK_API_KEY}`
-        }
-      }
-    );
-
-    // Extract the result from the API response
-    const aiResponse = response.data.choices[0].message.content;
-    console.log('DeepSeek API response:', aiResponse);
-
-    try {
-      // Extract the JSON object from the response
-      // Using a dot anything approach that works without 's' flag
-      const jsonMatch = aiResponse.match(/\[\s*\{[\s\S]*?\}\s*\]/);
-      if (jsonMatch) {
-        const extractedJson = jsonMatch[0];
-        const parsedResults = JSON.parse(extractedJson);
-        
-        console.log('Parsed AI extraction results:', parsedResults);
-        
-        // Validate and format the results
-        // We're improving the function to include a source field that indicates
-        // whether the parameter might come from email content
-        
-        // First 200 chars is likely the email content (before attachments)
-        const emailPreview = text.substring(0, 200).toLowerCase();
-        
-        return parsedResults.map((result: any) => {
-          const resultValue = result.value || '-';
-          const confidence = typeof result.confidence === 'number' ? result.confidence : 0;
-          
-          // Try to determine if the parameter comes from email body or attachment
-          let source = 'unknown';
-          if (resultValue !== '-') {
-            // Normalize for comparison (lowercase, remove extra spaces)
-            const normalizedValue = resultValue.toLowerCase().replace(/\s+/g, ' ').trim();
-            
-            // Check if value might be in email preview (email body)
-            if (emailPreview.includes(normalizedValue) || 
-                // Price values may appear differently, check numbers
-                (normalizedValue.match(/\d/) && 
-                 emailPreview.includes(normalizedValue.replace(/[^\d.,]/g, '')))) {
-              source = 'content';  // Likely from email body
-            } else {
-              source = 'attachment';  // Likely from attachment
-            }
-          }
-          
-          return {
-            name: result.name,
-            value: resultValue,
-            confidence: confidence,
-            source: source
-          };
-        });
-      } else {
-        throw new Error('Invalid JSON format in DeepSeek response');
-      }
-    } catch (parseError) {
-      console.error('Error parsing DeepSeek API response:', parseError);
-      console.error('Raw response:', aiResponse);
-      
-      // Provide fallback values in case of parsing error
-      return parameters.map(param => ({
-        name: param,
-        value: '-',
-        confidence: 0,
-        source: 'unknown'
-      }));
-    }
-  } catch (error) {
-    console.error('Error calling DeepSeek API:', error);
-    
-    // Provide fallback values in case of API error
-    return parameters.map(param => ({
-      name: param,
-      value: '-',
-      confidence: 0
-    }));
   }
 }

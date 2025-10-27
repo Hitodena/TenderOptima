@@ -25,8 +25,22 @@ export class ImapService {
   private lastCacheUpdate = 0;
   private readonly CACHE_DURATION = 60000; // 1 минута кэш
 
-  constructor() {
-    console.log('Initializing Personal IMAP Service - each user will have their own IMAP connection');
+  /**
+   * Clear processed message cache to force reprocessing
+   */
+  clearProcessedCache(): void {
+    console.log(`🧹 [GENERAL IMAP] Clearing processed message cache (${this.processedMessageIds.size} messages)`);
+    this.processedMessageIds.clear();
+    console.log(`✅ [GENERAL IMAP] Processed message cache cleared`);
+  }
+
+  /**
+   * Get cache statistics
+   */
+  getCacheStats(): { processedCount: number } {
+    return {
+      processedCount: this.processedMessageIds.size
+    };
   }
 
   private async getPersonalImapConnection(userId: number): Promise<Imap | null> {

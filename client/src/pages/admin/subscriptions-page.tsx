@@ -185,17 +185,64 @@ export default function SubscriptionsPage() {
       let aValue = a[sortField as keyof Subscription];
       let bValue = b[sortField as keyof Subscription];
       
+      // Special handling for status field - use actualStatus for sorting
+      if (sortField === 'status') {
+        // Calculate actual status for both items
+        const getActualStatus = (subscription: Subscription) => {
+          if (subscription.actualStatus) {
+            return subscription.actualStatus;
+          }
+          const now = new Date();
+          const endDate = subscription.endDate ? new Date(subscription.endDate) : null;
+          const isExpired = endDate && endDate < now;
+          return isExpired ? 'expired' : subscription.status;
+        };
+        
+        aValue = getActualStatus(a);
+        bValue = getActualStatus(b);
+      }
+      
       // Handle null/undefined values
       if (aValue === null || aValue === undefined) aValue = '';
       if (bValue === null || bValue === undefined) bValue = '';
       
-      // Convert to strings for comparison
-      const aStr = String(aValue).toLowerCase();
-      const bStr = String(bValue).toLowerCase();
-      
       let comparison = 0;
-      if (aStr < bStr) comparison = -1;
-      if (aStr > bStr) comparison = 1;
+      
+      // Special handling for numeric fields
+      if (sortField === 'id' || sortField === 'userId' || sortField === 'requestsLimit' || sortField === 'requestsUsed') {
+        const aNum = Number(aValue);
+        const bNum = Number(bValue);
+        
+        if (!isNaN(aNum) && !isNaN(bNum)) {
+          comparison = aNum - bNum;
+        } else {
+          // Fallback to string comparison if not numbers
+          const aStr = String(aValue).toLowerCase();
+          const bStr = String(bValue).toLowerCase();
+          if (aStr < bStr) comparison = -1;
+          if (aStr > bStr) comparison = 1;
+        }
+      } else if (sortField === 'startDate' || sortField === 'endDate') {
+        // Date comparison
+        const aDate = new Date(aValue as string);
+        const bDate = new Date(bValue as string);
+        
+        if (!isNaN(aDate.getTime()) && !isNaN(bDate.getTime())) {
+          comparison = aDate.getTime() - bDate.getTime();
+        } else {
+          // Fallback to string comparison
+          const aStr = String(aValue).toLowerCase();
+          const bStr = String(bValue).toLowerCase();
+          if (aStr < bStr) comparison = -1;
+          if (aStr > bStr) comparison = 1;
+        }
+      } else {
+        // String comparison for text fields (including status)
+        const aStr = String(aValue).toLowerCase();
+        const bStr = String(bValue).toLowerCase();
+        if (aStr < bStr) comparison = -1;
+        if (aStr > bStr) comparison = 1;
+      }
       
       return sortDirection === 'desc' ? -comparison : comparison;
     });

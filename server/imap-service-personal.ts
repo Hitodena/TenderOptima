@@ -27,23 +27,140 @@ export class PersonalImapService {
   private lastCacheUpdate = 0;
   private readonly CACHE_DURATION = 60000; // 1 минута кэш
 
-  constructor() {
-    console.log('Initializing Personal IMAP Service - each user will have their own IMAP connection');
+  /**
+   * Clear processed message cache to force reprocessing
+   */
+  clearProcessedCache(): void {
+    console.log(`🧹 [PERSONAL IMAP] Clearing processed message cache (${this.processedMessageIds.size} messages)`);
+    this.processedMessageIds.clear();
+    console.log(`✅ [PERSONAL IMAP] Processed message cache cleared`);
+  }
+
+  /**
+   * Get cache statistics
+   */
+  getCacheStats(): { processedCount: number; lastCheckTimes: Record<number, Date> } {
+    return {
+      processedCount: this.processedMessageIds.size,
+      lastCheckTimes: Object.fromEntries(this.lastCheckTime)
+    };
+  }
+
+  private setupGlobalErrorHandlers() {
+    // Handle unhandled promise rejections
+    process.on('unhandledRejection', (reason, promise) => {
+      console.error('[PERSONAL IMAP] Unhandled Promise Rejection:', reason);
+      console.error('[PERSONAL IMAP] Promise:', promise);
+      
+      // Check if it's a connection error we can handle gracefully
+      if (this.isConnectionErrorRecoverable(reason)) {
+        console.log('[PERSONAL IMAP] Connection error detected in unhandled rejection, cleaning up connections');
+        this.personalImapConnections.clear();
+      }
+    });
+
+    // Handle uncaught exceptions
+    process.on('uncaughtException', (error) => {
+      console.error('[PERSONAL IMAP] Uncaught Exception:', error);
+      
+      // Check if it's a connection error we can handle gracefully
+      if (this.isConnectionErrorRecoverable(error)) {
+        console.log('[PERSONAL IMAP] Connection error detected in uncaught exception, cleaning up connections');
+        this.personalImapConnections.clear();
+      }
+      
+      // Don't exit the process for connection errors
+      if (this.isConnectionErrorRecoverable(error)) {
+        console.log('[PERSONAL IMAP] Recovering from connection error, continuing execution');
+        return;
+      }
+      
+      // For other errors, let the process handle them normally
+      throw error;
+    });
   }
 
   private isConnectionHealthy(imap: Imap): boolean {
     try {
       // Check if the connection object has the required internal state
       // @ts-ignore - accessing private properties to check connection state
-      const state = imap._state;
-      const sock = imap._sock;
+      const state = (imap as any)._state;
+      const sock = (imap as any)._sock;
       
-      // Connection should have proper state and active socket
-      return state !== undefined && sock !== undefined;
+      // For new connections that haven't connected yet, consider them healthy
+      // Only check socket state for established connections
+      if (state === undefined || sock === undefined) {
+        return true; // New connection, not yet established
+      }
+      
+      // For established connections, check if socket is still open
+      return (sock as any).readyState === 'open';
     } catch (error) {
       console.log(`[PERSONAL IMAP] Connection health check failed:`, error);
-      return false;
+      return true; // If we can't check, assume it's healthy to avoid blocking
     }
+  }
+
+  private isConnectionErrorRecoverable(error: any): boolean {
+    const recoverableErrors = ['ECONNRESET', 'EPIPE', 'ETIMEDOUT', 'ENOTFOUND', 'ECONNREFUSED'];
+    return recoverableErrors.includes(error?.code) || 
+           error?.message?.includes('ECONNRESET') ||
+           error?.message?.includes('EPIPE') ||
+           error?.message?.includes('Connection lost');
+  }
+
+  private async safeImapOperation<T>(
+    userId: number, 
+    operation: (imap: Imap) => Promise<T>, 
+    maxRetries: number = 3
+  ): Promise<T> {
+    let lastError: any;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        // Get fresh connection for each attempt
+        const imap = await this.getPersonalImapConnection(userId);
+        if (!imap) {
+          throw new Error('Failed to establish IMAP connection');
+        }
+
+        // Only check connection health for established connections
+        // Skip health check for new connections to avoid blocking normal operation
+        if (this.personalImapConnections.has(userId)) {
+          if (!this.isConnectionHealthy(imap)) {
+            console.log(`[PERSONAL IMAP] Connection unhealthy for user ${userId}, attempt ${attempt}`);
+            this.personalImapConnections.delete(userId);
+            throw new Error('Connection unhealthy');
+          }
+        }
+
+        // Perform the operation
+        const result = await operation(imap);
+        return result;
+
+      } catch (error) {
+        lastError = error;
+        console.log(`[PERSONAL IMAP] Operation failed for user ${userId}, attempt ${attempt}/${maxRetries}:`, (error as any)?.message || error);
+
+        // If it's a recoverable error, clean up and retry
+        if (this.isConnectionErrorRecoverable(error)) {
+          console.log(`[PERSONAL IMAP] Recoverable error detected, cleaning up connection for user ${userId}`);
+          this.personalImapConnections.delete(userId);
+          
+          if (attempt < maxRetries) {
+            const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000); // Exponential backoff, max 10s
+            console.log(`[PERSONAL IMAP] Retrying in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          }
+        }
+
+        // If not recoverable or max retries reached, throw the error
+        throw error;
+      }
+    }
+
+    throw lastError;
   }
 
   private async getPersonalImapConnection(userId: number): Promise<Imap | null> {
@@ -199,78 +316,79 @@ export class PersonalImapService {
     }
 
     try {
-      // Get personal IMAP connection for this user
-      const personalImap = await this.getPersonalImapConnection(userId);
-      if (!personalImap) {
-        return {
-          success: false,
-          message: "Failed to connect to user's personal email - check email configuration",
-          newResponses: 0
-        };
-      }
-
-      // Connect to user's personal IMAP
-      const connected = await this.connectToPersonalImap(personalImap, userId);
+      // Use safe operation wrapper to handle connection errors gracefully
+      const result = await this.safeImapOperation(userId, async (personalImap) => {
+        // Connect to user's personal IMAP
+        const connected = await this.connectToPersonalImap(personalImap, userId);
         if (!connected) {
-          return {
-            success: false,
-          message: "Failed to connect to personal email server - check credentials",
-            newResponses: 0
-          };
-      }
+          throw new Error("Failed to connect to personal email server - check credentials");
+        }
 
-      // Count responses before checking
-      let responsesBefore = 0;
-      let responsesAfter = 0;
+        // Count responses before checking
+        let responsesBefore = 0;
+        let responsesAfter = 0;
 
-      if (requestId) {
-        const initialResponses = await storage.getSupplierResponses(requestId, userId);
-        responsesBefore = initialResponses.length;
-        console.log(`[PERSONAL EMAIL] User ${userId} Request ${requestId} currently has ${responsesBefore} responses`);
+        if (requestId) {
+          const initialResponses = await storage.getSupplierResponses(requestId, userId);
+          responsesBefore = initialResponses.length;
+          console.log(`[PERSONAL EMAIL] User ${userId} Request ${requestId} currently has ${responsesBefore} responses`);
 
-        // Get the request to extract order number
-        const request = await storage.getSearchRequest(requestId, userId);
-        if (request && request.orderNumber) {
-          console.log(`[PERSONAL EMAIL] Using order number ${request.orderNumber} for targeted email search in user's mailbox`);
-          await this.checkPersonalEmailsForOrderNumber(personalImap, request.orderNumber, userId);
+          // Get the request to extract order number
+          const request = await storage.getSearchRequest(requestId, userId);
+          if (request && request.orderNumber) {
+            console.log(`[PERSONAL EMAIL] Using order number ${request.orderNumber} for targeted email search in user's mailbox`);
+            await this.checkPersonalEmailsForOrderNumber(personalImap, request.orderNumber, userId);
+          } else {
+            console.log('[PERSONAL EMAIL] No order number found, checking all personal emails');
+            await this.checkPersonalEmails(personalImap, userId);
+          }
         } else {
-          console.log('[PERSONAL EMAIL] No order number found, checking all personal emails');
+          responsesBefore = await storage.countAllSupplierResponses();
+          console.log(`[PERSONAL EMAIL] User ${userId} currently has ${responsesBefore} total responses`);
+
+          // Check all emails in user's personal mailbox
           await this.checkPersonalEmails(personalImap, userId);
         }
-      } else {
-        responsesBefore = await storage.countAllSupplierResponses();
-        console.log(`[PERSONAL EMAIL] User ${userId} currently has ${responsesBefore} total responses`);
 
-        // Check all emails in user's personal mailbox
-        await this.checkPersonalEmails(personalImap, userId);
-      }
+        // Count responses after
+        let newResponses = 0;
 
-      // Count responses after
-      let newResponses = 0;
+        if (requestId) {
+          const updatedResponses = await storage.getSupplierResponses(requestId, userId);
+          responsesAfter = updatedResponses.length;
+          newResponses = responsesAfter - responsesBefore;
+          console.log(`[PERSONAL EMAIL] Request now has ${responsesAfter} responses (${newResponses} new)`);
+        } else {
+          responsesAfter = await storage.countAllSupplierResponses();
+          newResponses = responsesAfter - responsesBefore;
+        }
 
-      if (requestId) {
-        const updatedResponses = await storage.getSupplierResponses(requestId, userId);
-        responsesAfter = updatedResponses.length;
-        newResponses = responsesAfter - responsesBefore;
-        console.log(`[PERSONAL EMAIL] Request now has ${responsesAfter} responses (${newResponses} new)`);
-      } else {
-        responsesAfter = await storage.countAllSupplierResponses();
-        newResponses = responsesAfter - responsesBefore;
-      }
+        // Обновляем время последней проверки после успешной проверки
+        this.lastCheckTime.set(userId, new Date());
+        
+        return {
+          success: true,
+          message: newResponses > 0 
+            ? `Found and processed ${newResponses} new supplier ${newResponses === 1 ? 'response' : 'responses'} from personal mailbox` 
+            : "No new supplier responses found in personal mailbox",
+          newResponses
+        };
+      });
 
-      // Обновляем время последней проверки после успешной проверки
-      this.lastCheckTime.set(userId, new Date());
-      
-      return {
-        success: true,
-        message: newResponses > 0 
-          ? `Found and processed ${newResponses} new supplier ${newResponses === 1 ? 'response' : 'responses'} from personal mailbox` 
-          : "No new supplier responses found in personal mailbox",
-        newResponses
-      };
+      return result;
     } catch (error: unknown) {
       console.error("[PERSONAL EMAIL] Error checking personal emails on demand:", error);
       const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // Check if it's a connection error that we can provide better messaging for
+      if (this.isConnectionErrorRecoverable(error)) {
+        return {
+          success: false,
+          message: "Email connection lost - please try again. The system will automatically retry.",
+          newResponses: 0
+        };
+      }
+      
       return {
         success: false,
         message: `Error checking personal emails: ${errorMessage}`,
@@ -325,9 +443,18 @@ export class PersonalImapService {
 
   private async checkPersonalFolder(imap: Imap, folderName: string, userId: number): Promise<void> {
     return new Promise((resolve, reject) => {
+      // Skip health check here - let the IMAP operations handle connection errors naturally
+
       imap.openBox(folderName, false, async (err, box) => {
         if (err) {
           console.error(`[PERSONAL EMAIL] Failed to open ${folderName} for user ${userId}:`, err);
+          
+          // Check if it's a recoverable connection error
+          if (this.isConnectionErrorRecoverable(err)) {
+            console.log(`[PERSONAL EMAIL] Recoverable error opening ${folderName} for user ${userId}, will retry`);
+            this.personalImapConnections.delete(userId);
+          }
+          
           return reject(err);
         }
 
@@ -345,7 +472,18 @@ export class PersonalImapService {
           const searchCriteria = ['ALL', ['SINCE', searchDate]];
 
           imap.search(searchCriteria, (err, results) => {
-            if (err) return reject(err);
+            if (err) {
+              console.error(`[PERSONAL EMAIL] Search error in ${folderName} for user ${userId}:`, err);
+              
+              // Check if it's a recoverable connection error
+              if (this.isConnectionErrorRecoverable(err)) {
+                console.log(`[PERSONAL EMAIL] Recoverable search error in ${folderName} for user ${userId}, will retry`);
+                this.personalImapConnections.delete(userId);
+              }
+              
+              return reject(err);
+            }
+            
             if (!results || !results.length) {
               console.log(`[PERSONAL EMAIL] No emails found in ${folderName} for user ${userId}`);
               return resolve();
@@ -372,6 +510,13 @@ export class PersonalImapService {
 
           fetch.once('error', async (err: any) => {
             console.error(`[PERSONAL EMAIL] Fetch error in ${folderName} for user ${userId}:`, err);
+            
+            // Check if it's a recoverable connection error
+            if (this.isConnectionErrorRecoverable(err)) {
+              console.log(`[PERSONAL EMAIL] Recoverable fetch error in ${folderName} for user ${userId}, will retry`);
+              this.personalImapConnections.delete(userId);
+            }
+            
             // Обновляем время проверки даже при ошибке
             try {
               await storage.updateLastEmailCheck(userId);
@@ -404,9 +549,18 @@ export class PersonalImapService {
 
   private async checkPersonalFolderWithOrderNumber(imap: Imap, folderName: string, orderNumber: string, userId: number): Promise<void> {
     return new Promise((resolve, reject) => {
+      // Skip health check here - let the IMAP operations handle connection errors naturally
+
       imap.openBox(folderName, false, (err, box) => {
         if (err) {
           console.error(`[PERSONAL EMAIL] Failed to open ${folderName} for order ${orderNumber}, user ${userId}:`, err);
+          
+          // Check if it's a recoverable connection error
+          if (this.isConnectionErrorRecoverable(err)) {
+            console.log(`[PERSONAL EMAIL] Recoverable error opening ${folderName} for order ${orderNumber}, user ${userId}, will retry`);
+            this.personalImapConnections.delete(userId);
+          }
+          
           return reject(err);
         }
 
@@ -422,7 +576,18 @@ export class PersonalImapService {
         const searchCriteria = ['ALL', ['SINCE', searchDate], ['SUBJECT', orderNumber]];
 
         imap.search(searchCriteria, (err, results) => {
-          if (err) return reject(err);
+          if (err) {
+            console.error(`[PERSONAL EMAIL] Search error in ${folderName} for order ${orderNumber}, user ${userId}:`, err);
+            
+            // Check if it's a recoverable connection error
+            if (this.isConnectionErrorRecoverable(err)) {
+              console.log(`[PERSONAL EMAIL] Recoverable search error in ${folderName} for order ${orderNumber}, user ${userId}, will retry`);
+              this.personalImapConnections.delete(userId);
+            }
+            
+            return reject(err);
+          }
+          
           if (!results || !results.length) {
             console.log(`[PERSONAL EMAIL] No emails found with order ${orderNumber} in ${folderName} for user ${userId}`);
             return resolve();
@@ -449,6 +614,13 @@ export class PersonalImapService {
 
           fetch.once('error', (err: any) => {
             console.error(`[PERSONAL EMAIL] Fetch error in ${folderName} for order ${orderNumber}, user ${userId}:`, err);
+            
+            // Check if it's a recoverable connection error
+            if (this.isConnectionErrorRecoverable(err)) {
+              console.log(`[PERSONAL EMAIL] Recoverable fetch error in ${folderName} for order ${orderNumber}, user ${userId}, will retry`);
+              this.personalImapConnections.delete(userId);
+            }
+            
             reject(err);
           });
 
@@ -672,10 +844,10 @@ export class PersonalImapService {
             io.to(`user_${userId}`).emit('newEmail', {
               responseId: result.dbRecordId,
               requestId: responseData.requestId,
-              supplier: responseData.supplier,
+              supplier: responseData.supplierEmail,
               subject: responseData.subject,
-              orderNumber: responseData.orderNumber,
-              hasAttachments: responseData.hasAttachments,
+              orderNumber: trackingInfo.orderNumber,
+              hasAttachments: attachments.length > 0,
               timestamp: new Date().toISOString()
             });
             console.log(`📡 [SOCKET] Sent new email notification to user ${userId} for response ${result.dbRecordId}`);
@@ -725,14 +897,79 @@ export class PersonalImapService {
                     // Ждем завершения обработки вложений
                     console.log(`⏳ Waiting for attachment processing to complete for response ${savedResponse.id}`);
                     let attempts = 0;
-                    const maxAttempts = 20; // Максимум 60 секунд ожидания
+                    const maxAttempts = 30; // Увеличиваем до 90 секунд ожидания
                     
                     while (attempts < maxAttempts) {
                       const updatedResponse = await storage.getSupplierResponseById(savedResponse.id);
                       if (updatedResponse && updatedResponse.attachments && Array.isArray(updatedResponse.attachments)) {
-                        const hasProcessedAttachments = updatedResponse.attachments.some((att: any) => att.extractedText);
-                        if (hasProcessedAttachments) {
-                          console.log(`✅ Attachments processed for response ${savedResponse.id}`);
+                        // Проверяем, что все вложения обработаны и имеют extractedText
+                        const processedAttachments = updatedResponse.attachments.filter((att: any) => 
+                          att.extractedText && 
+                          att.extractedText.trim().length > 0 && 
+                          !att.extractedText.includes('Error extracting') &&
+                          !att.extractedText.includes('Ошибка')
+                        );
+                        
+                        if (processedAttachments.length > 0) {
+                          console.log(`✅ ${processedAttachments.length}/${updatedResponse.attachments.length} attachments processed for response ${savedResponse.id}`);
+                          hasAttachmentData = true;
+                          
+                          // Извлекаем параметры из обработанных вложений
+                          for (const attachment of processedAttachments) {
+                            if (attachment.extractedText) {
+                              console.log(`📄 Processing attachment: ${attachment.filename} (${attachment.extractedText.length} chars)`);
+                              
+                              // Извлекаем параметры из каждого вложения используя AI
+                              console.log(`🤖 Using AI extraction for attachment: ${attachment.filename}`);
+                              try {
+                                // Используем AI для извлечения параметров из вложения
+                                const { extractParametersFromResponse } = await import('./routes/extract-parameters');
+                                
+                                // Создаем временный response объект для вложения
+                                const tempResponse = {
+                                  id: savedResponse.id,
+                                  content: attachment.extractedText,
+                                  attachments: [attachment],
+                                  requestId: savedResponse.requestId,
+                                  supplierEmail: savedResponse.supplierEmail
+                                };
+                                
+                                // Используем AI извлечение для вложения
+                                const attachmentResults = await extractParametersFromResponse(
+                                  savedResponse.id,
+                                  parameters,
+                                  true // useAI = true
+                                );
+                                
+                                // Обрабатываем результаты AI извлечения
+                                if (attachmentResults && attachmentResults.length > 0) {
+                                  attachmentResults.forEach((param: any) => {
+                                    if (param.value && param.value !== '-') {
+                                      attachmentParameters[param.name] = param.value;
+                                      console.log(`📋 AI extracted ${param.name} from attachment: ${param.value}`);
+                                    }
+                                  });
+                                }
+                              } catch (aiError) {
+                                console.error(`❌ AI extraction failed for attachment, falling back to regex:`, aiError);
+                                
+                                // Fallback к старому методу если AI не работает
+                                for (const paramName of parameters) {
+                                  try {
+                                    const { extractParameterFromText } = await import('./routes/extract-parameters');
+                                    const paramResult = extractParameterFromText(attachment.extractedText, paramName);
+                                    
+                                    if (paramResult && paramResult.value && paramResult.value !== '-') {
+                                      attachmentParameters[paramName] = paramResult.value;
+                                      console.log(`📋 Regex fallback extracted ${paramName} from attachment: ${paramResult.value}`);
+                                    }
+                                  } catch (extractError) {
+                                    console.error(`❌ Error extracting ${paramName} from attachment:`, extractError);
+                                  }
+                                }
+                              }
+                            }
+                          }
                           break;
                         }
                       }
@@ -755,8 +992,11 @@ export class PersonalImapService {
                 // ШАГ 2: Извлечение из тела письма
                 console.log(`🔄 Step 2: Extracting parameters from email body for response ${savedResponse.id}`);
                 try {
-                  // Ждем немного, чтобы вложения успели обработаться
-                  await new Promise(resolve => setTimeout(resolve, 2000));
+                  // Если есть вложения, ждем их обработки перед извлечением из тела письма
+                  if (attachments && attachments.length > 0 && !hasAttachmentData) {
+                    console.log(`⏳ Waiting additional time for attachment processing...`);
+                    await new Promise(resolve => setTimeout(resolve, 5000)); // Дополнительные 5 секунд
+                  }
                   
                   // Используем прямую функцию извлечения параметров
                   const { extractParametersFromResponse } = await import('./routes/extract-parameters');
@@ -780,22 +1020,27 @@ export class PersonalImapService {
                   }
                   
                   // Применяем правила приоритета: Вложения > Тело письма
-                  parameters.forEach(paramName => {
+                  console.log(`🔄 Step 3: Applying priority rules for ${parameters.length} parameters`);
+                  console.log(`📊 Attachment data available: ${hasAttachmentData}`);
+                  console.log(`📊 Attachment parameters found: ${Object.keys(attachmentParameters).length}`);
+                  console.log(`📊 Body parameters found: ${Object.keys(bodyParameters).length}`);
+                  
+                  parameters.forEach((paramName: string) => {
                     if (hasAttachmentData && attachmentParameters[paramName] && 
                         attachmentParameters[paramName] !== '-' && 
                         attachmentParameters[paramName] !== '' && 
                         attachmentParameters[paramName] !== null) {
                       finalParameters[paramName] = String(attachmentParameters[paramName]);
-                      console.log(`Priority rule: Using attachment value for ${paramName}: ${attachmentParameters[paramName]}`);
+                      console.log(`🎯 Priority rule: Using ATTACHMENT value for ${paramName}: ${attachmentParameters[paramName]}`);
                     } else if (bodyParameters[paramName] && 
                              bodyParameters[paramName] !== '-' && 
                              bodyParameters[paramName] !== '' && 
                              bodyParameters[paramName] !== null) {
                       finalParameters[paramName] = String(bodyParameters[paramName]);
-                      console.log(`Priority rule: Using body value for ${paramName}: ${bodyParameters[paramName]}`);
+                      console.log(`📧 Priority rule: Using BODY value for ${paramName}: ${bodyParameters[paramName]}`);
                     } else {
                       finalParameters[paramName] = '-';
-                      console.log(`Priority rule: No value found for ${paramName}, using default '-'`);
+                      console.log(`❌ Priority rule: No value found for ${paramName}, using default '-'`);
                     }
                   });
                   
