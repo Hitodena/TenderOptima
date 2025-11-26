@@ -1,0 +1,35 @@
+[33mdb26fff[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mGG-YAru-sent-comparison[m[33m, [m[1;31morigin/GG-YAru-sent-comparison[m[33m)[m Checkpoint: 2025-10-27 10:03:14
+[33mf63bcff[m Checkpoint: 2025-10-27 08:56:51
+[33m8b71a54[m checkpoint: almost final version 2. issues with subject in sending and auto scan - OCR delay and poor OCR quality
+[33m301616f[m checkpoint: almost final version. issues with subject in sending and auto scan - OCR delay and poor OCR quality
+[33m4fc69bf[m OK. otkrytie na BEKE pervym ( bez env)
+[33m323c4bb[m OK. otkrytie na BEKE pervym
+[33m4d3bbdc[m OK. dashboard adapted
+[33m99a1cd8[m OK. adaptaciya dizayna, kruzhki, emaily vidny bez reload. FOTO vo otpravlennyh - ne otkryvayutsya_version2
+[33m746fde5[m OK. adaptaciya dizayna, kruzhki, emaily vidny bez reload. FOTO vo otpravlennyh - ne otkryvayutsya
+[33mdae9554[m OK. racionalnaya proverka emailov + admin nesortirovannye
+[33ma54cc64[m OK. rabota s shablonami emailov dlya otpravki
+[33m28cdc94[m OK. rabota v admin.paneli pered migraciey end and expiry date fields
+[33m01c5e22[m OK. POSLE ispravleniya izvlecheniya dannyh ustanovleny LibreOffice Tesseract
+[33mc7e654e[m OK. POSLE ispravleniya logiki poiska po gorodam 3.10.25 no est YA GG na fronte
+[33m6fc5a64[m Clean up Python cache files after reset to checkpoint
+[33m025f805[m OK. Do ispravleniya logiki poiska po gorodam 2.10.25
+[33m142ef8e[m Обновления: новые компоненты, API управление, обработка вложений и улучшения поиска поставщиков
+[33med81644[m добавлены кэш-файлы Python
+[33mbd54647[m inbox показывается ОК. До исправления логики проверки входящих писем
+[33m79d3184[m скорректировано Има в сравнении
+[33md02cd3d[m CHECKPOINT: 2025-09-24 16:10 - Сохранение текущего состояния проекта
+[33m6ce3c57[m Добавлен README для проекта GG+YAru+sent в сравнении
+[33m9706f20[m[33m ([m[1;31morigin/feature/price-sorting[m[33m, [m[1;32mfeature/price-sorting[m[33m)[m GG+YAru+sent в сравнении - исправлены кнопки Улучшить и Запросить
+[33m4071565[m gg --ok, ya-ru, sent -ok
+[33mc4cb82a[m last on compcc _big files problem не решена
+[33m7c97654[m gg ya -words after ya parsing. ДО attachments
+[33m6ccedc2[m ya gg admin new parser V2.0 160 results
+[33me1a59d4[m админ панель + ya+ gg+реестр
+[33m8427634[m до корректировки БД реестра
+[33m45caea0[m яндекс подключен
+[33m41c1e02[m до корректировки яндекс поиска
+[33m1c9fc6b[m CHECKPOINT: 2025-09-17_02-02 - работа по дизайну файл не считывается. иконки долго грузятся
+[33mb3b7659[m CHECKPOINT: 2025-09-16_23-07 - быстрая загрузка карточке с дохагрузкой до испралвения файлы на считывавние не работают
+[33mcde631f[m checkpoint: design buttons, search, no file opening and email sending
+[33mb513420[m сортировка по цене за шт

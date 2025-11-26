@@ -32,6 +32,12 @@ interface AnalysisRequest {
   created_at: string;
   updated_at: string;
   type: 'technical_analysis';
+  technical_analysis_id?: number;
+  analysis_status?: 'pending' | 'completed';
+  tz_file_path?: string;
+  kp_file_path?: string;
+  result_json?: any;
+  analysis_completed_at?: string;
 }
 
 export function TechnicalAnalysisDashboard() {
@@ -287,15 +293,23 @@ export function TechnicalAnalysisDashboard() {
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    const statusConfig = {
-      draft: { label: 'Черновик', variant: 'secondary' as const },
-      in_progress: { label: 'В работе', variant: 'default' as const },
-      completed: { label: 'Завершен', variant: 'outline' as const }
-    };
-    
-    const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.draft;
-    return <Badge variant={config.variant}>{config.label}</Badge>;
+  const getAnalysisStatusBadge = (request: AnalysisRequest) => {
+    // Если есть technical_analysis_id, показываем статус анализа
+    if (request.technical_analysis_id) {
+      if (request.analysis_status === 'completed') {
+        return <Badge variant="default" className="bg-green-600 text-white">Готов</Badge>;
+      } else {
+        return <Badge variant="default" className="bg-blue-600 text-white">В процессе</Badge>;
+      }
+    }
+    // Если нет анализа, показываем статус запроса
+    if (request.status === 'draft') {
+      return <Badge variant="secondary">Черновик</Badge>;
+    } else if (request.status === 'in_progress') {
+      return <Badge variant="default">В работе</Badge>;
+    } else {
+      return <Badge variant="outline">Завершен</Badge>;
+    }
   };
 
   const filteredRequests = requests.filter(request =>
@@ -362,6 +376,15 @@ export function TechnicalAnalysisDashboard() {
                 )}
               </Button>
               
+              {/* Temporary: Test Gemini Button */}
+              <Button 
+                onClick={() => setLocation('/test-gemini')}
+                variant="outline"
+                className="bg-yellow-50 hover:bg-yellow-100 border-yellow-300 text-yellow-700 hover:text-yellow-800 flex items-center gap-2 whitespace-nowrap"
+              >
+                🧪 Тест Gemini API
+              </Button>
+              
               {/* Search Bar - moved to same line, reduced width */}
               <div className="max-w-xs">
                 <div className="relative">
@@ -389,7 +412,19 @@ export function TechnicalAnalysisDashboard() {
             </TabsList>
 
             <TabsContent value="active">
-              {activeRequests.length === 0 ? (
+              {isLoading ? (
+                <Card>
+                  <CardContent className="text-center py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600 mx-auto mb-4"></div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">
+                      Идет загрузка
+                    </h3>
+                    <p className="text-gray-600">
+                      Запросы проверяются и загружаются...
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : activeRequests.length === 0 ? (
                 <Card>
                   <CardContent className="text-center py-12">
                     <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
@@ -438,17 +473,18 @@ export function TechnicalAnalysisDashboard() {
                             className="flex items-center gap-3 animate-fade-in-element"
                             style={{ animationDelay: `${(activeRequests.length + index) * 100 + 400}ms` }}
                           >
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="text-gray-500 hover:text-gray-600 border-gray-300 hover:border-gray-400"
-                            >
-                              Черновик
-                            </Button>
+                            {getAnalysisStatusBadge(request)}
                             <Button
                               onClick={() => {
-                                console.log(`[Dashboard] Opening active request ID: ${request.id}, Name: ${request.name}, Project ID: ${request.project_id}`);
-                                setLocation(`/analyze/technical/${request.project_id || request.id}/workspace`);
+                                // Всегда переходим на страницу результатов
+                                // Если есть technical_analysis_id, используем его
+                                // Если нет, используем analysis_request_id для поиска
+                                if (request.technical_analysis_id) {
+                                  setLocation(`/analysis/results?requestId=${request.technical_analysis_id}`);
+                                } else {
+                                  // Используем analysis_request_id для поиска technical_analysis_request
+                                  setLocation(`/analysis/results?analysisRequestId=${request.id}`);
+                                }
                               }}
                               variant="outline"
                               size="sm"
@@ -476,7 +512,19 @@ export function TechnicalAnalysisDashboard() {
             </TabsContent>
 
             <TabsContent value="completed">
-              {completedRequests.length === 0 ? (
+              {isLoading ? (
+                <Card>
+                  <CardContent className="text-center py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600 mx-auto mb-4"></div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">
+                      Идет загрузка
+                    </h3>
+                    <p className="text-gray-600">
+                      Запросы проверяются и загружаются...
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : completedRequests.length === 0 ? (
                 <Card>
                   <CardContent className="text-center py-12">
                     <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
@@ -517,17 +565,18 @@ export function TechnicalAnalysisDashboard() {
                             className="flex items-center gap-3 animate-fade-in-element"
                             style={{ animationDelay: `${(activeRequests.length + index) * 100 + 400}ms` }}
                           >
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="text-gray-500 hover:text-gray-600 border-gray-300 hover:border-gray-400"
-                            >
-                              Черновик
-                            </Button>
+                            {getAnalysisStatusBadge(request)}
                             <Button
                               onClick={() => {
-                                console.log(`[Dashboard] Opening completed request ID: ${request.id}, Name: ${request.name}, Project ID: ${request.project_id}`);
-                                setLocation(`/analyze/technical/${request.project_id || request.id}/workspace`);
+                                // Всегда переходим на страницу результатов
+                                // Если есть technical_analysis_id, используем его
+                                // Если нет, используем analysis_request_id для поиска
+                                if (request.technical_analysis_id) {
+                                  setLocation(`/analysis/results?requestId=${request.technical_analysis_id}`);
+                                } else {
+                                  // Используем analysis_request_id для поиска technical_analysis_request
+                                  setLocation(`/analysis/results?analysisRequestId=${request.id}`);
+                                }
                               }}
                               variant="outline"
                               size="sm"

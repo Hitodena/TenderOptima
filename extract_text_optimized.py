@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 OPTIMIZED Section-Aware Text Extraction for SupplierFinder Analysis
 Enhanced text extraction with improved section detection, proper numerical sorting, and speed optimizations
@@ -9,6 +10,12 @@ import os
 import re
 import tempfile
 from pathlib import Path
+
+# Force UTF-8 encoding for stdout/stderr on Windows
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 # Document processing imports
 try:

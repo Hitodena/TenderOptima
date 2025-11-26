@@ -18,6 +18,7 @@
     "db:migrate": "node db-push.js"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@hookform/resolvers": "^3.3.4",
     "@jridgewell/trace-mapping": "^0.3.25",
     "@neondatabase/serverless": "^0.10.4",
@@ -65,6 +66,8 @@
     "cors": "^2.8.5",
     "csurf": "^1.11.0",
     "date-fns": "^3.6.0",
+    "docx": "^9.5.1",
+    "dotenv": "^17.2.3",
     "drizzle-orm": "^0.39.1",
     "drizzle-zod": "^0.7.0",
     "embla-carousel-react": "^8.3.0",
@@ -81,6 +84,7 @@
     "lucide-react": "^0.453.0",
     "luxon": "^3.7.2",
     "mailparser": "^3.7.2",
+    "mammoth": "^1.11.0",
     "memorystore": "^1.6.7",
     "multer": "^1.4.5-lts.2",
     "nanoid": "^5.1.5",

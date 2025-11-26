@@ -279,8 +279,13 @@ export function AnalyzeRequirementsPage() {
     }
   };
   
-  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  // Gemini analysis states
+  const [tzFile, setTzFile] = useState<File | null>(null);
+  const [kpFile, setKpFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  
+  // Legacy states (keep for backward compatibility if needed)
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractedRequirements, setExtractedRequirements] = useState<ExtractedRequirement[]>([]);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -434,6 +439,108 @@ export function AnalyzeRequirementsPage() {
     e.stopPropagation();
     handleFileUpload(e.dataTransfer.files);
   }, [handleFileUpload]);
+
+  // Handle TZ file upload
+  const handleTzUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setTzFile(e.target.files[0]);
+    }
+  };
+
+  // Handle KP file upload
+  const handleKpUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setKpFile(e.target.files[0]);
+    }
+  };
+
+  // Submit files for Gemini analysis
+  const submitForAnalysis = async () => {
+    if (!tzFile || !kpFile) {
+      toast({
+        title: "Необходимо загрузить оба файла",
+        description: "Пожалуйста, загрузите техническое задание и коммерческое предложение",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const currentProjectId = projectId || project.id;
+
+    if (!currentProjectId) {
+      toast({
+        title: "Ошибка",
+        description: "ID проекта не найден",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Загружаем проект заново, чтобы получить актуальный analysis_request_id
+    let currentAnalysisRequestId = project.analysisRequestId;
+    if (!currentAnalysisRequestId) {
+      try {
+        const projectResponse = await fetch(`/api/analysis-projects/${currentProjectId}`, {
+          credentials: 'include'
+        });
+        if (projectResponse.ok) {
+          const projectData = await projectResponse.json();
+          if (projectData.project?.analysis_request_id) {
+            currentAnalysisRequestId = projectData.project.analysis_request_id;
+            // Обновляем состояние проекта
+            setProject(prev => ({ ...prev, analysisRequestId: currentAnalysisRequestId }));
+          }
+        }
+      } catch (error) {
+        console.error('Error loading project analysis_request_id:', error);
+      }
+    }
+
+    setIsUploading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("technicalSpecification", tzFile);
+      formData.append("commercialOffer", kpFile);
+      if (currentAnalysisRequestId) {
+        formData.append("analysis_request_id", currentAnalysisRequestId.toString());
+      }
+      formData.append("project_id", currentProjectId.toString());
+
+      const response = await fetch("/api/analyze-gemini", {
+        method: "POST",
+        credentials: 'include',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Ошибка при отправке файлов на анализ");
+      }
+
+      toast({
+        title: "Файлы отправлены на анализ",
+        description: "Результат будет готов в течение 2 часов",
+      });
+
+      // Redirect to status page
+      if (data.requestId) {
+        setLocation(`/analysis/status/${data.requestId}`);
+      } else {
+        setLocation(`/analyze/technical`);
+      }
+    } catch (error) {
+      console.error('Error submitting for analysis:', error);
+      toast({
+        title: "Ошибка отправки",
+        description: error instanceof Error ? error.message : "Попробуйте еще раз",
+        variant: "destructive"
+      });
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   const removeFile = async (index: number) => {
     const fileToRemove = uploadedFiles[index];
@@ -1008,294 +1115,139 @@ export function AnalyzeRequirementsPage() {
           <CardContent className="space-y-6">
             {/* Project Information */}
             <div className="grid grid-cols-1 gap-4">
-              
-              {/* Hidden description field - keep in code but hide from UI */}
-              <div className="hidden">
-                <Label htmlFor="description" className={themeClasses.textMain}>
-                  Описание (опционально)
-                </Label>
-                <Input
-                  id="description"
-                  value={description}
-                  onChange={(e) => {
-                    setDescription(e.target.value);
-                    setProject(prev => ({ ...prev, description: e.target.value }));
-                    // Auto-save after a short delay
-                    setTimeout(() => saveProjectDetails(), 1000);
-                  }}
-                  placeholder="Введите описание запроса"
-                  className={`border-2 ${themeClasses.borderColor}`}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm text-gray-700">
+                  Загрузите техническое задание (ТЗ) и коммерческое предложение (КП) для анализа соответствия требований.
+                </p>
+              </div>
+            </div>
+
+            {/* TZ File Upload */}
+            <div className="space-y-2">
+              <Label htmlFor="tz-file" className={`text-base font-medium ${themeClasses.textMain}`}>
+                Техническое задание (ТЗ) *
+              </Label>
+              <div 
+                className={`border-2 border-dashed ${themeClasses.borderColor} rounded-lg p-6 text-center cursor-pointer hover:bg-gray-50 transition-colors ${tzFile ? 'border-green-500 bg-green-50' : ''}`}
+                onClick={() => document.getElementById('tz-file-input')?.click()}
+              >
+                <Upload className={`mx-auto h-10 w-10 ${tzFile ? 'text-green-600' : themeClasses.textAccent} mb-3`} />
+                <h3 className={`text-base font-medium ${themeClasses.textMain} mb-1`}>
+                  {tzFile ? tzFile.name : 'Нажмите для выбора файла ТЗ'}
+                </h3>
+                <p className="text-xs text-gray-500">
+                  PDF, DOC, DOCX
+                </p>
+                <input
+                  id="tz-file-input"
+                  type="file"
+                  accept=".pdf,.doc,.docx"
+                  onChange={handleTzUpload}
+                  className="hidden"
                 />
               </div>
-            </div>
-
-              {/* File Upload Area */}
-            <div 
-              className={`border-2 border-dashed ${themeClasses.borderColor} rounded-lg p-8 text-center cursor-pointer hover:bg-gray-50 transition-colors`}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload className={`mx-auto h-12 w-12 ${themeClasses.textAccent} mb-4`} />
-              <h3 className={`text-lg font-medium ${themeClasses.textMain} mb-2`}>
-                Перетащите файлы или нажмите для выбора
-              </h3>
-              <p className="text-sm text-gray-500 mb-4">
-                Поддерживаемые форматы: PDF, DOC, DOCX, TXT, XLS, XLSX, JPG, JPEG, PNG, BMP, GIF
-              </p>
-              
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept=".pdf,.doc,.docx,.txt,.xls,.xlsx,.jpg,.jpeg,.png,.bmp,.gif"
-                onChange={(e) => {
-                  handleFileUpload(e.target.files);
-                  // Reset the input so the same file can be selected again
-                  if (e.target) e.target.value = '';
-                }}
-                className="hidden"
-              />
-            </div>
-
-            {/* Uploaded Files List */}
-            {uploadedFiles.length > 0 && (
-              <div className="space-y-2">
-                <h3 className={`text-lg font-medium ${themeClasses.textMain}`}>
-                  Загруженные файлы:
-                </h3>
-                {uploadedFiles.map((file, index) => (
-                  <div key={index} className={`flex items-center justify-between p-3 border ${themeClasses.borderColor} rounded-lg bg-white`}>
-                    <div className="flex items-center space-x-3">
-                      <FileText className={`h-5 w-5 ${themeClasses.textAccent}`} />
-                      <span className={themeClasses.textMain}>{file.name}</span>
-                      <span className="text-sm text-gray-500">
-                        ({(file.size / 1024).toFixed(1)} KB)
-                      </span>
-                    </div>
-                    <Button
-                      onClick={() => removeFile(index)}
-                      variant="ghost"
-                      size="sm"
-                      className="text-red-500 hover:bg-red-50"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+              {tzFile && (
+                <div className="flex items-center justify-between p-3 border border-green-200 rounded-lg bg-green-50">
+                  <div className="flex items-center space-x-3">
+                    <FileText className="h-5 w-5 text-green-600" />
+                    <span className="text-sm font-medium text-gray-900">{tzFile.name}</span>
+                    <span className="text-xs text-gray-500">
+                      ({(tzFile.size / 1024).toFixed(1)} KB)
+                    </span>
                   </div>
-                ))}
+                  <Button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setTzFile(null);
+                    }}
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-500 hover:bg-red-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* KP File Upload */}
+            <div className="space-y-2">
+              <Label htmlFor="kp-file" className={`text-base font-medium ${themeClasses.textMain}`}>
+                Коммерческое предложение (КП) *
+              </Label>
+              <div 
+                className={`border-2 border-dashed ${themeClasses.borderColor} rounded-lg p-6 text-center cursor-pointer hover:bg-gray-50 transition-colors ${kpFile ? 'border-green-500 bg-green-50' : ''}`}
+                onClick={() => document.getElementById('kp-file-input')?.click()}
+              >
+                <Upload className={`mx-auto h-10 w-10 ${kpFile ? 'text-green-600' : themeClasses.textAccent} mb-3`} />
+                <h3 className={`text-base font-medium ${themeClasses.textMain} mb-1`}>
+                  {kpFile ? kpFile.name : 'Нажмите для выбора файла КП'}
+                </h3>
+                <p className="text-xs text-gray-500">
+                  PDF, DOC, DOCX
+                </p>
+                <input
+                  id="kp-file-input"
+                  type="file"
+                  accept=".pdf,.doc,.docx"
+                  onChange={handleKpUpload}
+                  className="hidden"
+                />
               </div>
-            )}
+              {kpFile && (
+                <div className="flex items-center justify-between p-3 border border-green-200 rounded-lg bg-green-50">
+                  <div className="flex items-center space-x-3">
+                    <FileText className="h-5 w-5 text-green-600" />
+                    <span className="text-sm font-medium text-gray-900">{kpFile.name}</span>
+                    <span className="text-xs text-gray-500">
+                      ({(kpFile.size / 1024).toFixed(1)} KB)
+                    </span>
+                  </div>
+                  <Button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setKpFile(null);
+                    }}
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-500 hover:bg-red-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
 
             {/* Loading State */}
-            {(isUploading || isExtracting) && (
+            {isUploading && (
               <div className="flex items-center space-x-2 text-sm">
                 <Spinner className="h-4 w-4" />
                 <span className={themeClasses.textMain}>
-                  {isExtracting ? 'Извлечение параметров...' : 'Загрузка файлов...'}
+                  Отправка файлов на анализ...
                 </span>
               </div>
             )}
 
-            {/* Extract Parameters Button */}
-            <div className="flex justify-center py-6 border-t border-b border-gray-200 my-6 bg-blue-50">
+            {/* Submit Button */}
+            <div className="flex justify-center py-6 border-t border-gray-200 my-6">
               <Button
-                onClick={extractParameters}
-                disabled={uploadedFiles.length === 0 || isExtracting}
+                onClick={submitForAnalysis}
+                disabled={!tzFile || !kpFile || isUploading}
                 size="lg"
-                className="bg-cyan-600 hover:bg-cyan-700 text-white disabled:opacity-50 disabled:cursor-not-allowed px-8 py-3 text-lg font-medium"
+                className={`${themeClasses.bgPrimary} ${themeClasses.hoverPrimary} text-white disabled:opacity-50 disabled:cursor-not-allowed px-8 py-3 text-lg font-medium`}
               >
-                {isExtracting ? (
+                {isUploading ? (
                   <>
                     <Spinner className="h-5 w-5 mr-3" />
-                    Извлечение параметров...
+                    Отправка...
                   </>
                 ) : (
                   <>
-                    <FileText className="h-5 w-5 mr-3" />
-                    Извлечь параметры
+                    <Upload className="h-5 w-5 mr-3" />
+                    Загрузить на анализ
                   </>
                 )}
               </Button>
-            </div>
-
-            {/* Extracted Parameters Table */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className={`text-lg font-medium ${themeClasses.textMain}`}>
-                  Извлеченные параметры:
-                </h3>
-                <Button
-                  onClick={addNewRequirement}
-                  variant="outline"
-                  size="sm"
-                  className={`${themeClasses.borderColor} ${themeClasses.textAccent} hover:${themeClasses.bgAccent}`}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Добавить параметр
-                </Button>
-              </div>
-
-              {extractedRequirements.length > 0 ? (
-                <div className={`border ${themeClasses.borderColor} rounded-lg overflow-hidden`}>
-                  <table className="w-full">
-                    <thead className={`${themeClasses.bgBackground}`}>
-                      <tr>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">№</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Номер спецификации</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Значение</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Действия</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {/* Sort requirements by serialNumber for better user experience */}
-                      {[...extractedRequirements].sort((a, b) => a.serialNumber - b.serialNumber).map((req, index) => (
-                        <React.Fragment key={req.id || `req-${index}`}>
-                          <tr className="border-t border-gray-200 group hover:bg-gray-50">
-                            <td className="px-4 py-3 text-sm text-gray-600 relative">
-                              <div className="flex items-center space-x-2">
-                                <button
-                                  className="cursor-grab active:cursor-grabbing p-1 rounded hover:bg-gray-200 opacity-0 group-hover:opacity-100 transition-opacity"
-                                  title="Перетащите для изменения порядка"
-                                  onMouseDown={(e) => {
-                                    e.preventDefault();
-                                    let startY = e.clientY;
-                                    let isDragging = false;
-                                    
-                                    const handleMouseMove = (e: MouseEvent) => {
-                                      const deltaY = e.clientY - startY;
-                                      if (Math.abs(deltaY) > 30 && !isDragging) {
-                                        isDragging = true;
-                                        const direction = deltaY > 0 ? 1 : -1;
-                                        const newIndex = Math.max(0, Math.min(extractedRequirements.length - 1, index + direction));
-                                        
-                                        if (newIndex !== index) {
-                                          const newReqs = [...extractedRequirements];
-                                          const [movedItem] = newReqs.splice(index, 1);
-                                          newReqs.splice(newIndex, 0, movedItem);
-                                          
-                                          // Renumber all requirements
-                                          const renumbered = newReqs.map((req, i) => ({
-                                            ...req,
-                                            serialNumber: i + 1
-                                          }));
-                                          
-                                          setExtractedRequirements(renumbered);
-                                          
-                                          // Update startY for continued dragging
-                                          startY = e.clientY;
-                                          isDragging = false;
-                                        }
-                                      }
-                                    };
-                                    
-                                    const handleMouseUp = () => {
-                                      document.removeEventListener('mousemove', handleMouseMove);
-                                      document.removeEventListener('mouseup', handleMouseUp);
-                                    };
-                                    
-                                    document.addEventListener('mousemove', handleMouseMove);
-                                    document.addEventListener('mouseup', handleMouseUp);
-                                  }}
-                                >
-                                  <GripVertical className="h-4 w-4 text-gray-400" />
-                                </button>
-                                <span>{req.serialNumber}</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              {editingIndex === index ? (
-                                <Input
-                                  value={req.techSpecNumber}
-                                  onChange={(e) => updateRequirement(index, 'techSpecNumber', e.target.value)}
-                                  placeholder="2.1"
-                                  className="w-full"
-                                />
-                              ) : (
-                                <span className={themeClasses.textMain}>{req.techSpecNumber}</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3">
-                              {editingIndex === index ? (
-                                <Input
-                                  value={req.extractedValue}
-                                  onChange={(e) => updateRequirement(index, 'extractedValue', e.target.value)}
-                                  placeholder="Мощность 100 кВт"
-                                  className="w-full"
-                                />
-                              ) : (
-                                <span className={themeClasses.textMain}>{req.extractedValue}</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center space-x-2">
-                                {req.page_reference && uploadedFiles.length > 0 && (
-                                  <Button
-                                    onClick={() => openDocument(uploadedFiles[0].name, req.page_reference)}
-                                    variant="outline"
-                                    size="sm"
-                                    className="text-xs px-2 py-1 h-auto text-blue-600 hover:text-blue-800 border-blue-300 hover:border-blue-500"
-                                    title={`Открыть документ на ${req.page_reference}`}
-                                  >
-                                    <ExternalLink className="w-3 h-3 mr-1" />
-                                    {req.page_reference}
-                                  </Button>
-                                )}
-                                {editingIndex === index ? (
-                                  <>
-                                    <Button
-                                      onClick={() => saveRequirement(index)}
-                                      variant="ghost"
-                                      size="sm"
-                                      className={`${themeClasses.textAccent} hover:${themeClasses.bgAccent}`}
-                                    >
-                                      <Save className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                      onClick={() => setEditingIndex(null)}
-                                      variant="ghost"
-                                      size="sm"
-                                      className="text-gray-500 hover:bg-gray-100"
-                                    >
-                                      ✕
-                                    </Button>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Button
-                                      onClick={() => setEditingIndex(index)}
-                                      variant="ghost"
-                                      size="sm"
-                                      className={`${themeClasses.textAccent} hover:${themeClasses.bgAccent}`}
-                                    >
-                                      <Edit3 className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                      onClick={() => deleteRequirement(index)}
-                                      variant="ghost"
-                                      size="sm"
-                                      className="text-red-500 hover:bg-red-50"
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  </>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        </React.Fragment>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className={`text-center py-8 ${themeClasses.bgBackground} rounded-lg border ${themeClasses.borderColor}`}>
-                  <AlertCircle className={`mx-auto h-12 w-12 ${themeClasses.textAccent} mb-4`} />
-                  <p className={`${themeClasses.textMain} mb-2`}>Параметры не извлечены</p>
-                  <p className="text-sm text-gray-500">
-                    Загрузите файлы с техническими требованиями или добавьте параметры вручную
-                  </p>
-                </div>
-              )}
             </div>
 
             {/* Semantic Blocks Section */}
@@ -1437,50 +1389,9 @@ export function AnalyzeRequirementsPage() {
               </div>
             )}
 
-              {/* Confirm Button for New Project */}
-              <div className="flex justify-end pt-4">
-                <Button
-                  onClick={handleConfirmClick}
-                  disabled={extractedRequirements.length === 0}
-                  className={`${themeClasses.bgPrimary} ${themeClasses.hoverPrimary} text-white`}
-                >
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Подтвердить параметры
-                </Button>
-              </div>
             </CardContent>
         </Card>
       </div>
-      
-      {/* Confirmation Dialog */}
-      <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Подтверждение параметров</AlertDialogTitle>
-            <AlertDialogDescription>
-              Нажав эту кнопку вы больше не сможете менять параметры для проверки. Убедитесь, что все параметры включены корректно.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="flex items-center space-x-2 py-4">
-            <Checkbox 
-              id="dont-show-again" 
-              checked={dontShowAgain}
-              onCheckedChange={(checked) => setDontShowAgain(checked === true)}
-            />
-            <Label htmlFor="dont-show-again" className="text-sm">
-              Не показывать это больше
-            </Label>
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={handleConfirmDialogCancel}>
-              Отмена
-            </AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmDialogProceed}>
-              Данные корректны
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
         </>
       )}
     </div>

@@ -6,6 +6,7 @@ import { spawn } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import os from 'os';
 import { execSync } from 'child_process';
 import OpenAI from 'openai';
 import crypto from 'crypto';
@@ -2863,19 +2864,37 @@ router.post('/:projectId/compliance/:supplierId', requireAuth, async (req, res) 
       try {
         console.log(`[Analysis] Processing file: ${file.original_name || file.filename}, size: ${file.file_data?.length || 0} bytes, type: ${file.mime_type}`);
         
-        const tempFilePath = path.join('/tmp', `supplier_${file.id}_${file.filename}`);
+        // Create safe filename for temporary file to handle special characters
+        const safeFilename = (file.filename || file.original_name || 'file').replace(/[^\w\s.-]/g, '_');
+        const tempDir = path.join(os.tmpdir(), 'supplier-finder-analysis');
+        
+        console.log(`[Analysis] Using temp directory: ${tempDir}`);
+        console.log(`[Analysis] System temp dir: ${os.tmpdir()}`);
+        
+        // Ensure temp directory exists
+        if (!fs.existsSync(tempDir)) {
+          console.log(`[Analysis] Creating temp directory: ${tempDir}`);
+          fs.mkdirSync(tempDir, { recursive: true });
+        }
+        
+        const tempFilePath = path.join(tempDir, `supplier_${file.id}_${safeFilename}`);
+        console.log(`[Analysis] Writing file to: ${tempFilePath}`);
         fs.writeFileSync(tempFilePath, file.file_data);
         
         const pythonScriptPath = path.join(process.cwd(), 'extract_text_optimized.py');
         const mimeType = file.mime_type || file.mimetype || 'application/octet-stream';
-        const command = `python3 "${pythonScriptPath}" "${tempFilePath}" "${mimeType}"`;
+        
+        // Use 'python' for Windows compatibility, 'python3' for Linux/Mac
+        const pythonCommand = process.platform === 'win32' ? 'python' : 'python3';
+        const command = `${pythonCommand} "${pythonScriptPath}" "${tempFilePath}" "${mimeType}"`;
         
         console.log(`[Analysis] Executing OPTIMIZED section-aware text extraction command: ${command}`);
         
         const extractedText = execSync(command, { 
           encoding: 'utf8',
           maxBuffer: 1024 * 1024 * 10,
-          timeout: 30000
+          timeout: 30000,
+          env: { ...process.env, PYTHONIOENCODING: 'utf-8' }
         });
         
         console.log(`[Analysis] Extracted text length for ${file.original_name}: ${extractedText.length} characters`);
@@ -3110,13 +3129,172 @@ ${supplierText.substring(0, 15000)}
             max_tokens: 4096
           });
 
-          const jsonMatch = response.choices[0].message.content.match(/\{[\s\S]*\}/);
+          const content = response.choices[0].message.content;
+          if (!content) {
+            console.error('[Analysis] API returned empty content');
+            return { sections: [] };
+          }
+          
+          console.log(`[Analysis] Raw API response length: ${content.length} characters`);
+          
+          // Try to extract JSON from response
+          const jsonMatch = content.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
-            return JSON.parse(jsonMatch[0]);
+            let jsonText = jsonMatch[0];
+            
+            // Enhanced JSON repair - multiple passes
+            let jsonTextFixed = jsonText;
+            
+            // Pass 1: Remove markdown formatting
+            if (jsonTextFixed.includes('```json')) {
+              jsonTextFixed = jsonTextFixed.replace(/```json\s*/g, '').replace(/```\s*$/g, '');
+            }
+            if (jsonTextFixed.includes('```')) {
+              jsonTextFixed = jsonTextFixed.replace(/```/g, '');
+            }
+            
+            // Pass 2: Fix double commas and malformed separators
+            jsonTextFixed = jsonTextFixed.replace(/,\s*,/g, ',');
+            jsonTextFixed = jsonTextFixed.replace(/;(\s*[}\]])/g, '$1');
+            
+            // Pass 3: Remove trailing commas (multiple patterns)
+            jsonTextFixed = jsonTextFixed.replace(/,(\s*[}\]])/g, '$1');
+            jsonTextFixed = jsonTextFixed.replace(/,(\s*$)/gm, '');
+            
+            // Pass 4: Fix missing commas between objects/arrays
+            jsonTextFixed = jsonTextFixed.replace(/}\s*{/g, '},{');
+            jsonTextFixed = jsonTextFixed.replace(/]\s*\[/g, '],[');
+            jsonTextFixed = jsonTextFixed.replace(/]\s*{/g, '},{');
+            jsonTextFixed = jsonTextFixed.replace(/}\s*\[/g, '},[');
+            
+            // Pass 5: Remove control characters (but keep newlines and tabs)
+            jsonTextFixed = jsonTextFixed.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, '');
+            
+            // Pass 6: Fix incomplete strings - ensure all strings are properly closed
+            // This handles cases where quotes are missing or unescaped
+            let quoteCount = 0;
+            let inString = false;
+            let escapeNext = false;
+            const chars = jsonTextFixed.split('');
+            for (let i = 0; i < chars.length; i++) {
+              if (escapeNext) {
+                escapeNext = false;
+                continue;
+              }
+              if (chars[i] === '\\') {
+                escapeNext = true;
+                continue;
+              }
+              if (chars[i] === '"') {
+                inString = !inString;
+                quoteCount++;
+              }
+            }
+            
+            // If odd number of quotes, try to fix by removing the last unclosed quote
+            if (quoteCount % 2 !== 0 && inString) {
+              const lastQuoteIndex = jsonTextFixed.lastIndexOf('"');
+              if (lastQuoteIndex > 0) {
+                // Check if it's actually an unclosed string
+                const beforeQuote = jsonTextFixed.substring(Math.max(0, lastQuoteIndex - 10), lastQuoteIndex);
+                if (!beforeQuote.includes('\\"')) {
+                  // Remove the problematic quote and everything after if it's at the end
+                  if (lastQuoteIndex > jsonTextFixed.length - 50) {
+                    jsonTextFixed = jsonTextFixed.substring(0, lastQuoteIndex);
+                    // Try to close the object/array properly
+                    const lastOpenBrace = jsonTextFixed.lastIndexOf('{');
+                    const lastOpenBracket = jsonTextFixed.lastIndexOf('[');
+                    if (lastOpenBrace > lastOpenBracket) {
+                      jsonTextFixed += '}';
+                    } else if (lastOpenBracket > lastOpenBrace) {
+                      jsonTextFixed += ']';
+                    }
+                  }
+                }
+              }
+            }
+            
+            // Try parsing with fixed JSON
+            try {
+              const parsed = JSON.parse(jsonTextFixed);
+              console.log(`[Analysis] Successfully parsed ${parsed.sections?.length || 0} supplier sections`);
+              return parsed;
+            } catch (parseError) {
+              console.error('[Analysis] JSON parse error after fixes:', parseError);
+              
+              // Extract error position for better debugging
+              const errorPosMatch = (parseError as Error).message.match(/position (\d+)/);
+              if (errorPosMatch) {
+                const errorPos = parseInt(errorPosMatch[1]);
+                const start = Math.max(0, errorPos - 200);
+                const end = Math.min(jsonTextFixed.length, errorPos + 200);
+                console.error('[Analysis] Problematic JSON snippet:', jsonTextFixed.substring(start, end));
+                console.error('[Analysis] Error at position:', errorPos, 'of', jsonTextFixed.length);
+              }
+              
+              // Try to extract and parse sections array manually
+              try {
+                console.log('[Analysis] Attempting manual section extraction as fallback');
+                const sectionsArrayMatch = jsonTextFixed.match(/"sections"\s*:\s*\[([\s\S]*)\]/);
+                if (sectionsArrayMatch) {
+                  // Try to extract individual section objects
+                  const sectionsContent = sectionsArrayMatch[1];
+                  const sectionObjects: any[] = [];
+                  
+                  // Find all complete section objects
+                  let braceCount = 0;
+                  let currentSection = '';
+                  let sectionStart = -1;
+                  
+                  for (let i = 0; i < sectionsContent.length; i++) {
+                    const char = sectionsContent[i];
+                    if (char === '{') {
+                      if (braceCount === 0) {
+                        sectionStart = i;
+                        currentSection = '{';
+                      } else {
+                        currentSection += char;
+                      }
+                      braceCount++;
+                    } else if (char === '}') {
+                      currentSection += char;
+                      braceCount--;
+                      if (braceCount === 0) {
+                        // Complete section found
+                        try {
+                          const sectionObj = JSON.parse(currentSection);
+                          sectionObjects.push(sectionObj);
+                        } catch (e) {
+                          console.warn('[Analysis] Failed to parse individual section:', e);
+                        }
+                        currentSection = '';
+                      }
+                    } else if (braceCount > 0) {
+                      currentSection += char;
+                    }
+                  }
+                  
+                  if (sectionObjects.length > 0) {
+                    console.log(`[Analysis] Manually extracted ${sectionObjects.length} sections`);
+                    return { sections: sectionObjects };
+                  }
+                }
+              } catch (fallbackError) {
+                console.error('[Analysis] Fallback extraction also failed:', fallbackError);
+              }
+            }
+          } else {
+            console.error('[Analysis] No JSON object found in API response');
+            console.error('[Analysis] Response preview:', content.substring(0, 500));
           }
         } catch (error) {
           console.error('[Analysis] Error parsing supplier sections:', error);
+          if (error instanceof Error) {
+            console.error('[Analysis] Error message:', error.message);
+            console.error('[Analysis] Error stack:', error.stack);
+          }
         }
+        console.log('[Analysis] Returning empty sections due to parsing failure');
         return { sections: [] };
       }
 
@@ -3321,8 +3499,14 @@ ${supplierSections.sections.map(section =>
 
       // **STEP 1: Parse supplier document into semantic sections**
       console.log(`[Analysis] Parsing supplier document into semantic sections`);
-      const supplierSections = await parseSupplierSections(combinedSupplierText);
-      console.log(`[Analysis] Found ${supplierSections.sections?.length || 0} supplier sections`);
+      let supplierSections = { sections: [] };
+      try {
+        supplierSections = await parseSupplierSections(combinedSupplierText);
+        console.log(`[Analysis] Found ${supplierSections.sections?.length || 0} supplier sections`);
+      } catch (parseError) {
+        console.error('[Analysis] Critical error in parseSupplierSections, continuing with empty sections:', parseError);
+        supplierSections = { sections: [] };
+      }
 
       // **STEP 2: Group requirements by technical sections**
       const requirementSections = groupRequirementsByTechnicalSections(requirements.rows);

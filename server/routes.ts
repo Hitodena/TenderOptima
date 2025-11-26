@@ -32,6 +32,7 @@ import { generateSupplierAnalysis } from "./routes/analysis";
 import analysisProjectsRoutes from './routes/analysis-projects';
 import analysisIntegrationRoutes from './routes/analysis-integration';
 import analysisRequestsRoutes from './routes/analysis-requests';
+import analyzeGeminiRoutes from './routes/analyze-gemini';
 import supplierSearchRoutes from './routes/supplier-search';
 import universalSearchRoutes from './routes/universal-search';
 import { sendImprovementRequest } from "./routes/improvement-request";
@@ -2722,6 +2723,7 @@ app.post("/api/check-emails", requireAuth, async (req, res) => {
   app.use('/api/analysis-projects', analysisProjectsRoutes);
   app.use('/api/analysis-integration', analysisIntegrationRoutes);
   app.use('/api/analysis-requests', analysisRequestsRoutes);
+  app.use('/api', analyzeGeminiRoutes); // Gemini analysis endpoint at /api/analyze-gemini
   app.use('/api/semantic', semanticVectorizationRoutes);
 
   // Subscription routes - registered after authentication is set up

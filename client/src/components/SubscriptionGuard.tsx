@@ -48,7 +48,7 @@ export function SubscriptionGuard({ isActive, children, onUpgrade }: Subscriptio
             <div className="text-xs text-gray-600 mb-2">Свяжитесь с Вашим менеджером</div>
             <div className="text-sm">
               <p>Email: support@tenderoptima.by</p>
-              <p>Тел: +375 29 1111111</p>
+              <p className="sr-only">Тел: +375 29 1111111</p>
             </div>
           </div>
         </div>

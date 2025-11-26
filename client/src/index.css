@@ -142,5 +142,5 @@
 
 .animate-fade-in-element {
   animation: fadeInElement 0.3s ease-out 0.4s forwards;
-  opacity: 0;
+  opacity: 1; /* Изменено с 0 на 1, чтобы элементы были видимы по умолчанию */
 }

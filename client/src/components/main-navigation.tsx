@@ -20,6 +20,9 @@ export function MainNavigation() {
     '/compare-results',
     '/select-request-parameters',
     '/analyze/technical',
+    '/analyze/parameters',
+    '/analyze',
+    '/analysis',
     '/settings',
     '/auth',
     '/admin',
@@ -33,6 +36,9 @@ export function MainNavigation() {
   if (shouldHideNavigation) {
     return null;
   }
+  
+  // Hide menu completely - not needed anymore
+  return null;
 
   // Define menu items based on current mode
   const getMenuItems = (currentMode: AppMode) => {

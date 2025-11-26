@@ -225,7 +225,7 @@ export function SubscriptionStatusNew({ className }: SubscriptionStatusProps) {
             <div className="space-y-1">
               <div className="text-sm">
                 <p>Email: support@tenderoptima.by</p>
-                <p>Тел: +375 29 1111111</p>
+                <p className="sr-only">Тел: +375 29 1111111</p>
               </div>
             </div>
           </div>

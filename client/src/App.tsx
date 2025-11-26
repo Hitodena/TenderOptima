@@ -43,6 +43,9 @@ import { NewNavigation } from "@/components/new-navigation";
 import AdminEmailPanel from "@/pages/AdminEmailPanel";
 import UnprocessedEmailsPage from "@/pages/admin/unprocessed-emails";
 import EmailTemplatesPage from "@/pages/admin/email-templates";
+import TestGeminiPage from "@/pages/test-gemini";
+import AnalysisResultsPage from "@/pages/analysis/results";
+import AnalysisStatusPage from "@/pages/analysis-status";
 
 function Router() {
   return (
@@ -77,12 +80,21 @@ function Router() {
         <Route path="/admin/unprocessed-emails">
           <ProtectedRoute component={UnprocessedEmailsPage} />
         </Route>
-        <Route path="/admin/email-templates">
-          <ProtectedRoute component={EmailTemplatesPage} />
-        </Route>
-        <Route path="/admin-email-panel">
-          <ProtectedRoute component={AdminEmailPanel} />
-        </Route>
+      <Route path="/admin/email-templates">
+        <ProtectedRoute component={EmailTemplatesPage} />
+      </Route>
+      <Route path="/admin-email-panel">
+        <ProtectedRoute component={AdminEmailPanel} />
+      </Route>
+      <Route path="/test-gemini">
+        <ProtectedRoute component={TestGeminiPage} />
+      </Route>
+      <Route path="/analysis/results">
+        <ProtectedRoute component={AnalysisResultsPage} />
+      </Route>
+      <Route path="/analysis/status/:requestId">
+        <ProtectedRoute component={AnalysisStatusPage} />
+      </Route>
       
       {/* Protected routes */}
       <Route path="/">

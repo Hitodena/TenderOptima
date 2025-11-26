@@ -22,11 +22,18 @@ router.get('/', requireAuth, async (req, res) => {
         ap.procedure_name,
         ap.description as project_description,
         COUNT(DISTINCT arp.id) as parameters_count,
-        COUNT(DISTINCT ars.id) as suppliers_count
+        COUNT(DISTINCT ars.id) as suppliers_count,
+        tar.id as technical_analysis_id,
+        tar.status as analysis_status,
+        tar.tz_file_path,
+        tar.kp_file_path,
+        tar.result_json,
+        tar.completed_at as analysis_completed_at
       FROM analysis_requests ar
       LEFT JOIN analysis_projects ap ON ar.id = ap.analysis_request_id
       LEFT JOIN analysis_request_parameters arp ON ar.id = arp.request_id
       LEFT JOIN analysis_request_suppliers ars ON ar.id = ars.request_id
+      LEFT JOIN technical_analysis_requests tar ON ar.id = tar.analysis_request_id
       WHERE ar.user_id = $1
     `;
     
@@ -38,7 +45,7 @@ router.get('/', requireAuth, async (req, res) => {
     }
     
     query += `
-      GROUP BY ar.id, ap.id, ap.procedure_name, ap.description
+      GROUP BY ar.id, ap.id, ap.procedure_name, ap.description, tar.id, tar.status, tar.tz_file_path, tar.kp_file_path, tar.result_json, tar.completed_at
       ORDER BY ar.updated_at DESC, ar.created_at DESC
     `;
 
@@ -119,12 +126,19 @@ router.get('/:id', requireAuth, async (req, res) => {
       SELECT 
         ar.*,
         COUNT(DISTINCT arp.id) as parameters_count,
-        COUNT(DISTINCT ars.id) as suppliers_count
+        COUNT(DISTINCT ars.id) as suppliers_count,
+        tar.id as technical_analysis_id,
+        tar.status as analysis_status,
+        tar.tz_file_path,
+        tar.kp_file_path,
+        tar.result_json,
+        tar.completed_at as analysis_completed_at
       FROM analysis_requests ar
       LEFT JOIN analysis_request_parameters arp ON ar.id = arp.request_id
       LEFT JOIN analysis_request_suppliers ars ON ar.id = ars.request_id
+      LEFT JOIN technical_analysis_requests tar ON ar.id = tar.analysis_request_id
       WHERE ar.id = $1 AND ar.user_id = $2
-      GROUP BY ar.id
+      GROUP BY ar.id, tar.id, tar.status, tar.tz_file_path, tar.kp_file_path, tar.result_json, tar.completed_at
     `;
 
     const result = await pool.query(query, [requestId, userId]);
