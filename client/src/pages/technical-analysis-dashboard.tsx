@@ -376,15 +376,6 @@ export function TechnicalAnalysisDashboard() {
                 )}
               </Button>
               
-              {/* Temporary: Test Gemini Button */}
-              <Button 
-                onClick={() => setLocation('/test-gemini')}
-                variant="outline"
-                className="bg-yellow-50 hover:bg-yellow-100 border-yellow-300 text-yellow-700 hover:text-yellow-800 flex items-center gap-2 whitespace-nowrap"
-              >
-                🧪 Тест Gemini API
-              </Button>
-              
               {/* Search Bar - moved to same line, reduced width */}
               <div className="max-w-xs">
                 <div className="relative">
@@ -448,7 +439,7 @@ export function TechnicalAnalysisDashboard() {
                 <div className="grid gap-4">
                   {activeRequests.map((request, index) => (
                     <div 
-                      key={request.id} 
+                      key={`active-${request.id}-${index}`} 
                       className={`bg-white border border-gray-300 rounded-md overflow-hidden mb-1 hover:shadow-sm transition-shadow ${
                         animatingItems.has(request.id) ? 'animate-slide-out' : ''
                       }`}
@@ -540,7 +531,7 @@ export function TechnicalAnalysisDashboard() {
                 <div className="grid gap-4">
                   {completedRequests.map((request, index) => (
                     <div 
-                      key={request.id} 
+                      key={`completed-${request.id}-${index}`} 
                       className={`bg-white border border-gray-300 rounded-md overflow-hidden mb-1 hover:shadow-sm transition-shadow ${
                         animatingItems.has(request.id) ? 'animate-slide-out' : ''
                       }`}

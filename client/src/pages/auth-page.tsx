@@ -105,7 +105,9 @@ export default function AuthPage() {
   });
   
   // Redirect if already logged in - moved after all hook calls
-  if (user && !isLoading) {
+  // But only if there's actually a valid token (user might be cached but token removed)
+  const hasToken = localStorage.getItem('accessToken');
+  if (user && !isLoading && hasToken) {
     // Check if user is admin and redirect to admin panel
     if (user.role === 'admin') {
       return <Redirect to="/admpanel" />;

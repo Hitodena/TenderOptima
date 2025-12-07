@@ -66,8 +66,20 @@ export default function SelectRequestParameters({ suppliers = [], searchRequest,
       if (suppliersFromSession) {
         const parsedSuppliers = JSON.parse(suppliersFromSession);
         if (Array.isArray(parsedSuppliers) && parsedSuppliers.length > 0) {
-          console.log('Loaded suppliers from session storage:', parsedSuppliers.length);
-          setSelectedSuppliers(parsedSuppliers);
+          // КРИТИЧНО: Восстанавливаем selectedEmail из сохраненных данных
+          const suppliersWithSelectedEmail = parsedSuppliers.map((s: any) => ({
+            ...s,
+            selectedEmail: s.selectedEmail || (Array.isArray(s.email) ? s.email[0] : s.email)
+          }));
+          
+          console.log(`[CRITICAL] Loaded suppliers from session storage:`, suppliersWithSelectedEmail.length);
+          console.log(`[CRITICAL] Suppliers with selectedEmail:`, suppliersWithSelectedEmail.map((s: any) => ({
+            id: s.id,
+            name: s.name,
+            email: s.email,
+            selectedEmail: s.selectedEmail
+          })));
+          setSelectedSuppliers(suppliersWithSelectedEmail);
           return;
         }
       }
@@ -391,9 +403,13 @@ export default function SelectRequestParameters({ suppliers = [], searchRequest,
     <div className="bg-background">
       <MainNavigation />
       <div className="container mx-auto px-4 py-4">
+        <div className="mb-4" data-onboarding-id="select-parameters-hero">
+          <h1 className="text-2xl font-semibold">Выбор параметров запроса</h1>
+          <p className="text-m text-gray-400">Выберите параметры и опишите товар для отправки запроса поставщикам</p>
+        </div>
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           {/* Левая колонка - Выбор параметров (40%) */}
-          <Card className="lg:col-span-2">
+          <Card className="lg:col-span-2" data-onboarding-id="select-parameters-list">
             <CardHeader className="pb-3">
               <CardTitle className="text-lg">
                 <span className="text-sm font-normal text-muted-foreground mr-2">1/3</span>
@@ -477,7 +493,7 @@ export default function SelectRequestParameters({ suppliers = [], searchRequest,
           </Card>
 
           {/* Правая колонка - Описание товара/услуги (60%) */}
-          <Card className="lg:col-span-3">
+          <Card className="lg:col-span-3" data-onboarding-id="select-parameters-description">
             <CardHeader className="pb-3">
               <CardTitle className="text-lg">
                 <span className="text-sm font-normal text-muted-foreground mr-2">2/3</span>
@@ -511,21 +527,23 @@ export default function SelectRequestParameters({ suppliers = [], searchRequest,
           >
             Назад
           </Button>
-          <Button 
-            variant="default" 
-            onClick={saveParametersAndContinue}
-            disabled={isLoading || !productDescription.trim()}
-            className="flex items-center gap-2"
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Обработка...
-              </>
-            ) : (
-              "Создать запрос"
-            )}
-          </Button>
+          <div data-onboarding-id="select-parameters-create-button">
+            <Button 
+              variant="default" 
+              onClick={saveParametersAndContinue}
+              disabled={isLoading || !productDescription.trim()}
+              className="flex items-center gap-2"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Обработка...
+                </>
+              ) : (
+                "Создать запрос"
+              )}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

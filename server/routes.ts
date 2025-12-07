@@ -53,6 +53,7 @@ import adminModerationTestRoutes from "./routes/admin-moderation-test";
 import adminExcludedDomainsRoutes from "./routes/admin-excluded-domains";
 import adminClientRequestsRoutes from "./routes/admin-client-requests";
 import adminUnprocessedEmailsRoutes from "./routes/admin-unprocessed-emails";
+import onboardingRoutes from "./routes/onboarding";
 
 
 import { matchingService } from "./matching-service";
@@ -853,6 +854,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`[email] Parsed subject:`, subject);
       console.log(`[email] Parsed requestId:`, requestId);
       console.log(`[email] Parsed apiSuppliers:`, apiSuppliers?.length || 0);
+      console.log(`[CRITICAL] apiSuppliers content:`, apiSuppliers?.map((s: any) => ({
+        id: s.id,
+        name: s.name,
+        email: s.email,
+        selectedEmail: s.selectedEmail
+      })));
       console.log(`[email] Parsed fromContactGroup:`, fromContactGroup);
       console.log(`[email] Parsed parameters:`, parameters);
 
@@ -989,6 +996,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
             console.log(`[email] Checking DB supplier ${s.name} (ID: ${s.id}): Selected = ${included}`);
             return included;
+          }).map(s => {
+            // КРИТИЧНО: Ищем соответствующий supplier в apiSuppliers для получения selectedEmail
+            const matchingApiSupplier = apiSuppliers?.find((apiS: any) => {
+              return String(apiS.id) === String(s.id);
+            });
+            
+            // Если нашли matchingApiSupplier с selectedEmail, используем его
+            if (matchingApiSupplier?.selectedEmail) {
+              console.log(`[CRITICAL] Database supplier ${s.name}: using selectedEmail ${matchingApiSupplier.selectedEmail} from apiSuppliers`);
+              return {
+                ...s,
+                email: matchingApiSupplier.selectedEmail,
+                selectedEmail: matchingApiSupplier.selectedEmail
+              };
+            }
+            
+            return s;
           });
           
           console.log(`[email] Selected ${dbSelectedSuppliers.length} database suppliers from ${databaseSuppliers.length} available`);
@@ -1010,19 +1034,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log(`[email] Selected ${stagingSelectedSuppliers.length} staging suppliers from ${stagingSuppliers.length} available`);
           
           // Преобразуем staging suppliers в формат для отправки email
-          const convertedStagingSuppliers = stagingSelectedSuppliers.map(s => ({
-            id: s.id,
-            name: s.rawTitle,
-            email: s.rawEmails && s.rawEmails[0] ? s.rawEmails[0] : '',
-            phone: s.rawPhones && s.rawPhones[0] ? s.rawPhones[0] : '',
-            website: s.rawUrl,
-            description: s.rawDescription,
-            categories: [s.searchQuery],
-            searchEngine: s.sourceEngine,
-            allEmails: s.rawEmails || [],
-            allPhones: s.rawPhones || [],
-            searchDate: s.createdAt?.toISOString()
-          }));
+          // КРИТИЧНО: Используем selectedEmail из apiSuppliers, если он есть
+          const convertedStagingSuppliers = stagingSelectedSuppliers.map(s => {
+            // Ищем соответствующий supplier в apiSuppliers для получения selectedEmail
+            // Пробуем несколько способов сопоставления
+            const matchingApiSupplier = apiSuppliers?.find((apiS: any) => {
+              // Способ 1: Сравнение по API ID
+              const apiId = typeof apiS.id === 'number' && apiS.id < 0 
+                ? `api-${Math.abs(apiS.id)}` 
+                : (typeof apiS.id === 'string' && apiS.id.startsWith('api-') ? apiS.id : null);
+              const stagingId = `api-${Math.abs(s.id)}`;
+              
+              // Способ 2: Прямое сравнение ID
+              const directMatch = String(apiS.id) === String(s.id);
+              
+              // Способ 3: Сравнение по имени и домену (если ID не совпадают)
+              const nameMatch = apiS.name === s.rawTitle;
+              const websiteMatch = apiS.website === s.rawUrl;
+              
+              const matched = apiId === stagingId || directMatch || (nameMatch && websiteMatch);
+              
+              if (matched) {
+                console.log(`[CRITICAL] Found matching apiSupplier for staging ${s.rawTitle}:`, {
+                  stagingId: s.id,
+                  apiId: apiS.id,
+                  apiSelectedEmail: apiS.selectedEmail,
+                  apiEmail: apiS.email,
+                  apiName: apiS.name,
+                  fullApiSupplier: JSON.stringify(apiS, null, 2)
+                });
+              }
+              
+              return matched;
+            });
+            
+            // КРИТИЧНО: Если matchingApiSupplier не найден, значит поставщик не был выбран пользователем
+            // НЕ используем fallback - просто пропускаем этого поставщика
+            if (!matchingApiSupplier) {
+              console.log(`[CRITICAL] Staging supplier ${s.rawTitle}: NO matching apiSupplier found - supplier was NOT selected by user, skipping`);
+              return null; // Возвращаем null, чтобы отфильтровать этого поставщика
+            }
+            
+            // Используем selectedEmail из apiSuppliers, если он есть
+            // Если selectedEmail отсутствует, используем apiEmail из matchingApiSupplier
+            let emailToUse: string;
+            if (matchingApiSupplier.selectedEmail) {
+              emailToUse = matchingApiSupplier.selectedEmail;
+              console.log(`[CRITICAL] Staging supplier ${s.rawTitle}: using selectedEmail ${emailToUse} from apiSuppliers`);
+            } else if (matchingApiSupplier.email) {
+              // Если selectedEmail отсутствует, но есть apiEmail - используем его
+              emailToUse = matchingApiSupplier.email;
+              console.log(`[CRITICAL] Staging supplier ${s.rawTitle}: selectedEmail not found, using apiEmail ${emailToUse} from matchingApiSupplier`);
+            } else {
+              // Если и apiEmail отсутствует - это ошибка, пропускаем
+              console.error(`[CRITICAL ERROR] Staging supplier ${s.rawTitle}: matchingApiSupplier found but no email available, skipping`);
+              return null;
+            }
+            
+            return {
+              id: s.id,
+              name: s.rawTitle,
+              email: emailToUse, // Используем selectedEmail или apiEmail
+              phone: s.rawPhones && s.rawPhones[0] ? s.rawPhones[0] : '',
+              website: s.rawUrl,
+              description: s.rawDescription,
+              categories: [s.searchQuery],
+              searchEngine: s.sourceEngine,
+              allEmails: s.rawEmails || [],
+              allPhones: s.rawPhones || [],
+              searchDate: s.createdAt?.toISOString(),
+              selectedEmail: matchingApiSupplier?.selectedEmail || matchingApiSupplier?.email || emailToUse // Сохраняем selectedEmail или apiEmail
+            };
+          }).filter(s => s !== null); // Фильтруем null (невыбранные поставщики)
           
           selectedSuppliers.push(...convertedStagingSuppliers);
         }
@@ -1040,10 +1123,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const included = apiSupplierIds.includes(apiId);
             
             console.log(`[email] Checking API supplier ${supplier.name} (ID: ${supplier.id}): API ID = ${apiId}, Selected = ${included}`);
+            if (included) {
+              console.log(`[CRITICAL] API supplier ${supplier.name}: selectedEmail = ${supplier.selectedEmail || 'not set'}, email = ${supplier.email}`);
+              // КРИТИЧНО: Обновляем email на selectedEmail, если он установлен
+              if (supplier.selectedEmail) {
+                supplier.email = supplier.selectedEmail;
+                console.log(`[CRITICAL] Updated supplier.email to selectedEmail: ${supplier.selectedEmail}`);
+              }
+            }
             return included;
           });
           
           console.log(`[email] Selected ${selectedApiSuppliers.length} API suppliers from ${apiSuppliers.length} available`);
+          // КРИТИЧНО: Убеждаемся, что selectedEmail используется
+          selectedApiSuppliers.forEach((supplier: any) => {
+            console.log(`[CRITICAL] Processing API supplier ${supplier.name}:`, {
+              id: supplier.id,
+              email: supplier.email,
+              selectedEmail: supplier.selectedEmail,
+              allEmails: supplier.allEmails
+            });
+            
+            if (supplier.selectedEmail) {
+              // ПРИНУДИТЕЛЬНО используем selectedEmail
+              console.log(`[CRITICAL] Forcing email to selectedEmail for ${supplier.name}: ${supplier.email} -> ${supplier.selectedEmail}`);
+              supplier.email = supplier.selectedEmail;
+            } else {
+              console.warn(`[CRITICAL WARNING] No selectedEmail for ${supplier.name}, using email: ${supplier.email}`);
+            }
+          });
           selectedSuppliers.push(...selectedApiSuppliers);
         } else if (apiSupplierIds.length > 0) {
           console.warn(`[email] Warning: ${apiSupplierIds.length} API supplier IDs selected but no apiSuppliers provided in request`);
@@ -1052,15 +1160,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // selectedSuppliers already contains all suppliers from the logic above
 
-      // Remove duplicates based on email address
+      // Remove duplicates based on email address (use selectedEmail or first email from array)
       const uniqueSuppliers = [];
       const seenEmails = new Set();
       for (const supplier of selectedSuppliers) {
-        if (!seenEmails.has(supplier.email)) {
-          seenEmails.add(supplier.email);
+        // Get email to use for deduplication
+        let emailForDedup: string;
+        if ((supplier as any).selectedEmail) {
+          emailForDedup = (supplier as any).selectedEmail;
+        } else if (Array.isArray(supplier.email)) {
+          emailForDedup = supplier.email[0] || '';
+        } else {
+          emailForDedup = supplier.email || '';
+        }
+        
+        if (emailForDedup && !seenEmails.has(emailForDedup)) {
+          seenEmails.add(emailForDedup);
           uniqueSuppliers.push(supplier);
         } else {
-          console.log(`Removing duplicate supplier: ${supplier.name} (${supplier.email})`);
+          console.log(`Removing duplicate supplier: ${supplier.name} (${emailForDedup})`);
         }
       }
       selectedSuppliers = uniqueSuppliers;
@@ -1123,7 +1241,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Debug log to check the suppliers before sending
       console.log("All selected suppliers:");
       selectedSuppliers.forEach(supplier => {
-        console.log(`- ${supplier.name} (${supplier.email})`);
+        const emailForLog = (supplier as any).selectedEmail || (Array.isArray(supplier.email) ? supplier.email[0] : supplier.email);
+        console.log(`- ${supplier.name} (${emailForLog})`);
       });
 
       // Create tracking records and send emails
@@ -1133,7 +1252,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Generate unique tracking ID for this supplier-request combo
             const trackingId = storage.generateTrackingId();
 
-            console.log(`Processing supplier: ${supplier.name} (${supplier.email}) with tracking ID: ${trackingId}`);
+            // Get email to use (selectedEmail or first from array)
+            const emailForLog = (supplier as any).selectedEmail || (Array.isArray(supplier.email) ? supplier.email[0] : supplier.email);
+            console.log(`Processing supplier: ${supplier.name} (${emailForLog}) with tracking ID: ${trackingId}`);
 
             // Use the authenticated user ID from above (already obtained and verified)
 
@@ -1163,12 +1284,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.error(`[routes] Error retrieving business card for user ${userId}:`, error);
             }
 
+            // CRITICAL: Use selectedEmail if available, otherwise use first email from array or email string
+            let emailToSend: string;
+            if ((supplier as any).selectedEmail) {
+              emailToSend = (supplier as any).selectedEmail;
+            } else if (Array.isArray(supplier.email)) {
+              emailToSend = supplier.email[0] || '';
+            } else {
+              emailToSend = supplier.email || '';
+            }
+            
+            // КРИТИЧНО: Проверяем, что emailToSend не пустой и соответствует selectedEmail
+            if ((supplier as any).selectedEmail && emailToSend !== (supplier as any).selectedEmail) {
+              console.error(`[CRITICAL ERROR] Email mismatch for ${supplier.name}: emailToSend=${emailToSend}, selectedEmail=${(supplier as any).selectedEmail}`);
+              emailToSend = (supplier as any).selectedEmail; // Принудительно используем selectedEmail
+            }
+            
+            console.log(`[CRITICAL] Using email for ${supplier.name}: ${emailToSend} (selectedEmail: ${(supplier as any).selectedEmail || 'not set'}, supplier.email: ${supplier.email})`);
+            
             // Create a record of this supplier request with userId and business card
             const requestSupplier = await storage.createRequestSupplier({
               userId: userId, // Add the user ID for proper data isolation
               requestId: searchRequest.id,
               supplierId: fixedSupplierId, // Use the fixed positive supplier ID
-              supplierEmail: supplier.email,
+              supplierEmail: emailToSend, // Use selected email
               supplierName: supplier.name || 'Unknown Supplier',
               supplierWebsite: supplier.website || '',
               supplierPhone: supplier.phone || '',
@@ -1224,9 +1363,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
 
             // Send the email with tracking information, sanitized attachments and business card
-            console.log(`[routes] *** CALLING sendSimpleEmail for ${supplier.email} ***`, { userId, trackingId });
+            console.log(`[routes] *** CALLING sendSimpleEmail for ${emailToSend} ***`, { userId, trackingId });
             const emailSuccess = await sendSimpleEmail(
-              supplier.email, 
+              emailToSend, // Use selected email
               formattedSubject, 
               fullMessage,
               {
@@ -1239,19 +1378,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
             );
             console.log(`[routes] *** sendEmail RETURNED ***`, { emailSuccess });
 
-            console.log(`Email to ${supplier.email} ${emailSuccess ? 'succeeded' : 'failed'}`);
+            console.log(`Email to ${emailToSend} ${emailSuccess ? 'succeeded' : 'failed'}`);
 
             return {
               supplier,
               trackingId,
               success: emailSuccess,
+              requestSupplierId: requestSupplier.id, // Добавляем ID requestSupplier для сохранения сообщений
             };
           } catch (error) {
             console.error(`Error sending email to ${supplier.email}:`, error);
             return {
               supplier,
               success: false,
-              error: String(error)
+              error: String(error),
+              requestSupplierId: undefined // Если ошибка, requestSupplierId не определен
             };
           }
         })
@@ -1288,6 +1429,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           supplierName: result.supplier.name,
           success: result.success,
           trackingId: result.trackingId,
+          requestSupplierId: result.requestSupplierId, // Добавляем ID requestSupplier
           error: result.error
         }))
       });
@@ -2725,6 +2867,7 @@ app.post("/api/check-emails", requireAuth, async (req, res) => {
   app.use('/api/analysis-requests', analysisRequestsRoutes);
   app.use('/api', analyzeGeminiRoutes); // Gemini analysis endpoint at /api/analyze-gemini
   app.use('/api/semantic', semanticVectorizationRoutes);
+  app.use('/api/onboarding', onboardingRoutes);
 
   // Subscription routes - registered after authentication is set up
   app.use('/api/subscriptions', subscriptionRoutes);

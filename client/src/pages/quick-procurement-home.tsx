@@ -79,7 +79,7 @@ export default function QuickProcurementHome() {
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="container mx-auto px-4 max-w-6xl">
         {/* Header */}
-        <div className="text-center mb-12">
+        <div className="text-center mb-12" data-onboarding-id="quick-procurement-hero">
           <h1 className="text-3xl font-bold text-gray-900 mb-4">
             {t('quick_procurement_home_title')}
           </h1>
@@ -89,7 +89,7 @@ export default function QuickProcurementHome() {
         </div>
 
         {/* Feature Cards Grid */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12" data-onboarding-id="quick-procurement-features">
           {features.map((feature, index) => {
             const Icon = feature.icon;
             const colors = {
@@ -124,7 +124,7 @@ export default function QuickProcurementHome() {
         </div>
 
         {/* Quick Start Guide */}
-        <Card className="bg-slate-50 border-slate-200">
+        <Card className="bg-slate-50 border-slate-200" data-onboarding-id="quick-procurement-guide">
           <CardHeader>
             <CardTitle className="text-slate-800">Быстрый старт</CardTitle>
           </CardHeader>

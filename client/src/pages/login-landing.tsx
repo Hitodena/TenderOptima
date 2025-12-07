@@ -72,7 +72,7 @@ export default function LoginLanding() {
         {/* Main content area */}
         <div className="flex-1 max-w-5xl mx-auto ml-64">
           {/* Header */}
-          <div className="text-center mb-8">
+          <div className="text-center mb-8" data-onboarding-id="login-landing-hero">
             <h1 className="text-3xl font-bold text-gray-900 mb-4">
               Добро пожаловать в TenderOptima
             </h1>
@@ -130,7 +130,7 @@ export default function LoginLanding() {
           )}
 
           {/* Main Procurement Sections */}
-          <div className="grid md:grid-cols-2 gap-8 mb-8">
+          <div className="grid md:grid-cols-2 gap-8 mb-8" data-onboarding-id="login-landing-primary-cta">
             {procurementSections.map((section, index) => {
               const Icon = section.icon;
               const colors = getColorClasses(section.color);
@@ -161,7 +161,7 @@ export default function LoginLanding() {
           </div>
 
           {/* Quick Start Guide */}
-          <Card>
+          <Card data-onboarding-id="login-landing-guide">
             <CardHeader>
               <CardTitle className="text-xl">Быстрый старт</CardTitle>
               <CardDescription>Основные этапы работы с платформой</CardDescription>

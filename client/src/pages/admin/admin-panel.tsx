@@ -61,9 +61,22 @@ export default function AdminPanel() {
               <Button 
                 variant="outline" 
                 size="sm"
-                onClick={() => {
-                  // Use standard logout - redirect to auth page
-                  window.location.href = '/auth';
+                onClick={async () => {
+                  // Clear all auth data immediately
+                  localStorage.removeItem('accessToken');
+                  localStorage.removeItem('tokenExpiry');
+                  localStorage.removeItem('rememberMe');
+                  localStorage.removeItem('currentUserId');
+                  
+                  // Try to call logout on server, but don't wait for it
+                  try {
+                    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+                  } catch (error) {
+                    console.error('Logout request failed:', error);
+                  }
+                  
+                  // Force immediate redirect to auth page (replace to prevent back button)
+                  window.location.replace('/auth');
                 }}
               >
                 Выйти

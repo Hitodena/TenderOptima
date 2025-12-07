@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { LanguageProvider } from "./contexts/language-context";
 import { AuthProvider, useAuth } from "@/hooks/auth-provider";
+import { OnboardingProvider } from "@/hooks/useOnboarding";
 import { ProtectedRoute } from "@/lib/protected-route";
 import { AuthInitializer } from "@/components/auth-initializer";
 import React, { Suspense } from "react";
@@ -242,7 +243,9 @@ function App() {
       <LanguageProvider>
         <AuthProvider>
           <AuthInitializer>
-            <Router />
+            <OnboardingProvider>
+              <Router />
+            </OnboardingProvider>
           </AuthInitializer>
         </AuthProvider>
         <Toaster />

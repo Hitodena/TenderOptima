@@ -1,6 +1,7 @@
 import asyncio
+import codecs
 import re
-from typing import Dict, List, Optional, Set, Union
+from typing import Dict, List, Optional, Set, Tuple, Union
 import xml.etree.ElementTree as ET
 import sys
 from urllib.parse import urljoin, urlparse
@@ -24,6 +25,9 @@ except (ImportError, ModuleNotFoundError):
 CONTACT_PATHS = ["/contact", "/contacts", "/kontakty", "/kontakti", "/контакты", "/about", "/о-компании", "/feedback", "/impressum", "/legal"]
 CONTACT_KEYWORDS = ["contact", "contacts", "kontakti", "about", "impressum", "legal", "kontakty", "о-нас", "связаться", "feedback"]
 EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
+HOSTCMS_EMAIL_PATTERN = re.compile(r"hostcmsEmail\(['\"]([^'\"]+)['\"]\)", re.IGNORECASE | re.DOTALL)
+ROT13_MAILTO_PATTERN = re.compile(r"znvygb:([a-z0-9._%+\-@]+)", re.IGNORECASE)
+CFEMAIL_PATTERN = re.compile(r'data-cfemail="([0-9a-fA-F]+)"')
 
 def sanitize_url(domain: str) -> str:
     if not re.match(r"^(http|https)://", domain):
@@ -150,13 +154,63 @@ async def find_contact_page(session: aiohttp.ClientSession, domain: str) -> str:
 def normalize_email(raw: str) -> str:
     return raw.split(":", 1)[-1].strip().lower()
 
+def _decode_cfemail(encoded: str) -> Optional[str]:
+    """Decode Cloudflare data-cfemail value."""
+    try:
+        data = bytes.fromhex(encoded)
+        key = data[0]
+        decoded_chars = [chr(b ^ key) for b in data[1:]]
+        return "".join(decoded_chars)
+    except Exception:
+        return None
+
+def _decode_rot13(value: str) -> str:
+    """Decode value assuming simple ROT13 obfuscation."""
+    return codecs.decode(value, "rot_13")
+
+def extract_obfuscated_emails(html: str) -> Tuple[Set[str], Set[str]]:
+    """
+    Detect common JS/email-obfuscation patterns (HostCMS, Cloudflare, ROT13 mailto)
+    so that visible addresses on landing pages are not lost.
+    """
+    decoded: Set[str] = set()
+    encoded_variants: Set[str] = set()
+
+    # HostCMS helper embeds addresses via hostcmsEmail('...') calls (ROT13 encoded)
+    for payload in HOSTCMS_EMAIL_PATTERN.findall(html):
+        normalized_payload = payload.strip()
+        candidate = _decode_rot13(normalized_payload)
+        if "@" in candidate and is_valid_email(candidate):
+            decoded.add(candidate.lower())
+            encoded_variants.add(normalized_payload.lower())
+
+    # Direct ROT13 mailto: links (znvygb:...), often used by static builders
+    for payload in ROT13_MAILTO_PATTERN.findall(html):
+        normalized_payload = payload.strip()
+        candidate = _decode_rot13(normalized_payload)
+        if is_valid_email(candidate):
+            decoded.add(candidate.lower())
+            encoded_variants.add(normalized_payload.lower())
+
+    # Cloudflare email protection snippets
+    for encoded in CFEMAIL_PATTERN.findall(html):
+        candidate = _decode_cfemail(encoded)
+        if candidate and is_valid_email(candidate):
+            decoded.add(candidate.lower())
+
+    return decoded, encoded_variants
+
 def extract_contacts(html: str, region: str) -> Dict[str, List[str]]:
     tree = HTMLParser(html)
     emails, phones = set(), set()
+    decoded_obfuscated, obfuscated_variants = extract_obfuscated_emails(html)
+    emails.update(decoded_obfuscated)
     
     # 1. Поиск в mailto ссылках (приоритетный)
     for link in tree.css('a[href^="mailto:"]'):
         if (href := link.attributes.get("href")) and is_valid_email(email := normalize_email(href)):
+            if email in obfuscated_variants:
+                continue
             emails.add(email)
     
     # 2. Детальный поиск email в ключевых областях страницы
@@ -166,6 +220,8 @@ def extract_contacts(html: str, region: str) -> Dict[str, List[str]]:
         footer_text = footer.text(separator=" ")
         for match in EMAIL_RE.finditer(footer_text):
             if is_valid_email(email := match.group(0)):
+                if email.lower() in obfuscated_variants:
+                    continue
                 emails.add(email.lower())
     
     # Поиск в навигации/меню (header, nav, menu)
@@ -174,6 +230,8 @@ def extract_contacts(html: str, region: str) -> Dict[str, List[str]]:
         nav_text = nav.text(separator=" ")
         for match in EMAIL_RE.finditer(nav_text):
             if is_valid_email(email := match.group(0)):
+                if email.lower() in obfuscated_variants:
+                    continue
                 emails.add(email.lower())
     
     # Поиск в контактных блоках
@@ -182,12 +240,16 @@ def extract_contacts(html: str, region: str) -> Dict[str, List[str]]:
         contact_text = contact.text(separator=" ")
         for match in EMAIL_RE.finditer(contact_text):
             if is_valid_email(email := match.group(0)):
+                if email.lower() in obfuscated_variants:
+                    continue
                 emails.add(email.lower())
     
     # 3. Общий поиск по всему тексту страницы (как fallback)
     text = tree.text(separator=" ")
     for match in EMAIL_RE.finditer(text):
         if is_valid_email(email := match.group(0)):
+            if email.lower() in obfuscated_variants:
+                continue
             emails.add(email.lower())
     
     # 4. Поиск телефонов в tel ссылках
@@ -203,20 +265,100 @@ def extract_contacts(html: str, region: str) -> Dict[str, List[str]]:
         if phonenumbers.is_valid_number(match.number):
             phones.add(phonenumbers.format_number(match.number, phonenumbers.PhoneNumberFormat.E164))
     
-    return {"emails": sorted(emails), "phones": sorted(phones)}
+    # 6. Извлечение page_title из <title> тега
+    page_title = ""
+    try:
+        title_tag = tree.css_first('title')
+        if title_tag:
+            page_title = title_tag.text(separator=" ").strip()
+            if page_title:
+                logger.debug(f"[EXTRACT] Extracted page_title: '{page_title[:100]}...'")
+            else:
+                logger.debug(f"[EXTRACT] page_title tag found but empty")
+        else:
+            logger.debug(f"[EXTRACT] No <title> tag found in HTML")
+    except Exception as e:
+        logger.debug(f"[EXTRACT] Error extracting page_title: {e}")
+        pass
+    
+    # 7. Извлечение meta description из <meta name="description"> тега
+    # СКРЫТО: meta_description больше не извлекается (код оставлен для возможного использования)
+    meta_description = ""
+    # try:
+    #     meta_desc_tag = tree.css_first('meta[name="description"]')
+    #     if meta_desc_tag:
+    #         meta_description = meta_desc_tag.attributes.get("content", "").strip()
+    #         # Проверяем, что meta_description не пустой и имеет минимальную длину (минимум 5 символов)
+    #         if meta_description and len(meta_description) >= 5:
+    #             logger.debug(f"Extracted meta description: '{meta_description[:100]}...'")
+    #         else:
+    #             logger.debug(f"Meta description too short or empty: '{meta_description}'")
+    #             meta_description = ""  # Сбрасываем, если слишком короткий
+    # except Exception as e:
+    #     logger.debug(f"Error extracting meta description: {e}")
+    #     pass
+    
+    return {"emails": sorted(emails), "phones": sorted(phones), "page_title": page_title, "meta_description": meta_description}
 
 async def fetch_contacts(domain: str, session: aiohttp.ClientSession, semaphore: asyncio.Semaphore) -> Dict:
     async with semaphore:
         contact_url = ""
+        page_title = ""
+        meta_description = ""
         try:
+            # Сначала получаем title с главной страницы (meta_description СКРЫТ)
+            base_url = sanitize_url(domain)
+            try:
+                async with session.get(base_url, timeout=7) as main_response:
+                    if main_response.status == 200:
+                        main_html = await main_response.text(errors="ignore")
+                        main_data = extract_contacts(main_html, "ru")
+                        page_title = main_data.get("page_title", "")
+                        # meta_description СКРЫТ - больше не извлекаем (код оставлен для возможного использования)
+                        # meta_description = main_data.get("meta_description", "")
+                        # logger.info(f"[META DEBUG] Extracted page_title from main page: '{page_title}'")
+                        # logger.info(f"[META DEBUG] Extracted meta_description from main page: '{meta_description[:100] if meta_description else 'EMPTY'}...'")
+            except Exception as e:
+                logger.debug(f"Failed to get title from main page: {e}")
+            
+            # Затем находим страницу контактов для извлечения email/телефонов
             contact_url = await find_contact_page(session, domain)
             async with session.get(contact_url, timeout=10) as response:
                 html = await response.text(errors="ignore")
             data = extract_contacts(html, "ru")
-            return {"domain": domain, "url": contact_url, **data}
+            
+            # ВСЕГДА используем title с главной страницы, если он был получен
+            # Если не получили с главной, используем title со страницы контактов как fallback
+            if not page_title:
+                page_title = data.get("page_title", "")
+                if page_title:
+                    logger.debug(f"Using page_title from contact page as fallback: '{page_title}'")
+                else:
+                    logger.debug(f"No page_title found for domain: {domain}")
+            else:
+                logger.debug(f"Using page_title from main page: '{page_title}'")
+            
+            # meta_description СКРЫТ - больше не используем (код оставлен для возможного использования)
+            # if not meta_description:
+            #     meta_description = data.get("meta_description", "")
+            #     if meta_description:
+            #         logger.debug(f"Using meta_description from contact page as fallback: '{meta_description[:100]}...'")
+            #     else:
+            #         logger.debug(f"No meta_description found for domain: {domain}")
+            # else:
+            #     logger.debug(f"Using meta_description from main page: '{meta_description[:100]}...'")
+            
+            # Устанавливаем page_title в результат (meta_description всегда пустой)
+            data["page_title"] = page_title
+            data["meta_description"] = ""  # Всегда пустой, так как извлечение скрыто
+            
+            result = {"domain": domain, "url": contact_url, **data}
+            # Убрали логирование meta_description для ускорения
+            # logger.info(f"[FETCH_CONTACTS] Returning for {domain}: page_title='{result.get('page_title', 'NOT FOUND')}', meta_description='{result.get('meta_description', 'NOT FOUND')[:100] if result.get('meta_description') else 'NOT FOUND'}...'")
+            return result
         except Exception as e:
             logger.error(f"Failed to process {domain} (URL: {contact_url}): {e}")
-            return {"domain": domain, "url": contact_url, "emails": [], "phones": []}
+            return {"domain": domain, "url": contact_url, "emails": [], "phones": [], "page_title": page_title, "meta_description": ""}
 
 async def get_info(domains: List[str], max_concurrent_requests: int) -> List[Dict]:
     ua = UserAgent()

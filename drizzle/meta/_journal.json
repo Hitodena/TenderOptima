@@ -57,6 +57,13 @@
       "when": 1760347412531,
       "tag": "0007_tan_overlord",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1764247085329,
+      "tag": "0008_onboarding_flags",
+      "breakpoints": true
     }
   ]
 }

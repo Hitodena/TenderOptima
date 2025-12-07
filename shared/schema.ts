@@ -29,6 +29,22 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at").defaultNow()
 });
 
+export const onboardingProgress = pgTable("onboarding_progress", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  pageKey: text("page_key").notNull(),
+  completedAt: timestamp("completed_at").defaultNow().notNull()
+}, (table) => {
+  return {
+    userPageKeyIdx: uniqueIndex("onboarding_progress_user_page_key_idx").on(
+      table.userId,
+      table.pageKey
+    )
+  };
+});
+
 // Managers table for user support managers
 export const managers = pgTable("managers", {
   id: serial("id").primaryKey(),

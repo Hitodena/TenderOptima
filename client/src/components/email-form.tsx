@@ -33,7 +33,7 @@ const formatDeadline = (isoDate: string | null | undefined): string => {
 
 interface Props {
   suppliers: Supplier[];
-  selectedSuppliers: Supplier[];
+  selectedSuppliers: (Supplier & { selectedEmail?: string })[];
   searchRequest: SearchRequest;
   comingFromGroup?: boolean;
   groupId?: number | null;
@@ -499,7 +499,33 @@ ${generateParameterList()}
       };
 
       // Add the full supplier details for API-sourced suppliers that are selected
-      const apiSuppliers = selectedSuppliers.filter(s => {
+      // КРИТИЧНО: Сохраняем selectedEmail для каждого поставщика
+      console.log(`[CRITICAL] Processing selectedSuppliers before creating apiSuppliers:`, selectedSuppliers.map((s: any) => ({
+        id: s.id,
+        name: s.name,
+        email: s.email,
+        selectedEmail: s.selectedEmail,
+        emailArray: Array.isArray(s.email) ? s.email : [s.email]
+      })));
+      
+      // КРИТИЧНО: Используем selectedEmail из Supplier, если он есть, иначе используем email
+      const apiSuppliers = selectedSuppliers.map(s => {
+        // Используем selectedEmail из Supplier, если он есть, иначе используем email
+        const selectedEmail = (s as any).selectedEmail || (Array.isArray(s.email) ? s.email[0] : s.email);
+        
+        console.log(`[CRITICAL] Processing supplier ${s.name}:`, {
+          id: s.id,
+          originalEmail: s.email,
+          selectedEmail: (s as any).selectedEmail,
+          finalSelectedEmail: selectedEmail
+        });
+        
+        return {
+          ...s,
+          email: selectedEmail, // Устанавливаем email на selectedEmail
+          selectedEmail: selectedEmail // Сохраняем selectedEmail явно
+        };
+      }).filter(s => {
         // Include suppliers that have negative IDs or are from search engines
         if (typeof s.id === 'number' && s.id < 0) return true;
         if (typeof s.id === 'string' && s.id.startsWith('api-')) return true;
@@ -507,6 +533,17 @@ ${generateParameterList()}
         if ((s as any).searchEngine || (s as any).allEmails || (s as any).allPhones) return true;
         return false;
       });
+      
+      console.log(`[CRITICAL] ===== FINAL CHECK BEFORE SENDING =====`);
+      console.log(`[CRITICAL] Sending apiSuppliers with selectedEmail:`, apiSuppliers.map((s: any) => ({
+        id: s.id,
+        name: s.name,
+        email: s.email,
+        selectedEmail: s.selectedEmail,
+        allEmails: (s as any).allEmails,
+        emailArray: Array.isArray(s.email) ? s.email : [s.email]
+      })));
+      console.log(`[CRITICAL] ===== END FINAL CHECK =====`);
       
       const formData = {
         ...data,
@@ -549,39 +586,38 @@ ${generateParameterList()}
           throw new Error("Сервер вернул ошибку при отправке email");
         }
         
+        // ПРИМЕЧАНИЕ: Сообщения уже сохраняются на сервере при отправке email (строка 1350 в routes.ts)
+        // Не нужно сохранять их повторно с фронтенда, чтобы избежать дублирования
+        // Если в будущем понадобится дополнительное сохранение с фронтенда, можно раскомментировать код ниже
+        /*
         // Сохраняем сообщение для каждого поставщика
         if (response.success && response.results) {
           for (const result of response.results) {
-            if (result.success) {
+            if (result.success && result.requestSupplierId) {
               try {
-                // Найдем ID поставщика по его email
-                const supplier = selectedSuppliers.find(s => s.email === result.supplierEmail);
-                if (supplier && supplier.id) {
-                  const supplierId = typeof supplier.id === 'string' ? parseInt(supplier.id) : supplier.id;
-                  
-                  // Если это обычный (не API) поставщик и ID положительный
-                  if (!isNaN(supplierId) && supplierId > 0) {
-                    // Сохраняем сообщение в истории
-                    await apiRequest(`/api/request-suppliers/${supplierId}/add-message`, "POST", {
-                      content: data.message,
-                      sentDate: new Date().toISOString(),
-                      direction: "outbound",
-                      attachments: data.attachments?.map((a: any) => ({
-                        filename: a.filename,
-                        contentType: a.contentType,
-                        size: a.size
-                      })) || []
-                    });
-                    console.log(`Сообщение сохранено для поставщика ${supplierId}`);
-                  }
-                }
+                // Используем requestSupplierId из ответа сервера
+                const requestSupplierId = result.requestSupplierId;
+                
+                // Сохраняем сообщение в истории используя правильный requestSupplierId
+                await apiRequest(`/api/request-suppliers/${requestSupplierId}/add-message`, "POST", {
+                  content: data.message,
+                  sentDate: new Date().toISOString(),
+                  direction: "outbound",
+                  attachments: data.attachments?.map((a: any) => ({
+                    filename: a.filename,
+                    contentType: a.contentType,
+                    size: a.size
+                  })) || []
+                });
+                console.log(`Сообщение сохранено для requestSupplierId ${requestSupplierId}`);
               } catch (saveError) {
                 // Логируем ошибку, но не прерываем общий процесс отправки
-                console.error(`Не удалось сохранить сообщение для поставщика ${result.supplierEmail}:`, saveError);
+                console.error(`Не удалось сохранить сообщение для поставщика ${result.supplierEmail} (requestSupplierId: ${result.requestSupplierId}):`, saveError);
               }
             }
           }
         }
+        */
         
         return response;
       } catch (err) {

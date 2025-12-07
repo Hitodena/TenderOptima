@@ -39,7 +39,7 @@ if env_path.exists():
 else:
     print(f"DEBUG: .env file not found at {env_path}")
 
-from main import main_search
+from parsers.main import main_search
 from parsers.utils.logger import CustomLogger
 
 # Настройка логирования
@@ -140,6 +140,15 @@ async def search_endpoint(request: SearchRequest):
         )
         
         logger.info(f"Search completed: found {len(results)} suppliers with contact information")
+        
+        # Debug: Log first result to check page_title
+        if results and len(results) > 0:
+            first_result = results[0]
+            description = first_result.get('description') or 'NOT FOUND'
+            description_preview = description[:200] if description != 'NOT FOUND' else 'NOT FOUND'
+            logger.info(f"[FASTAPI DEBUG] First result domain: {first_result.get('domain', 'NOT FOUND')}")
+            logger.info(f"[FASTAPI DEBUG] First result page_title: {first_result.get('page_title', 'NOT FOUND')}")
+            logger.info(f"[FASTAPI DEBUG] First result description (first 200 chars): {description_preview}")
         
         return SearchResponse(
             results=results,

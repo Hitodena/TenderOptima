@@ -228,7 +228,24 @@ export default function AnalysisResults() {
       });
       
       if (!response.ok) {
-        throw new Error('Ошибка при скачивании файла');
+        // Пытаемся получить текст ошибки из ответа
+        let errorMessage = 'Ошибка при скачивании файла';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (e) {
+          // Если не удалось распарсить JSON, используем статус
+          errorMessage = `Ошибка ${response.status}: ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
+      }
+      
+      // Проверяем, что ответ действительно содержит файл
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        // Если сервер вернул JSON вместо файла, это ошибка
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Сервер вернул ошибку вместо файла');
       }
       
       const blob = await response.blob();
@@ -242,7 +259,8 @@ export default function AnalysisResults() {
       document.body.removeChild(a);
     } catch (error) {
       console.error('Ошибка при скачивании файла:', error);
-      alert('Не удалось скачать файл');
+      const errorMessage = error instanceof Error ? error.message : 'Не удалось скачать файл';
+      alert(errorMessage);
     }
   };
 

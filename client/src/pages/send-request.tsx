@@ -20,14 +20,22 @@ import type { SearchRequest, Supplier } from "@shared/schema";
 // Extended supplier type for handling multiple emails
 type ExtendedSupplier = Omit<Supplier, 'email'> & {
   email: string[] | string;
-  selectedEmail?: string;
+  selectedEmail?: string; // Выбранный email (только один на поставщика)
+  pageTitle?: string;
 };
 
 // Helper function to convert ExtendedSupplier to Supplier for compatibility
-const convertToSupplier = (extended: ExtendedSupplier): Supplier => ({
-  ...extended,
-  email: Array.isArray(extended.email) ? (extended.selectedEmail || extended.email[0] || '') : extended.email
-});
+// КРИТИЧНО: Сохраняем selectedEmail в результате
+const convertToSupplier = (extended: ExtendedSupplier): Supplier & { selectedEmail?: string } => {
+  const emailToUse = Array.isArray(extended.email) 
+    ? (extended.selectedEmail || extended.email[0] || '') 
+    : extended.email;
+  return {
+    ...extended,
+    email: emailToUse,
+    selectedEmail: extended.selectedEmail || (Array.isArray(extended.email) ? extended.email[0] : extended.email) // Сохраняем selectedEmail
+  };
+};
 
 // Helper function to convert ExtendedSupplier to SupplierTooltip format
 const convertToTooltipSupplier = (extended: ExtendedSupplier) => ({
@@ -47,6 +55,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { SupplierTooltip } from "@/components/ui/supplier-tooltip";
+import punycode from "punycode/";
 
 export default function SendRequest() {
   const [suppliers, setSuppliers] = useState<ExtendedSupplier[]>([]);
@@ -105,10 +114,10 @@ export default function SendRequest() {
 
   // Function to navigate to parameter selection
   const handleContinueToParameters = () => {
-    if (selectedSuppliers.length === 0) {
+    if (getSelectedEmailsCount() === 0) {
       toast({
-        title: "Выберите поставщиков",
-        description: "Пожалуйста, выберите хотя бы одного поставщика для продолжения.",
+        title: "Выберите email",
+        description: "Пожалуйста, выберите хотя бы один email для отправки запроса.",
         variant: "destructive",
       });
       return;
@@ -116,7 +125,18 @@ export default function SendRequest() {
     
     // Store selected suppliers in session storage for the parameters page
     try {
-      sessionStorage.setItem('selectedSuppliers', JSON.stringify(selectedSuppliers));
+      // КРИТИЧНО: Убеждаемся, что selectedEmail сохраняется
+      const suppliersToSave = selectedSuppliers.map(s => ({
+        ...s,
+        selectedEmail: s.selectedEmail || (Array.isArray(s.email) ? s.email[0] : s.email)
+      }));
+      console.log(`[CRITICAL] Saving selectedSuppliers to sessionStorage:`, suppliersToSave.map(s => ({
+        id: s.id,
+        name: s.name,
+        email: s.email,
+        selectedEmail: s.selectedEmail
+      })));
+      sessionStorage.setItem('selectedSuppliers', JSON.stringify(suppliersToSave));
       if (searchRequest?.id) {
         sessionStorage.setItem('requestId', searchRequest.id.toString());
       }
@@ -163,8 +183,12 @@ export default function SendRequest() {
 
   const handleBulkUpload = (newSuppliers: ExtendedSupplier[]) => {
     setSuppliers(prev => [...prev, ...newSuppliers]);
-    // Автоматически выбираем всех новых поставщиков
-    setSelectedSuppliers(prev => [...prev, ...newSuppliers]);
+    // Автоматически выбираем первый email у каждого нового поставщика
+    const newSuppliersWithFirstEmail = newSuppliers.map(supplier => ({
+      ...supplier,
+      selectedEmail: Array.isArray(supplier.email) ? supplier.email[0] : supplier.email
+    }));
+    setSelectedSuppliers(prev => [...prev, ...newSuppliersWithFirstEmail]);
   };
 
   const handleRemoveSupplier = (id: number | string) => {
@@ -176,8 +200,11 @@ export default function SendRequest() {
   const cleanEmail = (email: string): string => {
     if (!email) return "";
     
+    // Decode URL-encoded characters (e.g., %20 = space)
+    let cleaned = decodeURIComponent(email);
+    
     // Remove leading slashes, spaces, and other unwanted characters
-    let cleaned = email.trim();
+    cleaned = cleaned.trim();
     
     // Remove common prefixes that shouldn't be in email
     cleaned = cleaned.replace(/^[\/\\\s]+/, ''); // Remove leading slashes and spaces
@@ -186,6 +213,19 @@ export default function SendRequest() {
     
     // Remove any trailing slashes or spaces
     cleaned = cleaned.replace(/[\/\\\s]+$/, '');
+    
+    // Decode Punycode in email domain part
+    try {
+      const parts = cleaned.split('@');
+      if (parts.length === 2) {
+        const localPart = parts[0];
+        const domainPart = parts[1];
+        const decodedDomain = decodePunycode(domainPart);
+        cleaned = `${localPart}@${decodedDomain}`;
+      }
+    } catch {
+      // If decoding fails, return original
+    }
     
     return cleaned;
   };
@@ -229,6 +269,36 @@ export default function SendRequest() {
       // If URL parsing fails, try to extract domain from string
       const cleaned = website.replace(/^(https?:\/\/)?(www\.)?/, '').toLowerCase();
       return cleaned.split('/')[0].split('?')[0];
+    }
+  };
+
+  // Helper function to decode Punycode domain to readable format
+  const decodePunycode = (domain: string): string => {
+    if (!domain) return "";
+    try {
+      // Remove protocol/paths to keep only hostname
+      let cleaned = domain.trim();
+      if (cleaned.startsWith("http://") || cleaned.startsWith("https://")) {
+        cleaned = cleaned.replace(/^https?:\/\//, "");
+      }
+      if (cleaned.startsWith("www.")) {
+        cleaned = cleaned.substring(4);
+      }
+      cleaned = cleaned.split("/")[0];
+
+      const lower = cleaned.toLowerCase();
+
+      if (!lower.includes("xn--")) {
+        return cleaned;
+      }
+
+      const decodedParts = lower
+        .split(".")
+        .map(part => (part.startsWith("xn--") ? punycode.toUnicode(part) : part));
+
+      return decodedParts.join(".");
+    } catch {
+      return domain;
     }
   };
 
@@ -449,28 +519,82 @@ export default function SendRequest() {
     return emailsToCheck.find(email => email && email.trim()) || emails[0];
   };
 
-  // Function to handle email selection within a supplier
-  const handleEmailSelection = (supplier: ExtendedSupplier, selectedEmail: string) => {
-    // Update the supplier's selectedEmail
-    const updatedSupplier = { ...supplier, selectedEmail: selectedEmail };
+  // Function to handle email selection - только один email на поставщика
+  const handleEmailSelection = (supplier: ExtendedSupplier, selectedEmail: string, checked: boolean) => {
+    console.log(`[CRITICAL] handleEmailSelection called:`, {
+      supplierId: supplier.id,
+      supplierName: supplier.name,
+      selectedEmail,
+      checked,
+      currentSelectedEmail: supplier.selectedEmail
+    });
     
-    // Update in the main suppliers list
-    setSuppliers(prev => 
-      prev.map(s => s.id === supplier.id ? updatedSupplier : s)
-    );
-    
-    // If supplier is already selected, update the selection
-    if (selectedSuppliers.some(s => s.id === supplier.id)) {
-      setSelectedSuppliers(prev => 
-        prev.map(s => s.id === supplier.id ? updatedSupplier : s)
+    if (checked) {
+      // Выбираем email = выбираем поставщика с этим email
+      // Если у поставщика уже был выбран другой email, заменяем его
+      const updatedSupplier = { 
+        ...supplier, 
+        selectedEmail: selectedEmail 
+      };
+      
+      console.log(`[CRITICAL] Updated supplier:`, {
+        id: updatedSupplier.id,
+        name: updatedSupplier.name,
+        selectedEmail: updatedSupplier.selectedEmail
+      });
+      
+      // Update in the main suppliers list
+      setSuppliers(prev => 
+        prev.map(s => {
+          if (s.id === supplier.id) {
+            return updatedSupplier;
+          }
+          return s;
+        })
+      );
+      
+      // Если включен режим "только уникальные", проверяем дубликаты по домену
+      if (uniqueEmailsOnly) {
+        const website = supplier.website || '';
+        const domain = getDomainFromWebsite(website);
+        
+        if (domain) {
+          // Удаляем других поставщиков с того же домена
+          setSelectedSuppliers(prev => {
+            const filtered = prev.filter(s => {
+              const sDomain = getDomainFromWebsite(s.website || '');
+              return sDomain !== domain;
+            });
+            return [...filtered, updatedSupplier];
+          });
+        } else {
+          // Если нет домена, просто обновляем
+          setSelectedSuppliers(prev => {
+            const filtered = prev.filter(s => s.id !== supplier.id);
+            return [...filtered, updatedSupplier];
+          });
+        }
+      } else {
+        // Обычный режим - обновляем поставщика
+        setSelectedSuppliers(prev => {
+          const filtered = prev.filter(s => s.id !== supplier.id);
+          return [...filtered, updatedSupplier];
+        });
+      }
+    } else {
+      // Снимаем выбор - удаляем поставщика из выбранных
+      setSelectedSuppliers(prev => prev.filter(s => s.id !== supplier.id));
+      
+      // Update in the main suppliers list
+      setSuppliers(prev => 
+        prev.map(s => {
+          if (s.id === supplier.id) {
+            return { ...s, selectedEmail: undefined };
+          }
+          return s;
+        })
       );
     }
-    
-    // Show a toast notification
-    toast({
-      title: "Email выбран",
-      description: `Выбран email: ${cleanEmail(selectedEmail)}`,
-    });
   };
 
   // Function to handle selection within a domain group
@@ -500,21 +624,32 @@ export default function SendRequest() {
     }
   };
 
+  // Подсчет количества выбранных email (не поставщиков!)
+  // Подсчет количества выбранных email (не поставщиков!)
+  const getSelectedEmailsCount = () => {
+    // Каждый выбранный поставщик = один выбранный email
+    return selectedSuppliers.length;
+  };
+
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      // НОВАЯ ЛОГИКА: При активации "Выделить все" автоматически отключаем "Только уникальные"
-      if (uniqueEmailsOnly) {
-        setUniqueEmailsOnly(false);
-      }
-      setSelectedSuppliers([...suppliers]);
-    } else {
-      // ИСПРАВЛЕНИЕ: Если включен фильтр "только уникальные", применяем его вместо полной очистки
+      // Выбираем первый email у каждого поставщика
+      const allSuppliersWithFirstEmail = suppliers.map(supplier => {
+        const emails = Array.isArray(supplier.email) ? supplier.email : [supplier.email];
+        const firstEmail = emails[0] || '';
+        return { ...supplier, selectedEmail: firstEmail };
+      });
+      
+      // Если включен режим "только уникальные", применяем фильтрацию
       if (uniqueEmailsOnly) {
         const uniqueSuppliers = selectUniqueEmails();
         setSelectedSuppliers(uniqueSuppliers);
       } else {
-        setSelectedSuppliers([]);
+        setSelectedSuppliers(allSuppliersWithFirstEmail);
       }
+    } else {
+      // Снимаем все выборы
+      setSelectedSuppliers([]);
     }
   };
   
@@ -796,7 +931,17 @@ export default function SendRequest() {
           try {
             // Ensure all suppliers have proper email format
             const processedSuppliers = parsedSuppliers.map((supplier: any) => {
-              const emails = Array.isArray(supplier.email) ? supplier.email : [supplier.email];
+              // Используем все email из rawEmails, allEmails или email
+              let emails: string[] = [];
+              if (supplier.rawEmails && Array.isArray(supplier.rawEmails) && supplier.rawEmails.length > 0) {
+                emails = supplier.rawEmails;
+              } else if (supplier.allEmails && Array.isArray(supplier.allEmails) && supplier.allEmails.length > 0) {
+                emails = supplier.allEmails;
+              } else if (Array.isArray(supplier.email)) {
+                emails = supplier.email;
+              } else if (supplier.email) {
+                emails = [supplier.email];
+              }
               const selectedEmail = emails[0] || '';
               return {
                 ...supplier,
@@ -810,8 +955,12 @@ export default function SendRequest() {
             
             const limitedSuppliers = await applyTrialLimitations(processedSuppliers);
             setSuppliers(limitedSuppliers);
-            // Автоматически выбираем всех поставщиков из результатов поиска
-            setSelectedSuppliers(limitedSuppliers);
+            // Автоматически выбираем первый email у каждого поставщика
+            const suppliersWithFirstEmail = limitedSuppliers.map(supplier => ({
+              ...supplier,
+              selectedEmail: Array.isArray(supplier.email) ? supplier.email[0] : supplier.email
+            }));
+            setSelectedSuppliers(suppliersWithFirstEmail);
             console.log(`Loaded ${limitedSuppliers.length} suppliers from localStorage (search results) with full DB data`);
           } catch (error) {
             console.error('Error processing suppliers:', error);
@@ -943,7 +1092,12 @@ export default function SendRequest() {
         const processGroupSuppliers = async () => {
           const limitedSuppliers = await applyTrialLimitations(suppliersFromGroup);
           setSuppliers(limitedSuppliers);
-          setSelectedSuppliers(limitedSuppliers);
+          // Автоматически выбираем первый email у каждого поставщика
+          const suppliersWithFirstEmail = limitedSuppliers.map(supplier => ({
+            ...supplier,
+            selectedEmail: Array.isArray(supplier.email) ? supplier.email[0] : supplier.email
+          }));
+          setSelectedSuppliers(suppliersWithFirstEmail);
         };
         
         processGroupSuppliers();
@@ -977,13 +1131,26 @@ export default function SendRequest() {
         try {
           const parsedSuppliers = JSON.parse(savedSuppliers);
           
+          // КРИТИЧНО: Восстанавливаем selectedEmail из сохраненных данных
+          const suppliersWithSelectedEmail = parsedSuppliers.map((s: any) => ({
+            ...s,
+            selectedEmail: s.selectedEmail || (Array.isArray(s.email) ? s.email[0] : s.email)
+          }));
+          
+          console.log(`[CRITICAL] Loaded selectedSuppliers from sessionStorage:`, suppliersWithSelectedEmail.map((s: any) => ({
+            id: s.id,
+            name: s.name,
+            email: s.email,
+            selectedEmail: s.selectedEmail
+          })));
+          
           // Apply trial limitations before setting suppliers
           const processSessionSuppliers = async () => {
-            const limitedSuppliers = await applyTrialLimitations(parsedSuppliers);
+            const limitedSuppliers = await applyTrialLimitations(suppliersWithSelectedEmail);
             setSuppliers(limitedSuppliers);
-            // ИСПРАВЛЕНИЕ: Не выбираем всех поставщиков автоматически
-            setSelectedSuppliers([]);
-            console.log(`Загружено ${limitedSuppliers.length} поставщиков из sessionStorage`);
+            // КРИТИЧНО: Восстанавливаем selectedSuppliers с selectedEmail
+            setSelectedSuppliers(limitedSuppliers);
+            console.log(`[CRITICAL] Restored ${limitedSuppliers.length} selectedSuppliers with selectedEmail from sessionStorage`);
           };
           
           processSessionSuppliers();
@@ -1191,7 +1358,12 @@ export default function SendRequest() {
                 
                 const limitedSuppliers = await applyTrialLimitations(suppliersFromContacts);
                 setSuppliers(limitedSuppliers);
-                setSelectedSuppliers(limitedSuppliers);
+                // Автоматически выбираем первый email у каждого поставщика
+                const suppliersWithFirstEmail = limitedSuppliers.map(supplier => ({
+                  ...supplier,
+                  selectedEmail: Array.isArray(supplier.email) ? supplier.email[0] : supplier.email
+                }));
+                setSelectedSuppliers(suppliersWithFirstEmail);
               };
               
               processContactSuppliers();
@@ -1297,7 +1469,12 @@ export default function SendRequest() {
           const processStorageSuppliers = async () => {
             const limitedSuppliers = await applyTrialLimitations(suppliersFromContacts);
             setSuppliers(limitedSuppliers);
-            setSelectedSuppliers(limitedSuppliers);
+            // Автоматически выбираем первый email у каждого поставщика
+            const suppliersWithFirstEmail = limitedSuppliers.map(supplier => ({
+              ...supplier,
+              selectedEmail: Array.isArray(supplier.email) ? supplier.email[0] : supplier.email
+            }));
+            setSelectedSuppliers(suppliersWithFirstEmail);
           };
           
           processStorageSuppliers();
@@ -1454,10 +1631,15 @@ export default function SendRequest() {
         <MainNavigation />
         <SubscriptionAlerts />
         <SubscriptionGuard isActive={isActiveOrLoading}>
-        <div className="container mx-auto px-4 py-8">
+        <div className="container mx-auto px-4 py-8 max-w-[1500px]">
        
         <div className="mt-4">
-          <div className="grid grid-cols-1">
+          <div 
+            className="grid grid-cols-1" 
+            data-onboarding-id={
+              showEmailForm || getSearchParam('requestId') ? "send-request-email-hero" : "send-request-hero"
+            }
+          >
             <h2 className="text-2xl font-semibold">Отправить запрос поставщикам</h2>
             <div className="text-m text-gray-400">
               Выберите поставщиков и отправьте запрос на получение коммерческих предложений
@@ -1509,8 +1691,8 @@ export default function SendRequest() {
                 </div>
               </div>
 
-              <div className="mb-6">
-                <div className="flex gap-4 flex-wrap lg:flex-nowrap">
+              <div className="mb-6" data-onboarding-id="send-request-add-suppliers">
+                <div className="flex gap-4 flex-wrap lg:flex-nowrap items-stretch">
                   <CustomSupplierInput onSupplierAdded={handleAddSupplier} />
                   <div className="hidden">
                     <UploadSuppliersExcel onSuppliersUploaded={handleBulkUpload} />
@@ -1527,10 +1709,24 @@ export default function SendRequest() {
                       localStorage.setItem('groupName', groupName);
                     }
                   }} />
+                  <div className="flex-1 min-w-[280px]">
+                    <div className="flex items-start gap-3 h-full rounded-md border border-blue-200 bg-blue-50/70 px-4 py-3 shadow-[0_1px_3px_rgba(59,130,246,0.15)]">
+                      <div className="rounded-full bg-blue-100 p-1">
+                        <Info className="h-4 w-4 text-blue-700" />
+                      </div>
+                      <div className="text-sm text-blue-900 space-y-1">
+                        <p className="font-semibold leading-none">Внимание!</p>
+                        <p className="leading-snug">
+                          Отправляйте запросы только подходящим компаниям.
+                          Отправка нерелевантных писем может оказывать негативное влияние на репутацию вашей компании.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <Card>
+              <Card data-onboarding-id="send-request-suppliers-list">
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <div className="flex flex-col gap-2">
@@ -1546,7 +1742,7 @@ export default function SendRequest() {
                         </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="mt-4 flex items-center gap-4">
                       <div className="flex items-center space-x-2">
                         <Checkbox 
                           id="unique-emails" 
@@ -1560,33 +1756,33 @@ export default function SendRequest() {
                         >
                           Только уникальные
                         </label>
-                        <Checkbox 
-                          id="select-all" 
-                          checked={!uniqueEmailsOnly && suppliers.length > 0 && selectedSuppliers.length === suppliers.length}
+                        {/* Скрыта кнопка "Выделить все", но код сохранен для возможного использования в будущем */}
+                        <Checkbox
+                          id="select-all"
+                          checked={suppliers.length > 0 && selectedSuppliers.length === suppliers.length}
                           onCheckedChange={handleSelectAll}
                           disabled={suppliers.length === 0}
+                          className="hidden"
                         />
                         
                         <label 
                           htmlFor="select-all" 
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                          className="hidden text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                         >
-                          {selectedSuppliers.length === suppliers.length 
-                            ? "Выделить все" 
-                            : selectedSuppliers.length > 0 
-                              ? "Выделить все" 
-                              : "Выделить все"}
+                          Выделить все
                         </label>
                       </div>
-                      <Button
-                        variant="default"
-                        className="flex items-center gap-2"
-                        disabled={selectedSuppliers.length === 0}
-                        onClick={handleContinueToParameters}
-                      >
-                        <Mail className="h-4 w-4" />
-                        Отправить запрос ({selectedSuppliers.length})
-                      </Button>
+                      <div data-onboarding-id="send-request-continue-button">
+                        <Button
+                          variant="default"
+                          className="flex items-center gap-2"
+                          disabled={getSelectedEmailsCount() === 0}
+                          onClick={handleContinueToParameters}
+                        >
+                          <Mail className="h-4 w-4" />
+                          Отправить запрос ({getSelectedEmailsCount()})
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </CardHeader>
@@ -1608,18 +1804,18 @@ export default function SendRequest() {
                       )}
                       
                       <ScrollArea className="h-[400px] rounded-md">
-                        <div className="rounded-md border">
+                        <div className="rounded-md border w-full max-w-[1500px]">
                           <table className="w-full">
                             <thead className="bg-muted/50">
                               <tr>
-                                <th className="w-[40px] px-3 py-2 text-sm font-medium">#</th>
-                                <th className="w-[40px] px-3 py-2"></th>
-                                <th className="text-left px-3 py-2 text-sm font-medium">Компания</th>
-                                <th className="text-left px-3 py-2 text-sm font-medium">Email</th>
-                                <th className="text-left px-3 py-2 text-sm font-medium">Сайт</th>
-                                <th className="text-left px-3 py-2 text-sm font-medium">Описание</th>
-                                <th className="w-[40px] px-3 py-2"></th>
-                                <th className="w-[60px] px-3 py-2"></th>
+                                <th className="w-[40px] px-1 py-2 text-sm font-medium text-center">#</th>
+                                <th className="text-left px-2 py-2 text-sm font-medium w-[100px]">Компания</th>
+                                <th className="text-left px-2 py-2 text-sm font-medium w-[180px]">Email</th>
+                                <th className="text-left px-2 py-2 text-sm font-medium w-[100px]">Сайт</th>
+                                <th className="text-left px-2 py-2 text-sm font-medium hidden">Title</th>
+                                <th className="text-left px-2 py-2 text-sm font-medium min-w-[350px]">Описание</th>
+                                <th className="w-[25px] px-0 py-2"></th>
+                                <th className="w-[30px] px-0 py-2"></th>
                               </tr>
                             </thead>
                             <tbody>
@@ -1637,56 +1833,89 @@ export default function SendRequest() {
                                 })
                                 .map((supplier, index) => (
                                 <tr key={supplier.id} className={index % 2 === 1 ? "bg-muted/20" : ""}>
-                                  <td className="px-3 py-1 text-center text-sm text-muted-foreground">
+                                  <td className="px-1 py-1 text-center text-sm text-muted-foreground w-[40px]">
                                     {index + 1}
                                   </td>
-                                  <td className="px-3 py-1 text-center">
-                                    <Checkbox 
-                                      id={`supplier-${supplier.id}`}
-                                      checked={selectedSuppliers.some(s => s.id === supplier.id)}
-                                      onCheckedChange={(checked) => 
-                                        uniqueEmailsOnly 
-                                          ? handleSelectSupplierInGroup(supplier, checked as boolean)
-                                          : handleSelectSupplier(supplier, checked as boolean)
-                                      }
-                                    />
+                                  <td className="px-2 py-1 w-[100px]">
+                                    <p className="font-medium text-sm truncate" title={decodePunycode(supplier.name || '')}>
+                                      {decodePunycode(supplier.name || '')}
+                                    </p>
                                   </td>
-                                  <td className="px-3 py-1">
-                                    <p className="font-medium text-sm">{supplier.name}</p>
-                                  </td>
-                                  <td className="px-3 py-1">
+                                  <td className="px-2 py-1 w-[180px]">
                                     {supplier.email && (
                                       <div className="space-y-1">
-                                        {Array.isArray(supplier.email) ? (
-                                          supplier.email.map((email, idx) => (
-                                            <p key={idx} className="text-sm text-blue-600 hover:text-blue-800 cursor-pointer" 
-                                               title="Нажмите для выбора этого email"
-                                               onClick={() => handleEmailSelection(supplier, email)}>
-                                              {cleanEmail(email)}
-                                            </p>
-                                          ))
+                                        {Array.isArray(supplier.email) && supplier.email.length > 0 ? (
+                                          supplier.email.map((email, idx) => {
+                                            // Проверяем, выбран ли этот email
+                                            const selectedSupplier = selectedSuppliers.find(s => s.id === supplier.id);
+                                            const isEmailSelected = selectedSupplier?.selectedEmail === email;
+                                            
+                                            return (
+                                              <div key={idx} className="flex items-center gap-2">
+                                                <Checkbox
+                                                  checked={isEmailSelected}
+                                                  onCheckedChange={(checked) => {
+                                                    handleEmailSelection(supplier, email, checked as boolean);
+                                                  }}
+                                                  className="h-3.5 w-3.5"
+                                                />
+                                                <p 
+                                                  className={`text-xs flex-1 cursor-pointer transition-colors ${
+                                                    isEmailSelected 
+                                                      ? 'text-blue-700 font-semibold' 
+                                                      : 'text-blue-600 hover:text-blue-800'
+                                                  }`}
+                                                  title={isEmailSelected ? "Выбранный email для отправки" : "Выберите этот email для отправки"}
+                                                  onClick={() => handleEmailSelection(supplier, email, !isEmailSelected)}>
+                                                  {cleanEmail(email)}
+                                                </p>
+                                              </div>
+                                            );
+                                          })
                                         ) : (
-                                          <p className="text-sm">{cleanEmail(supplier.email)}</p>
+                                          <div className="flex items-center gap-2">
+                                            <Checkbox
+                                              checked={selectedSuppliers.some(s => s.id === supplier.id)}
+                                              onCheckedChange={(checked) => {
+                                                handleEmailSelection(supplier, supplier.email as string, checked as boolean);
+                                              }}
+                                              className="h-3.5 w-3.5"
+                                            />
+                                            <p className="text-sm text-blue-600">{cleanEmail(supplier.email)}</p>
+                                          </div>
                                         )}
                                       </div>
                                     )}
                                   </td>
-                                  <td className="px-3 py-1">
+                                  <td className="px-2 py-1 w-[100px]">
                                     {supplier.website ? (
                                       <a 
                                         href={supplier.website.startsWith('http') ? supplier.website : `http://${supplier.website}`}
                                         target="_blank" 
                                         rel="noopener noreferrer"
-                                        className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                                        className="text-sm text-blue-600 hover:text-blue-800 hover:underline truncate block"
                                         onClick={(e) => e.stopPropagation()}
+                                        title={(() => {
+                                          try {
+                                            const url = supplier.website.startsWith('http') ? supplier.website : `http://${supplier.website}`;
+                                            const domain = new URL(url).hostname;
+                                            const cleaned = domain.replace('www.', '');
+                                            return decodePunycode(cleaned);
+                                          } catch {
+                                            return decodePunycode(supplier.website);
+                                          }
+                                        })()}
                                       >
                                         {(() => {
                                           try {
                                             const url = supplier.website.startsWith('http') ? supplier.website : `http://${supplier.website}`;
                                             const domain = new URL(url).hostname;
-                                            return domain.replace('www.', '');
+                                            const cleaned = domain.replace('www.', '');
+                                            // Decode Punycode domain
+                                            return decodePunycode(cleaned);
                                           } catch {
-                                            return supplier.website;
+                                            // If URL parsing fails, try to decode the website string directly
+                                            return decodePunycode(supplier.website);
                                           }
                                         })()}
                                       </a>
@@ -1694,16 +1923,45 @@ export default function SendRequest() {
                                       <span className="text-sm text-muted-foreground">—</span>
                                     )}
                                   </td>
-                                  <td className="px-3 py-1">
+                                  <td className="px-2 py-1 w-[180px] hidden">
+                                    {supplier.pageTitle ? (
+                                      <p
+                                        className="text-sm text-muted-foreground break-words"
+                                        title={supplier.pageTitle}
+                                        style={{
+                                          display: '-webkit-box',
+                                          WebkitLineClamp: 2,
+                                          WebkitBoxOrient: 'vertical',
+                                          overflow: 'hidden',
+                                          wordBreak: 'break-word'
+                                        }}
+                                      >
+                                        {supplier.pageTitle}
+                                      </p>
+                                    ) : (
+                                      <span className="text-sm text-muted-foreground">—</span>
+                                    )}
+                                  </td>
+                                  <td className="px-2 py-1 min-w-[350px]">
                                     {supplier.description ? (
-                                      <p className="text-sm text-muted-foreground max-w-xs truncate" title={supplier.description}>
+                                      <p 
+                                        className="text-sm text-muted-foreground break-words" 
+                                        title={supplier.description}
+                                        style={{
+                                          display: '-webkit-box',
+                                          WebkitLineClamp: 2,
+                                          WebkitBoxOrient: 'vertical',
+                                          overflow: 'hidden',
+                                          wordBreak: 'break-word'
+                                        }}
+                                      >
                                         {supplier.description}
                                       </p>
                                     ) : (
                                       <span className="text-sm text-muted-foreground">—</span>
                                     )}
                                   </td>
-                                  <td className="px-3 py-1 text-center">
+                                  <td className="px-0 py-1 text-center w-[25px]">
                                     <SupplierTooltip supplier={convertToTooltipSupplier(supplier)}>
                                       <Dialog>
                                         <DialogTrigger asChild>
@@ -1728,19 +1986,50 @@ export default function SendRequest() {
                                               </div>
                                               {supplier.email && (
                                                 <div>
-                                                  <Label className="text-sm font-medium">Email</Label>
-                                                  {Array.isArray(supplier.email) ? (
-                                                    <div className="space-y-1">
-                                                      {supplier.email.map((email, idx) => (
-                                                        <p key={idx} className="text-sm text-blue-600 hover:text-blue-800 cursor-pointer"
-                                                           title="Нажмите для выбора этого email"
-                                                           onClick={() => handleEmailSelection(supplier, email)}>
-                                                          {cleanEmail(email)}
-                                                        </p>
-                                                      ))}
+                                                  <Label className="text-sm font-medium">
+                                                    Email{Array.isArray(supplier.email) && supplier.email.length > 1 ? ` (${supplier.email.length})` : ''}
+                                                  </Label>
+                                                  {Array.isArray(supplier.email) && supplier.email.length > 0 ? (
+                                                    <div className="space-y-2 mt-2">
+                                                      {supplier.email.map((email, idx) => {
+                                                        // Проверяем, выбран ли этот email
+                                                        const selectedSupplier = selectedSuppliers.find(s => s.id === supplier.id);
+                                                        const isEmailSelected = selectedSupplier?.selectedEmail === email;
+                                                        
+                                                        return (
+                                                          <div key={idx} className="flex items-center gap-2">
+                                                            <Checkbox
+                                                              checked={isEmailSelected}
+                                                              onCheckedChange={(checked) => {
+                                                                handleEmailSelection(supplier, email, checked as boolean);
+                                                              }}
+                                                              className="h-4 w-4"
+                                                            />
+                                                            <p 
+                                                              className={`text-sm flex-1 cursor-pointer transition-colors ${
+                                                                isEmailSelected 
+                                                                  ? 'text-blue-700 font-semibold' 
+                                                                  : 'text-blue-600 hover:text-blue-800'
+                                                              }`}
+                                                              title={isEmailSelected ? "✓ Выбранный email для отправки" : "Выберите этот email для отправки"}
+                                                              onClick={() => handleEmailSelection(supplier, email, !isEmailSelected)}>
+                                                              {cleanEmail(email)}
+                                                            </p>
+                                                          </div>
+                                                        );
+                                                      })}
                                                     </div>
                                                   ) : (
-                                                    <p className="text-sm">{cleanEmail(supplier.email)}</p>
+                                                    <div className="flex items-center gap-2 mt-2">
+                                                      <Checkbox
+                                                        checked={selectedSuppliers.some(s => s.id === supplier.id)}
+                                                        onCheckedChange={(checked) => {
+                                                          handleEmailSelection(supplier, supplier.email as string, checked as boolean);
+                                                        }}
+                                                        className="h-4 w-4"
+                                                      />
+                                                      <p className="text-sm">{cleanEmail(supplier.email)}</p>
+                                                    </div>
                                                   )}
                                                 </div>
                                               )}
@@ -1770,7 +2059,7 @@ export default function SendRequest() {
                                       </Dialog>
                                     </SupplierTooltip>
                                   </td>
-                                  <td className="px-3 py-1 text-center">
+                                  <td className="px-0 py-1 text-center w-[30px]">
                                     <Button 
                                       variant="ghost" 
                                       size="sm"
@@ -1803,16 +2092,25 @@ export default function SendRequest() {
                 
               </div>
               {selectedSuppliers.length > 0 ? (
-                <div>
+                <div data-onboarding-id="send-request-email-form">
                   <Alert className="mb-4">
-                    <AlertTitle>Выбрано поставщиков:  {selectedSuppliers.length}</AlertTitle>
+                    <AlertTitle>Выбрано email:  {getSelectedEmailsCount()}</AlertTitle>
                     <AlertDescription>
-                      Запрос будет отправлен всем выбранным поставщикам.
+                      Запрос будет отправлен на все выбранные email адреса.
                     </AlertDescription>
                   </Alert>
                   <EmailForm 
                     suppliers={suppliers.map(convertToSupplier)} 
-                    selectedSuppliers={selectedSuppliers.map(convertToSupplier)} 
+                    selectedSuppliers={(() => {
+                      const converted = selectedSuppliers.map(convertToSupplier);
+                      console.log(`[CRITICAL] Passing selectedSuppliers to EmailForm:`, converted.map(s => ({
+                        id: s.id,
+                        name: s.name,
+                        email: s.email,
+                        selectedEmail: (s as any).selectedEmail
+                      })));
+                      return converted;
+                    })()} 
                     searchRequest={searchRequest || createEmptyRequest()}
                     comingFromGroup={comingFromGroup}
                     groupId={groupId}

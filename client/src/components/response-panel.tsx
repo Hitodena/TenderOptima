@@ -958,7 +958,7 @@ export function ResponsePanel({
                   key={response.id}
                   className={`
                     p-3 border-b cursor-pointer flex items-start gap-2 hover:bg-muted/20 transition-colors
-                    ${!response.isRead ? "bg-primary/5" : ""}
+                    ${!response.isRead ? "bg-blue-50/70 dark:bg-blue-950/30 border-l-2 border-l-blue-500" : ""}
                     ${isActive ? "bg-primary/10 hover:bg-primary/15" : ""}
                   `}
                   onClick={() => handleSelectForView(response.id)}
@@ -977,7 +977,7 @@ export function ResponsePanel({
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
-                      <div className={`text-sm truncate ${!response.isRead ? 'font-semibold' : ''}`}>
+                      <div className={`text-sm truncate ${!response.isRead ? 'font-semibold text-foreground' : 'font-normal'}`}>
                         {response.supplierName}
                       </div>
                       <div className="flex items-center gap-1">
@@ -1009,7 +1009,7 @@ export function ResponsePanel({
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <div className="text-xs text-muted-foreground truncate mt-1 cursor-help">
+                          <div className={`text-xs truncate mt-1 cursor-help ${!response.isRead ? 'text-foreground/80 font-medium' : 'text-muted-foreground'}`}>
                             {cleanEmailSubject((response as any).subject) || '(No subject)'}
                           </div>
                         </TooltipTrigger>

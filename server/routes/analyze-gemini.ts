@@ -213,6 +213,97 @@ router.post('/analyze-gemini',
   }
 );
 
+// GET endpoint for downloading files (must be before /:requestId route)
+router.get('/analyze-gemini/files',
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const filePath = req.query.path as string;
+      
+      if (!filePath) {
+        console.error('[Download] Путь к файлу не указан');
+        return res.status(400).json({
+          success: false,
+          error: 'Путь к файлу не указан'
+        });
+      }
+      
+      const userId = req.user?.id;
+      if (!userId) {
+        console.error('[Download] Пользователь не авторизован');
+        return res.status(401).json({
+          success: false,
+          error: 'Пользователь не авторизован'
+        });
+      }
+
+      console.log(`[Download] Попытка скачать файл: ${filePath} для пользователя ${userId}`);
+
+      // Проверяем, что файл принадлежит пользователю
+      const checkResult = await pool.query(`
+        SELECT id FROM technical_analysis_requests
+        WHERE (tz_file_path = $1 OR kp_file_path = $1) AND user_id = $2
+      `, [filePath, userId]);
+      
+      if (checkResult.rows.length === 0) {
+        console.error(`[Download] Файл не найден в БД или доступ запрещен: ${filePath} для пользователя ${userId}`);
+        return res.status(404).json({
+          success: false,
+          error: 'Файл не найден или доступ запрещен'
+        });
+      }
+
+      // Проверяем существование файла
+      if (!fs.existsSync(filePath)) {
+        console.error(`[Download] Файл не существует на сервере: ${filePath}`);
+        return res.status(404).json({
+          success: false,
+          error: 'Файл не найден на сервере'
+        });
+      }
+
+      // Проверяем, что это файл, а не директория
+      const stats = fs.statSync(filePath);
+      if (!stats.isFile()) {
+        console.error(`[Download] Указанный путь не является файлом: ${filePath}`);
+        return res.status(400).json({
+          success: false,
+          error: 'Указанный путь не является файлом'
+        });
+      }
+
+      // Отправляем файл
+      const fileName = path.basename(filePath);
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.setHeader('Content-Length', stats.size.toString());
+      
+      const fileStream = fs.createReadStream(filePath);
+      
+      fileStream.on('error', (streamError) => {
+        console.error('[Download] Ошибка при чтении файла:', streamError);
+        if (!res.headersSent) {
+          res.status(500).json({
+            success: false,
+            error: 'Ошибка при чтении файла'
+          });
+        }
+      });
+      
+      fileStream.pipe(res);
+      
+    } catch (error) {
+      console.error('❌ Ошибка при скачивании файла:', error);
+      if (!res.headersSent) {
+        return res.status(500).json({
+          success: false,
+          error: error instanceof Error ? error.message : 'Неизвестная ошибка'
+        });
+      }
+    }
+  }
+);
+
 // GET endpoint for checking request status
 router.get('/analyze-gemini/:requestId', 
   requireAuth,
@@ -354,67 +445,6 @@ router.post('/admin/analyze-gemini/:requestId/result',
       
     } catch (error) {
       console.error('❌ Ошибка:', error);
-      return res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Неизвестная ошибка'
-      });
-    }
-  }
-);
-
-// GET endpoint for downloading files
-router.get('/analyze-gemini/files',
-  requireAuth,
-  async (req: Request, res: Response) => {
-    try {
-      const filePath = req.query.path as string;
-      
-      if (!filePath) {
-        return res.status(400).json({
-          success: false,
-          error: 'Путь к файлу не указан'
-        });
-      }
-      
-      const userId = req.user?.id;
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          error: 'Пользователь не авторизован'
-        });
-      }
-
-      // Проверяем, что файл принадлежит пользователю
-      const checkResult = await pool.query(`
-        SELECT id FROM technical_analysis_requests
-        WHERE (tz_file_path = $1 OR kp_file_path = $1) AND user_id = $2
-      `, [filePath, userId]);
-      
-      if (checkResult.rows.length === 0) {
-        return res.status(404).json({
-          success: false,
-          error: 'Файл не найден или доступ запрещен'
-        });
-      }
-
-      // Проверяем существование файла
-      if (!fs.existsSync(filePath)) {
-        return res.status(404).json({
-          success: false,
-          error: 'Файл не найден на сервере'
-        });
-      }
-
-      // Отправляем файл
-      const fileName = path.basename(filePath);
-      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-      res.setHeader('Content-Type', 'application/octet-stream');
-      
-      const fileStream = fs.createReadStream(filePath);
-      fileStream.pipe(res);
-      
-    } catch (error) {
-      console.error('❌ Ошибка при скачивании файла:', error);
       return res.status(500).json({
         success: false,
         error: error instanceof Error ? error.message : 'Неизвестная ошибка'

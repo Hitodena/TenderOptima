@@ -248,7 +248,7 @@ export function SupplierSearchForm({ onComplete }: Props) {
         <FormField
           control={form.control} name="productName"
           render={({ field }) => (
-            <FormItem>
+            <FormItem data-onboarding-id="search-keywords">
               <div className="flex items-center gap-2">
                 <FormLabel>Ключевые слова</FormLabel>
                 <Popover open={infoPopoverOpen} onOpenChange={setInfoPopoverOpen}>
@@ -338,7 +338,7 @@ export function SupplierSearchForm({ onComplete }: Props) {
           <FormItem className="flex items-center space-x-3"><FormControl><Checkbox id="search-google" checked={searchGoogle} onCheckedChange={(c) => setSearchGoogle(c === true)} /></FormControl><FormLabel htmlFor="search-google" className="cursor-pointer">Поиск по Google</FormLabel></FormItem>
         </div>
 
-        <div className="bg-muted/50 p-3 rounded-lg space-y-3 border">
+        <div className="bg-muted/50 p-3 rounded-lg space-y-3 border" data-onboarding-id="search-regions">
             <FormLabel>Регионы поиска</FormLabel>
             <Button type="button" variant="outline" className="w-full" onClick={() => setShowRegionDialog(true)}>
               {selectedRegions.length > 0 ? `Выбрано: ${selectedRegions.length}` : "Выбрать регионы"}
@@ -522,15 +522,17 @@ export function SupplierSearchForm({ onComplete }: Props) {
           </Dialog>
         </div>
 
-        <ProgressButton 
-          onClick={handleUnifiedSearch} 
-          disabled={unifiedSearchMutation.isPending}
-          externalLoading={unifiedSearchMutation.isPending}
-          loadingText="Поиск поставщиков..."
-          className="w-full"
-        >
-          Найти поставщиков
-        </ProgressButton>
+        <div data-onboarding-id="search-button">
+          <ProgressButton 
+            onClick={handleUnifiedSearch} 
+            disabled={unifiedSearchMutation.isPending}
+            externalLoading={unifiedSearchMutation.isPending}
+            loadingText="Поиск поставщиков..."
+            className="w-full"
+          >
+            Найти поставщиков
+          </ProgressButton>
+        </div>
       </form>
     </Form>
   );
@@ -552,7 +554,7 @@ export function SupplierSearchPage() {
   return (
     <div className="container mx-auto px-4 py-4">
       <div className="max-w-4xl mx-auto">
-        <div className="mb-4">
+        <div className="mb-4" data-onboarding-id="search-hero">
           <h1 className="text-3xl font-bold">Поиск поставщиков</h1>
           <p className="text-gray-600">Найдите подходящих поставщиков для ваших потребностей</p>
         </div>

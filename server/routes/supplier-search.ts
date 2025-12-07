@@ -4,6 +4,7 @@ import { db } from '../db';
 import { suppliers, stagingSuppliers, excludedDomains } from '@shared/schema';
 import { subscriptionService } from '../subscription';
 import { requireAuth } from '../middleware/requireAuth';
+import { toUnicode } from 'punycode';
 
 const router = Router();
 
@@ -17,6 +18,8 @@ interface SearchResult {
   emails: string[];
   phones: string[];
   dateOfSearch: string;
+  page_title?: string;
+  pageTitle?: string;
 }
 
 /**
@@ -133,7 +136,7 @@ router.post('/', requireAuth, async (req, res) => {
       const results = uniqueResults;
 
       // 3. Сохранение результатов в БД (логика осталась прежней)
-      const savedSuppliers = await saveSearchResults(results, regionObjects[0]?.googleCode || "ru", parseInt(userId), requestId);
+      const savedSuppliers = await saveSearchResults(results, regionObjects[0]?.googleCode || "ru", Number(userId), requestId);
 
       console.log(`[SupplierSearch] Successfully found and saved ${savedSuppliers.length} suppliers`);
 
@@ -261,7 +264,8 @@ async function callPythonParser(query: string, elements: number, userId: string,
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify(requestBody),
+        signal: AbortSignal.timeout(600000) // ждём FastAPI до 10 минут, т.к. парсер может дольше собирать контакты
       });
 
       if (!response.ok) {
@@ -286,6 +290,46 @@ async function callPythonParser(query: string, elements: number, userId: string,
 /**
  * Функция сохранения результатов в staging_suppliers
  */
+function buildSupplierTextFields(result: SearchResult) {
+    const rawDomain = result.domain || '';
+    const domain = rawDomain.replace(/^https?:\/\//, '').replace(/^www\./, '');
+    const decodedDomain = (() => {
+        try {
+            return toUnicode(domain);
+        } catch {
+            return domain;
+        }
+    })();
+    const domainName = decodedDomain.split('.')[0] || 'Supplier';
+    const formattedDomainName = domainName.charAt(0).toUpperCase() + domainName.slice(1);
+
+    const rawPageTitle = (result.page_title || result.pageTitle || '').toString().trim();
+    const supplierName = formattedDomainName;
+
+    // Python парсер (main.py) уже объединяет meta_description + page_title + original_description,
+    // поэтому здесь просто используем description как есть
+    let finalDescription = (result.description || '').toString().trim();
+    
+    console.log(`[buildSupplierTextFields] Domain: ${result.domain}`);
+    console.log(`[buildSupplierTextFields] RAW description from Python (first 300 chars): ${finalDescription.substring(0, 300)}`);
+    console.log(`[buildSupplierTextFields] page_title from result: ${rawPageTitle || 'NOT FOUND'}`);
+
+    // Если description пустое, используем page_title как fallback
+    if (!finalDescription && rawPageTitle) {
+        finalDescription = rawPageTitle;
+        console.log(`[buildSupplierTextFields] Using page_title as fallback: ${rawPageTitle}`);
+    }
+
+    const MAX_DESCRIPTION_LENGTH = 800;
+    if (finalDescription.length > MAX_DESCRIPTION_LENGTH) {
+        const truncated = finalDescription.slice(0, MAX_DESCRIPTION_LENGTH);
+        const lastSpace = truncated.lastIndexOf(' ');
+        finalDescription = (lastSpace > 0 ? truncated.slice(0, lastSpace) : truncated) + '...';
+    }
+
+    return { supplierName, finalDescription, pageTitle: rawPageTitle };
+}
+
 async function saveSearchResults(results: SearchResult[], region: string, userId?: number, requestId?: number): Promise<any[]> {
     console.log('[saveSearchResults] Called with:', { resultsCount: results.length, region, userId, requestId });
     const savedSuppliers = [];
@@ -295,10 +339,13 @@ async function saveSearchResults(results: SearchResult[], region: string, userId
         const phonesArray = Array.isArray(result.phones) ? result.phones : (result.phones ? [result.phones] : []);
         
         try {
-            const domain = result.domain.replace(/^https?:\/\//, '').replace(/^www\./, '');
-            const supplierName = domain.split('.')[0].charAt(0).toUpperCase() + domain.split('.')[0].slice(1);
+            const { supplierName, finalDescription, pageTitle } = buildSupplierTextFields(result);
 
             console.log('[saveSearchResults] Inserting supplier with requestId:', requestId);
+            console.log('[saveSearchResults] Domain:', result.domain);
+            console.log('[saveSearchResults] pageTitle from result:', result.page_title || result.pageTitle || 'NOT FOUND');
+            console.log('[saveSearchResults] RAW description from Python (first 200 chars):', (result.description || '').toString().substring(0, 200));
+            console.log('[saveSearchResults] finalDescription (first 200 chars):', finalDescription.substring(0, 200));
             const [saved] = await db.insert(stagingSuppliers).values({
                 userId: userId, // Добавляем userId для связи с пользователем
                 requestId: requestId, // Добавляем requestId для связи с конкретным запросом
@@ -306,7 +353,7 @@ async function saveSearchResults(results: SearchResult[], region: string, userId
                 searchQuery: result.query,
                 region: result.region || region, // Используем region из результата или fallback на переменную
                 rawTitle: supplierName,
-                rawDescription: result.description || '',
+                rawDescription: finalDescription,
                 rawUrl: result.domain,
                 rawEmails: emailsArray,
                 rawPhones: phonesArray,
@@ -316,15 +363,21 @@ async function saveSearchResults(results: SearchResult[], region: string, userId
             console.log('[saveSearchResults] Saved supplier:', { id: saved.id, requestId: saved.requestId });
 
             if (saved) {
+                // Используем все email из rawEmails (из БД) или из result.emails (из Python)
+                const allEmailsArray = (saved.rawEmails && saved.rawEmails.length > 0) 
+                    ? saved.rawEmails 
+                    : (Array.isArray(result.emails) ? result.emails : (result.emails ? [result.emails] : []));
+                
                 // Адаптируем данные для совместимости с фронтендом
                 savedSuppliers.push({
                     // Основные поля для фронтенда
                     id: saved.id,
                     name: saved.rawTitle,
-                    email: result.emails && result.emails[0] ? result.emails[0] : '',
+                    email: allEmailsArray, // Передаем массив всех email
                     website: saved.rawUrl,
                     description: saved.rawDescription,
                     categories: [result.engine],
+                    pageTitle: pageTitle,
                     // Дополнительные поля из staging_suppliers
                     sourceEngine: saved.sourceEngine,
                     searchQuery: saved.searchQuery,
@@ -338,7 +391,7 @@ async function saveSearchResults(results: SearchResult[], region: string, userId
                     createdAt: saved.createdAt,
                     // Поля для совместимости
                     searchEngine: result.engine,
-                    allEmails: result.emails,
+                    allEmails: allEmailsArray, // Дублируем для совместимости
                     allPhones: result.phones,
                     searchDate: result.dateOfSearch,
                 });
@@ -347,28 +400,28 @@ async function saveSearchResults(results: SearchResult[], region: string, userId
             if (saveError.code === '23505') {
                 // Duplicate key error - staging supplier already exists, return data anyway
                 console.log(`[SupplierSearch] Staging supplier ${result.domain} already exists in database`);
-                const domain = result.domain.replace(/^https?:\/\//, '').replace(/^www\./, '');
-                const supplierName = domain.split('.')[0].charAt(0).toUpperCase() + domain.split('.')[0].slice(1);
+                const { supplierName, finalDescription, pageTitle } = buildSupplierTextFields(result);
                 savedSuppliers.push({
                     // Основные поля для фронтенда
                     id: Date.now(), // Временный ID для дубликатов
                     name: supplierName,
-                    email: emailsArray && emailsArray[0] ? emailsArray[0] : '',
+                    email: emailsArray, // Передаем массив всех email
                     website: result.domain,
-                    description: result.description || '',
+                    description: finalDescription,
                     categories: [result.engine],
+                    pageTitle: pageTitle,
                     // Дополнительные поля
                     sourceEngine: result.engine,
                     searchQuery: result.query,
                     region: result.region || region,
                     rawTitle: supplierName,
-                    rawDescription: result.description || '',
+                    rawDescription: finalDescription,
                     rawUrl: result.domain,
                     rawEmails: emailsArray,
                     rawPhones: phonesArray,
                     status: 'new',
                     searchEngine: result.engine,
-                    allEmails: emailsArray,
+                    allEmails: emailsArray, // Дублируем для совместимости
                     allPhones: phonesArray,
                     searchDate: result.dateOfSearch,
                 });
