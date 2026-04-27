@@ -58,6 +58,10 @@ temp/
 .cache/
 .parcel-cache/
 
+# Python
+.pyc
+__pycache__
+
 # Uploads and processed files
 uploads/
 server/file-processing/processed_attachments/
