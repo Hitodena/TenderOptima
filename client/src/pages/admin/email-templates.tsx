@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
-import Layout from '@/components/Layout';
+import Layout from '@/components/layout';
 
 interface EmailReplyTemplate {
   id: number;
