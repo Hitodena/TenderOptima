@@ -70,3 +70,5 @@ server/file-processing/temp/
 # Archive files
 *.tar.gz
 *.ziparchive/
+
+.kilo
