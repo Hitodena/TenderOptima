@@ -4,10 +4,11 @@ from urllib.parse import urlparse
 
 from googleapiclient.errors import HttpError
 from langchain_google_community import GoogleSearchAPIWrapper
-
 from parsers.utils.logger import CustomLogger
 
-logger = CustomLogger("GoogleParser", "GoogleParser.log", debug=False, console=True).get_logger()
+logger = CustomLogger(
+    "GoogleParser", "GoogleParser.log", debug=False, console=True
+).get_logger()
 
 
 async def parse_page(
@@ -26,7 +27,12 @@ async def parse_page(
         List[Dict[str, str]]: List of dictionaries with domain and description.
     """
     try:
-        params = { "gl": region, "hl": region, "cr": "country" + region.upper(), "start": start, }
+        params = {
+            "gl": region,
+            "hl": region,
+            "cr": "country" + region.upper(),
+            "start": start,
+        }
         batch = await asyncio.to_thread(search.results, query, 10, params)
 
         results = []
@@ -48,7 +54,9 @@ async def parse_page(
     except HttpError as e:
         # stop on invalid argument (start > 90)
         if e.resp.status == 400:
-            logger.warning(f"Google CSE badRequest at start={start}, stopping pagination")
+            logger.warning(
+                f"Google CSE badRequest at start={start}, stopping pagination"
+            )
             return []
         logger.error(f"HttpError at start {start} - quota end")
         return []
@@ -79,11 +87,16 @@ async def parse_google(
     """
     max_allowed = 100
     if elements > max_allowed:
-        logger.warning(f"Requested {elements} > {max_allowed}, limiting to {max_allowed} results.")
+        logger.warning(
+            f"Requested {elements} > {max_allowed}, limiting to {max_allowed} results."
+        )
     to_fetch = min(elements, max_allowed)
 
     search = GoogleSearchAPIWrapper(google_api_key=token, google_cse_id=cust)
-    tasks = [parse_page(search, query, start, region) for start in range(0, to_fetch, 10)]
+    tasks = [
+        parse_page(search, query, start, region)
+        for start in range(0, to_fetch, 10)
+    ]
 
     all_results = await asyncio.gather(*tasks)
     flat = [item for batch in all_results for item in batch]

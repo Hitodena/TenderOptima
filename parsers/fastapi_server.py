@@ -11,10 +11,10 @@ from typing import Dict, List, Union
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+from parsers.utils.logger import CustomLogger
 from pydantic import BaseModel
 
 from parsers.main import main_search
-from parsers.utils.logger import CustomLogger
 
 # Загружаем переменные окружения из .env в корневой папке
 project_root = Path(__file__).resolve().parent.parent

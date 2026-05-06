@@ -7,11 +7,11 @@ from pathlib import Path
 from typing import Dict, List, Optional, Union
 
 import aiohttp
+from parsers.utils.logger import CustomLogger
 
 from parsers.info_getter import get_info
 from parsers.search_manager import fetch_all
 from parsers.utils import storage
-from parsers.utils.logger import CustomLogger
 
 logger = CustomLogger(
     logger_name="SupplierFinderParser",
