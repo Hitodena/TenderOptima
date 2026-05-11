@@ -2,3 +2,4 @@
 .env
 logs
 .kilo
+.ruff_cache

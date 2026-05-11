@@ -1,9 +1,6 @@
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.models.base import Base, IDMixinUUID, TimestampMixin
-from app.db.models.blacklisted_domain import BlacklistedDomain
-from app.db.models.request import Request
-from app.db.models.subscription import Subscription
 
 
 class User(IDMixinUUID, TimestampMixin, Base):
@@ -15,12 +12,12 @@ class User(IDMixinUUID, TimestampMixin, Base):
     full_name: Mapped[str | None] = mapped_column()
     company_name: Mapped[str | None] = mapped_column()
 
-    request: Mapped[Request] = relationship(
+    request: Mapped["Request"] = relationship(  # noqa: F821 # type: ignore
         back_populates="user", uselist=False, lazy="selectin"
     )
-    blacklisted_domains: Mapped[list["BlacklistedDomain"]] = relationship(
+    blacklisted_domains: Mapped[list["BlacklistedDomain"]] = relationship(  # noqa: F821 # type: ignore
         back_populates="added_by_user"
     )
-    subscription: Mapped[Subscription] = relationship(
+    subscription: Mapped["Subscription"] = relationship(  # noqa: F821 # type: ignore
         back_populates="user", uselist=False, lazy="selectin"
     )

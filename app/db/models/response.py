@@ -7,15 +7,14 @@ from sqlalchemy.dialects.postgresql import JSON, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.models.base import Base, IDMixinUUID, TimestampMixin
-from app.db.models.supplier import RequestSupplier
 
 
 class SupplierResponse(IDMixinUUID, TimestampMixin, Base):
     __tablename__ = "supplier_responses"
 
-    tender_supplier_id: Mapped[uuid.UUID] = mapped_column(
+    request_supplier_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("tender_suppliers.id"),
+        ForeignKey("request_suppliers.id"),
         unique=True,
         nullable=False,
     )
@@ -34,7 +33,7 @@ class SupplierResponse(IDMixinUUID, TimestampMixin, Base):
         DateTime(timezone=True)
     )
 
-    tender_supplier: Mapped["RequestSupplier"] = relationship(
+    request_supplier: Mapped["RequestSupplier"] = relationship(  # noqa: F821 # type: ignore
         back_populates="response"
     )
     analysis: Mapped["ResponseAnalysis | None"] = relationship(

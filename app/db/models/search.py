@@ -4,10 +4,10 @@ from sqlalchemy import ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.models.base import Base, TimestampMixin
+from app.db.models.base import Base, IDMixinUUID, TimestampMixin
 
 
-class SearchHistory(TimestampMixin, Base):
+class SearchHistory(IDMixinUUID, TimestampMixin, Base):
     __tablename__ = "search_history"
 
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))

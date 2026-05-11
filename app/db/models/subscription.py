@@ -5,11 +5,10 @@ from sqlalchemy import Boolean, DateTime, ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.models.base import Base, TimestampMixin
-from app.db.models.user import User
+from app.db.models.base import Base, IDMixinUUID, TimestampMixin
 
 
-class Subscription(TimestampMixin, Base):
+class Subscription(IDMixinUUID, TimestampMixin, Base):
     __tablename__ = "subscriptions"
 
     user_id: Mapped[uuid.UUID] = mapped_column(
@@ -29,4 +28,4 @@ class Subscription(TimestampMixin, Base):
         DateTime(timezone=True)
     )
 
-    user: Mapped["User"] = relationship(back_populates="subscription")
+    user: Mapped["User"] = relationship(back_populates="subscription")  # type: ignore # noqa: F821

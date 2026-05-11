@@ -4,11 +4,10 @@ from sqlalchemy import ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.models.base import Base, TimestampMixin
-from app.db.models.user import User
+from app.db.models.base import Base, IDMixinUUID, TimestampMixin
 
 
-class BlacklistedDomain(TimestampMixin, Base):
+class BlacklistedDomain(IDMixinUUID, TimestampMixin, Base):
     __tablename__ = "blacklisted_domains"
 
     domain: Mapped[str] = mapped_column(unique=True, nullable=False)
@@ -19,6 +18,6 @@ class BlacklistedDomain(TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("users.id")
     )
 
-    added_by_user: Mapped["User | None"] = relationship(
+    added_by_user: Mapped["User | None"] = relationship(  # noqa: F821 # type: ignore
         back_populates="blacklisted_domains"
     )
