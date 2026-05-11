@@ -1,27 +1,20 @@
-import asyncio
 import os
 import re
-import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Union
 
-import aiohttp
-from parsers.utils.logger import CustomLogger
+from dotenv import load_dotenv
+from loguru import logger
 
-from parsers.info_getter import get_info
-from parsers.search_manager import fetch_all
-from parsers.utils import storage
+from .search_manager import fetch_all
+from .site_contact_scrapper import get_info
 
-logger = CustomLogger(
-    logger_name="SupplierFinderParser",
-    file_path="SupplierFinderParser.log",
-    debug=True,
-    console=True,
-).get_logger()
+load_dotenv()
+
+CONCURRENT = int(os.getenv("LIMIT_CONCURRENT", 50))
 
 
-# Helpers
 def normalize_domain(value: str) -> str:
     """
     Normalize domains/URLs so that `https://www.example.com/` and `example.com`
@@ -41,47 +34,42 @@ def normalize_domain(value: str) -> str:
 
 def clean_text(text: str) -> str:
     """
-    Удаляет эмодзи и специальные символы из текста (✅, ➦, и т.д.)
+    Remove emoji from text
     """
     if not text:
         return ""
 
-    # Удаляем эмодзи и специальные символы
-    # Паттерн для удаления эмодзи и символов из категорий: Symbols, Pictographs, Supplemental Symbols and Pictographs
     emoji_pattern = re.compile(
         "["
-        "\U0001f600-\U0001f64f"  # emoticons
-        "\U0001f300-\U0001f5ff"  # symbols & pictographs
-        "\U0001f680-\U0001f6ff"  # transport & map symbols
-        "\U0001f1e0-\U0001f1ff"  # flags (iOS)
-        "\U00002702-\U000027b0"  # dingbats
-        "\U000024c2-\U0001f251"  # enclosed characters
-        "\U0001f900-\U0001f9ff"  # Supplemental Symbols and Pictographs
-        "\U0001fa00-\U0001fa6f"  # Chess Symbols
-        "\U0001fa70-\U0001faff"  # Symbols and Pictographs Extended-A
-        "\U00002600-\U000026ff"  # Miscellaneous Symbols
-        "\U00002700-\U000027bf"  # Dingbats
-        "\U0001f018-\U0001f270"  # Various asian characters
-        "\U0001f300-\U0001f5ff"  # Miscellaneous Symbols and Pictographs
-        "\U0001f600-\U0001f64f"  # Emoticons
-        "\U0001f680-\U0001f6ff"  # Transport and Map
-        "\U0001f700-\U0001f77f"  # Alchemical Symbols
-        "\U0001f780-\U0001f7ff"  # Geometric Shapes Extended
-        "\U0001f800-\U0001f8ff"  # Supplemental Arrows-C
-        "\U0001f900-\U0001f9ff"  # Supplemental Symbols and Pictographs
-        "\U0001fa00-\U0001fa6f"  # Chess Symbols
-        "\U0001fa70-\U0001faff"  # Symbols and Pictographs Extended-A
-        "\U00002600-\U000026ff"  # Miscellaneous Symbols
-        "\U00002700-\U000027bf"  # Dingbats
+        "\U0001f600-\U0001f64f"
+        "\U0001f300-\U0001f5ff"
+        "\U0001f680-\U0001f6ff"
+        "\U0001f1e0-\U0001f1ff"
+        "\U00002702-\U000027b0"
+        "\U000024c2-\U0001f251"
+        "\U0001f900-\U0001f9ff"
+        "\U0001fa00-\U0001fa6f"
+        "\U0001fa70-\U0001faff"
+        "\U00002600-\U000026ff"
+        "\U00002700-\U000027bf"
+        "\U0001f018-\U0001f270"
+        "\U0001f300-\U0001f5ff"
+        "\U0001f600-\U0001f64f"
+        "\U0001f680-\U0001f6ff"
+        "\U0001f700-\U0001f77f"
+        "\U0001f780-\U0001f7ff"
+        "\U0001f800-\U0001f8ff"
+        "\U0001f900-\U0001f9ff"
+        "\U0001fa00-\U0001fa6f"
+        "\U0001fa70-\U0001faff"
+        "\U00002600-\U000026ff"
+        "\U00002700-\U000027bf"
         "]+",
         flags=re.UNICODE,
     )
 
-    # Удаляем эмодзи
     text = emoji_pattern.sub("", text)
 
-    # Удаляем другие специальные символы (стрелки, галочки и т.д.)
-    # ✅, ➦, ➤, ➜, ➝, ➞, ➟, ➠, ➡, ➢, ➣, ➤, ➥, ➦, ➧, ➨, ➩, ➪, ➫, ➬, ➭, ➮, ➯, ➰, ➱, ➲, ➳, ➴, ➵, ➶, ➷, ➸, ➹, ➺, ➻, ➼, ➽, ➾, ➿
     special_chars = [
         "✅",
         "❌",
@@ -426,32 +414,22 @@ def clean_text(text: str) -> str:
     for char in special_chars:
         text = text.replace(char, "")
 
-    # Удаляем множественные пробелы
     text = re.sub(r"\s+", " ", text)
 
-    # Удаляем пробелы в начале и конце
     return text.strip()
-
-
-# Configuration
-MAX_CONCURRENT_REQUESTS = 10
-DEFAULT_ELEMENTS = 50
-DEFAULT_REGION = "ru"
-DATA_DIR = Path(__file__).resolve().parent / "data"
 
 
 async def main_search(
     query: str,
-    user_id: str = "1",
-    elements: int = DEFAULT_ELEMENTS,
-    region: Union[str, dict] = DEFAULT_REGION,
-    google_search_api: Optional[str] = None,
-    google_search_id: Optional[str] = None,
-    yandex_key_file: Optional[Path] = None,
-    yandex_folder_id: Optional[str] = None,
-    sources: dict = {},
-    excluded_domains: List[str] = [],  # Восстанавливаем параметр стоп-листа
-) -> List[Dict]:
+    elements: int,
+    region: Union[str, dict],
+    google_search_api: str,
+    google_search_id: str,
+    yandex_key_file: Path,
+    yandex_folder_id: str,
+    user_id: str,
+    excluded_domains: list[str],
+) -> list[dict]:
     """
     Main search function that orchestrates Google and Yandex searches with contact extraction.
 
@@ -472,33 +450,17 @@ async def main_search(
         f"Starting search for query: '{query}' with {elements} elements, excluding {len(excluded_domains)} domains"
     )
 
-    # Validate API credentials
-    has_google = google_search_api and google_search_id
-    has_yandex = yandex_key_file and yandex_folder_id
-
-    if not has_google and not has_yandex:
-        logger.error("No valid API credentials provided")
-        return []
-
-    # Step 1: Search for domains using Google and/or Yandex
     try:
-        # Ensure we have values for all parameters
-        google_api = google_search_api or ""
-        google_id = google_search_id or ""
-        yandex_key = yandex_key_file or Path("dummy")
-        yandex_folder = yandex_folder_id or ""
-
         search_results = await fetch_all(
             query=query,
             user_id=user_id,
             elements=elements,
             region=region,
-            google_search_api=google_api,
-            google_search_id=google_id,
-            yandex_key_file=yandex_key,
-            yandex_folder_id=yandex_folder,
-            sources=sources,
-            excluded_domains=excluded_domains,  # Передаем стоп-лист в fetch_all
+            google_search_api=google_search_api,
+            google_search_id=google_search_id,
+            yandex_key_file=yandex_key_file,
+            yandex_folder_id=yandex_folder_id,
+            excluded_domains=excluded_domains,
         )
 
         if not search_results:
@@ -513,18 +475,11 @@ async def main_search(
         logger.error(f"Search failed: {e}")
         return []
 
-    # Step 2: Extract contact information
+    # Extract contact information
     try:
         domains = [result["domain"] for result in search_results]
 
-        # Setup for contact extraction
-        semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
-        connector = aiohttp.TCPConnector(
-            limit=100, ttl_dns_cache=300, use_dns_cache=True
-        )
-
-        # Get contact information
-        contact_results = await get_info(domains, MAX_CONCURRENT_REQUESTS)
+        contact_results = await get_info(domains, CONCURRENT)
 
         logger.info(f"Extracted contacts from {len(contact_results)} domains")
 
@@ -532,27 +487,22 @@ async def main_search(
         logger.error(f"Contact extraction failed: {e}")
         contact_results = []
 
-    # Step 3: Merge search results with contact information
     enriched_results = []
     contact_map = {
         normalize_domain(result["domain"]): result
         for result in contact_results
     }
 
-    # Логирование отключено для ускорения вывода результатов
-
     def is_relevant_email(address: str) -> bool:
         if not address:
             return False
 
-        # Извлекаем локальную часть (до @) и домен
         parts = address.split("@")
         if len(parts) != 2:
             return False
         local_part = parts[0].lower()
         domain_part = parts[1].lower()
 
-        # Проверка 0: Фильтруем известные технические домены
         technical_domains = [
             "receive-sentry",
             "sentry",
@@ -571,110 +521,130 @@ async def main_search(
             "evo",
             "prom",
         ]
+
         for tech_domain in technical_domains:
             if tech_domain in domain_part:
                 logger.info(
-                    f"❌ Filtered email (technical domain '{tech_domain}'): {address}"
+                    f"Filtered email (technical domain '{tech_domain}'): {address}"
                 )
                 return False
 
-        # Проверка 1: СТРОГОЕ правило - если в email больше 10 цифр, отфильтровываем
         digits_total = sum(ch.isdigit() for ch in address)
         if digits_total > 10:
             logger.info(
-                f"❌ Filtered email (>10 digits: {digits_total}): {address}"
+                f"Filtered email (>10 digits: {digits_total}): {address}"
             )
             return False
 
-        # Проверка 2: Длинная локальная часть с большим количеством цифр
         digits_local = sum(ch.isdigit() for ch in local_part)
         if len(local_part) >= 16 and digits_local >= 6:
             logger.info(
-                f"❌ Filtered email (long local part with >=6 digits): {address}"
+                f"Filtered email (long local part with >=6 digits): {address}"
             )
             return False
 
-        # Проверка 3: Локальная часть состоит почти полностью из hex-символов (технические email)
         hex_chars = set("0123456789abcdef")
         cleaned_local = local_part.replace("-", "").replace("_", "")
         if len(cleaned_local) >= 20:
             hex_ratio = sum(
                 1 for ch in cleaned_local if ch in hex_chars
             ) / len(cleaned_local)
-            if (
-                hex_ratio >= 0.85
-            ):  # 85% и более hex-символов (снижено с 90% для более строгой фильтрации)
+            if hex_ratio >= 0.85:
                 logger.info(
-                    f"❌ Filtered email (hex-like technical email, {hex_ratio:.1%} hex): {address}"
+                    f"Filtered email (hex-like technical email, {hex_ratio:.1%} hex): {address}"
                 )
                 return False
 
-        # Проверка 4: Очень длинная локальная часть (>=30 символов) - вероятно технический email
         if len(local_part) >= 30:
             logger.info(
-                f"❌ Filtered email (very long local part >=30): {address}"
+                f"Filtered email (very long local part >=30): {address}"
             )
             return False
 
-        # Проверка 5: Локальная часть состоит только из hex-символов и длиннее 20 символов
         if len(local_part) >= 20:
             if all(ch in hex_chars or ch in "-_" for ch in local_part):
                 hex_only = sum(1 for ch in local_part if ch in hex_chars)
-                if (
-                    hex_only >= 20
-                ):  # Почти все символы hex (снижено с 24 для более строгой фильтрации)
+                if hex_only >= 20:
                     logger.info(
-                        f"❌ Filtered email (long hex-only local part, {hex_only} hex chars): {address}"
+                        f"Filtered email (long hex-only local part, {hex_only} hex chars): {address}"
                     )
                     return False
 
-        # Проверка 6: Слишком много подряд идущих hex-символов без разделителей
         if len(local_part) >= 20:
-            # Проверяем, есть ли хотя бы одна буква (не hex) или разделитель
             has_non_hex = any(
                 ch not in hex_chars and ch not in "-_." for ch in local_part
             )
             if not has_non_hex and len(local_part) >= 20:
                 logger.info(
-                    f"❌ Filtered email (only hex chars, no separators): {address}"
+                    f"Filtered email (only hex chars, no separators): {address}"
                 )
                 return False
 
-        logger.debug(f"✅ Email passed all filters: {address}")
-        return True
+        digits_local = sum(ch.isdigit() for ch in local_part)
+        if len(local_part) >= 16 and digits_local >= 6:
+            logger.info(
+                f"Filtered email (long local part with >=6 digits): {address}"
+            )
+            return False
+
+        hex_chars = set("0123456789abcdef")
+        cleaned_local = local_part.replace("-", "").replace("_", "")
+        if len(cleaned_local) >= 20:
+            hex_ratio = sum(
+                1 for ch in cleaned_local if ch in hex_chars
+            ) / len(cleaned_local)
+            if hex_ratio >= 0.85:
+                logger.info(
+                    f"Filtered email (hex-like technical email, {hex_ratio:.1%} hex): {address}"
+                )
+                return False
+
+        if len(local_part) >= 30:
+            logger.info(
+                f"Filtered email (very long local part >=30): {address}"
+            )
+            return False
+
+        if len(local_part) >= 20:
+            if all(ch in hex_chars or ch in "-_" for ch in local_part):
+                hex_only = sum(1 for ch in local_part if ch in hex_chars)
+                if hex_only >= 20:
+                    logger.info(
+                        f"Filtered email (long hex-only local part, {hex_only} hex chars): {address}"
+                    )
+                    return False
+
+        if len(local_part) >= 20:
+            has_non_hex = any(
+                ch not in hex_chars and ch not in "-_." for ch in local_part
+            )
+            if not has_non_hex and len(local_part) >= 20:
+                logger.info(
+                    f"Filtered email (only hex chars, no separators): {address}"
+                )
+                return False
+
+        return False
 
     for search_result in search_results:
         domain = search_result["domain"]
         normalized_domain = normalize_domain(domain)
         contact_info = contact_map.get(normalized_domain, {})
 
-        # Логирование отключено для ускорения вывода результатов
+        emails = contact_info.get("emails", [])
 
-        # Only include suppliers with valid email addresses
-        raw_emails = contact_info.get("emails", [])
-        emails = []
-        for email in raw_emails:
-            if is_relevant_email(email):
-                emails.append(email)
-        # Логирование фильтрации email отключено для ускорения
-
-        # Если все email отфильтрованы, пропускаем этого поставщика
         if not emails:
             logger.info(
-                f"❌ Отбрасываем домен '{domain}', так как все email отфильтрованы. Было {len(raw_emails)} email."
+                f"Rejecting {domain} because there is no emails",
             )
             continue
 
         phones = contact_info.get("phones", [])
 
-        if emails:  # Only save suppliers with authentic email addresses
-            # Объединяем meta description, title страницы и описание
-            # ЛОГИКА КАК В СТАРОЙ ВЕРСИИ (TEMP_CHANGES_BACKUP.md), но с добавлением meta_description
-            meta_description = contact_info.get("meta_description", "")
+        if emails:
             page_title = contact_info.get("page_title", "")
             original_description = search_result.get("description", "")
 
-            # Очищаем текст от эмодзи и специальных символов
             page_title = clean_text(page_title) if page_title else ""
             original_description = (
                 clean_text(original_description)
@@ -682,31 +652,17 @@ async def main_search(
                 else ""
             )
 
-            # Формируем финальное описание: page_title + original_description
-            # ПОРЯДОК: page_title ПЕРВЫМ, затем original_description
-            # meta_description СКРЫТ (но код оставлен для возможного использования в будущем)
             description_parts = []
 
-            # 1. Добавляем page_title ПЕРВЫМ (если есть)
             if page_title:
                 description_parts.append(page_title)
-
-            # 2. meta_description СКРЫТ - не добавляем в описание (код оставлен для возможного использования)
-            # if meta_description:
-            #     description_parts.append(meta_description)
-
-            # 3. Добавляем original_description (если есть) - это то описание, которое всегда было ранее
             if original_description:
                 description_parts.append(original_description)
-
-            # Объединяем все части
             if description_parts:
                 final_description = ". ".join(description_parts)
             else:
-                # Fallback: используем только page_title или original_description (meta_description исключен)
                 final_description = page_title or original_description or ""
 
-            # Ограничиваем длину описания
             if len(final_description) > 800:
                 final_description = (
                     final_description[:800].rsplit(" ", 1)[0] + "..."
@@ -724,55 +680,10 @@ async def main_search(
                 "page_title": page_title,
             }
             enriched_results.append(enriched_result)
-            logger.info(f"✅ Домен '{domain}' добавлен с email: {emails}")
+            logger.info("Domain '{}' added with emails: {}", domain, emails)
 
     logger.info(
         f"Final results: {len(enriched_results)} suppliers with authentic contact information"
     )
 
-    # Step 4: Save results if any found
-    if enriched_results:
-        DATA_DIR.mkdir(exist_ok=True)
-        storage.save_to_csv(enriched_results, DATA_DIR / "results.csv")
-
     return enriched_results
-
-
-if __name__ == "__main__":
-    # Example usage
-    if len(sys.argv) < 2:
-        print("Usage: python main.py 'search query' [elements] [user_id]")
-        sys.exit(1)
-
-    query = sys.argv[1]
-    elements = int(sys.argv[2]) if len(sys.argv) > 2 else DEFAULT_ELEMENTS
-    user_id = sys.argv[3] if len(sys.argv) > 3 else "1"
-
-    # Load environment variables for API keys
-    google_api = os.getenv("GOOGLE_SEARCH_API_TOKEN")
-    google_id = os.getenv("GOOGLE_CUSTOM_SEARCH_ENGINE_ID")
-    yandex_key_path = os.getenv("YANDEX_KEY_PATH")
-    yandex_folder = os.getenv("YANDEX_FOLDER_ID")
-
-    yandex_key_file = Path(yandex_key_path) if yandex_key_path else None
-
-    # Run the search
-    results = asyncio.run(
-        main_search(
-            query=query,
-            user_id=user_id,
-            elements=elements,
-            google_search_api=google_api,
-            google_search_id=google_id,
-            yandex_key_file=yandex_key_file,
-            yandex_folder_id=yandex_folder,
-        )
-    )
-
-    print(
-        f"Search completed. Found {len(results)} suppliers with contact information."
-    )
-    for result in results:
-        print(
-            f"- {result['domain']}: {len(result['emails'])} emails, {len(result['phones'])} phones"
-        )

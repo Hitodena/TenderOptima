@@ -5,38 +5,31 @@ import math
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Optional
 
 import aiohttp
 import jwt
 import yandexcloud
+from loguru import logger
 from yandex.cloud.iam.v1.iam_token_service_pb2 import CreateIamTokenRequest
 from yandex.cloud.iam.v1.iam_token_service_pb2_grpc import IamTokenServiceStub
 
-from parsers.utils.logger import CustomLogger
-
-# ============ Configuration ============
 API_URL_POST = "https://searchapi.api.cloud.yandex.net/v2/web/searchAsync"
 API_URL_GET = "https://operation.api.cloud.yandex.net/operations/{}"
-POLL_INTERVAL = 5  # Seconds between polling attempts
-MAX_RETRIES = 10  # Number of retry attempts for HTTP requests
-RETRY_DELAY = 10  # Seconds to wait between retries
-
-# ============ Logger Setup ============
-logger = CustomLogger(
-    logger_name="YandexParser", file_path="YandexParser.log", debug=True, console=True
-).get_logger()
+POLL_INTERVAL = 5
+MAX_RETRIES = 5
+RETRY_DELAY = 10
+YANDEX_GROUPS_ON_PAGE = 100
+YANDEX_DOCS_IN_GROUP = 3
+YANDEX_DEFAULT_REGION = 65
 
 
-# ============ IAM Helpers ============
-
-
-def load_service_account(key_file: Path) -> Dict[str, str]:
+def load_service_account(key_file: Path) -> dict[str, str]:
     """
     Load service account credentials from a JSON key file.
 
     Returns:
-        Dict[str, str]: A dictionary containing:
+        dict[str, str]: A dictionary containing:
             - id: key identifier
             - service_account_id: service account ID
             - private_key: PEM-formatted private key
@@ -49,12 +42,12 @@ def load_service_account(key_file: Path) -> Dict[str, str]:
     }
 
 
-def create_jwt(sa_key: Dict[str, str]) -> str:
+def create_jwt(sa_key: dict[str, str]) -> str:
     """
     Generate a PS256-signed JWT for Yandex IAM token exchange.
 
     Args:
-        sa_key (Dict[str, str]): Service account credentials.
+        sa_key (dict[str, str]): Service account credentials.
 
     Returns:
         str: Encoded JWT token.
@@ -67,24 +60,27 @@ def create_jwt(sa_key: Dict[str, str]) -> str:
         "exp": now + 3600,
     }
     token = jwt.encode(
-        payload=payload, key=sa_key["private_key"], algorithm="PS256", headers={"kid": sa_key["id"]}
+        payload=payload,
+        key=sa_key["private_key"],
+        algorithm="PS256",
+        headers={"kid": sa_key["id"]},
     )
     logger.debug("JWT created successfully.")
     return token
 
 
-def get_iam_token(sa_key: Dict[str, str]) -> str:
+def get_iam_token(sa_key: dict[str, str]) -> str:
     """
     Exchange the JWT for an IAM token using Yandex Cloud SDK.
 
     Args:
-        sa_key (Dict[str, str]): Service account credentials.
+        sa_key (dict[str, str]): Service account credentials.
 
     Returns:
         str: IAM bearer token.
     """
     jwt_token = create_jwt(sa_key)
-    sdk = yandexcloud.SDK(service_account_key=sa_key)
+    sdk = yandexcloud.SDK(service_account_key=sa_key)  # type:ignore
     client: IamTokenServiceStub = sdk.client(IamTokenServiceStub)
     response = client.Create(CreateIamTokenRequest(jwt=jwt_token))
     logger.info("IAM token obtained.")
@@ -126,7 +122,10 @@ async def post_search(
             "familyMode": "FAMILY_MODE_NONE",
             "page": str(page),
         },
-        "sortSpec": {"sortMode": "SORT_MODE_BY_RELEVANCE", "sortOrder": "SORT_ORDER_DESC"},
+        "sortSpec": {
+            "sortMode": "SORT_MODE_BY_RELEVANCE",
+            "sortOrder": "SORT_ORDER_DESC",
+        },
         "groupSpec": {
             "groupMode": "GROUP_MODE_DEEP",
             "groupsOnPage": str(groups_on_page),
@@ -138,7 +137,10 @@ async def post_search(
         "folderId": folder_id,
         "responseFormat": "FORMAT_XML",
     }
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
 
     for attempt in range(1, MAX_RETRIES + 1):
         try:
@@ -163,7 +165,9 @@ async def post_search(
     return None
 
 
-async def poll_search(session: aiohttp.ClientSession, token: str, op_id: str) -> Optional[Dict]:
+async def poll_search(
+    session: aiohttp.ClientSession, token: str, op_id: str
+) -> Optional[dict]:
     """
     Poll a Yandex operation until it completes (`done == True`).
 
@@ -173,9 +177,12 @@ async def poll_search(session: aiohttp.ClientSession, token: str, op_id: str) ->
         op_id (str): Operation ID to poll.
 
     Returns:
-        Optional[Dict]: Operation result JSON when done, or None on failure.
+        Optional[dict]: Operation result JSON when done, or None on failure.
     """
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
     url = API_URL_GET.format(op_id)
 
     for attempt in range(1, MAX_RETRIES + 1):
@@ -196,7 +203,9 @@ async def poll_search(session: aiohttp.ClientSession, token: str, op_id: str) ->
                     logger.info(f"Operation {op_id} completed.")
                     return data
                 else:
-                    logger.debug(f"Not done yet (done={data['done']}), waiting...")
+                    logger.debug(
+                        f"Not done yet (done={data['done']}), waiting..."
+                    )
         except Exception as e:
             logger.error(f"Polling exception attempt {attempt}: {e}")
 
@@ -208,7 +217,7 @@ async def poll_search(session: aiohttp.ClientSession, token: str, op_id: str) ->
     return None
 
 
-# ============ XML Processing ============
+# =========== XML Processing ============
 
 
 def decode_base64_xml(b64_str: str) -> str:
@@ -227,7 +236,7 @@ def decode_base64_xml(b64_str: str) -> str:
     return xml_text
 
 
-def parse_yandex_xml(xml_str: str) -> List[Dict]:
+def parse_yandex_xml(xml_str: str) -> list[dict]:
     """
     Parse Yandex XML response and extract unique domains and snippets.
 
@@ -235,13 +244,13 @@ def parse_yandex_xml(xml_str: str) -> List[Dict]:
         xml_str (str): Raw XML string.
 
     Returns:
-        List[Dict]: List of dicts with keys:
+        list[dict]: list of dicts with keys:
             - domain (str)
             - description (Optional[str])
     """
     root = ET.fromstring(xml_str)
     seen = set()
-    out: List[Dict] = []
+    out: list[dict] = []
 
     for group in root.findall(".//results/grouping/group"):
         categ = group.find("categ")
@@ -278,7 +287,7 @@ async def yandex_fetch_all(
     groups_on_page: int = 100,
     docs_in_group: int = 3,
     region: int = 225,
-) -> List[Dict]:
+) -> list[dict]:
     """
     Fetch up to `total_results` unique domains from Yandex Web Search.
 
@@ -303,12 +312,19 @@ async def yandex_fetch_all(
     max_per_page = groups_on_page * docs_in_group
     pages_needed = math.ceil(total_results / max_per_page)
     seen = set()
-    combined: List[Dict] = []
+    combined: list[dict] = []
 
     async with aiohttp.ClientSession() as session:
         for page in range(pages_needed):
             op_id = await post_search(
-                session, query, page, folder_id, groups_on_page, docs_in_group, token, region
+                session,
+                query,
+                page,
+                folder_id,
+                groups_on_page,
+                docs_in_group,
+                token,
+                region,
             )
             if not op_id:
                 break
@@ -330,7 +346,7 @@ async def yandex_fetch_all(
                     {
                         "user_id": user_id,
                         "query": query,
-                        "region": str(region),  # Convert region code to string
+                        "region": str(region),
                         "domain": "https://" + dom,
                         "description": item["description"],
                         "engine": "yandex",
