@@ -6,12 +6,40 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.18.4",
+    "asyncpg>=0.31.0",
     "fastapi>=0.136.1",
     "loguru>=0.7.3",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.14.1",
     "sqlalchemy>=2.0.49",
 ]
 
 [tool.uv.workspace]
-members = [
-    "parser",
-]
+members = ["parser"]
+
+[dependency-groups]
+dev = ["ruff>=0.15.12"]
+
+[tool.ruff]
+exclude = [".git", ".pytest_cache", ".ruff_cache", ".venv", "migration"]
+
+line-length = 79
+indent-width = 4
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B"]
+ignore = []
+
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+skip-magic-trailing-comma = false
+
+line-ending = "auto"
+
+docstring-code-format = true
+docstring-code-line-length = "dynamic"
