@@ -11,7 +11,7 @@ class BaseDAO[T: Base]:
     model: type[T]
 
     @classmethod
-    async def create(cls, session: AsyncSession, **values: Any) -> T | None:
+    async def create(cls, session: AsyncSession, **values: Any) -> T:
         logger.debug("Creating instance", model=cls.model, values=values)
         new_instance = cls.model(**values)
         try:
@@ -26,7 +26,7 @@ class BaseDAO[T: Base]:
         except Exception as exc:
             logger.exception(
                 "Failed to create instance",
-                error=exc,
+                error=str(exc),
                 model=cls.model,
                 values=values,
             )
@@ -48,7 +48,7 @@ class BaseDAO[T: Base]:
         except Exception as exc:
             logger.exception(
                 "Failed to get instances",
-                error=exc,
+                error=str(exc),
                 model=cls.model,
                 filters=kwargs,
             )

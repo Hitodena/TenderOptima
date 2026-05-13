@@ -1,5 +1,4 @@
 import asyncio
-from typing import Dict, List, Optional
 from urllib.parse import urlparse
 
 from googleapiclient.discovery import build
@@ -55,8 +54,8 @@ async def parse_google(
     query: str,
     elements: int,
     region: str,
-    user_id: Optional[str] = None,
-) -> Optional[List[Dict[str, str]]]:
+    user_id: str | None = None,
+) -> list[dict[str, str]] | None:
     logger.info(
         "Starting Google search for query: '{}' with elements: {}",
         query,

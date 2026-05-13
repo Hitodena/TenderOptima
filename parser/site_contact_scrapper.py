@@ -3,7 +3,6 @@ import codecs
 import re
 import sys
 import xml.etree.ElementTree as ET
-from typing import Dict, List, Optional, Set, Tuple, Union
 from urllib.parse import urljoin, urlparse
 
 import aiohttp
@@ -62,7 +61,7 @@ def is_valid_email(addr: str) -> bool:
 
 async def fetch_and_parse_sitemap(
     session: aiohttp.ClientSession, sitemap_url: str, processed_sitemaps: set
-) -> List[str]:
+) -> list[str]:
     if sitemap_url in processed_sitemaps:
         return []
     processed_sitemaps.add(sitemap_url)
@@ -108,7 +107,7 @@ async def fetch_and_parse_sitemap(
 
 async def crawl_for_contact_page(
     session: aiohttp.ClientSession, base_url: str
-) -> Optional[str]:
+) -> str | None:
     logger.debug(f"Smart-crawling main page: {base_url}")
     try:
         async with session.get(
@@ -228,7 +227,7 @@ def normalize_email(raw: str) -> str:
     return raw.split(":", 1)[-1].strip().lower()
 
 
-def _decode_cfemail(encoded: str) -> Optional[str]:
+def _decode_cfemail(encoded: str) -> str | None:
     """Decode Cloudflare data-cfemail value."""
     try:
         data = bytes.fromhex(encoded)
@@ -244,13 +243,13 @@ def _decode_rot13(value: str) -> str:
     return codecs.decode(value, "rot_13")
 
 
-def extract_obfuscated_emails(html: str) -> Tuple[Set[str], Set[str]]:
+def extract_obfuscated_emails(html: str) -> tuple[set[str], set[str]]:
     """
     Detect common JS/email-obfuscation patterns (HostCMS, Cloudflare, ROT13 mailto)
     so that visible addresses on landing pages are not lost.
     """
-    decoded: Set[str] = set()
-    encoded_variants: Set[str] = set()
+    decoded: set[str] = set()
+    encoded_variants: set[str] = set()
 
     for payload in HOSTCMS_EMAIL_PATTERN.findall(html):
         normalized_payload = payload.strip()
@@ -274,9 +273,7 @@ def extract_obfuscated_emails(html: str) -> Tuple[Set[str], Set[str]]:
     return decoded, encoded_variants
 
 
-def extract_contacts(
-    html: str, region: str
-) -> Dict[str, Union[List[str], str]]:
+def extract_contacts(html: str, region: str) -> dict[str, list[str] | str]:
     tree = HTMLParser(html)
     emails, phones = set(), set()
     decoded_obfuscated, obfuscated_variants = extract_obfuscated_emails(html)
@@ -373,7 +370,7 @@ def extract_contacts(
 
 async def fetch_contacts(
     domain: str, session: aiohttp.ClientSession, semaphore: asyncio.Semaphore
-) -> Dict[str, Union[List[str], str]]:
+) -> dict[str, list[str] | str]:
     async with semaphore:
         contact_url = ""
         page_title = ""
@@ -412,7 +409,7 @@ async def fetch_contacts(
 
             data["page_title"] = page_title
 
-            result: Dict[str, Union[List[str], str]] = {
+            result: dict[str, list[str] | str] = {
                 "domain": domain,
                 "url": contact_url,
                 **data,
@@ -432,8 +429,8 @@ async def fetch_contacts(
 
 
 async def get_info(
-    domains: List[str], max_concurrent_requests: int
-) -> List[Dict]:
+    domains: list[str], max_concurrent_requests: int
+) -> list[dict]:
     ua = UserAgent()
     headers = {"User-Agent": ua.random}
     semaphore = asyncio.Semaphore(max_concurrent_requests)

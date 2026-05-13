@@ -1,6 +1,5 @@
 import asyncio
 from pathlib import Path
-from typing import Union
 from urllib.parse import urlparse, urlunparse
 
 from loguru import logger
@@ -39,7 +38,7 @@ def add_city_to_queries(original_query: str, city_name: str) -> str:
 
 
 def prepare_query_for_region(
-    original_query: str, region_object: Union[dict, None]
+    original_query: str, region_object: dict | None
 ) -> str:
     """
     Модифицирует запрос в зависимости от типа региона
@@ -151,7 +150,7 @@ async def fetch_all(
     query: str,
     user_id: str,
     elements: int,
-    region: Union[str, dict],
+    region: str | dict,
     google_search_api: str,
     google_search_id: str,
     yandex_key_file: Path,

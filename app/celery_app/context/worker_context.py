@@ -3,6 +3,7 @@ import time
 from loguru import logger
 
 from app.core import get_config
+from app.core.logging_settings import LoggerSettings
 from app.services.db_service import DatabaseSessionManager
 
 
@@ -21,13 +22,13 @@ class WorkerContext:
         return cls._instance
 
     async def _setup(self) -> None:
+        LoggerSettings(self.config).setup_logger()
+
         start_time = time.perf_counter()
         logger.info("Initializing worker context")
         try:
-            self.db_manager = DatabaseSessionManager(
-                self.config.build_db_url()
-            )
-            self.db_manager.init()
+            self.db_manager = DatabaseSessionManager()
+            self.db_manager.init(self.config.build_db_url())
             elapsed_time = time.perf_counter() - start_time
             logger.info(
                 "Worker context initialized",
@@ -36,7 +37,9 @@ class WorkerContext:
 
         except Exception as exc:
             await self.cleanup()
-            logger.exception("Failed to initislize worker context", exc=exc)
+            logger.exception(
+                "Failed to initislize worker context", error=str(exc)
+            )
             raise
 
     async def cleanup(self) -> None:
@@ -48,5 +51,5 @@ class WorkerContext:
 
         except Exception as exc:
             await self.cleanup()
-            logger.exception("Failed to clean worker context", exc=exc)
+            logger.exception("Failed to clean worker context", error=str(exc))
             raise

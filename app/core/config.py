@@ -56,6 +56,10 @@ class Config(BaseSettings):
     imap_user: str
     imap_password: str
 
+    # Auth
+    secret_key: str
+    alghoritm: str
+
     def build_db_url(self) -> str:
         """Build SQLAlchemy URL scheme
 

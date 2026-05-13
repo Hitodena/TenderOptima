@@ -5,7 +5,6 @@ import math
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Optional
 
 import aiohttp
 import jwt
@@ -99,7 +98,7 @@ async def post_search(
     docs_in_group: int,
     token: str,
     region: int = 65,
-) -> Optional[str]:
+) -> str | None:
     """
     Start an asynchronous Yandex Web Search operation.
 
@@ -167,7 +166,7 @@ async def post_search(
 
 async def poll_search(
     session: aiohttp.ClientSession, token: str, op_id: str
-) -> Optional[dict]:
+) -> dict | None:
     """
     Poll a Yandex operation until it completes (`done == True`).
 

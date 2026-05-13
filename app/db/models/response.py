@@ -19,7 +19,7 @@ class SupplierResponse(IDMixinUUID, TimestampMixin, Base):
         nullable=False,
     )
 
-    imap_uid: Mapped[str | None] = mapped_column()
+    imap_id: Mapped[str | None] = mapped_column()
     subject: Mapped[str | None] = mapped_column()
     raw_body: Mapped[str | None] = mapped_column(Text)
     attachments: Mapped[list | None] = mapped_column(JSON)
@@ -44,9 +44,6 @@ class SupplierResponse(IDMixinUUID, TimestampMixin, Base):
 class ResponseAnalysis(IDMixinUUID, TimestampMixin, Base):
     __tablename__ = "response_analyses"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
     response_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("supplier_responses.id"),

@@ -39,7 +39,7 @@ class Request(IDMixinUUID, TimestampMixin, Base):
         UUID(as_uuid=True), default=uuid.uuid4, unique=True, nullable=False
     )
 
-    user: Mapped["User"] = relationship(back_populates="requests")  # type: ignore # noqa: F821
+    user: Mapped["User"] = relationship(back_populates="request")  # type: ignore # noqa: F821
     request_suppliers: Mapped[list["RequestSupplier"]] = relationship(  # noqa: F821 # type: ignore
         back_populates="request"
     )

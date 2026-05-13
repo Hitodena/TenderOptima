@@ -2,7 +2,6 @@ import os
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Union
 
 from dotenv import load_dotenv
 from loguru import logger
@@ -422,7 +421,7 @@ def clean_text(text: str) -> str:
 async def main_search(
     query: str,
     elements: int,
-    region: Union[str, dict],
+    region: str | dict,
     google_search_api: str,
     google_search_id: str,
     yandex_key_file: Path,

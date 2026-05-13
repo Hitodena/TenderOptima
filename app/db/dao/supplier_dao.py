@@ -48,7 +48,7 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
         except Exception as exc:
             logger.exception(
                 "Failed to get pending instances by request",
-                error=exc,
+                error=str(exc),
                 model=cls.model,
                 request_id=request_id,
             )
@@ -73,17 +73,24 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
             )
             result = await session.execute(stmt)
             instance = result.scalar_one_or_none()
-            logger.info(
-                "Got instance",
-                model=cls.model,
-                instance=instance,
-                tracking_id=tracking_id,
-            )
+            if instance:
+                logger.info(
+                    "Got instance",
+                    model=cls.model,
+                    instance=instance,
+                    tracking_id=tracking_id,
+                )
+            else:
+                logger.info(
+                    "Instance not found",
+                    model=cls.model,
+                    tracking_id=tracking_id,
+                )
             return instance
         except Exception as exc:
             logger.exception(
                 "Failed to get instance by tracking id",
-                error=exc,
+                error=str(exc),
                 model=cls.model,
                 tracking_id=tracking_id,
             )
@@ -96,14 +103,20 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
         logger.debug("Getting supplier by id", model=cls.model, rs_id=rs_id)
         try:
             instance = await session.get(RequestSupplier, rs_id)
-            logger.info(
-                "Got supplier", model=cls.model, instance=instance, rs_id=rs_id
-            )
+            if instance:
+                logger.info(
+                    "Got supplier",
+                    model=cls.model,
+                    instance=instance,
+                    rs_id=rs_id,
+                )
+            else:
+                logger.info("Supplier not found", model=cls.model, rs_id=rs_id)
             return instance
         except Exception as exc:
             logger.exception(
                 "Failed to get supplier by id",
-                error=exc,
+                error=str(exc),
                 model=cls.model,
                 rs_id=rs_id,
             )
@@ -140,7 +153,7 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
         except Exception as exc:
             logger.exception(
                 "Failed to mark sending status",
-                error=exc,
+                error=str(exc),
                 model=cls.model,
                 request_supplier=request_supplier,
                 status=status,
@@ -172,7 +185,7 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
         except Exception as exc:
             logger.exception(
                 "Failed to mark status",
-                error=exc,
+                error=str(exc),
                 model=cls.model,
                 request_supplier=request_supplier,
                 status=status,

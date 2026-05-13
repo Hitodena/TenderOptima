@@ -19,7 +19,7 @@ class LoggerSettings:
         console_format: str = (
             "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
             "<level>{level}</level> | "
-            "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> |"
+            "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "  # noqa: E501
             "<level>{message}</level>"
             " <dim>({extra})</dim>"
         )

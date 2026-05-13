@@ -12,25 +12,25 @@ from sqlalchemy.ext.asyncio import (
 
 
 class DatabaseSessionManager:
-    def __init__(self, url: str) -> None:
-        """Initialize the DatabaseSessionManager.
-
-        Args:
-            url (str): The database connection URL.
-        """
+    def __init__(self) -> None:
+        """Initialize the DatabaseSessionManager."""
         self._engine: AsyncEngine | None = None
         self._sessionmaker: async_sessionmaker[AsyncSession] | None = None
-        self.url = url
+        self.__url: str | None = None
 
-    def init(self) -> None:
+    def init(self, url: str) -> None:
         """Initialize the database engine and sessionmaker.
 
         This method sets up the asynchronous database engine and sessionmaker
         using the provided URL.
+
+        Args:
+            url (str): The database connection URL.
         """
-        logger.info("Connecting to DB", url=self.url)
+        self.__url = url
+        logger.info("Connecting to DB", url=url)
         self._engine = create_async_engine(
-            url=self.url,
+            url=url,
             pool_pre_ping=True,
         )
         self._sessionmaker = async_sessionmaker(
@@ -38,7 +38,7 @@ class DatabaseSessionManager:
             expire_on_commit=False,
             autoflush=False,
         )
-        logger.info("Successfully connected to DB", url=self.url)
+        logger.info("Successfully connected to DB", url)
 
     async def close(self) -> None:
         """Close the database connection.
@@ -48,14 +48,14 @@ class DatabaseSessionManager:
         Raises:
             RuntimeError: If the database engine is not started.
         """
-        logger.info("Closing DB connection", url=self.url)
+        logger.info("Closing DB connection", url=self.__url)
         if self._engine is None:
-            logger.error("DB engine is not started", url=self.url)
+            logger.error("DB engine is not started", url=self.__url)
             raise RuntimeError("DB engine is not started. Start by .init()")
         await self._engine.dispose()
         self._engine = None
         self._sessionmaker = None
-        logger.info("DB connection was successfully closed", url=self.url)
+        logger.info("DB connection was successfully closed", url=self.__url)
 
     @contextlib.asynccontextmanager
     async def session(self) -> AsyncIterator[AsyncSession]:
@@ -84,8 +84,11 @@ class DatabaseSessionManager:
                     execution_time=f"{elapsed_time:.2f}",
                 )
             except Exception as exc:
-                logger.exception("Failed to yield session", error=exc)
+                logger.exception("Failed to yield session", error=str(exc))
                 await session.rollback()
                 raise
             finally:
                 await session.close()
+
+
+db_manager = DatabaseSessionManager()

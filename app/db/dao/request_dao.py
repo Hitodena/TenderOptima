@@ -19,18 +19,27 @@ class RequestDAO(BaseDAO[Request]):
             "Getting instance by id", model=cls.model, request_id=request_id
         )
         try:
-            instance = await session.get(cls.model, request_id)
-            logger.info(
-                "Got instance",
-                model=cls.model,
-                instance=instance,
-                request_id=request_id,
-            )
+            stmt = select(cls.model).where(cls.model.id == request_id)
+            result = await session.execute(stmt)
+            instance = result.scalar_one_or_none()
+            if instance:
+                logger.info(
+                    "Got instance",
+                    model=cls.model,
+                    instance=instance,
+                    request_id=request_id,
+                )
+            else:
+                logger.info(
+                    "Instance not found",
+                    model=cls.model,
+                    request_id=request_id,
+                )
             return instance
         except Exception as exc:
             logger.exception(
                 "Failed to get instance by id",
-                error=exc,
+                error=str(exc),
                 model=cls.model,
                 request_id=request_id,
             )
@@ -51,17 +60,24 @@ class RequestDAO(BaseDAO[Request]):
             )
             result = await session.execute(stmt)
             instance = result.scalar_one_or_none()
-            logger.info(
-                "Got instance",
-                model=cls.model,
-                instance=instance,
-                tracking_id=tracking_id,
-            )
+            if instance:
+                logger.info(
+                    "Got instance",
+                    model=cls.model,
+                    instance=instance,
+                    tracking_id=tracking_id,
+                )
+            else:
+                logger.info(
+                    "Instance not found",
+                    model=cls.model,
+                    tracking_id=tracking_id,
+                )
             return instance
         except Exception as exc:
             logger.exception(
                 "Failed to get instance by tracking id",
-                error=exc,
+                error=str(exc),
                 model=cls.model,
                 tracking_id=tracking_id,
             )
