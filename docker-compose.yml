@@ -45,7 +45,7 @@ services:
       --maxmemory-policy allkeys-lru
       --requirepass ${REDIS_PASSWORD}
       --tcp-keepalive 60
-      --databases 2
+      --databases 6
 
 volumes:
   pgdata:

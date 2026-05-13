@@ -3,3 +3,4 @@
 logs
 .kilo
 .ruff_cache
+__pycache__
