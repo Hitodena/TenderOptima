@@ -13,8 +13,8 @@ class User(IDMixinUUID, TimestampMixin, Base):
     company_name: Mapped[str | None] = mapped_column()
     is_admin: Mapped[bool] = mapped_column(default=False)
 
-    request: Mapped["Request"] = relationship(  # noqa: F821 # type: ignore
-        back_populates="user", uselist=False, lazy="selectin"
+    requests: Mapped[list["Request"]] = relationship(  # noqa: F821 # type: ignore
+        back_populates="user", uselist=True, lazy="selectin"
     )
     blacklisted_domains: Mapped[list["BlacklistedDomain"]] = relationship(  # noqa: F821 # type: ignore
         back_populates="added_by_user"

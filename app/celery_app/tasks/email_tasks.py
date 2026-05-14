@@ -26,12 +26,6 @@ jinja_env = Environment(loader=FileSystemLoader("templates/mail"))
 
 TRACKING_ID_RE = re.compile(r"\[TID-([0-9a-f-]{36})\]", re.IGNORECASE)
 
-
-# ─────────────────────────────────────────
-# Helpers
-# ─────────────────────────────────────────
-
-
 def _decode_header_value(value: str) -> str:
     parts = decode_header(value)
     decoded = []
@@ -82,13 +76,14 @@ def get_db_manager():
         raise RuntimeError("WorkerContext is not initialized")
     return ctx.db_manager
 
-
 def async_task(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        return asyncio.run(func(*args, **kwargs))
+        loop = asyncio.get_event_loop()
+        return loop.run_until_complete(func(*args, **kwargs))
 
     return wrapper
+
 
 
 # ─────────────────────────────────────────
@@ -196,11 +191,6 @@ async def send_emails(self, request_id: str) -> dict:
     return {"sent": sent, "failed": failed}
 
 
-# ─────────────────────────────────────────
-# Task: poll IMAP for replies
-# ─────────────────────────────────────────
-
-
 @app.task(
     name="mail.poll",
     bind=True,
@@ -283,7 +273,7 @@ async def poll_imap(self) -> dict:
                     await SupplierResponseDAO.create(
                         session,
                         request_supplier_id=rs.id,
-                        imap_uid=uid_str,
+                        imap_id=uid_str,
                         subject=subject,
                         raw_body=body,
                         attachments=attachments,
@@ -307,7 +297,7 @@ async def poll_imap(self) -> dict:
                 except Exception as exc:
                     logger.exception(
                         "Failed to process message",
-                        imap_uid=uid_str,
+                        imap_id=uid_str,
                         error=str(exc),
                     )
                     skipped += 1

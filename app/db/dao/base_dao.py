@@ -24,6 +24,7 @@ class BaseDAO[T: Base]:
             )
             return new_instance
         except Exception as exc:
+            await session.rollback()
             logger.exception(
                 "Failed to create instance",
                 error=str(exc),
@@ -46,6 +47,7 @@ class BaseDAO[T: Base]:
             )
             return result
         except Exception as exc:
+            await session.rollback()
             logger.exception(
                 "Failed to get instances",
                 error=str(exc),

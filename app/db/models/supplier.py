@@ -14,7 +14,7 @@ class Supplier(IDMixinUUID, TimestampMixin, Base):
     domain: Mapped[str] = mapped_column(unique=True, nullable=False)
     company_name: Mapped[str] = mapped_column(nullable=False)
 
-    email: Mapped[str] = mapped_column(unique=True, nullable=False)
+    email: Mapped[str] = mapped_column(unique=False, nullable=False)
     from_source: Mapped[str | None] = mapped_column()
 
     request_suppliers: Mapped[list["RequestSupplier"]] = relationship(

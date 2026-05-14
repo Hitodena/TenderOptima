@@ -1,9 +1,11 @@
 from fastapi import APIRouter
 
 from app.api.auth.router import router as auth_router
+from app.api.request.router import router as request_router
 
 api_router = APIRouter(prefix="/api")
 api_router.include_router(auth_router)
+api_router.include_router(request_router)
 
 
 @api_router.get("/")

@@ -60,6 +60,9 @@ class Config(BaseSettings):
     secret_key: str
     alghoritm: str
 
+    # Parser
+    parser_url: str
+
     def build_db_url(self) -> str:
         """Build SQLAlchemy URL scheme
 

@@ -1,7 +1,7 @@
 import uuid
 
 from loguru import logger
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.dao.base_dao import BaseDAO
@@ -37,6 +37,7 @@ class RequestDAO(BaseDAO[Request]):
                 )
             return instance
         except Exception as exc:
+            await session.rollback()
             logger.exception(
                 "Failed to get instance by id",
                 error=str(exc),
@@ -75,10 +76,36 @@ class RequestDAO(BaseDAO[Request]):
                 )
             return instance
         except Exception as exc:
+            await session.rollback()
             logger.exception(
                 "Failed to get instance by tracking id",
                 error=str(exc),
                 model=cls.model,
                 tracking_id=tracking_id,
+            )
+            raise
+
+    @classmethod
+    async def update_status(
+        cls,
+        session: AsyncSession,
+        request_id: uuid.UUID,
+        status: str,
+    ) -> None:
+        try:
+            await session.execute(
+                update(cls.model)
+                .where(cls.model.id == request_id)
+                .values(status=status)
+            )
+            await session.flush()
+            await session.commit()
+        except Exception as exc:
+            await session.rollback()
+            logger.exception(
+                "Failed to update request status",
+                error=str(exc),
+                model=cls.model,
+                request_id=request_id,
             )
             raise

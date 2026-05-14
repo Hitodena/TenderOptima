@@ -118,6 +118,8 @@ class CeleryConfig:
         },
     }
 
+    include = ["app.celery_app.tasks.email_tasks"]
+
     # Logging
     worker_log_format = (
         "[%(asctime)s: %(levelname)s/%(processName)s] %(message)s"

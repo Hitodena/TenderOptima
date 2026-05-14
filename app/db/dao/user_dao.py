@@ -33,6 +33,7 @@ class UserDAO(BaseDAO[User]):
                 )
             return instance
         except Exception as exc:
+            await session.rollback()
             logger.exception(
                 "Failed to get user by id",
                 error=str(exc),
@@ -65,6 +66,7 @@ class UserDAO(BaseDAO[User]):
                 )
             return instance
         except Exception as exc:
+            await session.rollback()
             logger.exception(
                 "Failed to get user by email",
                 error=str(exc),
