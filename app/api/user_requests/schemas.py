@@ -53,3 +53,36 @@ class SearchResult(BaseModel):
     skipped_blacklisted: int
     skipped_no_email: int
     request_id: uuid.UUID
+
+
+class SupplierRead(BaseModel):
+    id: uuid.UUID
+    domain: str
+    company_name: str
+    email: str
+
+    model_config = {"from_attributes": True}
+
+
+class SupplierResponseRead(BaseModel):
+    id: uuid.UUID
+    subject: str | None
+    raw_body: str | None
+    attachments: list | None
+    received_at: datetime | None
+    supplier: SupplierRead
+
+    model_config = {"from_attributes": True}
+
+    @classmethod
+    def from_orm_with_supplier(cls, response) -> "SupplierResponseRead":
+        return cls(
+            id=response.id,
+            subject=response.subject,
+            raw_body=response.raw_body,
+            attachments=response.attachments,
+            received_at=response.received_at,
+            supplier=SupplierRead.model_validate(
+                response.request_supplier.supplier
+            ),
+        )

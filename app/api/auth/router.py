@@ -2,9 +2,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.auth.schemas import RegisterRequest
 from app.api.deps import get_current_user, get_session
 from app.db.dao import UserDAO
 from app.db.models import User
@@ -12,13 +12,6 @@ from app.utils.jwt_utils import create_access_token
 from app.utils.security import hash_password, verify_password
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
-
-
-class RegisterRequest(BaseModel):
-    email: EmailStr
-    password: str
-    full_name: str | None = None
-    company_name: str | None = None
 
 
 @router.post("/register")
@@ -69,4 +62,8 @@ async def login(
 async def get_user(
     current_user: Annotated[User, Depends(get_current_user)],
 ):
-    return {"email": current_user.email, "full_name": current_user.full_name}
+    return {
+        "email": current_user.email,
+        "full_name": current_user.full_name,
+        "id": current_user.id,
+    }

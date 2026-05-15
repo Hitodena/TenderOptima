@@ -8,21 +8,26 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_session
-from app.api.request.schemas import (
+from app.api.user_requests.schemas import (
     ParserResult,
     RequestCreate,
     RequestRead,
     SearchResult,
+    SupplierResponseRead,
 )
 from app.celery_app.tasks.email_tasks import send_emails
 from app.core.config import get_config
-from app.db.dao.blacklisted_domain_dao import BlacklistedDomainDAO
-from app.db.dao.request_dao import RequestDAO
-from app.db.dao.search_dao import SearchHistoryDAO
-from app.db.dao.supplier_dao import RequestSupplierDAO, SupplierDAO
-from app.db.models.user import User
+from app.db.dao import (
+    BlacklistedDomainDAO,
+    RequestDAO,
+    RequestSupplierDAO,
+    SearchHistoryDAO,
+    SupplierDAO,
+    SupplierResponseDAO,
+)
+from app.db.models import User
 
-router = APIRouter(prefix="/requests", tags=["requests"])
+router = APIRouter(prefix="/requests", tags=["Requests"])
 config = get_config()
 
 
@@ -210,3 +215,44 @@ async def launch_mailing(
         "request_id": str(request_id),
         "pending": pending_count,
     }
+
+
+@router.get("/", response_model=list[RequestRead])
+async def get_requests(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> list[RequestRead]:
+    requests = await RequestDAO.get_all_by_user(session, current_user.id)
+    return [RequestRead.model_validate(r) for r in requests]
+
+
+@router.get("/{request_id}", response_model=RequestRead)
+async def get_request(
+    request_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> RequestRead:
+    request = await RequestDAO.get_by_id(session, request_id)
+    if not request or request.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
+        )
+    return RequestRead.model_validate(request)
+
+
+@router.get(
+    "/{request_id}/responses", response_model=list[SupplierResponseRead]
+)
+async def get_responses(
+    request_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> list[SupplierResponseRead]:
+    request = await RequestDAO.get_by_id(session, request_id)
+    if not request or request.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
+        )
+
+    responses = await SupplierResponseDAO.get_by_request(session, request_id)
+    return [SupplierResponseRead.from_orm_with_supplier(r) for r in responses]
