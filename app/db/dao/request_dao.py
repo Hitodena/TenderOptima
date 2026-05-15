@@ -92,12 +92,19 @@ class RequestDAO(BaseDAO[Request]):
         request_id: uuid.UUID,
         status: str,
     ) -> None:
+        logger.debug(
+            "Updating request status",
+            model=cls.model,
+            request_id=request_id,
+            status=status,
+        )
         try:
-            await session.execute(
+            stmt = (
                 update(cls.model)
                 .where(cls.model.id == request_id)
                 .values(status=status)
             )
+            await session.execute(stmt)
             await session.flush()
             await session.commit()
         except Exception as exc:
@@ -107,5 +114,37 @@ class RequestDAO(BaseDAO[Request]):
                 error=str(exc),
                 model=cls.model,
                 request_id=request_id,
+            )
+            raise
+
+    @classmethod
+    async def get_all_by_user(
+        cls, session: AsyncSession, user_id: uuid.UUID
+    ) -> list[Request]:
+        logger.debug(
+            "Getting all requests by user", model=cls.model, user_id=user_id
+        )
+        try:
+            stmt = (
+                select(cls.model)
+                .where(cls.model.user_id == user_id)
+                .order_by(cls.model.created_at.desc())
+            )
+            result = await session.execute(stmt)
+            requests = list(result.scalars().all())
+            logger.info(
+                "Got requests by user",
+                model=cls.model.__name__,
+                count=len(requests),
+                user_id=user_id,
+            )
+            return requests
+        except Exception as exc:
+            await session.rollback()
+            logger.exception(
+                "Failed to get requests by user",
+                error=str(exc),
+                model=cls.model,
+                user_id=user_id,
             )
             raise

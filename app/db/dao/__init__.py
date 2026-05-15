@@ -3,7 +3,7 @@ from .blacklisted_domain_dao import BlacklistedDomainDAO
 from .request_dao import RequestDAO
 from .response_dao import SupplierResponseDAO
 from .search_dao import SearchHistoryDAO
-from .supplier_dao import RequestSupplier, RequestSupplierDAO
+from .supplier_dao import RequestSupplier, RequestSupplierDAO, SupplierDAO
 from .user_dao import UserDAO
 
 __all__ = [
@@ -15,4 +15,5 @@ __all__ = [
     "UserDAO",
     "SearchHistoryDAO",
     "BlacklistedDomainDAO",
+    "SupplierDAO",
 ]

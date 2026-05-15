@@ -26,14 +26,12 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
             stmt = (
                 select(cls.model)
                 .where(
-                    RequestSupplier.request_id == request_id,
-                    RequestSupplier.status == "pending",
+                    cls.model.request_id == request_id,
+                    cls.model.status == "pending",
                 )
                 .options(
-                    selectinload(RequestSupplier.supplier),
-                    selectinload(RequestSupplier.request).selectinload(
-                        Request.user
-                    ),
+                    selectinload(cls.model.supplier),
+                    selectinload(cls.model.request).selectinload(Request.user),
                 )
             )
             result = await session.execute(stmt)
@@ -67,10 +65,10 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
         try:
             stmt = (
                 select(cls.model)
-                .join(RequestSupplier.request)
+                .join(cls.model.request)
                 .where(Request.tracking_id == tracking_id)
-                .options(selectinload(RequestSupplier.response))
-                .order_by(RequestSupplier.sent_at.desc())
+                .options(selectinload(cls.model.response))
+                .order_by(cls.model.sent_at.desc())
             )
             result = await session.execute(stmt)
             instance = result.scalar_one_or_none()
@@ -104,7 +102,7 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
     ) -> RequestSupplier | None:
         logger.debug("Getting supplier by id", model=cls.model, rs_id=rs_id)
         try:
-            instance = await session.get(RequestSupplier, rs_id)
+            instance = await session.get(cls.model, rs_id)
             if instance:
                 logger.info(
                     "Got supplier",
@@ -126,16 +124,16 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
             raise
 
     @classmethod
-    async def mark_sending_status(
+    async def mark_status(
         cls,
         session: AsyncSession,
         request_supplier: RequestSupplier,
-        sent_at: datetime,
         status: str,
+        sent_at: datetime | None = None,
         smtp_message_id: str | None = None,
     ) -> None:
         logger.debug(
-            "Marking sending status",
+            "Marking status",
             model=cls.model,
             request_supplier=request_supplier,
             status=status,
@@ -144,41 +142,10 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
         )
         try:
             request_supplier.status = status
-            request_supplier.smtp_message_id = smtp_message_id
-            request_supplier.sent_at = sent_at
-            await session.flush()
-            await session.commit()
-            logger.info(
-                "Marked sending status",
-                model=cls.model,
-                request_supplier=request_supplier,
-            )
-        except Exception as exc:
-            await session.rollback()
-            logger.exception(
-                "Failed to mark sending status",
-                error=str(exc),
-                model=cls.model,
-                request_supplier=request_supplier,
-                status=status,
-            )
-            raise
-
-    @classmethod
-    async def mark_status(
-        cls,
-        session: AsyncSession,
-        request_supplier: RequestSupplier,
-        status: str,
-    ) -> None:
-        logger.debug(
-            "Marking status",
-            model=cls.model,
-            request_supplier=request_supplier,
-            status=status,
-        )
-        try:
-            request_supplier.status = status
+            if sent_at is not None:
+                request_supplier.sent_at = sent_at
+            if smtp_message_id is not None:
+                request_supplier.smtp_message_id = smtp_message_id
             await session.flush()
             await session.commit()
             logger.info(
@@ -204,25 +171,78 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
         request_id: uuid.UUID,
         supplier_id: uuid.UUID,
     ) -> RequestSupplier | None:
-        result = await session.execute(
-            select(RequestSupplier).where(
-                RequestSupplier.request_id == request_id,
-                RequestSupplier.supplier_id == supplier_id,
-            )
+        logger.debug(
+            "Getting by request and supplier",
+            model=cls.model,
+            request_id=request_id,
+            supplier_id=supplier_id,
         )
-        return result.scalar_one_or_none()
+        try:
+            stmt = select(cls.model).where(
+                cls.model.request_id == request_id,
+                cls.model.supplier_id == supplier_id,
+            )
+            result = await session.execute(stmt)
+            instance = result.scalar_one_or_none()
+            if instance:
+                logger.info(
+                    "Got instance by request and supplier",
+                    model=cls.model,
+                    instance=instance,
+                    request_id=request_id,
+                    supplier_id=supplier_id,
+                )
+            else:
+                logger.info(
+                    "Instance not found by request and supplier",
+                    model=cls.model,
+                    request_id=request_id,
+                    supplier_id=supplier_id,
+                )
+            return instance
+        except Exception as exc:
+            await session.rollback()
+            logger.exception(
+                "Failed to get by request and supplier",
+                error=str(exc),
+                model=cls.model,
+                request_id=request_id,
+                supplier_id=supplier_id,
+            )
+            raise
 
     @classmethod
     async def count_pending(
         cls, session: AsyncSession, request_id: uuid.UUID
     ) -> int:
-        result = await session.execute(
-            select(func.count()).where(
-                RequestSupplier.request_id == request_id,
-                RequestSupplier.status == "pending",
-            )
+        logger.debug(
+            "Counting pending by request",
+            model=cls.model,
+            request_id=request_id,
         )
-        return result.scalar_one()
+        try:
+            stmt = select(func.count()).where(
+                cls.model.request_id == request_id,
+                cls.model.status == "pending",
+            )
+            result = await session.execute(stmt)
+            count = result.scalar_one()
+            logger.info(
+                "Counted pending",
+                model=cls.model.__name__,
+                count=count,
+                request_id=request_id,
+            )
+            return count
+        except Exception as exc:
+            await session.rollback()
+            logger.exception(
+                "Failed to count pending",
+                error=str(exc),
+                model=cls.model,
+                request_id=request_id,
+            )
+            raise
 
 
 class SupplierDAO(BaseDAO[Supplier]):
@@ -235,13 +255,28 @@ class SupplierDAO(BaseDAO[Supplier]):
         domain: str,
         defaults: dict,
     ) -> Supplier:
+        logger.debug(
+            "Getting or creating supplier by domain",
+            model=cls.model,
+            domain=domain,
+        )
         try:
-            result = await session.execute(
-                select(cls.model).where(cls.model.domain == domain)
-            )
+            stmt = select(cls.model).where(cls.model.domain == domain)
+            result = await session.execute(stmt)
             supplier = result.scalar_one_or_none()
             if supplier is None:
                 supplier = await cls.create(session, domain=domain, **defaults)
+                logger.info(
+                    "Created new supplier by domain",
+                    model=cls.model.__name__,
+                    domain=domain,
+                )
+            else:
+                logger.info(
+                    "Got existing supplier by domain",
+                    model=cls.model.__name__,
+                    domain=domain,
+                )
             return supplier
         except Exception as exc:
             await session.rollback()
