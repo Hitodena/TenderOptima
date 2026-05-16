@@ -17,4 +17,9 @@ async def root():
     return {"message": "SupplierFinder API"}
 
 
+@api_router.get("/health")
+async def health() -> dict:
+    return {"status": "ok"}
+
+
 __all__ = ["api_router"]

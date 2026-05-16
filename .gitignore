@@ -1,5 +1,6 @@
 .venv
 .env
+.env.dev
 logs
 .kilo
 .ruff_cache

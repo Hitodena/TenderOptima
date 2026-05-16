@@ -1,5 +1,4 @@
 services:
-  # PostgreSQL Database
   db:
     image: postgres:18-alpine
     container_name: supplierfinder_db
@@ -9,9 +8,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     env_file:
-      - .env # Override by passing --env-file
+      - .env
     volumes:
-      - pgdata:/var/lib/postgresql
+      - pgdata:/var/lib/postgresql/data
     ports:
       - "${POSTGRES_PORT_EXTERNAL}:${POSTGRES_PORT_INNER}"
     healthcheck:
@@ -27,7 +26,7 @@ services:
     container_name: supplierfinder_redis
     restart: unless-stopped
     env_file:
-      - .env # Override by passing --env-file
+      - .env
     volumes:
       - redisdata:/data
     ports:
@@ -46,6 +45,122 @@ services:
       --requirepass ${REDIS_PASSWORD}
       --tcp-keepalive 60
       --databases 6
+
+  migrate:
+    build:
+      context: .
+      target: base
+    image: supplierfinder/migrate:latest
+    container_name: supplierfinder_migrate
+    command: alembic upgrade head
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - supplierfinder_network
+    restart: on-failure
+
+  api:
+    build:
+      context: .
+      target: api
+    image: supplierfinder/api:latest
+    container_name: supplierfinder_api
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - supplierfinder_network
+
+  api_parser:
+    build:
+      context: .
+      target: parser_api
+    image: supplierfinder/parser:latest
+    container_name: supplierfinder_parser
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "${PARSER_PORT:-8000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8010/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - supplierfinder_network
+
+  worker:
+    build:
+      context: .
+      target: worker
+    image: supplierfinder/worker:latest
+    container_name: supplierfinder_worker
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.celery_app.celery_config inspect ping -d celery@$$HOSTNAME || exit 1"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
+    networks:
+      - supplierfinder_network
+
+  beat:
+    build:
+      context: .
+      target: beat
+    image: supplierfinder/beat:latest
+    container_name: supplierfinder_beat
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /app/celerybeat/celerybeat-schedule || exit 1"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - supplierfinder_network
 
 volumes:
   pgdata:
