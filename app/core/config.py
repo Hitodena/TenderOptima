@@ -39,7 +39,6 @@ class Config(BaseSettings):
 
     # Logging
     log_level: LogLevel
-    log_level_file: LogLevel
 
     # Environment
     app_environment: AppEnvironment
