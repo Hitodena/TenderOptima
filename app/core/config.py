@@ -27,7 +27,7 @@ class Config(BaseSettings):
 
     # Redis
     redis_host: str
-    redis_port_inner: int
+    redis_port: int
     redis_password: str
 
     # PostgreSQL
@@ -35,7 +35,7 @@ class Config(BaseSettings):
     postgres_password: str
     postgres_db: str
     postgres_host: str
-    postgres_port_inner: int
+    postgres_port: int
 
     # Logging
     log_level: LogLevel
@@ -68,7 +68,7 @@ class Config(BaseSettings):
         Returns:
                 str: URL scheme
         """
-        return f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port_inner}/{self.postgres_db}"
+        return f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
 
 
 class ProdConfig(Config):

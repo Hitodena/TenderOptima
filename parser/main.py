@@ -34,13 +34,6 @@ logger.add(
     colorize=True,
 )
 
-logger.add(
-    "logs/parser.log",
-    format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
-    level="WARNING",
-    rotation="10 MB",
-    retention="1 week",
-)
 
 app = FastAPI(
     title=os.getenv("API_TITLE", "Supplier Parser API"),

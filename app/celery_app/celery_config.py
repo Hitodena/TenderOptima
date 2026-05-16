@@ -38,11 +38,11 @@ class CeleryConfig:
     # Broker & Backend
     broker_url = (
         f"redis://:{config.redis_password}@{config.redis_host}"
-        f":{config.redis_port_inner}/0"
+        f":{config.redis_port}/0"
     )
     result_backend = (
         f"redis://:{config.redis_password}@{config.redis_host}"
-        f":{config.redis_port_inner}/1"
+        f":{config.redis_port}/1"
     )
     broker_connection_retry_on_startup = True
     broker_connection_retry = True
