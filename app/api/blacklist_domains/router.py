@@ -4,50 +4,87 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.blacklist_domains.schemas import BlacklistCreate, BlacklistRead
+from app.api.blacklist_domains.schemas import BlacklistCreate, BlacklistResponse
 from app.api.deps import get_current_user, get_session
-from app.db.dao import (
-    BlacklistedDomainDAO,
-)
+from app.db.dao import BlacklistedDomainDAO
 from app.db.models import User
 
 router = APIRouter(prefix="/blacklist", tags=["Blacklisted Domains"])
 
 
-@router.get("/", response_model=list[BlacklistRead])
+@router.get(
+    "/",
+    response_model=list[BlacklistResponse],
+    summary="List all blacklisted domains for the current user",
+    responses={
+        200: {
+            "description": "List of blacklisted domains belonging to the authenticated user"  # noqa: E501
+        },
+        401: {"description": "Missing or invalid authentication credentials"},
+    },
+)
 async def get_blacklist(
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
-) -> list[BlacklistRead]:
+) -> list[BlacklistResponse]:
+    """
+    Returns all domains blacklisted by the currently authenticated user.
+    """
     items = await BlacklistedDomainDAO.get_domains_set(
         session, current_user.id
     )
-    return [BlacklistRead.model_validate(i) for i in items]
+    return [BlacklistResponse.model_validate(i) for i in items]
 
 
 @router.post(
-    "/", response_model=BlacklistRead, status_code=status.HTTP_201_CREATED
+    "/",
+    response_model=BlacklistResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Add a new domain to the blacklist",
+    responses={
+        201: {"description": "Domain successfully added to the blacklist"},
+        401: {"description": "Missing or invalid authentication credentials"},
+        422: {"description": "Validation error in request payload"},
+    },
 )
 async def add_to_blacklist(
     body: BlacklistCreate,
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
-) -> BlacklistRead:
+) -> BlacklistResponse:
+    """
+    Adds a domain to the current user's blacklist.
+    The domain is normalized (lowercased and stripped).
+    """
     instance = await BlacklistedDomainDAO.create(
         session,
         domain=body.domain.lower().strip(),
         reason=body.reason,
         added_by_user_id=current_user.id,
     )
-    return BlacklistRead.model_validate(instance)
+    return BlacklistResponse.model_validate(instance)
 
 
-@router.delete("/{domain_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{domain_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Remove a domain from the blacklist",
+    responses={
+        204: {"description": "Domain successfully removed from the blacklist"},
+        401: {"description": "Missing or invalid authentication credentials"},
+        404: {
+            "description": "Domain not found or does not belong to the current user"  # noqa: E501
+        },
+    },
+)
 async def remove_from_blacklist(
     domain_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> None:
+    """
+    Deletes a specific blacklist entry if it belongs to the current user.
+    """
     deleted = await BlacklistedDomainDAO.delete(
         session, domain_id, current_user.id
     )

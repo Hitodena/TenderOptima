@@ -1,42 +1,191 @@
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import Annotated
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.db.models import SupplierResponse
 
 
 class RequestCreate(BaseModel):
-    query: str
-    delivery_region: str | None = None
-    description: str | None = None
-    quantity: float | None = None
-    unit: str | None = None
-    quality_requirements: str | None = None
-    delivery_deadline: datetime | None = None
-    max_price_per_unit: Decimal | None = None
-    currency: str | None = "BYN"
+    """Payload for creating a new supplier search request."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, from_attributes=True)
+
+    query: Annotated[
+        str,
+        Field(
+            description="Main search query describing the product needed",
+            min_length=3,
+            max_length=500,
+            examples=["industrial pumps"],
+        ),
+    ]
+    delivery_region: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description="Preferred delivery region or country",
+            max_length=100,
+            examples=["Minsk"],
+        ),
+    ]
+    description: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description="Detailed description of requirements",
+            max_length=2000,
+            examples=["High pressure centrifugal pumps"],
+        ),
+    ]
+    quantity: Annotated[
+        float | None,
+        Field(
+            default=None,
+            description="Requested quantity",
+            gt=0,
+            examples=[100],
+        ),
+    ]
+    unit: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description="Unit of measurement",
+            max_length=50,
+            examples=["pcs"],
+        ),
+    ]
+    quality_requirements: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description="Specific quality or certification requirements",
+            max_length=1000,
+            examples=["ISO 9001 certified"],
+        ),
+    ]
+    delivery_deadline: Annotated[
+        datetime | None,
+        Field(default=None, description="Latest acceptable delivery date"),
+    ]
+    max_price_per_unit: Annotated[
+        Decimal | None,
+        Field(default=None, description="Maximum acceptable price per unit"),
+    ]
+    currency: Annotated[
+        str | None,
+        Field(
+            default="BYN",
+            description="Currency code for the price",
+            min_length=2,
+            max_length=20,
+            examples=["BYN"],
+        ),
+    ]
+    delivery_deadline: Annotated[
+        datetime | None,
+        Field(default=None, description="Latest acceptable delivery date"),
+    ]
+    max_price_per_unit: Annotated[
+        Decimal | None,
+        Field(
+            default=None,
+            description="Maximum acceptable price per unit",
+            examples=[1000],
+        ),
+    ]
 
 
-class RequestRead(BaseModel):
-    id: uuid.UUID
-    user_id: uuid.UUID
-    query: str
-    status: str
-    tracking_id: uuid.UUID
-    delivery_region: str | None
-    description: str | None
-    quantity: float | None
-    unit: str | None
-    quality_requirements: str | None
-    delivery_deadline: datetime | None
-    max_price_per_unit: Decimal | None
-    currency: str | None
-    created_at: datetime
+class RequestResponse(BaseModel):
+    """Full representation of a user request."""
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
+
+    id: Annotated[
+        uuid.UUID,
+        Field(
+            description="Unique request identifier",
+            examples=["123e4567-e89b-12d3-a456-426614174000"],
+        ),
+    ]
+    user_id: Annotated[
+        uuid.UUID,
+        Field(
+            description="Owner of the request",
+            examples=["123e4567-e89b-12d3-a456-426614174000"],
+        ),
+    ]
+    query: Annotated[
+        str,
+        Field(
+            description="Original search query", examples=["industrial pumps"]
+        ),
+    ]
+    status: Annotated[
+        str,
+        Field(
+            description="Current lifecycle status of the request",
+            examples=["active"],
+        ),
+    ]
+    tracking_id: Annotated[
+        uuid.UUID,
+        Field(
+            description="Unique tracking identifier",
+            examples=["123e4567-e89b-12d3-a456-426614174000"],
+        ),
+    ]
+    delivery_region: Annotated[
+        str | None,
+        Field(description="Requested delivery region", examples=["Minsk"]),
+    ]
+    description: Annotated[
+        str | None,
+        Field(
+            description="Detailed requirements",
+            examples=["High pressure centrifugal pumps"],
+        ),
+    ]
+    quantity: Annotated[
+        float | None,
+        Field(description="Requested quantity", examples=[100]),
+    ]
+    unit: Annotated[
+        str | None,
+        Field(description="Unit of measurement", examples=["pcs"]),
+    ]
+    quality_requirements: Annotated[
+        str | None,
+        Field(description="Quality requirements", examples=["ISO 9001"]),
+    ]
+    delivery_deadline: Annotated[
+        datetime | None,
+        Field(
+            description="Delivery deadline", examples=["2025-06-01T00:00:00Z"]
+        ),
+    ]
+    max_price_per_unit: Annotated[
+        Decimal | None,
+        Field(description="Max price per unit", examples=[1000]),
+    ]
+    currency: Annotated[
+        str | None,
+        Field(description="Price currency", examples=["BYN"]),
+    ]
+    created_at: Annotated[
+        datetime,
+        Field(
+            description="Creation timestamp", examples=["2025-01-15T10:30:00Z"]
+        ),
+    ]
 
 
 class ParserResult(BaseModel):
+    """Internal result from the external parser service."""
+
     user_id: str
     query: str
     domain: str
@@ -49,40 +198,167 @@ class ParserResult(BaseModel):
 
 
 class SearchResult(BaseModel):
-    saved_suppliers: int
-    skipped_blacklisted: int
-    skipped_no_email: int
-    request_id: uuid.UUID
+    """Summary of a supplier search operation."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    saved_suppliers: Annotated[
+        int,
+        Field(description="Number of new suppliers saved", examples=[3]),
+    ]
+    skipped_blacklisted: Annotated[
+        int,
+        Field(description="Suppliers skipped due to blacklist", examples=[1]),
+    ]
+    skipped_no_email: Annotated[
+        int,
+        Field(
+            description="Suppliers skipped due to missing email", examples=[2]
+        ),
+    ]
+    request_id: Annotated[
+        uuid.UUID,
+        Field(
+            description="Related request identifier",
+            examples=["123e4567-e89b-12d3-a456-426614174000"],
+        ),
+    ]
 
 
-class SupplierRead(BaseModel):
-    id: uuid.UUID
-    domain: str
-    company_name: str
-    email: str
+class Attachment(BaseModel):
+    """Email attachment metadata."""
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
+
+    filename: Annotated[
+        str,
+        Field(
+            description="Original filename of the attachment",
+            examples=["quote.pdf"],
+        ),
+    ]
+    content_type: Annotated[
+        str | None,
+        Field(
+            description="MIME type of the file", examples=["application/pdf"]
+        ),
+    ]
+    size: Annotated[
+        int | None,
+        Field(description="File size in bytes", examples=[245678]),
+    ]
+    path: Annotated[
+        str | None,
+        Field(
+            description="Server path where the file is stored",
+            examples=["/uploads/attachments/quote.pdf"],
+        ),
+    ]
 
 
-class SupplierResponseRead(BaseModel):
-    id: uuid.UUID
-    subject: str | None
-    raw_body: str | None
-    attachments: list | None
-    received_at: datetime | None
-    supplier: SupplierRead
+class LaunchMailingResponse(BaseModel):
+    """Response when a mailing campaign is successfully queued."""
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
+
+    status: Annotated[
+        str, Field(description="Task status", examples=["queued"])
+    ]
+    request_id: Annotated[
+        str,
+        Field(
+            description="ID of the request",
+            examples=["123e4567-e89b-12d3-a456-426614174000"],
+        ),
+    ]
+    pending: Annotated[
+        int,
+        Field(description="Number of pending suppliers", examples=[5]),
+    ]
+
+
+class Supplier(BaseModel):
+    """Minimal supplier information."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: Annotated[
+        uuid.UUID,
+        Field(
+            description="Supplier identifier",
+            examples=["123e4567-e89b-12d3-a456-426614174000"],
+        ),
+    ]
+    domain: Annotated[
+        str,
+        Field(description="Supplier domain", examples=["supplier.com"]),
+    ]
+    company_name: Annotated[
+        str,
+        Field(description="Company name", examples=["Acme Supplies LLC"]),
+    ]
+    email: Annotated[
+        str,
+        Field(
+            description="Primary contact email",
+            examples=["contact@supplier.com"],
+        ),
+    ]
+
+
+class SupplierResponseResponse(BaseModel):
+    """Email response received from a supplier."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: Annotated[
+        uuid.UUID,
+        Field(
+            description="Response identifier",
+            examples=["123e4567-e89b-12d3-a456-426614174000"],
+        ),
+    ]
+    subject: Annotated[
+        str | None,
+        Field(
+            description="Email subject",
+            examples=["Quotation for industrial pumps"],
+        ),
+    ]
+    raw_body: Annotated[
+        str | None,
+        Field(
+            description="Raw email body",
+            examples=["Dear Sir/Madam, we can supply..."],
+        ),
+    ]
+    attachments: Annotated[
+        list[Attachment] | None,
+        Field(description="List of attachments included in the email"),
+    ]
+    received_at: Annotated[
+        datetime | None,
+        Field(
+            description="When the response was received",
+            examples=["2025-01-15T14:22:00Z"],
+        ),
+    ]
+    supplier: Annotated[
+        Supplier,
+        Field(description="Supplier that sent the response"),
+    ]
 
     @classmethod
-    def from_orm_with_supplier(cls, response) -> "SupplierResponseRead":
+    def from_orm_with_supplier(
+        cls, response: SupplierResponse
+    ) -> "SupplierResponseResponse":
         return cls(
             id=response.id,
             subject=response.subject,
             raw_body=response.raw_body,
             attachments=response.attachments,
             received_at=response.received_at,
-            supplier=SupplierRead.model_validate(
+            supplier=Supplier.model_validate(
                 response.request_supplier.supplier
             ),
         )

@@ -9,11 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_session
 from app.api.user_requests.schemas import (
+    LaunchMailingResponse,
     ParserResult,
     RequestCreate,
-    RequestRead,
+    RequestResponse,
     SearchResult,
-    SupplierResponseRead,
+    SupplierResponseResponse,
 )
 from app.celery_app.tasks.email_tasks import send_emails
 from app.core.config import get_config
@@ -38,13 +39,22 @@ def _extract_domain(raw: str) -> str:
 
 
 @router.post(
-    "/", response_model=RequestRead, status_code=status.HTTP_201_CREATED
+    "/",
+    response_model=RequestResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new supplier search request",
+    responses={
+        201: {"description": "Request successfully created in draft status"},
+        401: {"description": "Missing or invalid authentication credentials"},
+        422: {"description": "Validation error in request payload"},
+    },
 )
 async def create_request(
     body: RequestCreate,
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
-) -> RequestRead:
+) -> RequestResponse:
+    """Creates a new request in 'draft' status. The request can later be searched and mailed."""  # noqa: E501
     request = await RequestDAO.create(
         session,
         user_id=current_user.id,
@@ -59,15 +69,27 @@ async def create_request(
         currency=body.currency,
         status="draft",
     )
-    return RequestRead.model_validate(request)
+    return RequestResponse.model_validate(request)
 
 
-@router.post("/{request_id}/search", response_model=SearchResult)
+@router.post(
+    "/{request_id}/search",
+    response_model=SearchResult,
+    summary="Search for suppliers and save results",
+    responses={
+        200: {"description": "Search completed and suppliers saved"},
+        400: {"description": "Request is not in a searchable state"},
+        401: {"description": "Missing or invalid authentication credentials"},
+        404: {"description": "Request not found or does not belong to user"},
+        502: {"description": "External parser service unavailable"},
+    },
+)
 async def search_suppliers(
     request_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> SearchResult:
+    """Runs an external parser search, filters blacklisted domains, and saves valid suppliers."""  # noqa: E501
     request = await RequestDAO.get_by_id(session, request_id)
     if not request or request.user_id != current_user.id:
         raise HTTPException(
@@ -99,10 +121,10 @@ async def search_suppliers(
             raw_results: list[dict] = resp.json().get("results", [])
     except httpx.HTTPError as exc:
         logger.exception("Parser service error", error=str(exc))
-        raise HTTPException(  # noqa: B904
+        raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Parser service unavailable",
-        )
+        ) from exc
 
     results = [ParserResult(**r) for r in raw_results]
     logger.info(
@@ -182,12 +204,26 @@ async def search_suppliers(
     )
 
 
-@router.post("/{request_id}/launch", status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/{request_id}/launch",
+    response_model=LaunchMailingResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Queue email campaign for a request",
+    responses={
+        202: {"description": "Mailing task successfully queued"},
+        400: {
+            "description": "Request not in active state or no pending suppliers"  # noqa: E501
+        },
+        401: {"description": "Missing or invalid authentication credentials"},
+        404: {"description": "Request not found or does not belong to user"},
+    },
+)
 async def launch_mailing(
     request_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
-) -> dict:
+) -> LaunchMailingResponse:
+    """Queues a background task to send emails to all pending suppliers for this request."""  # noqa: E501
     request = await RequestDAO.get_by_id(session, request_id)
     if not request or request.user_id != current_user.id:
         raise HTTPException(
@@ -210,44 +246,73 @@ async def launch_mailing(
     send_emails.delay(str(request_id))  # type: ignore
     logger.info("send_emails task queued", request_id=str(request_id))
 
-    return {
-        "status": "queued",
-        "request_id": str(request_id),
-        "pending": pending_count,
-    }
+    return LaunchMailingResponse(
+        status="queued",
+        request_id=str(request_id),
+        pending=pending_count,
+    )
 
 
-@router.get("/", response_model=list[RequestRead])
+@router.get(
+    "/",
+    response_model=list[RequestResponse],
+    summary="List all requests for the current user",
+    responses={
+        200: {"description": "List of all requests belonging to the user"},
+        401: {"description": "Missing or invalid authentication credentials"},
+    },
+)
 async def get_requests(
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
-) -> list[RequestRead]:
+) -> list[RequestResponse]:
+    """Returns all requests created by the authenticated user."""
     requests = await RequestDAO.get_all_by_user(session, current_user.id)
-    return [RequestRead.model_validate(r) for r in requests]
+    return [RequestResponse.model_validate(r) for r in requests]
 
 
-@router.get("/{request_id}", response_model=RequestRead)
+@router.get(
+    "/{request_id}",
+    response_model=RequestResponse,
+    summary="Retrieve a single request by ID",
+    responses={
+        200: {"description": "Request details returned"},
+        401: {"description": "Missing or invalid authentication credentials"},
+        404: {"description": "Request not found or does not belong to user"},
+    },
+)
 async def get_request(
     request_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
-) -> RequestRead:
+) -> RequestResponse:
+    """Fetches a specific request if it belongs to the current user."""
     request = await RequestDAO.get_by_id(session, request_id)
     if not request or request.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
         )
-    return RequestRead.model_validate(request)
+    return RequestResponse.model_validate(request)
 
 
 @router.get(
-    "/{request_id}/responses", response_model=list[SupplierResponseRead]
+    "/{request_id}/responses",
+    response_model=list[SupplierResponseResponse],
+    summary="List supplier responses for a request",
+    responses={
+        200: {
+            "description": "List of email responses received from suppliers"
+        },
+        401: {"description": "Missing or invalid authentication credentials"},
+        404: {"description": "Request not found or does not belong to user"},
+    },
 )
 async def get_responses(
     request_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
-) -> list[SupplierResponseRead]:
+) -> list[SupplierResponseResponse]:
+    """Returns all supplier email responses associated with the given request."""  # noqa: E501
     request = await RequestDAO.get_by_id(session, request_id)
     if not request or request.user_id != current_user.id:
         raise HTTPException(
@@ -255,4 +320,6 @@ async def get_responses(
         )
 
     responses = await SupplierResponseDAO.get_by_request(session, request_id)
-    return [SupplierResponseRead.from_orm_with_supplier(r) for r in responses]
+    return [
+        SupplierResponseResponse.from_orm_with_supplier(r) for r in responses
+    ]
