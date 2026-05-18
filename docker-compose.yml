@@ -97,7 +97,7 @@ services:
     restart: unless-stopped
     env_file: .env
     ports:
-      - "${PARSER_PORT:-8000}:8000"
+      - "${PARSER_PORT:-8010}:8010"
     depends_on:
       migrate:
         condition: service_completed_successfully
