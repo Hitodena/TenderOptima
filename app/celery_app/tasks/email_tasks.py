@@ -12,6 +12,7 @@ from email.header import decode_header
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
+from bs4 import BeautifulSoup
 from jinja2 import Environment, FileSystemLoader
 from loguru import logger
 
@@ -71,14 +72,14 @@ def _extract_attachments(msg: email.message.Message) -> list[dict]:
     return attachments
 
 
-def get_db_manager():
+def _get_db_manager():
     ctx = WorkerContext._instance
     if ctx is None or ctx.db_manager is None:
         raise RuntimeError("WorkerContext is not initialized")
     return ctx.db_manager
 
 
-def async_task(func):
+def _async_task(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         loop = asyncio.get_event_loop()
@@ -87,16 +88,24 @@ def async_task(func):
     return wrapper
 
 
-# ─────────────────────────────────────────
-# Task: send emails
-# ─────────────────────────────────────────
+def parse_email_body(raw_body: str) -> str:
+    if "<html>" in raw_body.lower() or "<div>" in raw_body.lower():
+        soup = BeautifulSoup(raw_body, "lxml")
+        text = soup.get_text(separator="\n", strip=True)
+    else:
+        text = raw_body
+
+    lines = text.split("\n")
+    lines = [line for line in lines if not line.strip().startswith(">")]
+
+    return "\n".join(lines)
 
 
 @app.task(name="mail.send", bind=True, max_retries=3, default_retry_delay=60)
-@async_task
+@_async_task
 async def send_emails(self, request_id: str) -> dict:
     logger.info("Starting sending emails", request_id=request_id)
-    db_manager = get_db_manager()
+    db_manager = _get_db_manager()
 
     async with db_manager.session() as session:
         request = await RequestDAO.get_by_id(session, uuid.UUID(request_id))
@@ -193,12 +202,12 @@ async def send_emails(self, request_id: str) -> dict:
 
 
 @app.task(name="mail.poll", bind=True, max_retries=3, default_retry_delay=120)
-@async_task
+@_async_task
 async def poll_imap(self) -> dict:
     logger.info("Starting IMAP poll")
     processed = 0
     skipped = 0
-    db_manager = get_db_manager()
+    db_manager = _get_db_manager()
 
     try:
         imap = imaplib.IMAP4_SSL(config.imap_host, config.imap_port)
@@ -286,12 +295,14 @@ async def poll_imap(self) -> dict:
                         skipped += 1
                         continue
 
+                    email_body_text = _extract_body(item["body"])
+
                     await SupplierResponseDAO.create(
                         session,
                         request_supplier_id=rs.id,
                         imap_id=item["uid_str"],
                         subject=item["subject"],
-                        raw_body=item["body"],
+                        raw_body=email_body_text,
                         attachments=item["attachments"],
                         extracted_text=item["body"],
                         received_at=item["received_at"],

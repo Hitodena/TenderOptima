@@ -30,6 +30,8 @@ dependencies = [
     "yandexcloud>=0.389.0",
     "pyjwt>=2.12.1",
     "redis>=7.4.0",
+    "bs4>=0.0.2",
+    "lxml>=6.1.0",
 ]
 
 
