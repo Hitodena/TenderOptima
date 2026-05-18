@@ -1,0 +1,21 @@
+{
+	"name": "SupplierFinderFront",
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"build": "nuxt build",
+		"dev": "nuxt dev",
+		"generate": "nuxt generate",
+		"preview": "nuxt preview",
+		"postinstall": "nuxt prepare"
+	},
+	"dependencies": {
+		"@nuxt/ui": "^4.7.1",
+		"@vueuse/core": "^14.3.0",
+		"axios": "^1.16.1",
+		"nuxt": "^4.4.5",
+		"tailwindcss": "^4.3.0",
+		"vue": "^3.5.34",
+		"vue-router": "^5.0.6"
+	}
+}
