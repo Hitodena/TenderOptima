@@ -1,0 +1,194 @@
+<template>
+	<div class="min-h-[calc(100vh-64px)] flex items-center justify-center px-4 py-12">
+		<div class="w-full max-w-md">
+
+			<div class="text-center mb-8">
+				<div class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-primary mb-4">
+					<UIcon name="i-lucide-package-search" class="w-6 h-6 text-white" />
+				</div>
+				<h1 class="text-2xl font-bold text-highlighted">SupplierFinder</h1>
+				<p class="text-sm text-muted mt-1">Автоматический поиск поставщиков B2B</p>
+			</div>
+
+			<UCard class="shadow-lg min-h-105">
+				<UTabs :items="tabs" class="w-full" :ui="{ list: 'mb-4' }">
+
+					<template #login>
+						<UForm :schema="loginSchema" :state="loginForm" @submit="handleLogin" class="space-y-4">
+
+							<UFormField label="Email" name="email" required>
+								<UInput v-model="loginForm.email" type="email" placeholder="you@company.com"
+									icon="i-lucide-mail" class="w-full" autocomplete="email" />
+							</UFormField>
+
+							<UFormField label="Пароль" name="password" required>
+								<UInput v-model="loginForm.password" :type="showLoginPassword ? 'text' : 'password'"
+									placeholder="••••••••" icon="i-lucide-lock" class="w-full"
+									autocomplete="current-password" @keydown.enter="handleLogin">
+									<template #trailing>
+										<button type="button"
+											class="flex items-center text-muted hover:text-default cursor-pointer transition-colors"
+											@click="showLoginPassword = !showLoginPassword">
+											<UIcon :name="showLoginPassword ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+												class="w-4 h-4" />
+										</button>
+									</template>
+								</UInput>
+							</UFormField>
+
+							<UAlert v-if="loginError" color="error" variant="soft" icon="i-lucide-circle-alert"
+								:description="loginError" />
+
+							<UButton type="submit" class="w-full justify-center" size="lg" :loading="loginLoading">
+								Войти
+							</UButton>
+
+							<p class="text-xs text-center text-toned">
+								Входя, вы соглашаетесь с условиями использования сервиса
+							</p>
+						</UForm>
+					</template>
+
+					<template #register>
+						<UForm :schema="registerSchema" :state="registerForm" @submit="handleRegister"
+							class="space-y-4">
+
+							<UFormField label="Email" name="email" required>
+								<UInput v-model="registerForm.email" type="email" placeholder="you@company.com"
+									icon="i-lucide-mail" class="w-full" autocomplete="email" />
+							</UFormField>
+
+							<div class="grid grid-cols-2 gap-3">
+								<UFormField label="Полное имя" name="full_name" required>
+									<UInput v-model="registerForm.full_name" placeholder="Иван Иванов"
+										icon="i-lucide-user" class="w-full" autocomplete="name" />
+								</UFormField>
+
+								<UFormField label="Компания" name="company_name">
+									<UInput v-model="registerForm.company_name" placeholder="ООО Ромашка"
+										icon="i-lucide-building-2" class="w-full" autocomplete="organization" />
+								</UFormField>
+							</div>
+
+							<UFormField label="Пароль" name="password" required hint="Минимум 8 символов">
+								<UInput v-model="registerForm.password"
+									:type="showRegisterPassword ? 'text' : 'password'" placeholder="••••••••"
+									icon="i-lucide-lock" class="w-full" autocomplete="new-password"
+									@keydown.enter="handleRegister">
+									<template #trailing>
+										<button type="button"
+											class="flex items-center text-muted hover:text-default cursor-pointer transition-colors"
+											@click="showRegisterPassword = !showRegisterPassword">
+											<UIcon :name="showRegisterPassword ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+												class="w-4 h-4" />
+										</button>
+									</template>
+								</UInput>
+							</UFormField>
+
+							<UAlert v-if="registerError" color="error" variant="soft" icon="i-lucide-circle-alert"
+								:description="registerError" />
+
+							<UButton type="submit" class="w-full justify-center" size="lg" :loading="registerLoading">
+								Создать аккаунт
+							</UButton>
+
+							<p class="text-xs text-center text-toned">
+								Регистрируясь, вы соглашаетесь с условиями использования сервиса
+							</p>
+						</UForm>
+					</template>
+
+				</UTabs>
+			</UCard>
+		</div>
+	</div>
+</template>
+
+<script lang="ts" setup>
+import type { RegisterCreate, TokenResponse } from '#shared/types'
+import { z } from 'zod'
+
+definePageMeta({ layout: 'auth' })
+
+const { post } = useApi()
+const auth = useAuthStore()
+
+if (auth.isAuthenticated.value) {
+	await navigateTo('/requests')
+}
+
+const tabs = [
+	{ label: 'Войти', slot: 'login', icon: 'i-lucide-log-in' },
+	{ label: 'Регистрация', slot: 'register', icon: 'i-lucide-user-plus' },
+]
+
+const loginSchema = z.object({
+	email: z.string().email('Неверный формат email'),
+	password: z.string().min(8, 'Минимум 8 символов'),
+})
+
+const registerSchema = z.object({
+	email: z.string().email('Неверный формат email'),
+	full_name: z.string().min(2, 'Минимум 2 символа'),
+	company_name: z.string().optional(),
+	password: z.string().min(8, 'Минимум 8 символов'),
+})
+
+const loginForm = reactive({ email: '', password: '' })
+const loginError = ref('')
+const loginLoading = ref(false)
+const showLoginPassword = ref(false)
+
+async function handleLogin() {
+	if (loginLoading.value) return
+	loginLoading.value = true
+	loginError.value = ''
+	try {
+		const params = new URLSearchParams()
+		params.append('username', loginForm.email)
+		params.append('password', loginForm.password)
+		const data = await post<TokenResponse>('/auth/token', params, {
+			headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+		})
+		auth.setToken(data.access_token)
+		await navigateTo('/requests')
+	} catch (e: any) {
+		const detail = e.response?.data?.detail
+		loginError.value = typeof detail === 'string' ? detail : 'Неверный email или пароль'
+	} finally {
+		loginLoading.value = false
+	}
+}
+
+const registerForm = reactive({ email: '', password: '', full_name: '', company_name: '' })
+const registerError = ref('')
+const registerLoading = ref(false)
+const showRegisterPassword = ref(false)
+
+async function handleRegister() {
+	if (registerLoading.value) return
+	registerLoading.value = true
+	registerError.value = ''
+	try {
+		const payload: RegisterCreate = {
+			email: registerForm.email,
+			password: registerForm.password,
+			full_name: registerForm.full_name,
+			company_name: registerForm.company_name || null,
+		}
+		const data = await post<TokenResponse>('/auth/register', payload)
+		auth.setToken(data.access_token)
+		await navigateTo('/requests')
+	} catch (e: any) {
+		const detail = e.response?.data?.detail
+		if (Array.isArray(detail)) {
+			registerError.value = detail.map((d: any) => d.msg).join(', ')
+		} else {
+			registerError.value = typeof detail === 'string' ? detail : 'Ошибка регистрации'
+		}
+	} finally {
+		registerLoading.value = false
+	}
+}
+</script>

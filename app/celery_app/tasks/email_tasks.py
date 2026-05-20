@@ -88,7 +88,7 @@ def _async_task(func):
     return wrapper
 
 
-def parse_email_body(raw_body: str) -> str:
+def _parse_email_body(raw_body: str) -> str:
     if "<html>" in raw_body.lower() or "<div>" in raw_body.lower():
         soup = BeautifulSoup(raw_body, "lxml")
         text = soup.get_text(separator="\n", strip=True)
@@ -295,7 +295,7 @@ async def poll_imap(self) -> dict:
                         skipped += 1
                         continue
 
-                    email_body_text = _extract_body(item["body"])
+                    email_body_text = _parse_email_body(item["body"])
 
                     await SupplierResponseDAO.create(
                         session,
