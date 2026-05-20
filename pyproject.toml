@@ -32,8 +32,12 @@ dependencies = [
     "redis>=7.4.0",
     "bs4>=0.0.2",
     "lxml>=6.1.0",
+    "click>=8.1.0",
 ]
 
+
+[project.scripts]
+supplier-cli = "app.cli.cli:cli"
 
 [dependency-groups]
 dev = ["ruff>=0.15.12"]
