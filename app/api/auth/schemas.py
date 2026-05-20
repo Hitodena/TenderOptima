@@ -48,6 +48,22 @@ class RegisterCreate(BaseModel):
             examples=["Acme Corp"],
         ),
     ]
+    agree_terms: Annotated[
+        bool,
+        Field(
+            default=True,
+            description="Accept for terms",
+            examples=[True],
+        ),
+    ]
+    agree_marketing: Annotated[
+        bool,
+        Field(
+            default=False,
+            description="Accept for mailing",
+            examples=[False],
+        ),
+    ]
 
 
 class TokenResponse(BaseModel):

@@ -12,6 +12,8 @@ class User(IDMixinUUID, TimestampMixin, Base):
     full_name: Mapped[str | None] = mapped_column()
     company_name: Mapped[str | None] = mapped_column()
     is_admin: Mapped[bool] = mapped_column(default=False)
+    agree_terms: Mapped[bool] = mapped_column(default=True)
+    agree_marketing: Mapped[bool] = mapped_column(default=False)
 
     requests: Mapped[list["Request"]] = relationship(  # noqa: F821 # type: ignore
         back_populates="user", uselist=True, lazy="selectin"
