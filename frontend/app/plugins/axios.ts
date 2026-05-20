@@ -1,16 +1,15 @@
 import axios from 'axios';
 
 export default defineNuxtPlugin(() => {
+	const config = useRuntimeConfig();
+
 	const api = axios.create({
-		baseURL: 'http://localhost:8000/api',
+		baseURL: config.public.apiBase,
 	});
 
 	api.interceptors.request.use((config) => {
-		if (import.meta.client) {
-			const auth = useAuthStore();
-			if (auth.token.value)
-				config.headers.Authorization = `Bearer ${auth.token.value}`;
-		}
+		const token = useCookie('sf_token');
+		if (token.value) config.headers.Authorization = `Bearer ${token.value}`;
 		return config;
 	});
 
@@ -25,11 +24,11 @@ export default defineNuxtPlugin(() => {
 				await navigateTo('/auth');
 			}
 
-			if (status === 502 || status >= 500) {
+			if (!error.response || status === 502 || status >= 500) {
 				const toast = useToast();
 				toast.add({
-					title: 'Ошибка сервера',
-					description: 'Попробуйте позже',
+					title: 'Внутренняя ошибка сервера',
+					description: 'Попробуйте позже или обновите страницу',
 					color: 'error',
 				});
 			}

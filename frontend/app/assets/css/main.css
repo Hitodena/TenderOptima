@@ -1,0 +1,33 @@
+@import 'tailwindcss';
+@import '@nuxt/ui';
+
+:root {
+	--font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+	--font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+* {
+	scrollbar-width: thin;
+	scrollbar-color: var(--ui-border) transparent;
+}
+
+::-webkit-scrollbar {
+	width: 6px;
+	height: 6px;
+}
+
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	background: var(--ui-border);
+	border-radius: 100px;
+}
+
+/* Полностью убираем стрелки у number-инпутов во всех браузерах */
+input[type='number'] {
+	-moz-appearance: textfield;
+	-webkit-appearance: none;
+	appearance: textfield;
+}

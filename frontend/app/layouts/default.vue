@@ -1,23 +1,23 @@
 <template>
-	<UHeader>
+	<UHeader class="h-20 border-b border-default">
 		<template #left>
 			<ULink to="/"
-				class="flex items-center gap-5 font-bold text-lg text-highlighted hover:opacity-80 transition-opacity">
-				<UIcon name="i-lucide-package-search" class="w-5 h-5 text-primary" />
+				class="flex items-center gap-2 font-bold text-2xl text-highlighted hover:opacity-80 transition-opacity">
+				<UIcon name="i-lucide-package-search" class="w-8 h-8 text-primary" />
 				TenderOptima
 			</ULink>
 		</template>
 
-		<UNavigationMenu v-if="auth.isAuthenticated.value" :items="navItems" />
+		<UNavigationMenu v-if="auth.isAuthenticated.value" :items="navItems" class="w-full justify-center" />
 
 		<template #right>
-			<div class="flex items-center gap-5">
+			<div class="flex items-center gap-2">
 				<UColorModeButton />
 				<UButton v-if="!auth.isAuthenticated.value" to="/auth" color="neutral" variant="outline"
-					leading-icon="i-lucide-log-in" label="Войти" />
-				<UDropdownMenu v-else :items="userMenuItems">
-					<UButton color="neutral" variant="ghost" trailing-icon="i-lucide-chevron-down">
-						<span class="max-w-28 truncate text-sm">{{ user?.full_name || user?.email }}</span>
+					leading-icon="i-lucide-log-in" label="Войти" size="lg" />
+				<UDropdownMenu v-else :items="userMenuItems" :ui="{ content: 'w-48' }">
+					<UButton color="neutral" variant="ghost" trailing-icon="i-lucide-chevron-down" size="lg">
+						<span class="max-w-28 truncate text-base">{{ user?.full_name || user?.email }}</span>
 					</UButton>
 				</UDropdownMenu>
 			</div>
@@ -72,6 +72,13 @@ const navItems = computed<NavigationMenuItem[]>(() => [
 		disabled: true,
 		badge: { label: 'Скоро', color: 'neutral', variant: 'subtle', size: 'sm' },
 	},
+	{
+		label: 'Подписка',
+		icon: 'i-lucide-credit-card',
+		disabled: true,
+		badge: { label: 'Скоро', color: 'neutral', variant: 'subtle', size: 'sm' },
+	},
+
 ])
 
 
@@ -88,11 +95,6 @@ const userMenuItems = computed<DropdownMenuItem[][]>(() => [
 		icon: 'i-lucide-user',
 		disabled: true
 	},
-	{
-		label: 'Подписка',
-		icon: 'i-lucide-credit-card',
-		disabled: true,
-	}
 	],
 	[
 		{

@@ -3,8 +3,14 @@ export default defineNuxtConfig({
 	devtools: { enabled: true },
 	typescript: { strict: true },
 
-	modules: ['@nuxt/ui', 'nuxt-zod-i18n', '@nuxtjs/i18n'],
+	modules: ['@nuxt/ui', 'nuxt-zod-i18n', '@nuxtjs/i18n', '@nuxt/eslint'],
 	css: ['~/assets/css/main.css'],
+
+	runtimeConfig: {
+		public: {
+			apiBase: 'http://localhost:8000/api',
+		},
+	},
 
 	i18n: {
 		locales: [{ code: 'ru', language: 'ru-RU' }],
@@ -34,6 +40,12 @@ export default defineNuxtConfig({
 			{ name: 'Inter', provider: 'google', global: true },
 			{ name: 'JetBrains Mono', provider: 'google', global: true },
 		],
+	},
+
+	vite: {
+		optimizeDeps: {
+			include: ['@vue/devtools-core', '@vue/devtools-kit', 'axios', 'zod'],
+		},
 	},
 
 	app: {

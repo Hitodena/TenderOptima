@@ -1,5 +1,5 @@
 {
-	"name": "front",
+	"name": "frontend",
 	"type": "module",
 	"private": true,
 	"scripts": {
@@ -10,10 +10,12 @@
 		"postinstall": "nuxt prepare"
 	},
 	"dependencies": {
+		"@nuxt/eslint": "^1.15.2",
 		"@nuxt/ui": "^4.7.1",
 		"@nuxtjs/i18n": "^10.3.0",
 		"@vueuse/core": "^14.3.0",
 		"axios": "^1.16.1",
+		"eslint": "^10.4.0",
 		"nuxt": "^4.4.5",
 		"nuxt-zod-i18n": "^1.12.1",
 		"tailwindcss": "^4.3.0",

@@ -14,6 +14,8 @@ export interface RegisterCreate {
 	password: string;
 	full_name: string;
 	company_name?: string | null;
+	agree_terms: boolean;
+	agree_marketing: boolean;
 }
 
 export interface RequestCreate {

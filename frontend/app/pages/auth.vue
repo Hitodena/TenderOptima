@@ -10,7 +10,7 @@
 				<p class="text-sm text-muted mt-1">Автоматический поиск поставщиков B2B</p>
 			</div>
 
-			<UCard class="shadow-lg min-h-115">
+			<UCard class="shadow-lg">
 				<UTabs :items="tabs" class="w-full" :ui="{ list: 'mb-4' }">
 
 					<template #login>
@@ -106,7 +106,7 @@
 								<UFormField name="agree_marketing">
 									<UCheckbox v-model="registerForm.agree_marketing">
 										<template #label>
-											<span class="text-sm text-muted">
+											<span class="text-sm">
 												Согласен на получение маркетинговых уведомлений
 											</span>
 										</template>
@@ -183,7 +183,7 @@ async function handleLogin() {
 		await navigateTo('/requests')
 	} catch (e: any) {
 		const detail = e.response?.data?.detail
-		loginError.value = typeof detail === 'string' ? detail : 'Неверный email или пароль'
+		loginError.value = typeof detail === 'string' ? detail : 'Внутренняя ошибка сервера'
 	} finally {
 		loginLoading.value = false
 	}
@@ -206,10 +206,7 @@ async function handleRegister() {
 	registerLoading.value = true
 	registerError.value = ''
 	try {
-		const payload: RegisterCreate & {
-			agree_terms: boolean
-			agree_marketing: boolean
-		} = {
+		const payload: RegisterCreate = {
 			email: registerForm.email,
 			password: registerForm.password,
 			full_name: registerForm.full_name,

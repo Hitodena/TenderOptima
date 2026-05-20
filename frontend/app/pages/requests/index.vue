@@ -13,7 +13,6 @@
 
 		<div class="flex items-center gap-3 mb-4">
 			<UInput v-model="search" placeholder="Поиск по запросу..." icon="i-lucide-search" class="max-w-xs" />
-			<USelect v-model="statusFilter" :options="availableStatusOptions" class="w-40" />
 			<span class="ml-auto text-sm text-muted">{{ filteredRequests.length }} запросов</span>
 		</div>
 
@@ -93,13 +92,6 @@ const STATUS_LABEL: Record<string, string> = {
 	queued: 'В очереди',
 }
 
-const availableStatusOptions = computed(() => {
-	const present = [...new Set(requests.value.map(r => r.status))]
-	return [
-		{ label: 'Все статусы', value: '' },
-		...present.map(s => ({ label: STATUS_LABEL[s] ?? s, value: s })),
-	]
-})
 
 const filteredRequests = computed(() => {
 	let list = requests.value
