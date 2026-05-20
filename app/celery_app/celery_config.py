@@ -11,7 +11,7 @@ from app.core import get_config
 config = get_config()
 
 
-app = Celery("supplierfinder")
+app = Celery("tenderoptima")
 app.config_from_object("app.celery_app.celery_config:CeleryConfig")
 
 

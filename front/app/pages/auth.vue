@@ -6,11 +6,11 @@
 				<div class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-primary mb-4">
 					<UIcon name="i-lucide-package-search" class="w-6 h-6 text-white" />
 				</div>
-				<h1 class="text-2xl font-bold text-highlighted">SupplierFinder</h1>
+				<h1 class="text-2xl font-bold text-highlighted">TenderOptima</h1>
 				<p class="text-sm text-muted mt-1">Автоматический поиск поставщиков B2B</p>
 			</div>
 
-			<UCard class="shadow-lg min-h-105">
+			<UCard class="shadow-lg min-h-115">
 				<UTabs :items="tabs" class="w-full" :ui="{ list: 'mb-4' }">
 
 					<template #login>
@@ -43,9 +43,6 @@
 								Войти
 							</UButton>
 
-							<p class="text-xs text-center text-toned">
-								Входя, вы соглашаетесь с условиями использования сервиса
-							</p>
 						</UForm>
 					</template>
 
@@ -86,16 +83,45 @@
 								</UInput>
 							</UFormField>
 
+							<div class="space-y-3 pt-1">
+								<UFormField name="agree_terms">
+									<UCheckbox v-model="registerForm.agree_terms" required>
+										<template #label>
+											<span class="text-sm">
+												Я принимаю
+												<ULink to="#"
+													class="text-primary underline underline-offset-2 hover:opacity-80">
+													условия использования
+												</ULink>
+												и
+												<ULink to="#"
+													class="text-primary underline underline-offset-2 hover:opacity-80">
+													политику конфиденциальности
+												</ULink>
+											</span>
+										</template>
+									</UCheckbox>
+								</UFormField>
+
+								<UFormField name="agree_marketing">
+									<UCheckbox v-model="registerForm.agree_marketing">
+										<template #label>
+											<span class="text-sm text-muted">
+												Согласен на получение маркетинговых уведомлений
+											</span>
+										</template>
+									</UCheckbox>
+								</UFormField>
+							</div>
+
 							<UAlert v-if="registerError" color="error" variant="soft" icon="i-lucide-circle-alert"
 								:description="registerError" />
 
-							<UButton type="submit" class="w-full justify-center" size="lg" :loading="registerLoading">
+							<UButton type="submit" class="w-full justify-center" size="lg" :loading="registerLoading"
+								:disabled="!registerForm.agree_terms">
 								Создать аккаунт
 							</UButton>
 
-							<p class="text-xs text-center text-toned">
-								Регистрируясь, вы соглашаетесь с условиями использования сервиса
-							</p>
 						</UForm>
 					</template>
 
@@ -133,6 +159,8 @@ const registerSchema = z.object({
 	full_name: z.string().min(2, 'Минимум 2 символа'),
 	company_name: z.string().optional(),
 	password: z.string().min(8, 'Минимум 8 символов'),
+	agree_terms: z.boolean().optional(),
+	agree_marketing: z.boolean().optional(),
 })
 
 const loginForm = reactive({ email: '', password: '' })
@@ -161,21 +189,33 @@ async function handleLogin() {
 	}
 }
 
-const registerForm = reactive({ email: '', password: '', full_name: '', company_name: '' })
+const registerForm = reactive({
+	email: '',
+	password: '',
+	full_name: '',
+	company_name: '',
+	agree_terms: false,
+	agree_marketing: false,
+})
 const registerError = ref('')
 const registerLoading = ref(false)
 const showRegisterPassword = ref(false)
 
 async function handleRegister() {
-	if (registerLoading.value) return
+	if (registerLoading.value || !registerForm.agree_terms) return
 	registerLoading.value = true
 	registerError.value = ''
 	try {
-		const payload: RegisterCreate = {
+		const payload: RegisterCreate & {
+			agree_terms: boolean
+			agree_marketing: boolean
+		} = {
 			email: registerForm.email,
 			password: registerForm.password,
 			full_name: registerForm.full_name,
 			company_name: registerForm.company_name || null,
+			agree_terms: registerForm.agree_terms,
+			agree_marketing: registerForm.agree_marketing,
 		}
 		const data = await post<TokenResponse>('/auth/register', payload)
 		auth.setToken(data.access_token)

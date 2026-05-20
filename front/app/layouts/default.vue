@@ -4,7 +4,7 @@
 			<ULink to="/"
 				class="flex items-center gap-5 font-bold text-lg text-highlighted hover:opacity-80 transition-opacity">
 				<UIcon name="i-lucide-package-search" class="w-5 h-5 text-primary" />
-				SupplierFinder
+				TenderOptima
 			</ULink>
 		</template>
 

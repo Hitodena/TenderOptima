@@ -1,7 +1,7 @@
 services:
   db:
     image: postgres:18-alpine
-    container_name: supplierfinder_db
+    container_name: tenderoptima_db
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -19,11 +19,11 @@ services:
       timeout: 10s
       retries: 5
     networks:
-      - supplierfinder_network
+      - tenderoptima_network
 
   redis:
     image: redis:8.0-alpine
-    container_name: supplierfinder_redis
+    container_name: tenderoptima_redis
     restart: unless-stopped
     env_file:
       - .env
@@ -37,7 +37,7 @@ services:
       timeout: 10s
       retries: 5
     networks:
-      - supplierfinder_network
+      - tenderoptima_network
     command: >
       redis-server
       --maxmemory ${REDIS_MAXMEMORY:-512mb}
@@ -50,8 +50,8 @@ services:
     build:
       context: .
       target: base
-    image: supplierfinder/migrate:latest
-    container_name: supplierfinder_migrate
+    image: tenderoptima/migrate:latest
+    container_name: tenderoptima_migrate
     command: alembic upgrade head
     env_file:
       - .env
@@ -59,15 +59,15 @@ services:
       db:
         condition: service_healthy
     networks:
-      - supplierfinder_network
+      - tenderoptima_network
     restart: on-failure
 
   api:
     build:
       context: .
       target: api
-    image: supplierfinder/api:latest
-    container_name: supplierfinder_api
+    image: tenderoptima/api:latest
+    container_name: tenderoptima_api
     restart: unless-stopped
     env_file: .env
     ports:
@@ -86,14 +86,14 @@ services:
       retries: 3
       start_period: 15s
     networks:
-      - supplierfinder_network
+      - tenderoptima_network
 
   api_parser:
     build:
       context: .
       target: parser_api
-    image: supplierfinder/parser:latest
-    container_name: supplierfinder_parser
+    image: tenderoptima/parser:latest
+    container_name: tenderoptima_parser
     restart: unless-stopped
     env_file: .env
     ports:
@@ -112,14 +112,14 @@ services:
       retries: 3
       start_period: 15s
     networks:
-      - supplierfinder_network
+      - tenderoptima_network
 
   worker:
     build:
       context: .
       target: worker
-    image: supplierfinder/worker:latest
-    container_name: supplierfinder_worker
+    image: tenderoptima/worker:latest
+    container_name: tenderoptima_worker
     restart: unless-stopped
     env_file: .env
     depends_on:
@@ -136,14 +136,14 @@ services:
       retries: 3
       start_period: 30s
     networks:
-      - supplierfinder_network
+      - tenderoptima_network
 
   beat:
     build:
       context: .
       target: beat
-    image: supplierfinder/beat:latest
-    container_name: supplierfinder_beat
+    image: tenderoptima/beat:latest
+    container_name: tenderoptima_beat
     restart: unless-stopped
     env_file: .env
     depends_on:
@@ -160,13 +160,13 @@ services:
       retries: 3
       start_period: 20s
     networks:
-      - supplierfinder_network
+      - tenderoptima_network
 
 volumes:
   pgdata:
   redisdata:
 
 networks:
-  supplierfinder_network:
+  tenderoptima_network:
     driver: bridge
-    name: supplierfinder_network
+    name: tenderoptima_network

@@ -150,7 +150,7 @@ async def send_emails(self, request_id: str) -> dict:
 
             msg = MIMEMultipart("alternative")
             msg["From"] = (
-                f"{rs.request.user.company_name or 'SupplierFinder'}"
+                f"{rs.request.user.company_name or 'TenderOptima'}"
                 f" <{config.smtp_user}>"
             )
             msg["To"] = recipient

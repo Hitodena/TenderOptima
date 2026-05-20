@@ -14,7 +14,7 @@ api_router.include_router(search_history_router)
 
 @api_router.get("/")
 async def root():
-    return {"message": "SupplierFinder API"}
+    return {"message": "TenderOptima API"}
 
 
 @api_router.get("/health")
