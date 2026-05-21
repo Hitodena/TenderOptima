@@ -6,11 +6,13 @@ export default defineNuxtPlugin(() => {
 	const api = axios.create({
 		baseURL: config.public.apiBase,
 	});
+	const auth = useAuthStore();
 
-	api.interceptors.request.use((config) => {
-		const token = useCookie('sf_token');
-		if (token.value) config.headers.Authorization = `Bearer ${token.value}`;
-		return config;
+	api.interceptors.request.use((req) => {
+		if (auth.token.value) {
+			req.headers.Authorization = `Bearer ${auth.token.value}`;
+		}
+		return req;
 	});
 
 	api.interceptors.response.use(

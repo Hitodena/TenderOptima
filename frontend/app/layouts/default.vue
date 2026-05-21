@@ -51,20 +51,7 @@ const navItems = computed<NavigationMenuItem[]>(() => [
 		label: 'Запросы',
 		icon: 'i-lucide-layers',
 		active: isRequestsActive.value,
-		children: [
-			{
-				label: 'История запросов',
-				description: 'Все ваши поисковые запросы',
-				icon: 'i-lucide-history',
-				to: '/requests',
-			},
-			{
-				label: 'Чёрный список',
-				description: 'Исключённые домены',
-				icon: 'i-lucide-shield-off',
-				to: '/requests/blacklist',
-			},
-		],
+		to: '/requests',
 	},
 	{
 		label: 'Анализ ТЗ',

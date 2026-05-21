@@ -328,6 +328,120 @@
 				}
 			}
 		},
+		"/api/requests/{request_id}/suppliers": {
+			"get": {
+				"tags": ["Requests"],
+				"summary": "List suppliers for a request",
+				"description": "Returns all suppliers associated with the given request.",
+				"operationId": "get_suppliers_api_requests__request_id__suppliers_get",
+				"security": [{ "OAuth2PasswordBearer": [] }],
+				"parameters": [
+					{
+						"name": "request_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid",
+							"title": "Request Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "List of suppliers associated with the request",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/RequestSupplierResponse"
+									},
+									"title": "Response Get Suppliers Api Requests  Request Id  Suppliers Get"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Missing or invalid authentication credentials"
+					},
+					"404": {
+						"description": "Request not found or does not belong to user"
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/requests/{request_id}/suppliers/{request_supplier_id}": {
+			"patch": {
+				"tags": ["Requests"],
+				"summary": "Toggle supplier enabled status for a request",
+				"description": "Updates the enabled status of a supplier for a specific request.",
+				"operationId": "toggle_supplier_api_requests__request_id__suppliers__request_supplier_id__patch",
+				"security": [{ "OAuth2PasswordBearer": [] }],
+				"parameters": [
+					{
+						"name": "request_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid",
+							"title": "Request Id"
+						}
+					},
+					{
+						"name": "request_supplier_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid",
+							"title": "Request Supplier Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/ToggleSupplierRequest" }
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Supplier enabled status updated",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/RequestSupplierResponse"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Missing or invalid authentication credentials"
+					},
+					"404": { "description": "Request or supplier not found" },
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
 		"/api/blacklist/": {
 			"get": {
 				"tags": ["Blacklisted Domains"],
@@ -678,6 +792,20 @@
 						"title": "Company Name",
 						"description": "Optional company or organization name",
 						"examples": ["Acme Corp"]
+					},
+					"agree_terms": {
+						"type": "boolean",
+						"title": "Agree Terms",
+						"description": "Accept for terms",
+						"default": true,
+						"examples": [true]
+					},
+					"agree_marketing": {
+						"type": "boolean",
+						"title": "Agree Marketing",
+						"description": "Accept for mailing",
+						"default": false,
+						"examples": [false]
 					}
 				},
 				"type": "object",
@@ -696,10 +824,8 @@
 						"examples": ["industrial pumps"]
 					},
 					"delivery_region": {
-						"anyOf": [
-							{ "type": "string", "maxLength": 100 },
-							{ "type": "null" }
-						],
+						"type": "string",
+						"maxLength": 100,
 						"title": "Delivery Region",
 						"description": "Preferred delivery region or country",
 						"examples": ["Minsk"]
@@ -712,24 +838,6 @@
 						"title": "Description",
 						"description": "Detailed description of requirements",
 						"examples": ["High pressure centrifugal pumps"]
-					},
-					"quantity": {
-						"anyOf": [
-							{ "type": "number", "exclusiveMinimum": 0.0 },
-							{ "type": "null" }
-						],
-						"title": "Quantity",
-						"description": "Requested quantity",
-						"examples": [100]
-					},
-					"unit": {
-						"anyOf": [
-							{ "type": "string", "maxLength": 50 },
-							{ "type": "null" }
-						],
-						"title": "Unit",
-						"description": "Unit of measurement",
-						"examples": ["pcs"]
 					},
 					"quality_requirements": {
 						"anyOf": [
@@ -748,19 +856,6 @@
 						"title": "Delivery Deadline",
 						"description": "Latest acceptable delivery date"
 					},
-					"max_price_per_unit": {
-						"anyOf": [
-							{ "type": "number" },
-							{
-								"type": "string",
-								"pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
-							},
-							{ "type": "null" }
-						],
-						"title": "Max Price Per Unit",
-						"description": "Maximum acceptable price per unit",
-						"examples": [1000]
-					},
 					"currency": {
 						"anyOf": [
 							{ "type": "string", "maxLength": 20, "minLength": 2 },
@@ -773,7 +868,7 @@
 					}
 				},
 				"type": "object",
-				"required": ["query"],
+				"required": ["query", "delivery_region"],
 				"title": "RequestCreate",
 				"description": "Payload for creating a new supplier search request."
 			},
@@ -813,7 +908,7 @@
 						"examples": ["123e4567-e89b-12d3-a456-426614174000"]
 					},
 					"delivery_region": {
-						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"type": "string",
 						"title": "Delivery Region",
 						"description": "Requested delivery region",
 						"examples": ["Minsk"]
@@ -823,18 +918,6 @@
 						"title": "Description",
 						"description": "Detailed requirements",
 						"examples": ["High pressure centrifugal pumps"]
-					},
-					"quantity": {
-						"anyOf": [{ "type": "number" }, { "type": "null" }],
-						"title": "Quantity",
-						"description": "Requested quantity",
-						"examples": [100]
-					},
-					"unit": {
-						"anyOf": [{ "type": "string" }, { "type": "null" }],
-						"title": "Unit",
-						"description": "Unit of measurement",
-						"examples": ["pcs"]
 					},
 					"quality_requirements": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
@@ -850,18 +933,6 @@
 						"title": "Delivery Deadline",
 						"description": "Delivery deadline",
 						"examples": ["2025-06-01T00:00:00Z"]
-					},
-					"max_price_per_unit": {
-						"anyOf": [
-							{
-								"type": "string",
-								"pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
-							},
-							{ "type": "null" }
-						],
-						"title": "Max Price Per Unit",
-						"description": "Max price per unit",
-						"examples": [1000]
 					},
 					"currency": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
@@ -886,16 +957,50 @@
 					"tracking_id",
 					"delivery_region",
 					"description",
-					"quantity",
-					"unit",
 					"quality_requirements",
 					"delivery_deadline",
-					"max_price_per_unit",
 					"currency",
 					"created_at"
 				],
 				"title": "RequestResponse",
 				"description": "Full representation of a user request."
+			},
+			"RequestSupplierResponse": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"format": "uuid",
+						"title": "Id",
+						"description": "RequestSupplier identifier",
+						"examples": ["123e4567-e89b-12d3-a456-426614174000"]
+					},
+					"supplier": {
+						"$ref": "#/components/schemas/SupplierResponse",
+						"description": "Supplier information"
+					},
+					"status": {
+						"type": "string",
+						"title": "Status",
+						"description": "Current status of the supplier request"
+					},
+					"is_enabled": {
+						"type": "boolean",
+						"title": "Is Enabled",
+						"description": "Whether the supplier is enabled for this request"
+					},
+					"sent_at": {
+						"anyOf": [
+							{ "type": "string", "format": "date-time" },
+							{ "type": "null" }
+						],
+						"title": "Sent At",
+						"description": "Timestamp when the request was sent"
+					}
+				},
+				"type": "object",
+				"required": ["id", "supplier", "status", "is_enabled", "sent_at"],
+				"title": "RequestSupplierResponse",
+				"description": "Response representation of a request-supplier link."
 			},
 			"SearchHistoryResponse": {
 				"properties": {
@@ -986,7 +1091,7 @@
 				"title": "SearchResult",
 				"description": "Summary of a supplier search operation."
 			},
-			"Supplier": {
+			"SupplierResponse": {
 				"properties": {
 					"id": {
 						"type": "string",
@@ -1016,7 +1121,7 @@
 				},
 				"type": "object",
 				"required": ["id", "domain", "company_name", "email"],
-				"title": "Supplier",
+				"title": "SupplierResponse",
 				"description": "Minimal supplier information."
 			},
 			"SupplierResponseResponse": {
@@ -1061,7 +1166,7 @@
 						"examples": ["2025-01-15T14:22:00Z"]
 					},
 					"supplier": {
-						"$ref": "#/components/schemas/Supplier",
+						"$ref": "#/components/schemas/SupplierResponse",
 						"description": "Supplier that sent the response"
 					}
 				},
@@ -1076,6 +1181,19 @@
 				],
 				"title": "SupplierResponseResponse",
 				"description": "Email response received from a supplier."
+			},
+			"ToggleSupplierRequest": {
+				"properties": {
+					"is_enabled": {
+						"type": "boolean",
+						"title": "Is Enabled",
+						"description": "New enabled status for the supplier"
+					}
+				},
+				"type": "object",
+				"required": ["is_enabled"],
+				"title": "ToggleSupplierRequest",
+				"description": "Request to toggle supplier enabled status."
 			},
 			"TokenResponse": {
 				"properties": {
