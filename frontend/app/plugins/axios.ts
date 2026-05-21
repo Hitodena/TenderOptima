@@ -1,6 +1,10 @@
 import axios from 'axios';
 
 export default defineNuxtPlugin(() => {
+	if (import.meta.server) {
+		return;
+	}
+
 	const config = useRuntimeConfig();
 
 	const api = axios.create({
