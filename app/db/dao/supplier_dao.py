@@ -186,7 +186,7 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
             instance = result.scalar_one_or_none()
             if instance:
                 logger.info(
-                    "Got instance by request and supplier",
+                    "Got RequstSupplier by request and supplier",
                     model=cls.model,
                     instance=instance,
                     request_id=request_id,
@@ -194,7 +194,7 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
                 )
             else:
                 logger.info(
-                    "Instance not found by request and supplier",
+                    "RequstSupplier not found by request and supplier",
                     model=cls.model,
                     request_id=request_id,
                     supplier_id=supplier_id,
@@ -203,7 +203,7 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
         except Exception as exc:
             await session.rollback()
             logger.exception(
-                "Failed to get by request and supplier",
+                "Failed to get RequestSupplier by request and supplier",
                 error=str(exc),
                 model=cls.model,
                 request_id=request_id,
@@ -238,6 +238,117 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
             await session.rollback()
             logger.exception(
                 "Failed to count pending",
+                error=str(exc),
+                model=cls.model,
+                request_id=request_id,
+            )
+            raise
+
+    @classmethod
+    async def get_by_request(
+        cls, session: AsyncSession, request_id: uuid.UUID
+    ) -> list[RequestSupplier]:
+        logger.debug(
+            "Getting suppliers by request",
+            model=cls.model,
+            request_id=request_id,
+        )
+        try:
+            stmt = (
+                select(cls.model)
+                .where(cls.model.request_id == request_id)
+                .options(selectinload(cls.model.supplier))
+            )
+            result = await session.execute(stmt)
+            instances = list(result.scalars().all())
+            logger.info(
+                "Got suppliers by request",
+                model=cls.model,
+                count=len(instances),
+                request_id=request_id,
+            )
+            return instances
+        except Exception as exc:
+            await session.rollback()
+            logger.exception(
+                "Failed to get suppliers by request",
+                error=str(exc),
+                model=cls.model,
+                request_id=request_id,
+            )
+            raise
+
+    @classmethod
+    async def set_enabled(
+        cls, session: AsyncSession, rs_id: uuid.UUID, enabled: bool
+    ) -> RequestSupplier | None:
+        logger.debug(
+            "Setting enabled status",
+            model=cls.model,
+            rs_id=rs_id,
+            enabled=enabled,
+        )
+        try:
+            instance = await session.get(cls.model, rs_id)
+            if instance:
+                instance.is_enabled = enabled
+                await session.flush()
+                await session.commit()
+                logger.info(
+                    "Set enabled status on supplier",
+                    model=cls.model,
+                    rs_id=rs_id,
+                    enabled=enabled,
+                )
+            else:
+                logger.info(
+                    "Supplier not found for set_enabled",
+                    model=cls.model,
+                    rs_id=rs_id,
+                )
+            return instance
+        except Exception as exc:
+            await session.rollback()
+            logger.exception(
+                "Failed to set enabled status on supplier",
+                error=str(exc),
+                model=cls.model,
+                rs_id=rs_id,
+                enabled=enabled,
+            )
+            raise
+
+    @classmethod
+    async def get_enabled_by_request(
+        cls, session: AsyncSession, request_id: uuid.UUID
+    ) -> list[RequestSupplier]:
+        logger.debug(
+            "Getting enabled instances by request",
+            model=cls.model,
+            request_id=request_id,
+        )
+        try:
+            stmt = (
+                select(cls.model)
+                .where(
+                    cls.model.request_id == request_id,
+                    cls.model.is_enabled.is_(True),
+                )
+                .options(selectinload(cls.model.supplier))
+            )
+            result = await session.execute(stmt)
+            instances = list(result.scalars().all())
+            logger.info(
+                "Got enabled instances by request",
+                model=cls.model,
+                count=len(instances),
+                request_id=request_id,
+            )
+            return instances
+        except Exception as exc:
+            await session.rollback()
+            logger.exception(
+                "Failed to get enabled instances by request",
                 error=str(exc),
                 model=cls.model,
                 request_id=request_id,

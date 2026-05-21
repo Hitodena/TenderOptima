@@ -37,6 +37,8 @@ class RequestSupplier(IDMixinUUID, TimestampMixin, Base):
     body_text: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(nullable=False)  # aka Enum
 
+    is_enabled: Mapped[bool] = mapped_column(default=True)
+
     smtp_message_id: Mapped[str | None] = mapped_column()
 
     request: Mapped["Request"] = relationship(  # noqa: F821 # type: ignore

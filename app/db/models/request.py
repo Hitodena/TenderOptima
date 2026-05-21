@@ -1,8 +1,7 @@
 import uuid
 from datetime import datetime
-from decimal import Decimal
 
-from sqlalchemy import DateTime, Float, ForeignKey, Numeric, Text
+from sqlalchemy import DateTime, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -17,20 +16,14 @@ class Request(IDMixinUUID, TimestampMixin, Base):
     )
 
     query: Mapped[str] = mapped_column(nullable=False)
-    delivery_region: Mapped[str | None] = mapped_column()
-
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-    quantity: Mapped[int | None] = mapped_column(Float)
-    unit: Mapped[str | None] = mapped_column()
+    delivery_region: Mapped[str] = mapped_column()
 
     quality_requirements: Mapped[str | None] = mapped_column(Text)
-
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     delivery_deadline: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
     )
 
-    max_price_per_unit: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     currency: Mapped[str | None] = mapped_column()
 
     status: Mapped[str] = mapped_column(nullable=False)  # aka Enum

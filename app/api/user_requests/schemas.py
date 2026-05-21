@@ -1,11 +1,10 @@
 import uuid
 from datetime import datetime
-from decimal import Decimal
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.db.models import SupplierResponse
+from app.db.models import SupplierResponse as SupplierResponseDB
 
 
 class RequestCreate(BaseModel):
@@ -23,9 +22,9 @@ class RequestCreate(BaseModel):
         ),
     ]
     delivery_region: Annotated[
-        str | None,
+        str,
         Field(
-            default=None,
+            ...,
             description="Preferred delivery region or country",
             max_length=100,
             examples=["Minsk"],
@@ -38,24 +37,6 @@ class RequestCreate(BaseModel):
             description="Detailed description of requirements",
             max_length=2000,
             examples=["High pressure centrifugal pumps"],
-        ),
-    ]
-    quantity: Annotated[
-        float | None,
-        Field(
-            default=None,
-            description="Requested quantity",
-            gt=0,
-            examples=[100],
-        ),
-    ]
-    unit: Annotated[
-        str | None,
-        Field(
-            default=None,
-            description="Unit of measurement",
-            max_length=50,
-            examples=["pcs"],
         ),
     ]
     quality_requirements: Annotated[
@@ -71,10 +52,6 @@ class RequestCreate(BaseModel):
         datetime | None,
         Field(default=None, description="Latest acceptable delivery date"),
     ]
-    max_price_per_unit: Annotated[
-        Decimal | None,
-        Field(default=None, description="Maximum acceptable price per unit"),
-    ]
     currency: Annotated[
         str | None,
         Field(
@@ -83,18 +60,6 @@ class RequestCreate(BaseModel):
             min_length=2,
             max_length=20,
             examples=["BYN"],
-        ),
-    ]
-    delivery_deadline: Annotated[
-        datetime | None,
-        Field(default=None, description="Latest acceptable delivery date"),
-    ]
-    max_price_per_unit: Annotated[
-        Decimal | None,
-        Field(
-            default=None,
-            description="Maximum acceptable price per unit",
-            examples=[1000],
         ),
     ]
 
@@ -139,7 +104,7 @@ class RequestResponse(BaseModel):
         ),
     ]
     delivery_region: Annotated[
-        str | None,
+        str,
         Field(description="Requested delivery region", examples=["Minsk"]),
     ]
     description: Annotated[
@@ -148,14 +113,6 @@ class RequestResponse(BaseModel):
             description="Detailed requirements",
             examples=["High pressure centrifugal pumps"],
         ),
-    ]
-    quantity: Annotated[
-        float | None,
-        Field(description="Requested quantity", examples=[100]),
-    ]
-    unit: Annotated[
-        str | None,
-        Field(description="Unit of measurement", examples=["pcs"]),
     ]
     quality_requirements: Annotated[
         str | None,
@@ -166,10 +123,6 @@ class RequestResponse(BaseModel):
         Field(
             description="Delivery deadline", examples=["2025-06-01T00:00:00Z"]
         ),
-    ]
-    max_price_per_unit: Annotated[
-        Decimal | None,
-        Field(description="Max price per unit", examples=[1000]),
     ]
     currency: Annotated[
         str | None,
@@ -277,7 +230,7 @@ class LaunchMailingResponse(BaseModel):
     ]
 
 
-class Supplier(BaseModel):
+class SupplierResponse(BaseModel):
     """Minimal supplier information."""
 
     model_config = ConfigDict(from_attributes=True)
@@ -344,13 +297,13 @@ class SupplierResponseResponse(BaseModel):
         ),
     ]
     supplier: Annotated[
-        Supplier,
+        SupplierResponse,
         Field(description="Supplier that sent the response"),
     ]
 
     @classmethod
     def from_orm_with_supplier(
-        cls, response: SupplierResponse
+        cls, response: SupplierResponseDB
     ) -> "SupplierResponseResponse":
         return cls(
             id=response.id,
@@ -358,7 +311,46 @@ class SupplierResponseResponse(BaseModel):
             raw_body=response.raw_body,
             attachments=response.attachments,
             received_at=response.received_at,
-            supplier=Supplier.model_validate(
+            supplier=SupplierResponse.model_validate(
                 response.request_supplier.supplier
             ),
         )
+
+
+class RequestSupplierResponse(BaseModel):
+    """Response representation of a request-supplier link."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: Annotated[
+        uuid.UUID,
+        Field(
+            description="RequestSupplier identifier",
+            examples=["123e4567-e89b-12d3-a456-426614174000"],
+        ),
+    ]
+    supplier: Annotated[
+        SupplierResponse,
+        Field(description="Supplier information"),
+    ]
+    status: Annotated[
+        str,
+        Field(description="Current status of the supplier request"),
+    ]
+    is_enabled: Annotated[
+        bool,
+        Field(description="Whether the supplier is enabled for this request"),
+    ]
+    sent_at: Annotated[
+        datetime | None,
+        Field(description="Timestamp when the request was sent"),
+    ]
+
+
+class ToggleSupplierRequest(BaseModel):
+    """Request to toggle supplier enabled status."""
+
+    is_enabled: Annotated[
+        bool,
+        Field(description="New enabled status for the supplier"),
+    ]

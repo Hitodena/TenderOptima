@@ -13,8 +13,11 @@ from app.api.user_requests.schemas import (
     ParserResult,
     RequestCreate,
     RequestResponse,
+    RequestSupplierResponse,
     SearchResult,
+    SupplierResponse,
     SupplierResponseResponse,
+    ToggleSupplierRequest,
 )
 from app.celery_app.tasks.email_tasks import send_emails
 from app.core.config import get_config
@@ -61,11 +64,8 @@ async def create_request(
         query=body.query,
         delivery_region=body.delivery_region,
         description=body.description,
-        quantity=body.quantity,
-        unit=body.unit,
         quality_requirements=body.quality_requirements,
         delivery_deadline=body.delivery_deadline,
-        max_price_per_unit=body.max_price_per_unit,
         currency=body.currency,
         status="draft",
     )
@@ -323,3 +323,81 @@ async def get_responses(
     return [
         SupplierResponseResponse.from_orm_with_supplier(r) for r in responses
     ]
+
+
+@router.get(
+    "/{request_id}/suppliers",
+    response_model=list[RequestSupplierResponse],
+    summary="List suppliers for a request",
+    responses={
+        200: {"description": "List of suppliers associated with the request"},
+        401: {"description": "Missing or invalid authentication credentials"},
+        404: {"description": "Request not found or does not belong to user"},
+    },
+)
+async def get_suppliers(
+    request_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> list[RequestSupplierResponse]:
+    """Returns all suppliers associated with the given request."""
+    request = await RequestDAO.get_by_id(session, request_id)
+    if not request or request.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
+        )
+
+    suppliers = await RequestSupplierDAO.get_by_request(session, request_id)
+    return [
+        RequestSupplierResponse(
+            id=rs.id,
+            supplier=SupplierResponse.model_validate(rs.supplier),
+            status=rs.status,
+            is_enabled=rs.is_enabled,
+            sent_at=rs.sent_at,
+        )
+        for rs in suppliers
+    ]
+
+
+@router.patch(
+    "/{request_id}/suppliers/{request_supplier_id}",
+    response_model=RequestSupplierResponse,
+    summary="Toggle supplier enabled status for a request",
+    responses={
+        200: {"description": "Supplier enabled status updated"},
+        401: {"description": "Missing or invalid authentication credentials"},
+        404: {"description": "Request or supplier not found"},
+    },
+)
+async def toggle_supplier(
+    request_id: uuid.UUID,
+    request_supplier_id: uuid.UUID,
+    body: ToggleSupplierRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> RequestSupplierResponse:
+    """Updates the enabled status of a supplier for a specific request."""
+    request = await RequestDAO.get_by_id(session, request_id)
+    if not request or request.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
+        )
+
+    rs = await RequestSupplierDAO.set_enabled(
+        session, request_supplier_id, body.is_enabled
+    )
+    if not rs:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Request supplier not found",
+        )
+
+    await session.refresh(rs, ["supplier"])
+    return RequestSupplierResponse(
+        id=rs.id,
+        supplier=SupplierResponse.model_validate(rs.supplier),
+        status=rs.status,
+        is_enabled=rs.is_enabled,
+        sent_at=rs.sent_at,
+    )
