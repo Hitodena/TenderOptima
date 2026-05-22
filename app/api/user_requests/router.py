@@ -31,6 +31,7 @@ from app.db.dao import (
     SupplierResponseDAO,
 )
 from app.db.models import User
+from app.enums import RequestStatus, RequestSupplierStatus
 
 router = APIRouter(prefix="/requests", tags=["Requests"])
 config = get_config()
@@ -64,7 +65,7 @@ async def create_request(
         user_id=current_user.id,
         query=body.query,
         delivery_region=body.delivery_region,
-        status="draft",
+        status=RequestStatus.DRAFT,
     )
     return RequestResponse.model_validate(request)
 
@@ -93,7 +94,7 @@ async def search_suppliers(
             status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
         )
 
-    if request.status not in ("draft", "active"):
+    if request.status not in (RequestStatus.DRAFT, RequestStatus.ACTIVE):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot search in status '{request.status}'",
@@ -170,7 +171,7 @@ async def search_suppliers(
                 request_id=request.id,
                 supplier_id=supplier.id,
                 sent_to_email=result.emails[0],
-                status="pending",
+                status=RequestSupplierStatus.PENDING,
                 smtp_message_id=None,
             )
             saved += 1
@@ -184,7 +185,7 @@ async def search_suppliers(
         request_id=request.id,
     )
 
-    await RequestDAO.update_status(session, request.id, "active")
+    await RequestDAO.update_status(session, request.id, RequestStatus.ACTIVE)
 
     logger.info(
         "Search done",
@@ -227,7 +228,7 @@ async def launch_mailing(
             status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
         )
 
-    if request.status != "active":
+    if request.status != RequestStatus.ACTIVE:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot launch mailing in status '{request.status}'",
@@ -243,8 +244,10 @@ async def launch_mailing(
     send_emails.delay(str(request_id))  # type: ignore
     logger.info("send_emails task queued", request_id=str(request_id))
 
+    await RequestDAO.update_status(session, request.id, RequestStatus.QUEUED)
+
     return LaunchMailingResponse(
-        status="queued",
+        status=RequestStatus.QUEUED,
         request_id=str(request_id),
         pending=pending_count,
     )
@@ -349,7 +352,7 @@ async def get_suppliers(
         RequestSupplierResponse(
             id=rs.id,
             supplier=SupplierResponse.model_validate(rs.supplier),
-            status=rs.status,
+            status=RequestSupplierStatus(rs.status),
             is_enabled=rs.is_enabled,
             sent_at=rs.sent_at,
         )
@@ -394,7 +397,7 @@ async def toggle_supplier(
     return RequestSupplierResponse(
         id=rs.id,
         supplier=SupplierResponse.model_validate(rs.supplier),
-        status=rs.status,
+        status=RequestSupplierStatus(rs.status),
         is_enabled=rs.is_enabled,
         sent_at=rs.sent_at,
     )

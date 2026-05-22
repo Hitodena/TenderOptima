@@ -4,7 +4,13 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.db.models import SupplierResponse as SupplierResponseDB
+from app.db.models import (
+    SupplierResponse as SupplierResponseDB,
+)
+from app.enums import (
+    RequestStatus,
+    RequestSupplierStatus,
+)
 
 
 class RequestCreate(BaseModel):
@@ -137,10 +143,10 @@ class RequestResponse(BaseModel):
         ),
     ]
     status: Annotated[
-        str,
+        RequestStatus,
         Field(
             description="Current lifecycle status of the request",
-            examples=["active"],
+            examples=[RequestStatus.ACTIVE],
         ),
     ]
     tracking_id: Annotated[
@@ -268,7 +274,8 @@ class LaunchMailingResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     status: Annotated[
-        str, Field(description="Task status", examples=["queued"])
+        RequestStatus,
+        Field(description="Task status", examples=[RequestStatus.QUEUED]),
     ]
     request_id: Annotated[
         str,
@@ -387,10 +394,10 @@ class RequestSupplierResponse(BaseModel):
         Field(description="Supplier information"),
     ]
     status: Annotated[
-        str,
+        RequestSupplierStatus,
         Field(
             description="Current status of the supplier request",
-            examples=["draft"],
+            examples=[RequestSupplierStatus.PENDING],
         ),
     ]
     is_enabled: Annotated[
