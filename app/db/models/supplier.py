@@ -17,6 +17,14 @@ class Supplier(IDMixinUUID, TimestampMixin, Base):
     email: Mapped[str] = mapped_column(unique=False, nullable=False)
     from_source: Mapped[str | None] = mapped_column()
 
+    added_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id")
+    )
+
+    added_by_user: Mapped["User | None"] = relationship(  # noqa: F821 # type: ignore
+        back_populates="added_suppliers"
+    )
+
     request_suppliers: Mapped[list["RequestSupplier"]] = relationship(
         back_populates="supplier"
     )

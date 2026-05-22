@@ -24,3 +24,7 @@ class User(IDMixinUUID, TimestampMixin, Base):
     subscription: Mapped["Subscription"] = relationship(  # noqa: F821 # type: ignore
         back_populates="user", uselist=False, lazy="selectin"
     )
+
+    added_suppliers: Mapped[list["Supplier"]] = relationship(  # noqa: F821 # type: ignore
+        back_populates="added_by_user"
+    )
