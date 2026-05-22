@@ -7,7 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.dao.base_dao import BaseDAO
-from app.db.models import Request, RequestSupplier, Supplier
+from app.db.models import (
+    Request,
+    RequestSupplier,
+    Supplier,
+)
+from app.enums import RequestSupplierStatus
 
 
 class RequestSupplierDAO(BaseDAO[RequestSupplier]):
@@ -27,7 +32,7 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
                 select(cls.model)
                 .where(
                     cls.model.request_id == request_id,
-                    cls.model.status == "pending",
+                    cls.model.status == RequestSupplierStatus.PENDING,
                     cls.model.is_enabled.is_(True),
                 )
                 .options(
@@ -129,7 +134,7 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
         cls,
         session: AsyncSession,
         request_supplier: RequestSupplier,
-        status: str,
+        status: RequestSupplierStatus,
         sent_at: datetime | None = None,
         smtp_message_id: str | None = None,
     ) -> None:
@@ -224,7 +229,7 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
         try:
             stmt = select(func.count()).where(
                 cls.model.request_id == request_id,
-                cls.model.status == "pending",
+                cls.model.status == RequestSupplierStatus.PENDING,
                 cls.model.is_enabled.is_(True),
             )
             result = await session.execute(stmt)
@@ -374,9 +379,7 @@ class SupplierDAO(BaseDAO[Supplier]):
             domain=domain,
         )
         try:
-            stmt = select(cls.model).where(cls.model.domain == domain)
-            result = await session.execute(stmt)
-            supplier = result.scalar_one_or_none()
+            supplier = await cls.get_by_domain(session, domain)
             if supplier is None:
                 supplier = await cls.create(session, domain=domain, **defaults)
                 logger.info(
@@ -397,5 +400,37 @@ class SupplierDAO(BaseDAO[Supplier]):
                 "Failed get supplier by domain",
                 error=str(exc),
                 model=cls.model,
+            )
+            raise
+
+    @classmethod
+    async def get_by_domain(
+        cls, session: AsyncSession, domain: str
+    ) -> Supplier | None:
+        logger.debug(
+            "Getting supplier by domain", model=cls.model, domain=domain
+        )
+        try:
+            stmt = select(cls.model).where(cls.model.domain == domain)
+            result = await session.execute(stmt)
+            instance = result.scalar_one_or_none()
+            if instance:
+                logger.info(
+                    "Got supplier by domain", model=cls.model, domain=domain
+                )
+            else:
+                logger.info(
+                    "Supplier not found by domain",
+                    model=cls.model,
+                    domain=domain,
+                )
+            return instance
+        except Exception as exc:
+            await session.rollback()
+            logger.exception(
+                "Failed to get supplier by domain",
+                error=str(exc),
+                model=cls.model,
+                domain=domain,
             )
             raise
