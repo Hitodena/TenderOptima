@@ -14,6 +14,7 @@ from app.api.user_requests.schemas import (
     RequestCreate,
     RequestResponse,
     RequestSupplierResponse,
+    RequestUpdate,
     SearchResult,
     SupplierResponse,
     SupplierResponseResponse,
@@ -63,10 +64,6 @@ async def create_request(
         user_id=current_user.id,
         query=body.query,
         delivery_region=body.delivery_region,
-        description=body.description,
-        quality_requirements=body.quality_requirements,
-        delivery_deadline=body.delivery_deadline,
-        currency=body.currency,
         status="draft",
     )
     return RequestResponse.model_validate(request)
@@ -401,3 +398,43 @@ async def toggle_supplier(
         is_enabled=rs.is_enabled,
         sent_at=rs.sent_at,
     )
+
+
+@router.patch(
+    "/{request_id}",
+    response_model=RequestResponse,
+    summary="Update optional fields and additional parameters for the request email",  # noqa: E501
+    responses={
+        200: {"description": "Request parameters updated"},
+        401: {"description": "Missing or invalid authentication credentials"},
+        404: {"description": "Request not found or does not belong to user"},
+        422: {"description": "Validation Error"},
+    },
+)
+async def update_request_additional_params(
+    request_id: uuid.UUID,
+    body: RequestUpdate,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> RequestResponse:
+    """Updates description, currency and/or the additional_params JSON for the email template."""  # noqa: E501
+    request = await RequestDAO.get_by_id(session, request_id)
+    if not request or request.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
+        )
+
+    additional_params_dict = (
+        body.additional_params.model_dump() if body.additional_params else None
+    )
+    await RequestDAO.update_additional_params(
+        session,
+        request_id,
+        additional_params=additional_params_dict,
+        description=body.description,
+        delivery_deadline=body.delivery_deadline,
+        currency=body.currency,
+    )
+
+    updated = await RequestDAO.get_by_id(session, request_id)
+    return RequestResponse.model_validate(updated)

@@ -8,7 +8,7 @@ from app.db.models import SupplierResponse as SupplierResponseDB
 
 
 class RequestCreate(BaseModel):
-    """Payload for creating a new supplier search request."""
+    """Minimal payload for creating a new supplier search request (only query + region; other fields set later via PATCH before launch)."""  # noqa: E501
 
     model_config = ConfigDict(str_strip_whitespace=True, from_attributes=True)
 
@@ -18,7 +18,7 @@ class RequestCreate(BaseModel):
             description="Main search query describing the product needed",
             min_length=3,
             max_length=500,
-            examples=["industrial pumps"],
+            examples=["промышленные насосы"],
         ),
     ]
     delivery_region: Annotated[
@@ -27,39 +27,86 @@ class RequestCreate(BaseModel):
             ...,
             description="Preferred delivery region or country",
             max_length=100,
-            examples=["Minsk"],
+            examples=["Минск"],
         ),
     ]
+
+
+class AdditionalParams(BaseModel):
+    """User-selected optional + custom parameters to include in the supplier request email."""  # noqa: E501
+
+    model_config = ConfigDict(from_attributes=True, str_strip_whitespace=True)
+
+    included_fields: Annotated[
+        list[str],
+        Field(
+            default_factory=list,
+            description="List of standard optional fields the user chose to include (e.g. 'description', 'delivery_deadline')",  # noqa: E501
+            examples=[["description", "delivery_deadline"]],
+        ),
+    ]
+    custom_params: Annotated[
+        list[dict[str, str]],
+        Field(
+            default_factory=list,
+            description="User-added custom key-value pairs for the email (label + value)",  # noqa: E501
+            examples=[
+                [{"label": "Условия оплаты", "value": "50% предоплата"}]
+            ],
+        ),
+    ]
+
+
+class RequestUpdate(BaseModel):
+    """Payload for updating optional fields and additional parameters before launching the request."""  # noqa: E501
+
+    model_config = ConfigDict(str_strip_whitespace=True, from_attributes=True)
+
     description: Annotated[
-        str | None,
+        str,
         Field(
-            default=None,
             description="Detailed description of requirements",
+            min_length=3,
             max_length=2000,
-            examples=["High pressure centrifugal pumps"],
+            examples=[
+                "Высоконапорные центробежные насосы для химической промышленности"  # noqa: E501
+            ],
         ),
-    ]
-    quality_requirements: Annotated[
-        str | None,
-        Field(
-            default=None,
-            description="Specific quality or certification requirements",
-            max_length=1000,
-            examples=["ISO 9001 certified"],
-        ),
-    ]
-    delivery_deadline: Annotated[
-        datetime | None,
-        Field(default=None, description="Latest acceptable delivery date"),
     ]
     currency: Annotated[
-        str | None,
+        str,
         Field(
-            default="BYN",
             description="Currency code for the price",
             min_length=2,
             max_length=20,
             examples=["BYN"],
+        ),
+    ]
+    delivery_deadline: Annotated[
+        datetime | None,
+        Field(
+            default=None,
+            description="Latest acceptable delivery date",
+            examples=["2026-06-30T00:00:00"],
+        ),
+    ]
+    additional_params: Annotated[
+        AdditionalParams | None,
+        Field(
+            default=None,
+            description="Selected optional and custom parameters for the outgoing email",  # noqa: E501
+            examples=[
+                {
+                    "included_fields": [
+                        "description",
+                        "delivery_deadline",
+                        "currency",
+                    ],
+                    "custom_params": [
+                        {"label": "Условия оплаты", "value": "50% предоплата"}
+                    ],
+                }
+            ],
         ),
     ]
 
@@ -104,7 +151,7 @@ class RequestResponse(BaseModel):
         ),
     ]
     delivery_region: Annotated[
-        str,
+        str | None,
         Field(description="Requested delivery region", examples=["Minsk"]),
     ]
     description: Annotated[
@@ -113,10 +160,6 @@ class RequestResponse(BaseModel):
             description="Detailed requirements",
             examples=["High pressure centrifugal pumps"],
         ),
-    ]
-    quality_requirements: Annotated[
-        str | None,
-        Field(description="Quality requirements", examples=["ISO 9001"]),
     ]
     delivery_deadline: Annotated[
         datetime | None,
@@ -132,6 +175,16 @@ class RequestResponse(BaseModel):
         datetime,
         Field(
             description="Creation timestamp", examples=["2025-01-15T10:30:00Z"]
+        ),
+    ]
+    additional_params: Annotated[
+        AdditionalParams | None,
+        Field(
+            default=None,
+            description="Selected optional and custom parameters for the outgoing email",  # noqa: E501
+            examples=[
+                {"included_fields": ["description"], "custom_params": []}
+            ],
         ),
     ]
 
@@ -335,7 +388,10 @@ class RequestSupplierResponse(BaseModel):
     ]
     status: Annotated[
         str,
-        Field(description="Current status of the supplier request"),
+        Field(
+            description="Current status of the supplier request",
+            examples=["draft"],
+        ),
     ]
     is_enabled: Annotated[
         bool,
