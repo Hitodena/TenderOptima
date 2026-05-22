@@ -185,7 +185,9 @@ async def search_suppliers(
         request_id=request.id,
     )
 
-    await RequestDAO.update_status(session, request.id, RequestStatus.ACTIVE)
+    await RequestDAO.update_status(
+        session, request.id, RequestStatus.ACTIVE
+    )
 
     logger.info(
         "Search done",

@@ -32,7 +32,7 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
                 select(cls.model)
                 .where(
                     cls.model.request_id == request_id,
-                    cls.model.status == RequestSupplierStatus.PENDING,
+                    cls.model.status == RequestSupplierStatus.PENDING.value,
                     cls.model.is_enabled.is_(True),
                 )
                 .options(

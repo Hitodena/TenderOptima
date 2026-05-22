@@ -115,7 +115,7 @@ class RequestDAO(BaseDAO[Request]):
             stmt = (
                 update(cls.model)
                 .where(cls.model.id == request_id)
-                .values(status=status)
+                .values(status=status.value)
             )
             await session.execute(stmt)
             await session.flush()
