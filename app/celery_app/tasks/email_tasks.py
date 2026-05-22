@@ -20,6 +20,7 @@ from app.celery_app.celery_config import app
 from app.celery_app.context import WorkerContext
 from app.core.config import get_config
 from app.db.dao import RequestDAO, RequestSupplierDAO, SupplierResponseDAO
+from app.enums import RequestStatus, RequestSupplierStatus
 
 config = get_config()
 
@@ -144,7 +145,7 @@ async def send_emails(self, request_id: str) -> dict:
                     supplier_id=str(supplier.id),
                     domain=supplier.domain,
                 )
-                results.append((rs.id, "failed"))
+                results.append((rs.id, RequestSupplierStatus.FAILED))
                 failed += 1
                 continue
 
@@ -167,7 +168,9 @@ async def send_emails(self, request_id: str) -> dict:
 
             try:
                 smtp.sendmail(config.smtp_user, recipient, msg.as_string())
-                results.append((rs.id, "sent", msg["Message-ID"]))
+                results.append(
+                    (rs.id, RequestSupplierStatus.SENT, msg["Message-ID"])
+                )
                 sent += 1
                 logger.info(
                     "Email sent", domain=supplier.domain, recipient=recipient
@@ -178,7 +181,7 @@ async def send_emails(self, request_id: str) -> dict:
                     domain=supplier.domain,
                     error=str(exc),
                 )
-                results.append((rs.id, "failed"))
+                results.append((rs.id, RequestSupplierStatus.FAILED))
                 failed += 1
     finally:
         smtp.quit()
@@ -194,6 +197,10 @@ async def send_emails(self, request_id: str) -> dict:
                     sent_at=datetime.now(UTC),
                     smtp_message_id=message_id,
                 )
+
+        await RequestDAO.update_status(
+            session, uuid.UUID(request_id), RequestStatus.COMPLETED
+        )
 
     logger.info(
         "send_emails done", request_id=request_id, sent=sent, failed=failed
@@ -308,7 +315,7 @@ async def poll_imap(self) -> dict:
                         received_at=item["received_at"],
                     )
                     await RequestSupplierDAO.mark_status(
-                        session, rs, "replied"
+                        session, rs, RequestSupplierStatus.REPLIED
                     )
                     seen_uids.append(item["uid"])
 
