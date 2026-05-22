@@ -121,7 +121,7 @@
             <td>Наименование / запрос</td>
             <td>{{ request.query }}</td>
           </tr>
-          {% if request.description %}
+          {% if request.description and not request.additional_params or 'description' in request.additional_params.included_fields or [] %}
             <tr>
               <td>Описание</td>
               <td>{{ request.description }}</td>
@@ -133,29 +133,25 @@
               <td>{{ request.quantity }} {{ request.unit or 'ед.' }}</td>
             </tr>
           {% endif %}
-          {% if request.quality_requirements %}
-            <tr>
-              <td>Требования к качеству</td>
-              <td>{{ request.quality_requirements }}</td>
-            </tr>
-          {% endif %}
-          {% if request.max_price_per_unit %}
-            <tr>
-              <td>Максимальная цена за единицу</td>
-              <td>{{ request.max_price_per_unit }} {{ request.currency or 'BYN' }}</td>
-            </tr>
-          {% endif %}
-          {% if request.delivery_deadline %}
+          {% if request.delivery_deadline and not request.additional_params or 'delivery_deadline' in request.additional_params.included_fields or [] %}
             <tr>
               <td>Срок поставки</td>
               <td>{{ request.delivery_deadline.strftime('%d.%m.%Y') }}</td>
             </tr>
           {% endif %}
-          {% if request.delivery_region %}
+          {% if request.delivery_region and not request.additional_params or 'delivery_region' in request.additional_params.included_fields or [] %}
             <tr>
               <td>Регион поставки</td>
               <td>{{ request.delivery_region }}</td>
             </tr>
+          {% endif %}
+          {% if request.additional_params and request.additional_params.custom_params %}
+            {% for p in request.additional_params.custom_params %}
+              <tr>
+                <td>{{ p.label }}</td>
+                <td>{{ p.value }}</td>
+              </tr>
+            {% endfor %}
           {% endif %}
         </table>
 
@@ -163,7 +159,9 @@
           <ul style="margin: 0; padding-left: 20px; list-style: disc;">
             <li>укажите цену за единицу, доступное количество, срок поставки, условия оплаты и иные существенные условия</li>
             <li>прикрепите прайс-лист или коммерческое предложение (PDF / Excel)</li>
-            <li><strong>не изменяйте тему письма</strong> — она содержит идентификатор запроса для автоматической обработки</li>
+            <li>
+              <strong>не изменяйте тему письма</strong> — она содержит идентификатор запроса для автоматической обработки
+            </li>
           </ul>
         </div>
       </div>

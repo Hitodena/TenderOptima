@@ -39,7 +39,6 @@
 						</div>
 
 						<div class="flex items-center gap-3 shrink-0">
-							<!-- Вложения -->
 							<UBadge v-if="response.attachments?.length" color="neutral" variant="subtle" size="sm"
 								:label="`${response.attachments.length} файл${attachmentSuffix(response.attachments.length)}`"
 								leading-icon="i-lucide-paperclip" />
