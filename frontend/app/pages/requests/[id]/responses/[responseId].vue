@@ -87,8 +87,6 @@
 <script lang="ts" setup>
 import type { SupplierResponseResponse } from '#shared/types'
 
-definePageMeta({ layout: 'default' })
-
 const route = useRoute()
 const id = route.params.id as string
 const responseId = route.params.responseId as string

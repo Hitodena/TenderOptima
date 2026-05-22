@@ -33,7 +33,7 @@
 					</div>
 				</div>
 
-				<UButton v-if="request.status !== 'draft'" variant="outline" color="neutral"
+				<UButton v-if="request.status === RequestStatus.QUEUED || request.status === RequestStatus.COMPLETED" variant="outline" color="neutral"
 					leading-icon="i-lucide-inbox" :to="`/requests/${id}/responses`" class="shrink-0">
 					Ответы поставщиков
 				</UButton>
@@ -42,30 +42,24 @@
 			<UAlert v-if="actionError" color="error" variant="soft" icon="i-lucide-circle-alert"
 				:description="actionError" class="mb-6" />
 
-			<UAlert v-if="launchResult" color="success" variant="soft" icon="i-lucide-mail-check"
-				title="Рассылка запущена"
-				:description="`Письма поставлены в очередь для ${launchResult.pending} поставщиков. Ответы появятся в разделе «Ответы поставщиков».`"
-				class="mb-6" />
-
 			<template v-if="suppliers.length || loadingSuppliers">
 
-				<div class="flex items-start justify-between mb-4 gap-4">
+				<div class="flex items-start justify-between mb-4 gap-4 flex-wrap">
 					<div>
 						<h2 class="text-lg font-semibold">Найденные поставщики</h2>
-						<p class="text-sm text-muted mt-0.5">
-							Включите нужных и нажмите «Отправить запрос»
-						</p>
+						<p class="text-sm text-muted mt-0.5">Включите нужных и нажмите «Отправить запрос»</p>
 					</div>
-
-					<div class="flex gap-3 shrink-0">
-						<div class="text-center">
-							<p class="text-xl font-bold text-highlighted">{{ suppliers.length }}</p>
-							<p class="text-xs text-muted">Найдено</p>
-						</div>
-						<USeparator orientation="vertical" />
-						<div class="text-center">
-							<p class="text-xl font-bold text-primary">{{ enabledCount }}</p>
-							<p class="text-xs text-muted">Выбрано</p>
+					<div class="flex items-center gap-4 shrink-0">
+						<div class="flex gap-4">
+							<div class="text-center">
+								<p class="text-xl font-bold text-highlighted">{{ suppliers.length }}</p>
+								<p class="text-xs text-muted">Найдено</p>
+							</div>
+							<USeparator orientation="vertical" />
+							<div class="text-center">
+								<p class="text-xl font-bold text-primary">{{ enabledCount }}</p>
+								<p class="text-xs text-muted">Выбрано</p>
+							</div>
 						</div>
 					</div>
 				</div>
@@ -77,8 +71,8 @@
 					<UTable :data="suppliers" :columns="supplierColumns" :loading="loadingSuppliers">
 						<template #is_enabled-cell="{ row }">
 							<USwitch :model-value="row.original.is_enabled" size="sm"
-								:disabled="updatingToggle || request.status === 'queued'"
-								@update:model-value="val => handleToggle(row.original, Boolean(val))" />
+								:disabled="updatingToggle || request.status === RequestStatus.QUEUED"
+								@update:model-value="(val: any) => handleToggle(row.original, Boolean(val))" />
 						</template>
 
 						<template #company_name-cell="{ row }">
@@ -86,9 +80,8 @@
 								<div class="w-7 h-7 rounded-lg bg-elevated flex items-center justify-center shrink-0">
 									<UIcon name="i-lucide-building-2" class="w-3.5 h-3.5 text-muted" />
 								</div>
-								<span class="font-medium truncate max-w-50">
-									{{ row.original.supplier?.company_name }}
-								</span>
+								<span class="font-medium truncate max-w-50">{{ row.original.supplier?.company_name
+								}}</span>
 							</div>
 						</template>
 
@@ -104,26 +97,30 @@
 						</template>
 
 						<template #status-cell="{ row }">
-							<UBadge :color="supplierStatusColor(row.original.status)" variant="subtle" size="sm">
-								{{ supplierStatusLabel(row.original.status) }}
+							<UBadge :color="getSupplierStatusColor(row.original.status)" variant="subtle" size="sm">
+								{{ getSupplierStatusLabel(row.original.status) }}
 							</UBadge>
 						</template>
 					</UTable>
 
-					<div class="px-4 py-3 border-t border-default flex items-center justify-between">
+					<div class="px-4 py-3 border-t border-default flex items-center justify-between gap-3 flex-wrap">
 						<p class="text-sm text-muted">
-							Выбрано
-							<span class="font-semibold text-highlighted">{{ enabledCount }}</span>
-							из {{ suppliers.length }}
+							Выбрано <span class="font-semibold text-highlighted">{{ enabledCount }}</span> из {{
+								suppliers.length }}
 						</p>
-						<div class="flex gap-2">
+						<div class="flex items-center gap-2">
+							<UButton v-if="request.status !== 'queued'" size="sm" variant="outline" color="neutral"
+								leading-icon="i-lucide-user-plus" @click="showAddSupplier = true">
+								Добавить поставщика
+							</UButton>
+
 							<UButton size="xs" variant="ghost" color="neutral"
-								:disabled="updatingToggle || request.status === 'queued' || enabledCount === 0"
+								:disabled="updatingToggle || request.status === RequestStatus.QUEUED || enabledCount === 0"
 								@click="deselectAll">
 								Снять все
 							</UButton>
 							<UButton size="xs" variant="ghost" color="primary"
-								:disabled="updatingToggle || request.status === 'queued' || enabledCount === suppliers.length"
+								:disabled="updatingToggle || request.status === RequestStatus.QUEUED || enabledCount === suppliers.length"
 								@click="selectAll">
 								Выбрать все
 							</UButton>
@@ -131,22 +128,24 @@
 					</div>
 				</UCard>
 
-				<div v-if="request.status !== 'queued'" class="flex items-center gap-3">
+				<div v-if="request.status !== RequestStatus.QUEUED" class="flex items-center gap-3">
 					<UButton size="lg" leading-icon="i-lucide-send" :disabled="enabledCount === 0" :loading="launching"
-						@click="openParamsModal">
+						@click="showParamsModal = true">
 						Отправить запрос поставщикам
 					</UButton>
-					<p v-if="enabledCount === 0" class="text-xs text-muted">
-						Включите хотя бы одного поставщика
-					</p>
+					<p v-if="enabledCount === 0" class="text-xs text-muted">Включите хотя бы одного поставщика</p>
 				</div>
 
-				<div v-else class="flex items-center gap-3 p-4 rounded-xl bg-warning/10 border border-warning/20">
+				<div v-if="request.status === RequestStatus.QUEUED" class="flex items-center gap-3 p-4 rounded-xl bg-warning/10 border border-warning/20">
 					<UIcon name="i-lucide-clock" class="w-5 h-5 text-warning shrink-0" />
 					<div>
 						<p class="text-sm font-medium">Рассылка в очереди</p>
 						<p class="text-xs text-muted">Письма отправляются в фоновом режиме</p>
 					</div>
+					<UButton size="sm" variant="ghost" :to="`/requests/${id}/responses`" class="ml-auto"
+						trailing-icon="i-lucide-arrow-right">
+						Смотреть ответы
+					</UButton>
 				</div>
 
 			</template>
@@ -158,15 +157,14 @@
 					</div>
 					<div class="text-center">
 						<p class="font-medium text-highlighted">Поставщики не найдены</p>
-						<p class="text-sm text-muted mt-1">
-							Попробуйте изменить формулировку запроса или регион
-						</p>
+						<p class="text-sm text-muted mt-1">Попробуйте изменить формулировку запроса или регион</p>
 					</div>
-					<UButton variant="outline" to="/requests/new">Новый поиск</UButton>
+					<UButton variant="outline" to="/requests">Новый поиск</UButton>
 				</div>
 			</template>
 
-			<AdditionalParamsModal v-model:open="showParamsModal" :request="request" @saved="handleLaunchAfterParams" />
+			<RequestParamsModal v-model:open="showParamsModal" :request="request" @launched="onLaunched" />
+			<AddSupplierModal v-model:open="showAddSupplier" :request-id="id" @added="fetchSuppliers" />
 
 		</template>
 
@@ -174,7 +172,7 @@
 			<div class="flex flex-col items-center justify-center py-24 gap-3">
 				<UIcon name="i-lucide-file-x" class="w-12 h-12 text-muted" />
 				<p class="text-muted">Запрос не найден</p>
-				<UButton to="/requests/new" variant="outline">Вернуться к поиску</UButton>
+				<UButton to="/requests" variant="outline">Вернуться к поиску</UButton>
 			</div>
 		</template>
 
@@ -182,14 +180,18 @@
 </template>
 
 <script lang="ts" setup>
-import type { LaunchMailingResponse, RequestResponse, RequestSupplierResponse } from '#shared/types'
+import {
+	getRequestStatusColor,
+	getRequestStatusLabel,
+	getSupplierStatusColor,
+	getSupplierStatusLabel,
+	RequestStatus,
+} from '#shared/types'
 import type { TableColumn } from '@nuxt/ui'
-
-definePageMeta({ layout: 'default' })
 
 const route = useRoute()
 const id = route.params.id as string
-const { get, post, patch } = useApi()
+const { get, patch } = useApi()
 
 const request = ref<RequestResponse | null>(null)
 const suppliers = ref<RequestSupplierResponse[]>([])
@@ -197,9 +199,9 @@ const loading = ref(true)
 const loadingSuppliers = ref(false)
 const launching = ref(false)
 const updatingToggle = ref(false)
-const launchResult = ref<LaunchMailingResponse | null>(null)
 const actionError = ref('')
 const showParamsModal = ref(false)
+const showAddSupplier = ref(false)
 
 async function fetchRequest() {
 	loading.value = true
@@ -213,7 +215,6 @@ async function fetchRequest() {
 }
 
 async function fetchSuppliers() {
-	if (!request.value) return
 	loadingSuppliers.value = true
 	try {
 		suppliers.value = await get<RequestSupplierResponse[]>(`/requests/${id}/suppliers`)
@@ -225,33 +226,17 @@ async function fetchSuppliers() {
 }
 
 await fetchRequest()
+
+	if (request.value?.status === RequestStatus.QUEUED) {
+		await navigateTo(`/requests/${id}/responses`)
+	}
+
 if (request.value) await fetchSuppliers()
 
 const enabledCount = computed(() => suppliers.value.filter(s => s.is_enabled).length)
 
-type BadgeColor = 'neutral' | 'primary' | 'success' | 'warning' | 'error' | 'info' | 'secondary'
-
-const STATUS_COLOR: Record<string, BadgeColor> = { draft: 'neutral', active: 'success', queued: 'warning' }
-const STATUS_LABEL: Record<string, string> = { draft: 'Черновик', active: 'Активный', queued: 'В очереди' }
-
-const statusColor = computed<BadgeColor>(() => STATUS_COLOR[request.value?.status ?? ''] ?? 'neutral')
-const statusLabel = computed(() => STATUS_LABEL[request.value?.status ?? ''] ?? request.value?.status ?? '')
-
-const SUPPLIER_STATUS_COLOR: Record<string, BadgeColor> = {
-	pending: 'neutral',
-	sent: 'primary',
-	replied: 'success',
-	failed: 'error',
-}
-const SUPPLIER_STATUS_LABEL: Record<string, string> = {
-	pending: 'Ожидает',
-	sent: 'Отправлено',
-	replied: 'Ответил',
-	failed: 'Ошибка',
-}
-
-function supplierStatusColor(s: string): BadgeColor { return SUPPLIER_STATUS_COLOR[s] ?? 'neutral' }
-function supplierStatusLabel(s: string): string { return SUPPLIER_STATUS_LABEL[s] ?? s }
+const statusColor = computed(() => getRequestStatusColor(request.value?.status ?? ''))
+const statusLabel = computed(() => getRequestStatusLabel(request.value?.status ?? ""))
 
 const supplierColumns: TableColumn<RequestSupplierResponse>[] = [
 	{ accessorKey: 'is_enabled', header: 'Рассылка' },
@@ -281,15 +266,13 @@ async function handleToggle(rs: RequestSupplierResponse, newVal: boolean) {
 	}
 }
 
-async function toggleAll(enabled: boolean) {
-	if (request.value?.status === 'queued') return
-	const toToggle = suppliers.value.filter(s => s.is_enabled !== enabled)
+	async function toggleAll(enabled: boolean) {
+		if (request.value?.status === RequestStatus.QUEUED) return
+		const toToggle = suppliers.value.filter(s => s.is_enabled !== enabled)
 	updatingToggle.value = true
 	actionError.value = ''
 	try {
-		await Promise.all(toToggle.map(s =>
-			patch(`/requests/${id}/suppliers/${s.id}`, { is_enabled: enabled })
-		))
+		await Promise.all(toToggle.map(s => patch(`/requests/${id}/suppliers/${s.id}`, { is_enabled: enabled })))
 		toToggle.forEach(s => s.is_enabled = enabled)
 	} catch (e: any) {
 		const detail = e?.response?.data?.detail
@@ -302,26 +285,7 @@ async function toggleAll(enabled: boolean) {
 const selectAll = () => toggleAll(true)
 const deselectAll = () => toggleAll(false)
 
-function openParamsModal() { showParamsModal.value = true }
-
-async function handleLaunchAfterParams(payload: any) {
-	if (launching.value) return
-	launching.value = true
-	actionError.value = ''
-	launchResult.value = null
-	showParamsModal.value = false
-	try {
-		await patch(`/requests/${id}`, payload)
-		const result = await post<LaunchMailingResponse>(`/requests/${id}/launch`)
-		launchResult.value = result
-		if (request.value) request.value.status = 'queued'
-		await fetchSuppliers()
-	} catch (e: any) {
-		const detail = e?.response?.data?.detail
-		actionError.value = typeof detail === 'string' ? detail : 'Ошибка при запуске рассылки'
-		showParamsModal.value = true
-	} finally {
-		launching.value = false
+	function onLaunched() {
+		if (request.value) request.value.status = RequestStatus.QUEUED
 	}
-}
 </script>

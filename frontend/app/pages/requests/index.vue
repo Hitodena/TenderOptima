@@ -20,7 +20,6 @@
 								class="w-full" />
 						</UFormField>
 
-						<!-- Индикатор поиска -->
 						<div v-if="loading" class="flex flex-col items-center gap-3 py-4">
 							<div class="relative">
 								<div class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
@@ -74,9 +73,9 @@
 								<div class="flex-1 min-w-0">
 									<div class="flex items-center gap-2 mb-0.5">
 										<p class="font-semibold truncate">{{ req.query }}</p>
-										<UBadge :color="statusColor(req.status)" variant="subtle" size="sm"
+										<UBadge :color="getRequestStatusColor(req.status)" variant="subtle" size="sm"
 											class="shrink-0">
-											{{ statusLabel(req.status) }}
+											{{ getRequestStatusLabel(req.status) }}
 										</UBadge>
 									</div>
 									<p class="text-xs text-muted flex items-center gap-2">
@@ -120,9 +119,8 @@
 
 <script lang="ts" setup>
 import type { RequestResponse } from '#shared/types'
+import { getRequestStatusColor, getRequestStatusLabel } from '#shared/types'
 import { z } from 'zod'
-
-definePageMeta({ layout: 'default' })
 
 const { post, get } = useApi()
 
@@ -220,18 +218,6 @@ onMounted(() => {
 	if (sentinel.value) observer.observe(sentinel.value)
 	onUnmounted(() => observer.disconnect())
 })
-
-type BadgeColor = 'neutral' | 'primary' | 'success' | 'warning' | 'error' | 'info' | 'secondary'
-
-const STATUS_COLOR: Record<string, BadgeColor> = {
-	draft: 'neutral', active: 'success', queued: 'warning',
-}
-const STATUS_LABEL: Record<string, string> = {
-	draft: 'Черновик', active: 'Активный', queued: 'В очереди',
-}
-
-function statusColor(s: string): BadgeColor { return STATUS_COLOR[s] ?? 'neutral' }
-function statusLabel(s: string): string { return STATUS_LABEL[s] ?? s }
 
 function formatDate(iso: string) {
 	return new Date(iso).toLocaleDateString('ru-RU', {
