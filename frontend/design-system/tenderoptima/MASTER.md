@@ -7,7 +7,7 @@
 ---
 
 **Project:** TenderOptima
-**Generated:** 2026-05-19 00:03:38
+**Generated:** 2026-05-22 00:41:35
 **Category:** B2B Service
 
 ---
@@ -164,10 +164,11 @@
 
 ### Page Pattern
 
-**Pattern Name:** Feature-Rich Showcase + Trust
+**Pattern Name:** Minimal Single Column
 
-- **CTA Placement:** Above fold
-- **Section Order:** Hero > Features > CTA
+- **Conversion Strategy:** Single CTA focus. Large typography. Lots of whitespace. No nav clutter. Mobile-first.
+- **CTA Placement:** Center, large CTA button
+- **Section Order:** 1. Hero headline, 2. Short description, 3. Benefit bullets (3 max), 4. CTA, 5. Footer
 
 ---
 

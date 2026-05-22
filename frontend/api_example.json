@@ -275,6 +275,50 @@
 						}
 					}
 				}
+			},
+			"patch": {
+				"tags": ["Requests"],
+				"summary": "Update optional fields and additional parameters for the request email",
+				"description": "Updates description, quality_requirements and/or the additional_params JSON for the email template.",
+				"operationId": "update_request_additional_params_api_requests__request_id__patch",
+				"security": [{ "OAuth2PasswordBearer": [] }],
+				"parameters": [
+					{
+						"name": "request_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid",
+							"title": "Request Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/RequestUpdate" }
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Request parameters updated",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/RequestResponse" }
+							}
+						}
+					},
+					"401": {
+						"description": "Missing or invalid authentication credentials"
+					},
+					"404": {
+						"description": "Request not found or does not belong to user"
+					},
+					"422": { "description": "Validation Error" }
+				}
 			}
 		},
 		"/api/requests/{request_id}/responses": {
@@ -600,6 +644,32 @@
 	},
 	"components": {
 		"schemas": {
+			"AdditionalParams": {
+				"properties": {
+					"included_fields": {
+						"items": { "type": "string" },
+						"type": "array",
+						"title": "Included Fields",
+						"description": "List of standard optional fields the user chose to include (e.g. 'description', 'quality_requirements')",
+						"examples": [["description", "quality_requirements"]]
+					},
+					"custom_params": {
+						"items": {
+							"additionalProperties": { "type": "string" },
+							"type": "object"
+						},
+						"type": "array",
+						"title": "Custom Params",
+						"description": "User-added custom key-value pairs for the email (label + value)",
+						"examples": [
+							[{ "label": "Условия оплаты", "value": "50% предоплата" }]
+						]
+					}
+				},
+				"type": "object",
+				"title": "AdditionalParams",
+				"description": "User-selected optional + custom parameters to include in the supplier request email."
+			},
 			"Attachment": {
 				"properties": {
 					"filename": {
@@ -946,6 +1016,16 @@
 						"title": "Created At",
 						"description": "Creation timestamp",
 						"examples": ["2025-01-15T10:30:00Z"]
+					},
+					"additional_params": {
+						"anyOf": [
+							{ "$ref": "#/components/schemas/AdditionalParams" },
+							{ "type": "null" }
+						],
+						"description": "Selected optional and custom parameters for the outgoing email",
+						"examples": [
+							{ "custom_params": [], "included_fields": ["description"] }
+						]
 					}
 				},
 				"type": "object",
@@ -1001,6 +1081,36 @@
 				"required": ["id", "supplier", "status", "is_enabled", "sent_at"],
 				"title": "RequestSupplierResponse",
 				"description": "Response representation of a request-supplier link."
+			},
+			"RequestUpdate": {
+				"properties": {
+					"description": {
+						"anyOf": [
+							{ "type": "string", "maxLength": 2000 },
+							{ "type": "null" }
+						],
+						"title": "Description",
+						"description": "Detailed description of requirements"
+					},
+					"quality_requirements": {
+						"anyOf": [
+							{ "type": "string", "maxLength": 1000 },
+							{ "type": "null" }
+						],
+						"title": "Quality Requirements",
+						"description": "Specific quality or certification requirements"
+					},
+					"additional_params": {
+						"anyOf": [
+							{ "$ref": "#/components/schemas/AdditionalParams" },
+							{ "type": "null" }
+						],
+						"description": "Selected optional and custom parameters for the outgoing email"
+					}
+				},
+				"type": "object",
+				"title": "RequestUpdate",
+				"description": "Payload for updating optional fields and additional parameters before launching the request."
 			},
 			"SearchHistoryResponse": {
 				"properties": {
