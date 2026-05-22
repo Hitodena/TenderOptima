@@ -15,5 +15,8 @@ export function useApi() {
 	const del = <T>(url: string, config?: AxiosRequestConfig) =>
 		$axios.delete<T>(url, config).then((r) => r.data);
 
-	return { get, post, put, del };
+	const patch = <T>(url: string, data?: unknown, config?: AxiosRequestConfig) =>
+		$axios.patch<T>(url, data, config).then((r) => r.data);
+
+	return { get, post, put, del, patch };
 }
