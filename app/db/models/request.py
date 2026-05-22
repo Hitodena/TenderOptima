@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSON, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.models.base import Base, IDMixinUUID, TimestampMixin
@@ -18,13 +18,13 @@ class Request(IDMixinUUID, TimestampMixin, Base):
     query: Mapped[str] = mapped_column(nullable=False)
     delivery_region: Mapped[str] = mapped_column()
 
-    quality_requirements: Mapped[str | None] = mapped_column(Text)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     delivery_deadline: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
     )
 
     currency: Mapped[str | None] = mapped_column()
+    additional_params: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     status: Mapped[str] = mapped_column(nullable=False)  # aka Enum
 

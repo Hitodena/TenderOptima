@@ -28,6 +28,7 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
                 .where(
                     cls.model.request_id == request_id,
                     cls.model.status == "pending",
+                    cls.model.is_enabled.is_(True),
                 )
                 .options(
                     selectinload(cls.model.supplier),
@@ -224,6 +225,7 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
             stmt = select(func.count()).where(
                 cls.model.request_id == request_id,
                 cls.model.status == "pending",
+                cls.model.is_enabled.is_(True),
             )
             result = await session.execute(stmt)
             count = result.scalar_one()
