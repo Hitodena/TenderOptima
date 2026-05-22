@@ -15,14 +15,10 @@ config = get_config()
 async def create_active_request_async(
     user_id: uuid.UUID,
     query: str,
-    delivery_region: str | None,
-    description: str | None,
-    quantity: int | None,
-    unit: str | None,
-    quality_requirements: str | None,
+    delivery_region: str,
+    description: str,
     delivery_deadline: str | None,
-    max_price_per_unit: float | None,
-    currency: str | None,
+    currency: str,
 ) -> tuple[Request, SearchHistory]:
     db_manager.init(config.build_db_url())
     async with db_manager.session() as session:
@@ -35,11 +31,7 @@ async def create_active_request_async(
             query=query,
             delivery_region=delivery_region,
             description=description,
-            quantity=quantity,
-            unit=unit,
-            quality_requirements=quality_requirements,
             delivery_deadline=delivery_deadline,
-            max_price_per_unit=max_price_per_unit,
             currency=currency,
             status="active",
         )
@@ -60,9 +52,6 @@ async def create_active_request_async(
 @click.option("--description", default=None, help="Description")
 @click.option("--quantity", default=None, type=int, help="Quantity")
 @click.option("--unit", default=None, help="Unit")
-@click.option(
-    "--quality-requirements", default=None, help="Quality requirements"
-)
 @click.option("--delivery-deadline", default=None, help="Delivery deadline")
 @click.option("--max-price-per-unit", default=None, type=float, help="Price")
 @click.option("--currency", default=None, help="Currency")
@@ -73,7 +62,6 @@ def create_active_request(
     description: str | None,
     quantity: int | None,
     unit: str | None,
-    quality_requirements: str | None,
     delivery_deadline: str | None,
     max_price_per_unit: float | None,
     currency: str | None,
@@ -86,7 +74,6 @@ def create_active_request(
             description,
             quantity,
             unit,
-            quality_requirements,
             delivery_deadline,
             max_price_per_unit,
             currency,
