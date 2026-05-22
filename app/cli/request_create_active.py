@@ -7,6 +7,7 @@ from loguru import logger
 from app.core import get_config
 from app.db.dao import RequestDAO, SearchHistoryDAO, UserDAO
 from app.db.models import Request, SearchHistory
+from app.enums import RequestStatus
 from app.services.db_service import db_manager
 
 config = get_config()
@@ -33,7 +34,7 @@ async def create_active_request_async(
             description=description,
             delivery_deadline=delivery_deadline,
             currency=currency,
-            status="active",
+            status=RequestStatus.ACTIVE,
         )
         search_history = await SearchHistoryDAO.create(
             session,
@@ -58,13 +59,10 @@ async def create_active_request_async(
 def create_active_request(
     user_id: uuid.UUID,
     query: str,
-    delivery_region: str | None,
-    description: str | None,
-    quantity: int | None,
-    unit: str | None,
+    delivery_region: str,
+    description: str,
     delivery_deadline: str | None,
-    max_price_per_unit: float | None,
-    currency: str | None,
+    currency: str,
 ) -> None:
     request, search_history = asyncio.run(
         create_active_request_async(
@@ -72,10 +70,7 @@ def create_active_request(
             query,
             delivery_region,
             description,
-            quantity,
-            unit,
             delivery_deadline,
-            max_price_per_unit,
             currency,
         )
     )
