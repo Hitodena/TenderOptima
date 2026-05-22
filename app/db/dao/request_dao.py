@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.dao.base_dao import BaseDAO
 from app.db.models import Request
+from app.enums import RequestStatus
 
 
 class RequestDAO(BaseDAO[Request]):
@@ -102,7 +103,7 @@ class RequestDAO(BaseDAO[Request]):
         cls,
         session: AsyncSession,
         request_id: uuid.UUID,
-        status: str,
+        status: RequestStatus,
     ) -> None:
         logger.debug(
             "Updating request status",
