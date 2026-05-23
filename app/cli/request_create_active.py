@@ -18,8 +18,6 @@ async def create_active_request_async(
     query: str,
     delivery_region: str,
     description: str,
-    delivery_deadline: str | None,
-    currency: str,
 ) -> tuple[Request, SearchHistory]:
     db_manager.init(config.build_db_url())
     async with db_manager.session() as session:
@@ -32,8 +30,6 @@ async def create_active_request_async(
             query=query,
             delivery_region=delivery_region,
             description=description,
-            delivery_deadline=delivery_deadline,
-            currency=currency,
             status=RequestStatus.ACTIVE,
         )
         search_history = await SearchHistoryDAO.create(
@@ -53,16 +49,12 @@ async def create_active_request_async(
 @click.option("--description", default=None, help="Description")
 @click.option("--quantity", default=None, type=int, help="Quantity")
 @click.option("--unit", default=None, help="Unit")
-@click.option("--delivery-deadline", default=None, help="Delivery deadline")
 @click.option("--max-price-per-unit", default=None, type=float, help="Price")
-@click.option("--currency", default=None, help="Currency")
 def create_active_request(
     user_id: uuid.UUID,
     query: str,
     delivery_region: str,
     description: str,
-    delivery_deadline: str | None,
-    currency: str,
 ) -> None:
     request, search_history = asyncio.run(
         create_active_request_async(
@@ -70,8 +62,6 @@ def create_active_request(
             query,
             delivery_region,
             description,
-            delivery_deadline,
-            currency,
         )
     )
     logger.info(f"Request created: {request.id}")

@@ -1,5 +1,4 @@
 import uuid
-from datetime import datetime
 
 from loguru import logger
 from sqlalchemy import select, update
@@ -55,24 +54,17 @@ class RequestDAO(BaseDAO[Request]):
         request_id: uuid.UUID,
         additional_params: dict | None,
         description: str,
-        currency: str,
-        delivery_deadline: datetime | None = None,
     ) -> None:
         logger.debug(
-            "Updating request additional_params and optional fields",
+            "Updating request additional_params and description",
             model=cls.model,
             request_id=request_id,
         )
         try:
-            values: dict = {}
-            values["additional_params"] = additional_params
-            values["description"] = description
-            values["currency"] = currency
-            if delivery_deadline:
-                values["delivery_deadline"] = delivery_deadline
-
-            if not values:
-                return
+            values: dict = {
+                "additional_params": additional_params,
+                "description": description,
+            }
 
             stmt = (
                 update(cls.model)

@@ -79,23 +79,6 @@ class RequestUpdate(BaseModel):
             ],
         ),
     ]
-    currency: Annotated[
-        str,
-        Field(
-            description="Currency code for the price",
-            min_length=2,
-            max_length=20,
-            examples=["BYN"],
-        ),
-    ]
-    delivery_deadline: Annotated[
-        datetime | None,
-        Field(
-            default=None,
-            description="Latest acceptable delivery date",
-            examples=["2026-06-30T00:00:00"],
-        ),
-    ]
     additional_params: Annotated[
         AdditionalParams | None,
         Field(
@@ -103,11 +86,7 @@ class RequestUpdate(BaseModel):
             description="Selected optional and custom parameters for the outgoing email",  # noqa: E501
             examples=[
                 {
-                    "included_fields": [
-                        "description",
-                        "delivery_deadline",
-                        "currency",
-                    ],
+                    "included_fields": ["description", "delivery_deadline"],
                     "custom_params": [
                         {"label": "Условия оплаты", "value": "50% предоплата"}
                     ],
@@ -166,16 +145,6 @@ class RequestResponse(BaseModel):
             description="Detailed requirements",
             examples=["High pressure centrifugal pumps"],
         ),
-    ]
-    delivery_deadline: Annotated[
-        datetime | None,
-        Field(
-            description="Delivery deadline", examples=["2025-06-01T00:00:00Z"]
-        ),
-    ]
-    currency: Annotated[
-        str | None,
-        Field(description="Price currency", examples=["BYN"]),
     ]
     created_at: Annotated[
         datetime,

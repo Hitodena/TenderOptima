@@ -31,8 +31,6 @@ export interface RequestResponse {
 	tracking_id: string;
 	delivery_region: string | null;
 	description: string;
-	delivery_deadline: string | null;
-	currency: string;
 	created_at: string;
 	additional_params?: AdditionalParams | null;
 }

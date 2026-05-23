@@ -15,18 +15,6 @@
                                 :class="errors.description ? 'ring-2 ring-error rounded-lg' : ''" />
                             <p v-if="errors.description" class="text-xs text-error mt-1">{{ errors.description }}</p>
                         </UFormField>
-
-                        <div class="grid grid-cols-2 gap-3">
-                            <UFormField label="Валюта" required>
-                                <UInput v-model="form.currency" placeholder="BYN" class="w-full"
-                                    :class="errors.currency ? 'ring-2 ring-error rounded-lg' : ''" />
-                                <p v-if="errors.currency" class="text-xs text-error mt-1">{{ errors.currency }}</p>
-                            </UFormField>
-
-                            <UFormField label="Срок поставки">
-                                <UInput v-model="form.delivery_deadline" type="datetime-local" class="w-full" />
-                            </UFormField>
-                        </div>
                     </div>
 
                     <div>
@@ -78,18 +66,6 @@
                     <div class="flex gap-2">
                         <span class="text-muted w-36 shrink-0">Описание</span>
                         <span class="font-medium">{{ form.description }}</span>
-                    </div>
-
-                    <USeparator />
-
-                    <div class="flex gap-2">
-                        <span class="text-muted w-36 shrink-0">Валюта</span>
-                        <span class="font-medium">{{ form.currency }}</span>
-                    </div>
-
-                    <div v-if="form.delivery_deadline" class="flex gap-2">
-                        <span class="text-muted w-36 shrink-0">Срок поставки</span>
-                        <span class="font-medium">{{ formatDeadline(form.delivery_deadline) }}</span>
                     </div>
 
                     <USeparator />
@@ -178,8 +154,6 @@ function fieldLabel(key: string): string {
 
 const form = reactive({
     description: '',
-    currency: 'BYN',
-    delivery_deadline: '',
     included_fields: [
         'description', 'total_price_no_vat', 'total_price_vat',
         'price_per_unit', 'payment_terms', 'delivery_deadline',
@@ -190,7 +164,7 @@ const form = reactive({
     newValue: '',
 })
 
-const errors = reactive({ description: '', currency: '' })
+const errors = reactive({ description: '' })
 const loading = ref(false)
 const error = ref<string | null>(null)
 
@@ -198,8 +172,6 @@ function loadFromRequest() {
     const r = props.request
     if (!r) return
     form.description = r.description || ''
-    form.currency = r.currency || 'BYN'
-    form.delivery_deadline = r.delivery_deadline ? r.delivery_deadline.slice(0, 16) : ''
     const ap = r.additional_params
     if (ap) {
         form.included_fields = [...(ap.included_fields || [])]
@@ -209,7 +181,7 @@ function loadFromRequest() {
 
 watch(() => isOpen.value, open => {
     if (open) { loadFromRequest(); step.value = 'params' }
-    else { error.value = null; errors.description = ''; errors.currency = '' }
+    else { error.value = null; errors.description = '' }
 }, { immediate: true })
 
 watch(() => props.request, () => { if (isOpen.value) loadFromRequest() })
@@ -235,14 +207,9 @@ function close() { isOpen.value = false }
 
 function validate() {
     errors.description = ''
-    errors.currency = ''
     let ok = true
     if (!form.description || form.description.trim().length < 3) {
         errors.description = 'Обязательное поле, минимум 3 символа'
-        ok = false
-    }
-    if (!form.currency || form.currency.trim().length < 2) {
-        errors.currency = 'Укажите валюту'
         ok = false
     }
     return ok
@@ -261,8 +228,6 @@ async function handleLaunch() {
     try {
         await patch(`/requests/${props.request.id}`, {
             description: form.description,
-            currency: form.currency,
-            delivery_deadline: form.delivery_deadline || null,
             additional_params: {
                 included_fields: form.included_fields,
                 custom_params: form.custom_params,
@@ -288,11 +253,5 @@ async function handleLaunch() {
     } finally {
         loading.value = false
     }
-}
-
-function formatDeadline(iso: string) {
-    return new Date(iso).toLocaleDateString('ru-RU', {
-        day: '2-digit', month: '2-digit', year: 'numeric',
-    })
 }
 </script>

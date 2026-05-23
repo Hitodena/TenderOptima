@@ -185,9 +185,7 @@ async def search_suppliers(
         request_id=request.id,
     )
 
-    await RequestDAO.update_status(
-        session, request.id, RequestStatus.ACTIVE
-    )
+    await RequestDAO.update_status(session, request.id, RequestStatus.ACTIVE)
 
     logger.info(
         "Search done",
@@ -422,7 +420,7 @@ async def update_request_additional_params(
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> RequestResponse:
-    """Updates description, currency and/or the additional_params JSON for the email template."""  # noqa: E501
+    """Updates description and/or the additional_params JSON for the email template."""  # noqa: E501
     request = await RequestDAO.get_by_id(session, request_id)
     if not request or request.user_id != current_user.id:
         raise HTTPException(
@@ -437,8 +435,6 @@ async def update_request_additional_params(
         request_id,
         additional_params=additional_params_dict,
         description=body.description,
-        delivery_deadline=body.delivery_deadline,
-        currency=body.currency,
     )
 
     updated = await RequestDAO.get_by_id(session, request_id)

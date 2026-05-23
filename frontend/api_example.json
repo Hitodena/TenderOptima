@@ -917,24 +917,6 @@
 						"title": "Quality Requirements",
 						"description": "Specific quality or certification requirements",
 						"examples": ["ISO 9001 certified"]
-					},
-					"delivery_deadline": {
-						"anyOf": [
-							{ "type": "string", "format": "date-time" },
-							{ "type": "null" }
-						],
-						"title": "Delivery Deadline",
-						"description": "Latest acceptable delivery date"
-					},
-					"currency": {
-						"anyOf": [
-							{ "type": "string", "maxLength": 20, "minLength": 2 },
-							{ "type": "null" }
-						],
-						"title": "Currency",
-						"description": "Currency code for the price",
-						"default": "BYN",
-						"examples": ["BYN"]
 					}
 				},
 				"type": "object",
@@ -995,21 +977,6 @@
 						"description": "Quality requirements",
 						"examples": ["ISO 9001"]
 					},
-					"delivery_deadline": {
-						"anyOf": [
-							{ "type": "string", "format": "date-time" },
-							{ "type": "null" }
-						],
-						"title": "Delivery Deadline",
-						"description": "Delivery deadline",
-						"examples": ["2025-06-01T00:00:00Z"]
-					},
-					"currency": {
-						"anyOf": [{ "type": "string" }, { "type": "null" }],
-						"title": "Currency",
-						"description": "Price currency",
-						"examples": ["BYN"]
-					},
 					"created_at": {
 						"type": "string",
 						"format": "date-time",
@@ -1038,8 +1005,6 @@
 					"delivery_region",
 					"description",
 					"quality_requirements",
-					"delivery_deadline",
-					"currency",
 					"created_at"
 				],
 				"title": "RequestResponse",

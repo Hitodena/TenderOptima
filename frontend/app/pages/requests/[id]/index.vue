@@ -26,10 +26,6 @@
 							<UIcon name="i-lucide-map-pin" class="w-3.5 h-3.5" />
 							{{ request.delivery_region }}
 						</span>
-						<span v-if="request.currency" class="flex items-center gap-1">
-							<UIcon name="i-lucide-coins" class="w-3.5 h-3.5" />
-							{{ request.currency }}
-						</span>
 					</div>
 				</div>
 

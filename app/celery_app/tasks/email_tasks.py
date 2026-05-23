@@ -9,11 +9,9 @@ import smtplib
 import uuid
 from datetime import UTC, datetime
 from email.header import decode_header
-from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 from bs4 import BeautifulSoup
-from jinja2 import Environment, FileSystemLoader
 from loguru import logger
 
 from app.celery_app.celery_config import app
@@ -23,8 +21,6 @@ from app.db.dao import RequestDAO, RequestSupplierDAO, SupplierResponseDAO
 from app.enums import RequestStatus, RequestSupplierStatus
 
 config = get_config()
-
-jinja_env = Environment(loader=FileSystemLoader("templates/mail"))
 
 TRACKING_ID_RE = re.compile(r"\[TID-([0-9a-f-]{36})\]", re.IGNORECASE)
 
@@ -125,8 +121,6 @@ async def send_emails(self, request_id: str) -> dict:
     failed = 0
     results: list[tuple] = []
 
-    template = jinja_env.get_template("request.html")
-
     try:
         smtp = smtplib.SMTP_SSL(config.smtp_host, config.smtp_port)
         smtp.login(config.smtp_user, config.smtp_password)
@@ -149,22 +143,58 @@ async def send_emails(self, request_id: str) -> dict:
                 failed += 1
                 continue
 
-            msg = MIMEMultipart("alternative")
+            supplier_name = supplier.company_name or ""
+            greeting = (
+                f"Обращаемся к вам, {supplier_name}, с запросом коммерческого предложения."  # noqa: E501
+                if supplier_name
+                else "Обращаемся к вам с запросом коммерческого предложения."
+            )
+            user = rs.request.user
+            desc_block = (
+                f"\nОписание:\n{request.description}\n"
+                if request.description
+                else ""
+            )
+            region_block = (
+                f"Регион поставки: {request.delivery_region or '—'}\n"
+            )
+            custom_block = ""
+            if request.additional_params and request.additional_params.get(
+                "custom_params"
+            ):  # noqa: E501
+                for p in request.additional_params["custom_params"]:
+                    custom_block += (
+                        f"{p.get('label', '')}: {p.get('value', '')}\n"
+                    )
+            if custom_block:
+                custom_block = "Дополнительные параметры:\n" + custom_block
+
+            plain_body = (
+                f"Запрос коммерческого предложения — {request.query}\n\n"
+                "Добрый день,\n\n"
+                f"{greeting} Просим ознакомиться с техническими требованиями и направить ответ на данное письмо.\n\n"  # noqa: E501
+                f"Наименование / запрос: {request.query}\n"
+                f"{desc_block}"
+                f"{region_block}"
+                f"{custom_block}\n"
+                "Пожалуйста, укажите цену за единицу, доступное количество, срок поставки, условия оплаты и иные существенные условия.\n"  # noqa: E501
+                "Прикрепите прайс-лист или коммерческое предложение (PDF / Excel).\n"  # noqa: E501
+                "Не изменяйте тему письма — она содержит идентификатор запроса для автоматической обработки.\n\n"  # noqa: E501
+                "С уважением,\n"
+                f"{user.full_name or user.company_name or 'Менеджер по закупкам'}\n"  # noqa: E501
+                f"{(user.company_name + chr(10)) if user.company_name else ''}"  # noqa: E501
+                f"{user.email}"
+            )
+
+            msg = MIMEText(plain_body, "plain", "utf-8")
             msg["From"] = (
-                f"{rs.request.user.company_name or 'TenderOptima'}"
-                f" <{config.smtp_user}>"
+                f"{user.company_name or 'TenderOptima'} <{config.smtp_user}>"
             )
             msg["To"] = recipient
             msg["Subject"] = (
                 f"[TID-{request.tracking_id}] "
                 f"Запрос коммерческого предложения — {request.query}"
             )
-            html_body = template.render(
-                request=request,
-                supplier=supplier,
-                user=rs.request.user,
-            )
-            msg.attach(MIMEText(html_body, "html", "utf-8"))
 
             try:
                 smtp.sendmail(config.smtp_user, recipient, msg.as_string())
