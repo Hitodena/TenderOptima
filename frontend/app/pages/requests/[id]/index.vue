@@ -29,8 +29,9 @@
 					</div>
 				</div>
 
-				<UButton v-if="request.status === RequestStatus.QUEUED || request.status === RequestStatus.COMPLETED" variant="outline" color="neutral"
-					leading-icon="i-lucide-inbox" :to="`/requests/${id}/responses`" class="shrink-0">
+				<UButton v-if="request.status === RequestStatus.QUEUED || request.status === RequestStatus.COMPLETED"
+					variant="outline" color="neutral" leading-icon="i-lucide-inbox" :to="`/requests/${id}/responses`"
+					class="shrink-0">
 					Ответы поставщиков
 				</UButton>
 			</div>
@@ -38,101 +39,29 @@
 			<UAlert v-if="actionError" color="error" variant="soft" icon="i-lucide-circle-alert"
 				:description="actionError" class="mb-6" />
 
-			<template v-if="suppliers.length || loadingSuppliers">
+			<div class="flex items-start justify-between mb-4 gap-4 flex-wrap">
+				<div>
+					<h2 class="text-lg font-semibold">Найденные поставщики</h2>
+					<p class="text-sm text-muted mt-0.5">
+						{{
+							suppliers.length ?
+								'Включите нужных и нажмите «Отправить запрос»' :
+								'Добавьте поставщиков для рассылки'
 
-				<div class="flex items-start justify-between mb-4 gap-4 flex-wrap">
-					<div>
-						<h2 class="text-lg font-semibold">Найденные поставщики</h2>
-						<p class="text-sm text-muted mt-0.5">Включите нужных и нажмите «Отправить запрос»</p>
-					</div>
-					<div class="flex items-center gap-4 shrink-0">
-						<div class="flex gap-4">
-							<div class="text-center">
-								<p class="text-xl font-bold text-highlighted">{{ suppliers.length }}</p>
-								<p class="text-xs text-muted">Найдено</p>
-							</div>
-							<USeparator orientation="vertical" />
-							<div class="text-center">
-								<p class="text-xl font-bold text-primary">{{ enabledCount }}</p>
-								<p class="text-xs text-muted">Выбрано</p>
-							</div>
-						</div>
-					</div>
+						}}
+					</p>
 				</div>
+				<UButton v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED"
+					size="sm" variant="outline" color="neutral" leading-icon="i-lucide-user-plus"
+					@click="showAddSupplier = true">
+					Добавить поставщика
+				</UButton>
+			</div>
 
-				<UAlert color="info" variant="soft" icon="i-lucide-info" class="mb-4"
-					description="Отправляйте запросы только подходящим компаниям. Нерелевантные письма могут негативно влиять на репутацию вашей компании." />
 
-				<UCard class="mb-4">
-					<UTable :data="suppliers" :columns="supplierColumns" :loading="loadingSuppliers">
-						<template #is_enabled-cell="{ row }">
-							<USwitch :model-value="row.original.is_enabled" size="sm"
-								:disabled="updatingToggle || request.status === RequestStatus.QUEUED"
-								@update:model-value="(val: any) => handleToggle(row.original, Boolean(val))" />
-						</template>
-
-						<template #company_name-cell="{ row }">
-							<div class="flex items-center gap-2">
-								<div class="w-7 h-7 rounded-lg bg-elevated flex items-center justify-center shrink-0">
-									<UIcon name="i-lucide-building-2" class="w-3.5 h-3.5 text-muted" />
-								</div>
-								<span class="font-medium truncate max-w-50">{{ row.original.supplier?.company_name
-								}}</span>
-							</div>
-						</template>
-
-						<template #domain-cell="{ row }">
-							<a :href="`https://${row.original.supplier?.domain}`" target="_blank"
-								class="text-primary hover:underline text-sm" @click.stop>
-								{{ row.original.supplier?.domain }}
-							</a>
-						</template>
-
-						<template #email-cell="{ row }">
-							<span class="text-sm text-muted">{{ row.original.supplier?.email }}</span>
-						</template>
-
-						<template #status-cell="{ row }">
-							<UBadge :color="getSupplierStatusColor(row.original.status)" variant="subtle" size="sm">
-								{{ getSupplierStatusLabel(row.original.status) }}
-							</UBadge>
-						</template>
-					</UTable>
-
-					<div class="px-4 py-3 border-t border-default flex items-center justify-between gap-3 flex-wrap">
-						<p class="text-sm text-muted">
-							Выбрано <span class="font-semibold text-highlighted">{{ enabledCount }}</span> из {{
-								suppliers.length }}
-						</p>
-						<div class="flex items-center gap-2">
-							<UButton v-if="request.status !== 'queued'" size="sm" variant="outline" color="neutral"
-								leading-icon="i-lucide-user-plus" @click="showAddSupplier = true">
-								Добавить поставщика
-							</UButton>
-
-							<UButton size="xs" variant="ghost" color="neutral"
-								:disabled="updatingToggle || request.status === RequestStatus.QUEUED || enabledCount === 0"
-								@click="deselectAll">
-								Снять все
-							</UButton>
-							<UButton size="xs" variant="ghost" color="primary"
-								:disabled="updatingToggle || request.status === RequestStatus.QUEUED || enabledCount === suppliers.length"
-								@click="selectAll">
-								Выбрать все
-							</UButton>
-						</div>
-					</div>
-				</UCard>
-
-				<div v-if="request.status !== RequestStatus.QUEUED" class="flex items-center gap-3">
-					<UButton size="lg" leading-icon="i-lucide-send" :disabled="enabledCount === 0" :loading="launching"
-						@click="showParamsModal = true">
-						Отправить запрос поставщикам
-					</UButton>
-					<p v-if="enabledCount === 0" class="text-xs text-muted">Включите хотя бы одного поставщика</p>
-				</div>
-
-				<div v-if="request.status === RequestStatus.QUEUED" class="flex items-center gap-3 p-4 rounded-xl bg-warning/10 border border-warning/20">
+			<div>
+				<div v-if="request.status === RequestStatus.QUEUED"
+					class="flex items-center gap-3 p-4 rounded-xl bg-warning/10 border border-warning/20">
 					<UIcon name="i-lucide-clock" class="w-5 h-5 text-warning shrink-0" />
 					<div>
 						<p class="text-sm font-medium">Рассылка в очереди</p>
@@ -143,21 +72,89 @@
 						Смотреть ответы
 					</UButton>
 				</div>
-
-			</template>
-
-			<template v-else>
-				<div class="flex flex-col items-center justify-center py-20 gap-4">
-					<div class="w-16 h-16 rounded-2xl bg-elevated flex items-center justify-center">
-						<UIcon name="i-lucide-search-x" class="w-8 h-8 text-muted" />
-					</div>
-					<div class="text-center">
-						<p class="font-medium text-highlighted">Поставщики не найдены</p>
-						<p class="text-sm text-muted mt-1">Попробуйте изменить формулировку запроса или регион</p>
-					</div>
-					<UButton variant="outline" to="/requests">Новый поиск</UButton>
+				<div v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED">
+					<UAlert color="info" variant="soft" icon="i-lucide-info" class="mb-4"
+						description="Отправляйте запросы только подходящим компаниям. Нерелевантные письма могут негативно влиять на репутацию вашей компании." />
 				</div>
-			</template>
+			</div>
+
+			<UCard class="mb-4 mt-4">
+				<UTable :data="suppliers" :columns="supplierColumns" :loading="loadingSuppliers">
+					<template #empty>
+						<div class="flex flex-col items-center justify-center py-12 gap-3">
+							<UIcon name="i-lucide-users" class="w-10 h-10 text-muted" />
+							<p class="text-muted">Поставщики не найдены</p>
+							<UButton size="sm" variant="outline" color="primary" leading-icon="i-lucide-user-plus"
+								@click="showAddSupplier = true">
+								Добавить поставщика
+							</UButton>
+						</div>
+					</template>
+
+					<template #is_enabled-cell="{ row }">
+						<USwitch :model-value="row.original.is_enabled" size="sm"
+							:disabled="updatingToggle || request.status === RequestStatus.QUEUED || request.status === RequestStatus.COMPLETED"
+							@update:model-value="(val: any) => handleToggle(row.original, Boolean(val))" />
+					</template>
+
+					<template #company_name-cell="{ row }">
+						<div class="flex items-center gap-2">
+							<div class="w-7 h-7 rounded-lg bg-elevated flex items-center justify-center shrink-0">
+								<UIcon name="i-lucide-building-2" class="w-3.5 h-3.5 text-muted" />
+							</div>
+							<span class="font-medium truncate max-w-50">{{ row.original.supplier?.company_name
+							}}</span>
+						</div>
+					</template>
+
+					<template #domain-cell="{ row }">
+						<a v-if="row.original.supplier?.domain" :href="`https://${row.original.supplier.domain}`"
+							target="_blank" class="text-primary hover:underline text-sm" @click.stop>
+							{{ row.original.supplier.domain }}
+						</a>
+						<span v-else class="text-sm text-muted">—</span>
+					</template>
+
+					<template #email-cell="{ row }">
+						<span class="text-sm text-muted">{{ row.original.supplier?.email }}</span>
+					</template>
+
+					<template #status-cell="{ row }">
+						<UBadge :color="getSupplierStatusColor(row.original.status)" variant="subtle" size="sm">
+							{{ getSupplierStatusLabel(row.original.status) }}
+						</UBadge>
+					</template>
+				</UTable>
+
+				<div class="px-4 py-3 border-t border-default flex items-center justify-between gap-3 flex-wrap">
+					<p class="text-sm text-muted">
+						Выбрано <span class="font-semibold text-highlighted">{{ enabledCount }}</span> из {{
+							suppliers.length }}
+					</p>
+					<div class="flex items-center gap-2">
+						<UButton size="xs" variant="ghost" color="neutral"
+							:disabled="updatingToggle || request.status === RequestStatus.QUEUED || request.status === RequestStatus.COMPLETED || enabledCount === 0"
+							@click="deselectAll">
+							Снять все
+						</UButton>
+						<UButton size="xs" variant="ghost" color="primary"
+							:disabled="updatingToggle || request.status === RequestStatus.QUEUED || request.status === RequestStatus.COMPLETED || enabledCount === suppliers.length"
+							@click="selectAll">
+							Выбрать все
+						</UButton>
+					</div>
+				</div>
+			</UCard>
+			<div v-if="request.status !== RequestStatus.QUEUED && suppliers.length > 0 && request.status !== RequestStatus.COMPLETED"
+				class="flex items-center gap-3">
+				<UButton size="lg" leading-icon="i-lucide-send" :disabled="enabledCount === 0"
+					@click="showParamsModal = true">
+					Отправить запрос поставщикам
+				</UButton>
+				<p v-if="enabledCount === 0" class="text-xs text-muted">Включите хотя бы одного поставщика</p>
+			</div>
+
+
 
 			<RequestParamsModal v-model:open="showParamsModal" :request="request" @launched="onLaunched" />
 			<AddSupplierModal v-model:open="showAddSupplier" :request-id="id" @added="fetchSuppliers" />
@@ -193,7 +190,6 @@ const request = ref<RequestResponse | null>(null)
 const suppliers = ref<RequestSupplierResponse[]>([])
 const loading = ref(true)
 const loadingSuppliers = ref(false)
-const launching = ref(false)
 const updatingToggle = ref(false)
 const actionError = ref('')
 const showParamsModal = ref(false)
@@ -222,10 +218,6 @@ async function fetchSuppliers() {
 }
 
 await fetchRequest()
-
-	if (request.value?.status === RequestStatus.QUEUED) {
-		await navigateTo(`/requests/${id}/responses`)
-	}
 
 if (request.value) await fetchSuppliers()
 
@@ -262,9 +254,9 @@ async function handleToggle(rs: RequestSupplierResponse, newVal: boolean) {
 	}
 }
 
-	async function toggleAll(enabled: boolean) {
-		if (request.value?.status === RequestStatus.QUEUED) return
-		const toToggle = suppliers.value.filter(s => s.is_enabled !== enabled)
+async function toggleAll(enabled: boolean) {
+	if (request.value?.status === RequestStatus.QUEUED) return
+	const toToggle = suppliers.value.filter(s => s.is_enabled !== enabled)
 	updatingToggle.value = true
 	actionError.value = ''
 	try {
@@ -281,7 +273,7 @@ async function handleToggle(rs: RequestSupplierResponse, newVal: boolean) {
 const selectAll = () => toggleAll(true)
 const deselectAll = () => toggleAll(false)
 
-	function onLaunched() {
-		if (request.value) request.value.status = RequestStatus.QUEUED
-	}
+function onLaunched() {
+	if (request.value) request.value.status = RequestStatus.QUEUED
+}
 </script>

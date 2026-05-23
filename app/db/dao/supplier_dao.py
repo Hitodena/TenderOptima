@@ -19,6 +19,42 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
     model = RequestSupplier
 
     @classmethod
+    async def update_body_text(
+        cls, session: AsyncSession, rs_id: uuid.UUID, body_text: str
+    ) -> None:
+        logger.debug(
+            "Updating request supplier body_text",
+            model=cls.model,
+            rs_id=rs_id,
+        )
+        try:
+            instance = await session.get(cls.model, rs_id)
+            if instance:
+                instance.body_text = body_text
+                await session.flush()
+                await session.commit()
+                logger.info(
+                    "Updated request supplier body_text",
+                    model=cls.model.__name__,
+                    rs_id=rs_id,
+                )
+            else:
+                logger.info(
+                    "Request supplier not found for update_body_text",
+                    model=cls.model,
+                    rs_id=rs_id,
+                )
+        except Exception as exc:
+            await session.rollback()
+            logger.exception(
+                "Failed to update request supplier body_text",
+                error=str(exc),
+                model=cls.model,
+                rs_id=rs_id,
+            )
+            raise
+
+    @classmethod
     async def get_pending_by_request(
         cls, session: AsyncSession, request_id: uuid.UUID
     ) -> list[RequestSupplier]:
@@ -147,7 +183,7 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
             smtp_message_id=smtp_message_id,
         )
         try:
-            request_supplier.status = status
+            request_supplier.status = status.value
             if sent_at is not None:
                 request_supplier.sent_at = sent_at
             if smtp_message_id is not None:
@@ -370,7 +406,7 @@ class SupplierDAO(BaseDAO[Supplier]):
     async def get_or_create_by_domain(
         cls,
         session: AsyncSession,
-        domain: str,
+        domain: str | None,
         defaults: dict,
     ) -> Supplier:
         logger.debug(
@@ -405,13 +441,17 @@ class SupplierDAO(BaseDAO[Supplier]):
 
     @classmethod
     async def get_by_domain(
-        cls, session: AsyncSession, domain: str
+        cls, session: AsyncSession, domain: str | None
     ) -> Supplier | None:
         logger.debug(
             "Getting supplier by domain", model=cls.model, domain=domain
         )
         try:
-            stmt = select(cls.model).where(cls.model.domain == domain)
+            stmt = select(cls.model)
+            if domain is not None:
+                stmt = stmt.where(cls.model.domain == domain)
+            else:
+                return None
             result = await session.execute(stmt)
             instance = result.scalar_one_or_none()
             if instance:

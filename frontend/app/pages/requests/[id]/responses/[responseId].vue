@@ -22,7 +22,7 @@
 							<span>{{ response.supplier.email }}</span>
 							<span>·</span>
 							<UIcon name="i-lucide-globe" class="w-4 h-4" />
-							<span>{{ response.supplier.domain }}</span>
+							<span>{{ response.supplier.domain || '—' }}</span>
 						</div>
 					</div>
 					<div class="text-right shrink-0">

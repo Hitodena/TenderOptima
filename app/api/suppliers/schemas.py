@@ -13,9 +13,13 @@ class SupplierCreate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, from_attributes=True)
 
     domain: Annotated[
-        str,
+        str | None,
         Field(
-            description="Supplier domain (unique, will be lowercased)",
+            default=None,
+            description=(
+                "Supplier domain (unique, will be lowercased). "
+                "Can be null if creating without domain."
+            ),
             min_length=3,
             max_length=255,
             examples=["example-supplier.ru"],
@@ -41,7 +45,10 @@ class SupplierCreate(BaseModel):
         SupplierSource | None,
         Field(
             default=SupplierSource.MANUAL,
-            description="Origin/source tag (stored as from_source). Examples: 'manual', 'admin', 'import'",  # noqa: E501
+            description=(
+                "Origin/source tag (stored as from_source). "
+                "Examples: 'manual', 'admin', 'import'"
+            ),
             max_length=50,
             examples=[SupplierSource.MANUAL],
         ),
@@ -50,7 +57,11 @@ class SupplierCreate(BaseModel):
         uuid.UUID | None,
         Field(
             default=None,
-            description="Optional: attach the (new or existing) supplier to this request immediately by creating a pending RequestSupplier link. The request must belong to the current user.",  # noqa: E501
+            description=(
+                "Optional: attach the (new or existing) supplier to this "
+                "request immediately by creating a pending RequestSupplier "
+                "link. The request must belong to the current user."
+            ),
             examples=["123e4567-e89b-12d3-a456-426614174000"],
         ),
     ]
@@ -69,7 +80,7 @@ class SupplierResponse(BaseModel):
         ),
     ]
     domain: Annotated[
-        str,
+        str | None,
         Field(description="Supplier domain", examples=["example-supplier.ru"]),
     ]
     company_name: Annotated[

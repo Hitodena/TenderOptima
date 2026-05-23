@@ -21,7 +21,7 @@ from app.api.user_requests.schemas import (
     ToggleSupplierRequest,
 )
 from app.celery_app.tasks.email_tasks import send_emails
-from app.core.config import get_config
+from app.core import get_config
 from app.db.dao import (
     BlacklistedDomainDAO,
     RequestDAO,
@@ -32,6 +32,7 @@ from app.db.dao import (
 )
 from app.db.models import User
 from app.enums import RequestStatus, RequestSupplierStatus
+from app.utils.email_utils import build_request_email_body
 
 router = APIRouter(prefix="/requests", tags=["Requests"])
 config = get_config()
@@ -420,21 +421,53 @@ async def update_request_additional_params(
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> RequestResponse:
-    """Updates description and/or the additional_params JSON for the email template."""  # noqa: E501
+    """Updates description, additional_params JSON"""
     request = await RequestDAO.get_by_id(session, request_id)
     if not request or request.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
         )
 
-    additional_params_dict = (
-        body.additional_params.model_dump() if body.additional_params else None
-    )
+    additional_params_data = body.additional_params
     await RequestDAO.update_additional_params(
         session,
         request_id,
-        additional_params=additional_params_dict,
+        additional_params=additional_params_data,
         description=body.description,
+    )
+
+    updated = await RequestDAO.get_by_id(session, request_id)
+    return RequestResponse.model_validate(updated)
+
+
+@router.patch(
+    "/{request_id}/email_message",
+    response_model=RequestResponse,
+    summary="Update email message for a request",
+    responses={
+        200: {"description": "Email message updated"},
+        401: {"description": "Missing or invalid authentication credentials"},
+        404: {"description": "Request not found or does not belong to user"},
+        422: {"description": "Validation Error"},
+    },
+)
+async def update_request_email_message(
+    request_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> RequestResponse:
+    """Updates the generated email message for the request."""
+    request = await RequestDAO.get_by_id(session, request_id)
+    if not request or request.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
+        )
+
+    email_message = build_request_email_body(request, current_user)
+    await RequestDAO.update_email_message(
+        session,
+        request_id,
+        email_message=email_message,
     )
 
     updated = await RequestDAO.get_by_id(session, request_id)

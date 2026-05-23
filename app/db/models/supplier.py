@@ -11,7 +11,7 @@ from app.db.models.base import Base, IDMixinUUID, TimestampMixin
 class Supplier(IDMixinUUID, TimestampMixin, Base):
     __tablename__ = "suppliers"
 
-    domain: Mapped[str] = mapped_column(unique=True, nullable=False)
+    domain: Mapped[str | None] = mapped_column(unique=True)
     company_name: Mapped[str] = mapped_column(nullable=False)
 
     email: Mapped[str] = mapped_column(unique=False, nullable=False)

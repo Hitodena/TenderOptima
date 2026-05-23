@@ -38,31 +38,6 @@ class RequestCreate(BaseModel):
     ]
 
 
-class AdditionalParams(BaseModel):
-    """User-selected optional + custom parameters to include in the supplier request email."""  # noqa: E501
-
-    model_config = ConfigDict(from_attributes=True, str_strip_whitespace=True)
-
-    included_fields: Annotated[
-        list[str],
-        Field(
-            default_factory=list,
-            description="List of standard optional fields the user chose to include (e.g. 'description', 'delivery_deadline')",  # noqa: E501
-            examples=[["description", "delivery_deadline"]],
-        ),
-    ]
-    custom_params: Annotated[
-        list[dict[str, str]],
-        Field(
-            default_factory=list,
-            description="User-added custom key-value pairs for the email (label + value)",  # noqa: E501
-            examples=[
-                [{"label": "Условия оплаты", "value": "50% предоплата"}]
-            ],
-        ),
-    ]
-
-
 class RequestUpdate(BaseModel):
     """Payload for updating optional fields and additional parameters before launching the request."""  # noqa: E501
 
@@ -80,18 +55,10 @@ class RequestUpdate(BaseModel):
         ),
     ]
     additional_params: Annotated[
-        AdditionalParams | None,
+        list | None,
         Field(
             default=None,
-            description="Selected optional and custom parameters for the outgoing email",  # noqa: E501
-            examples=[
-                {
-                    "included_fields": ["description", "delivery_deadline"],
-                    "custom_params": [
-                        {"label": "Условия оплаты", "value": "50% предоплата"}
-                    ],
-                }
-            ],
+            description="Selected optional and custom parameters for the outgoing email",
         ),
     ]
 
@@ -146,20 +113,31 @@ class RequestResponse(BaseModel):
             examples=["High pressure centrifugal pumps"],
         ),
     ]
+    additional_params: Annotated[
+        list | None,
+        Field(
+            default=None,
+            description="Selected optional and custom parameters for the outgoing email",
+        ),
+    ]
+    attachment_paths: Annotated[
+        list | None,
+        Field(
+            default=None,
+            description="Paths for attachments of the request",
+        ),
+    ]
+    email_message: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description="Generated email message of the request",
+        ),
+    ]
     created_at: Annotated[
         datetime,
         Field(
             description="Creation timestamp", examples=["2025-01-15T10:30:00Z"]
-        ),
-    ]
-    additional_params: Annotated[
-        AdditionalParams | None,
-        Field(
-            default=None,
-            description="Selected optional and custom parameters for the outgoing email",  # noqa: E501
-            examples=[
-                {"included_fields": ["description"], "custom_params": []}
-            ],
         ),
     ]
 
@@ -272,7 +250,7 @@ class SupplierResponse(BaseModel):
         ),
     ]
     domain: Annotated[
-        str,
+        str | None,
         Field(description="Supplier domain", examples=["supplier.com"]),
     ]
     company_name: Annotated[

@@ -23,27 +23,29 @@ export interface RequestCreate {
 	delivery_region: string;
 }
 
+export interface RequestUpdate {
+	description: string;
+	additional_params?: string[] | null;
+}
+
 export interface RequestResponse {
 	id: string;
 	user_id: string;
 	query: string;
 	status: RequestStatus;
 	tracking_id: string;
-	delivery_region: string | null;
+	delivery_region: string;
 	description: string;
 	created_at: string;
-	additional_params?: AdditionalParams | null;
-}
-
-export interface AdditionalParams {
-	included_fields?: string[];
-	custom_params?: Array<{ label: string; value: string }>;
+	additional_params?: string[] | null;
+	email_message: string | null;
+	attachment_paths: string[] | null;
 }
 
 export interface RequestSupplierResponse {
 	id: string;
 	supplier: Supplier;
-	status: RequestStatus;
+	status: RequestSupplierStatus;
 	is_enabled: boolean;
 	sent_at: string | null;
 }
@@ -68,9 +70,17 @@ export interface Attachment {
 	path: string | null;
 }
 
+export interface SupplierCreate {
+	domain?: string | null;
+	company_name: string;
+	email: string;
+	source?: string | null;
+	request_id?: string | null;
+}
+
 export interface Supplier {
 	id: string;
-	domain: string;
+	domain: string | null;
 	company_name: string;
 	email: string;
 }
@@ -142,7 +152,7 @@ export const REQUEST_STATUS_COLOR: Record<RequestStatus, BadgeColor> = {
 export const REQUEST_STATUS_LABEL: Record<RequestStatus, string> = {
 	[RequestStatus.DRAFT]: 'Черновик',
 	[RequestStatus.ACTIVE]: 'Активный',
-	[RequestStatus.QUEUED]: 'В очереди',
+	[RequestStatus.QUEUED]: 'В очереди на рассылку',
 	[RequestStatus.COMPLETED]: 'Завершён',
 };
 

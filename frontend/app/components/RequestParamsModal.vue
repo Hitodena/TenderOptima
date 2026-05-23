@@ -1,50 +1,45 @@
 <template>
-    <UModal v-model:open="isOpen" :title="step === 'params' ? 'Параметры письма поставщикам' : 'Подтверждение рассылки'"
-        :description="step === 'params' ? 'Заполните описание и выберите что включить в письмо' : 'Проверьте данные перед отправкой'"
-        :ui="{ content: step === 'params' ? 'max-w-3xl' : 'max-w-lg' }">
+    <UModal v-model:open="isOpen" :title="step === 'params' ? 'Параметры письма поставщикам' : 'Редактирование письма'"
+        :description="step === 'params' ? 'Заполните описание и укажите дополнительные параметры' : 'Проверьте и отредактируйте письмо перед отправкой'"
+        :ui="{ content: step === 'params' ? 'max-w-5xl' : 'max-w-5xl' }">
         <template #body>
 
             <div v-if="step === 'params'">
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-                    <div class="space-y-4">
-                        <UFormField label="Описание товара/услуги" required>
-                            <UTextarea v-model="form.description"
-                                placeholder="Опишите детально товар или услугу, технические характеристики, объёмы..."
-                                :rows="6" class="w-full" size="lg"
-                                :class="errors.description ? 'ring-2 ring-error rounded-lg' : ''" />
-                            <p v-if="errors.description" class="text-xs text-error mt-1">{{ errors.description }}</p>
-                        </UFormField>
-                    </div>
+                <div class="space-y-6">
+                    <UFormField label="Описание товара/услуги" required>
+                        <UTextarea v-model="form.description"
+                            placeholder="Опишите детально товар или услугу, технические характеристики, объёмы..."
+                            :rows="6" class="w-full" size="lg"
+                            :class="errors.description ? 'ring-2 ring-error rounded-lg' : ''" />
+                        <p v-if="errors.description" class="text-xs text-error mt-1">{{ errors.description }}</p>
+                    </UFormField>
 
                     <div>
-                        <p class="text-sm font-semibold mb-1">Запросить у поставщика</p>
-                        <p class="text-xs text-muted mb-3">Выбранные поля будут добавлены в письмо</p>
-                        <div class="space-y-1">
-                            <div v-for="field in standardFields" :key="field.key"
-                                class="flex items-center justify-between py-1.5 px-3 rounded-lg hover:bg-elevated/50 transition-colors">
-                                <label class="text-sm cursor-pointer">{{ field.label }}</label>
-                                <USwitch :model-value="form.included_fields.includes(field.key)" size="sm"
-                                    @update:model-value="(val: boolean) => toggleField(field.key, val)" />
-                            </div>
-                            <div v-for="(p, idx) in form.custom_params" :key="idx"
-                                class="flex items-center justify-between py-1.5 px-3 rounded-lg hover:bg-elevated/50 transition-colors">
-                                <span class="text-sm truncate">
-                                    <span class="font-medium">{{ p.label }}:</span>
-                                    <span class="text-muted ml-1">{{ p.value }}</span>
-                                </span>
-                                <UButton icon="i-lucide-x" size="xs" variant="ghost" color="neutral"
-                                    class="shrink-0 ml-2" @click="removeCustom(idx)" />
-                            </div>
-                        </div>
+                        <p class="text-sm font-semibold mb-1">Дополнительные параметры</p>
+                        <p class="text-xs text-muted mb-3">Укажите что должен указать поставщик в ответе</p>
 
-                        <div class="flex gap-2 mt-3">
-                            <UInput v-model="form.newLabel" placeholder="Название" class="flex-1" size="sm"
-                                @keyup.enter="addCustom" />
-                            <UInput v-model="form.newValue" placeholder="Значение" class="flex-1" size="sm"
-                                @keyup.enter="addCustom" />
-                            <UButton icon="i-lucide-plus" size="sm" variant="soft"
-                                :disabled="!form.newLabel || !form.newValue" @click="addCustom" />
+                        <div>
+                            <div class="space-y-2 max-h-60 overflow-y-auto">
+                                <div v-for="(label, idx) in form.labels" :key="idx"
+                                    class="flex items-center gap-2 py-1 px-2 rounded-lg hover:bg-elevated/50 transition-colors">
+                                    <span class="text-sm flex-1 truncate">{{ label }}</span>
+                                    <button type="button"
+                                        class="w-8 h-8 flex items-center justify-center rounded text-muted hover:text-error hover:bg-elevated transition-colors shrink-0"
+                                        @click="removeLabel(idx)">
+                                        <UIcon name="i-lucide-x" class="w-4 h-4" />
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="flex gap-2 mt-3 items-center px-2">
+                                <UInput v-model="form.newLabel" placeholder="Требование (цена, сроки, условия...)"
+                                    class="flex-1" size="lg" @keyup.enter="addLabel" />
+                                <button type="button"
+                                    class="w-8 h-8 flex items-center justify-center rounded text-muted hover:text-primary hover:bg-elevated transition-colors  disabled:opacity-40 disabled:cursor-not-allowed"
+                                    :disabled="!form.newLabel.trim()" @click="addLabel">
+                                    <UIcon name="i-lucide-plus" class="w-4 h-4" />
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -54,40 +49,21 @@
 
                 <div class="flex justify-end gap-2 pt-6">
                     <UButton color="neutral" variant="ghost" @click="close">Отмена</UButton>
-                    <UButton leading-icon="i-lucide-arrow-right" @click="goToConfirm">
+                    <UButton leading-icon="i-lucide-arrow-right" :loading="loadingMessage" @click="goToConfirm">
                         Далее
                     </UButton>
                 </div>
             </div>
 
             <div v-else-if="step === 'confirm'" class="space-y-4">
-                <div class="rounded-xl bg-elevated p-4 space-y-3 text-sm">
 
-                    <div class="flex gap-2">
-                        <span class="text-muted w-36 shrink-0">Описание</span>
-                        <span class="font-medium">{{ form.description }}</span>
-                    </div>
-
-                    <USeparator />
-
-                    <div class="flex gap-2">
-                        <span class="text-muted w-36 shrink-0">Запрашиваем</span>
-                        <div class="flex flex-wrap gap-1">
-                            <UBadge v-for="key in form.included_fields" :key="key" variant="subtle" color="neutral"
-                                size="sm">
-                                {{ fieldLabel(key) }}
-                            </UBadge>
-                            <UBadge v-for="p in form.custom_params" :key="p.label" variant="subtle" color="primary"
-                                size="sm">
-                                {{ p.label }}: {{ p.value }}
-                            </UBadge>
-                        </div>
-                    </div>
-
+                <div class="flex items-center gap-2 text-sm text-muted mb-4">
+                    <UIcon name="i-lucide-info" class="w-4 h-4 shrink-0" />
+                    Письмо сформировано на основе ваших параметров. Вы можете отредактировать текст перед отправкой.
                 </div>
 
-                <UAlert color="info" variant="soft" icon="i-lucide-info"
-                    description="После запуска письма поставлены в очередь и будут отправлены автоматически. Ответы появятся в разделе «Ответы поставщиков»." />
+                <UTextarea v-model="form.emailMessage" :rows="20" class="w-full font-mono text-sm"
+                    placeholder="Текст письма загружается..." />
 
                 <UAlert v-if="error" color="error" variant="soft" icon="i-lucide-circle-alert" :description="error" />
 
@@ -107,7 +83,7 @@
 </template>
 
 <script lang="ts" setup>
-import type { RequestResponse } from '#shared/types'
+import type { RequestResponse, RequestUpdate } from '#shared/types'
 
 const props = defineProps<{ request?: RequestResponse | null }>()
 const isOpen = defineModel<boolean>('open', { default: false })
@@ -119,63 +95,41 @@ const toast = useToast()
 type Step = 'params' | 'confirm'
 const step = ref<Step>('params')
 
-const standardFields = [
-    { key: 'description', label: 'Описание товара' },
-    { key: 'total_price_no_vat', label: 'Общая стоимость без НДС' },
-    { key: 'total_price_vat', label: 'Общая стоимость с НДС' },
-    { key: 'price_per_unit', label: 'Цена за единицу без НДС' },
-    { key: 'payment_terms', label: 'Условия оплаты' },
-    { key: 'delivery_deadline', label: 'Сроки поставки' },
-    { key: 'delivery_terms', label: 'Условия поставки' },
-    { key: 'warranty', label: 'Гарантия' },
-    { key: 'company_name', label: 'Наименование поставщика' },
-    { key: 'residency', label: 'Резидентство поставщика' },
-    { key: 'tax_id', label: 'ИНН / УНП' },
-] as const
-
-const ALL_FIELD_LABELS: Record<string, string> = {
-    delivery_region: 'Регион поставки',
-    description: 'Описание товара',
-    total_price_no_vat: 'Общая стоимость без НДС',
-    total_price_vat: 'Общая стоимость с НДС',
-    price_per_unit: 'Цена за единицу без НДС',
-    payment_terms: 'Условия оплаты',
-    delivery_deadline: 'Сроки поставки',
-    delivery_terms: 'Условия поставки',
-    warranty: 'Гарантия',
-    company_name: 'Наименование поставщика',
-    residency: 'Резидентство поставщика',
-    tax_id: 'ИНН / УНП',
-}
-
-function fieldLabel(key: string): string {
-    return ALL_FIELD_LABELS[key] ?? key
-}
-
 const form = reactive({
     description: '',
-    included_fields: [
-        'description', 'total_price_no_vat', 'total_price_vat',
-        'price_per_unit', 'payment_terms', 'delivery_deadline',
-        'company_name', 'tax_id',
+    labels: [
+        'Описание товара',
+        'Общая стоимость без НДС',
+        'Общая стоимость с НДС',
+        'Цена за единицу без НДС',
+        'Условия оплаты',
+        'Сроки поставки',
+        'Условия поставки',
+        'Гарантия',
+        'Наименование поставщика',
+        'Резидентство поставщика (страна)',
+        'ИНН / УНП',
     ] as string[],
-    custom_params: [] as { label: string; value: string }[],
     newLabel: '',
-    newValue: '',
+    emailMessage: '',
 })
 
 const errors = reactive({ description: '' })
 const loading = ref(false)
+const loadingMessage = ref(false)
 const error = ref<string | null>(null)
 
 function loadFromRequest() {
     const r = props.request
     if (!r) return
     form.description = r.description || ''
+    if (r.email_message) {
+        const msg = r.email_message
+        form.emailMessage = Array.isArray(msg) ? msg.join('\n') : String(msg)
+    }
     const ap = r.additional_params
-    if (ap) {
-        form.included_fields = [...(ap.included_fields || [])]
-        form.custom_params = [...(ap.custom_params || [])]
+    if (ap && Array.isArray(ap) && ap.length > 0) {
+        form.labels = [...ap]
     }
 }
 
@@ -186,39 +140,51 @@ watch(() => isOpen.value, open => {
 
 watch(() => props.request, () => { if (isOpen.value) loadFromRequest() })
 
-function toggleField(key: string, val: boolean) {
-    if (val) {
-        if (!form.included_fields.includes(key)) form.included_fields.push(key)
-    } else {
-        form.included_fields = form.included_fields.filter(k => k !== key)
-    }
-}
-
-function addCustom() {
-    if (!form.newLabel.trim() || !form.newValue.trim()) return
-    form.custom_params.push({ label: form.newLabel.trim(), value: form.newValue.trim() })
+function addLabel() {
+    if (!form.newLabel.trim()) return
+    form.labels.push(form.newLabel.trim())
     form.newLabel = ''
-    form.newValue = ''
 }
 
-function removeCustom(idx: number) { form.custom_params.splice(idx, 1) }
+function removeLabel(idx: number) { form.labels.splice(idx, 1) }
 
 function close() { isOpen.value = false }
 
 function validate() {
     errors.description = ''
-    let ok = true
     if (!form.description || form.description.trim().length < 3) {
         errors.description = 'Обязательное поле, минимум 3 символа'
-        ok = false
+        return false
     }
-    return ok
+    return true
 }
 
-function goToConfirm() {
+async function goToConfirm() {
     error.value = null
-    if (!validate()) return
-    step.value = 'confirm'
+    if (!validate() || !props.request) return
+
+    loadingMessage.value = true
+    try {
+        const body: RequestUpdate = {
+            description: form.description,
+            additional_params: form.labels.length > 0 ? form.labels : null,
+        }
+        await patch(`/requests/${props.request.id}`, body)
+
+        const updated = await patch<RequestResponse>(`/requests/${props.request.id}/email_message`)
+
+        if (updated?.email_message) {
+            const msg = updated.email_message
+            form.emailMessage = Array.isArray(msg) ? msg.join('\n') : String(msg)
+        }
+
+        step.value = 'confirm'
+    } catch (e: any) {
+        const detail = e?.response?.data?.detail
+        error.value = typeof detail === 'string' ? detail : 'Ошибка при генерации письма'
+    } finally {
+        loadingMessage.value = false
+    }
 }
 
 async function handleLaunch() {
@@ -226,24 +192,21 @@ async function handleLaunch() {
     loading.value = true
     error.value = null
     try {
-        await patch(`/requests/${props.request.id}`, {
-            description: form.description,
-            additional_params: {
-                included_fields: form.included_fields,
-                custom_params: form.custom_params,
-            },
-        })
+        if (form.emailMessage) {
+            await patch(`/requests/${props.request.id}/email_message`, {
+                email_message: form.emailMessage,
+            })
+        }
 
         await post(`/requests/${props.request.id}/launch`)
 
+        emit('launched')
         toast.add({
             title: 'Рассылка запущена',
             description: 'Письма поставлены в очередь и отправляются поставщикам',
             color: 'success',
             icon: 'i-lucide-mail-check',
         })
-
-        emit('launched')
         close()
         await navigateTo(`/requests/${props.request.id}/responses`)
     } catch (e: any) {

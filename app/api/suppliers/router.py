@@ -46,7 +46,7 @@ async def create_supplier(
     With request_id, existing suppliers are reused+attached for the
     frontend "add to current request" flow.
     """
-    normalized_domain = body.domain.lower().strip()
+    normalized_domain = body.domain.lower().strip() if body.domain else None
     normalized_email = body.email.lower().strip()
 
     existing = await SupplierDAO.get_by_domain(session, normalized_domain)

@@ -20,7 +20,6 @@ WORKDIR /app
 COPY --from=deps /app/.venv /app/.venv
 
 COPY --chown=appuser:appgroup app/ ./app/
-COPY --chown=appuser:appgroup templates/ ./templates/
 COPY --chown=appuser:appgroup migration/ ./migration/
 COPY --chown=appuser:appgroup alembic.ini ./
 COPY --chown=appuser:appgroup parser/ ./parser/

@@ -1,4 +1,5 @@
 import uuid
+from uuid import UUID
 
 from loguru import logger
 from sqlalchemy import select, update
@@ -11,6 +12,40 @@ from app.enums import RequestStatus
 
 class RequestDAO(BaseDAO[Request]):
     model = Request
+
+    @classmethod
+    async def update_email_message(
+        cls, session: AsyncSession, request_id: UUID, email_message: str | None
+    ) -> None:
+        logger.debug(
+            "Updating request email_message",
+            model=cls.model,
+            request_id=request_id,
+        )
+        try:
+            stmt = (
+                update(cls.model)
+                .where(cls.model.id == request_id)
+                .values(email_message=email_message)
+            )
+            await session.execute(stmt)
+            await session.flush()
+            await session.commit()
+
+            logger.info(
+                "Updated request email_message",
+                model=cls.model.__name__,
+                request_id=request_id,
+            )
+        except Exception as exc:
+            await session.rollback()
+            logger.exception(
+                "Failed to update request email_message",
+                error=str(exc),
+                model=cls.model,
+                request_id=request_id,
+            )
+            raise
 
     @classmethod
     async def get_by_id(
@@ -52,7 +87,7 @@ class RequestDAO(BaseDAO[Request]):
         cls,
         session: AsyncSession,
         request_id: uuid.UUID,
-        additional_params: dict | None,
+        additional_params: list | None,
         description: str,
     ) -> None:
         logger.debug(

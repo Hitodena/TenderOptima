@@ -3,7 +3,7 @@
 		<template #body>
 			<UForm :schema="schema" :state="form" @submit="handleAdd" class="space-y-4">
 
-				<UFormField label="Домен" name="domain" required hint="example.com">
+				<UFormField label="Домен" name="domain" hint="example.com">
 					<UInput v-model="form.domain" placeholder="supplier.ru" icon="i-lucide-globe" class="w-full" />
 				</UFormField>
 
@@ -30,6 +30,7 @@
 
 <script lang="ts" setup>
 import { z } from 'zod'
+import type { SupplierCreate } from '#shared/types'
 
 const props = defineProps<{ requestId: string }>()
 const isOpen = defineModel<boolean>('open', { default: false })
@@ -38,7 +39,7 @@ const emit = defineEmits<{ added: [] }>()
 const { post } = useApi()
 
 const schema = z.object({
-	domain: z.string().min(3, 'Минимум 3 символа').max(255),
+	domain: z.string().optional(),
 	company_name: z.string().min(1, 'Обязательное поле').max(200),
 	email: z.string().email('Неверный формат email'),
 })
@@ -60,13 +61,14 @@ async function handleAdd() {
 	loading.value = true
 	error.value = null
 	try {
-		await post('/suppliers/', {
-			domain: form.domain.trim(),
+		const payload: SupplierCreate = {
+			domain: form.domain.trim() || null,
 			company_name: form.company_name.trim(),
 			email: form.email.trim(),
 			source: 'manual',
 			request_id: props.requestId,
-		})
+		}
+		await post('/suppliers/', payload)
 		emit('added')
 		close()
 	} catch (e: any) {

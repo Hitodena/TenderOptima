@@ -15,10 +15,13 @@ class Request(IDMixinUUID, TimestampMixin, Base):
     )
 
     query: Mapped[str] = mapped_column(nullable=False)
-    delivery_region: Mapped[str] = mapped_column()
+    delivery_region: Mapped[str] = mapped_column(nullable=False)
 
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    additional_params: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text)
+    additional_params: Mapped[list | None] = mapped_column(JSON)
+
+    email_message: Mapped[str | None] = mapped_column(Text)
+    attachment_paths: Mapped[list | None] = mapped_column(JSON)
 
     status: Mapped[str] = mapped_column(nullable=False)  # aka Enum
 

@@ -279,7 +279,7 @@
 			"patch": {
 				"tags": ["Requests"],
 				"summary": "Update optional fields and additional parameters for the request email",
-				"description": "Updates description, quality_requirements and/or the additional_params JSON for the email template.",
+				"description": "Updates description, additional_params JSON",
 				"operationId": "update_request_additional_params_api_requests__request_id__patch",
 				"security": [{ "OAuth2PasswordBearer": [] }],
 				"parameters": [
@@ -486,6 +486,44 @@
 				}
 			}
 		},
+		"/api/requests/{request_id}/email_message": {
+			"patch": {
+				"tags": ["Requests"],
+				"summary": "Update email message for a request",
+				"description": "Updates the generated email message for the request.",
+				"operationId": "update_request_email_message_api_requests__request_id__email_message_patch",
+				"security": [{ "OAuth2PasswordBearer": [] }],
+				"parameters": [
+					{
+						"name": "request_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"format": "uuid",
+							"title": "Request Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Email message updated",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/RequestResponse" }
+							}
+						}
+					},
+					"401": {
+						"description": "Missing or invalid authentication credentials"
+					},
+					"404": {
+						"description": "Request not found or does not belong to user"
+					},
+					"422": { "description": "Validation Error" }
+				}
+			}
+		},
 		"/api/blacklist/": {
 			"get": {
 				"tags": ["Blacklisted Domains"],
@@ -581,6 +619,48 @@
 				}
 			}
 		},
+		"/api/suppliers/": {
+			"post": {
+				"tags": ["Suppliers"],
+				"summary": "Manually create/register a new supplier (optionally attach to a request)",
+				"description": "Creates a new supplier (or reuses existing domain).\n\nIf request_id provided: attach by creating RequestSupplier (pending).\nDup domain: 409 only if no request_id (preserves explicit create).\nWith request_id, existing suppliers are reused+attached for the\nfrontend \"add to current request\" flow.",
+				"operationId": "create_supplier_api_suppliers__post",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/SupplierCreate" }
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"201": {
+						"description": "New supplier created (and attached to request if request_id provided)",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/app__api__suppliers__schemas__SupplierResponse"
+								}
+							}
+						}
+					},
+					"200": {
+						"description": "Existing supplier reused and attached to the provided request"
+					},
+					"401": {
+						"description": "Missing or invalid authentication credentials"
+					},
+					"404": {
+						"description": "Request not found or does not belong to current user"
+					},
+					"409": {
+						"description": "Supplier with this domain already exists (when called without request_id)"
+					},
+					"422": { "description": "Validation error in request payload" }
+				},
+				"security": [{ "OAuth2PasswordBearer": [] }]
+			}
+		},
 		"/api/history/": {
 			"get": {
 				"tags": ["Search history"],
@@ -644,32 +724,6 @@
 	},
 	"components": {
 		"schemas": {
-			"AdditionalParams": {
-				"properties": {
-					"included_fields": {
-						"items": { "type": "string" },
-						"type": "array",
-						"title": "Included Fields",
-						"description": "List of standard optional fields the user chose to include (e.g. 'description', 'quality_requirements')",
-						"examples": [["description", "quality_requirements"]]
-					},
-					"custom_params": {
-						"items": {
-							"additionalProperties": { "type": "string" },
-							"type": "object"
-						},
-						"type": "array",
-						"title": "Custom Params",
-						"description": "User-added custom key-value pairs for the email (label + value)",
-						"examples": [
-							[{ "label": "Условия оплаты", "value": "50% предоплата" }]
-						]
-					}
-				},
-				"type": "object",
-				"title": "AdditionalParams",
-				"description": "User-selected optional + custom parameters to include in the supplier request email."
-			},
 			"Attachment": {
 				"properties": {
 					"filename": {
@@ -805,8 +859,7 @@
 			"LaunchMailingResponse": {
 				"properties": {
 					"status": {
-						"type": "string",
-						"title": "Status",
+						"$ref": "#/components/schemas/RequestStatus",
 						"description": "Task status",
 						"examples": ["queued"]
 					},
@@ -891,38 +944,20 @@
 						"minLength": 3,
 						"title": "Query",
 						"description": "Main search query describing the product needed",
-						"examples": ["industrial pumps"]
+						"examples": ["промышленные насосы"]
 					},
 					"delivery_region": {
 						"type": "string",
 						"maxLength": 100,
 						"title": "Delivery Region",
 						"description": "Preferred delivery region or country",
-						"examples": ["Minsk"]
-					},
-					"description": {
-						"anyOf": [
-							{ "type": "string", "maxLength": 2000 },
-							{ "type": "null" }
-						],
-						"title": "Description",
-						"description": "Detailed description of requirements",
-						"examples": ["High pressure centrifugal pumps"]
-					},
-					"quality_requirements": {
-						"anyOf": [
-							{ "type": "string", "maxLength": 1000 },
-							{ "type": "null" }
-						],
-						"title": "Quality Requirements",
-						"description": "Specific quality or certification requirements",
-						"examples": ["ISO 9001 certified"]
+						"examples": ["Минск"]
 					}
 				},
 				"type": "object",
 				"required": ["query", "delivery_region"],
 				"title": "RequestCreate",
-				"description": "Payload for creating a new supplier search request."
+				"description": "Minimal payload for creating a new supplier search request (only query + region; other fields set later via PATCH before launch)."
 			},
 			"RequestResponse": {
 				"properties": {
@@ -947,8 +982,7 @@
 						"examples": ["industrial pumps"]
 					},
 					"status": {
-						"type": "string",
-						"title": "Status",
+						"$ref": "#/components/schemas/RequestStatus",
 						"description": "Current lifecycle status of the request",
 						"examples": ["active"]
 					},
@@ -960,7 +994,7 @@
 						"examples": ["123e4567-e89b-12d3-a456-426614174000"]
 					},
 					"delivery_region": {
-						"type": "string",
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Delivery Region",
 						"description": "Requested delivery region",
 						"examples": ["Minsk"]
@@ -971,11 +1005,20 @@
 						"description": "Detailed requirements",
 						"examples": ["High pressure centrifugal pumps"]
 					},
-					"quality_requirements": {
-						"anyOf": [{ "type": "string" }, { "type": "null" }],
-						"title": "Quality Requirements",
-						"description": "Quality requirements",
-						"examples": ["ISO 9001"]
+					"additional_params": {
+						"anyOf": [{ "items": {}, "type": "array" }, { "type": "null" }],
+						"title": "Additional Params",
+						"description": "Selected optional and custom parameters for the outgoing email"
+					},
+					"attachment_paths": {
+						"anyOf": [{ "items": {}, "type": "array" }, { "type": "null" }],
+						"title": "Attachment Paths",
+						"description": "Paths for attachments of the request"
+					},
+					"email_message": {
+						"anyOf": [{ "items": {}, "type": "array" }, { "type": "null" }],
+						"title": "Email Message",
+						"description": "Generated email message of the request"
 					},
 					"created_at": {
 						"type": "string",
@@ -983,16 +1026,6 @@
 						"title": "Created At",
 						"description": "Creation timestamp",
 						"examples": ["2025-01-15T10:30:00Z"]
-					},
-					"additional_params": {
-						"anyOf": [
-							{ "$ref": "#/components/schemas/AdditionalParams" },
-							{ "type": "null" }
-						],
-						"description": "Selected optional and custom parameters for the outgoing email",
-						"examples": [
-							{ "custom_params": [], "included_fields": ["description"] }
-						]
 					}
 				},
 				"type": "object",
@@ -1004,11 +1037,16 @@
 					"tracking_id",
 					"delivery_region",
 					"description",
-					"quality_requirements",
 					"created_at"
 				],
 				"title": "RequestResponse",
 				"description": "Full representation of a user request."
+			},
+			"RequestStatus": {
+				"type": "string",
+				"enum": ["draft", "active", "queued", "completed"],
+				"title": "RequestStatus",
+				"description": "Lifecycle status of a user search/mailing request."
 			},
 			"RequestSupplierResponse": {
 				"properties": {
@@ -1020,13 +1058,13 @@
 						"examples": ["123e4567-e89b-12d3-a456-426614174000"]
 					},
 					"supplier": {
-						"$ref": "#/components/schemas/SupplierResponse",
+						"$ref": "#/components/schemas/app__api__user_requests__schemas__SupplierResponse",
 						"description": "Supplier information"
 					},
 					"status": {
-						"type": "string",
-						"title": "Status",
-						"description": "Current status of the supplier request"
+						"$ref": "#/components/schemas/RequestSupplierStatus",
+						"description": "Current status of the supplier request",
+						"examples": ["pending"]
 					},
 					"is_enabled": {
 						"type": "boolean",
@@ -1047,33 +1085,32 @@
 				"title": "RequestSupplierResponse",
 				"description": "Response representation of a request-supplier link."
 			},
+			"RequestSupplierStatus": {
+				"type": "string",
+				"enum": ["pending", "sent", "failed", "replied"],
+				"title": "RequestSupplierStatus",
+				"description": "Per-supplier sending + reply lifecycle for a request."
+			},
 			"RequestUpdate": {
 				"properties": {
 					"description": {
-						"anyOf": [
-							{ "type": "string", "maxLength": 2000 },
-							{ "type": "null" }
-						],
+						"type": "string",
+						"maxLength": 2000,
+						"minLength": 3,
 						"title": "Description",
-						"description": "Detailed description of requirements"
-					},
-					"quality_requirements": {
-						"anyOf": [
-							{ "type": "string", "maxLength": 1000 },
-							{ "type": "null" }
-						],
-						"title": "Quality Requirements",
-						"description": "Specific quality or certification requirements"
+						"description": "Detailed description of requirements",
+						"examples": [
+							"Высоконапорные центробежные насосы для химической промышленности"
+						]
 					},
 					"additional_params": {
-						"anyOf": [
-							{ "$ref": "#/components/schemas/AdditionalParams" },
-							{ "type": "null" }
-						],
+						"anyOf": [{ "items": {}, "type": "array" }, { "type": "null" }],
+						"title": "Additional Params",
 						"description": "Selected optional and custom parameters for the outgoing email"
 					}
 				},
 				"type": "object",
+				"required": ["description"],
 				"title": "RequestUpdate",
 				"description": "Payload for updating optional fields and additional parameters before launching the request."
 			},
@@ -1166,38 +1203,58 @@
 				"title": "SearchResult",
 				"description": "Summary of a supplier search operation."
 			},
-			"SupplierResponse": {
+			"SupplierCreate": {
 				"properties": {
-					"id": {
-						"type": "string",
-						"format": "uuid",
-						"title": "Id",
-						"description": "Supplier identifier",
-						"examples": ["123e4567-e89b-12d3-a456-426614174000"]
-					},
 					"domain": {
-						"type": "string",
+						"anyOf": [
+							{ "type": "string", "maxLength": 255, "minLength": 3 },
+							{ "type": "null" }
+						],
 						"title": "Domain",
-						"description": "Supplier domain",
-						"examples": ["supplier.com"]
+						"description": "Supplier domain (unique, will be lowercased). Can be null if creating without domain.",
+						"examples": ["example-supplier.ru"]
 					},
 					"company_name": {
 						"type": "string",
+						"maxLength": 200,
+						"minLength": 1,
 						"title": "Company Name",
-						"description": "Company name",
-						"examples": ["Acme Supplies LLC"]
+						"description": "Legal or display company name",
+						"examples": ["ООО ПромПоставка"]
 					},
 					"email": {
 						"type": "string",
+						"format": "email",
 						"title": "Email",
-						"description": "Primary contact email",
-						"examples": ["contact@supplier.com"]
+						"description": "Primary contact email for the supplier",
+						"examples": ["sales@example-supplier.ru"]
+					},
+					"source": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/SupplierSource",
+								"maxLength": 50
+							},
+							{ "type": "null" }
+						],
+						"description": "Origin/source tag (stored as from_source). Examples: 'manual', 'admin', 'import'",
+						"default": "manual",
+						"examples": ["manual"]
+					},
+					"request_id": {
+						"anyOf": [
+							{ "type": "string", "format": "uuid" },
+							{ "type": "null" }
+						],
+						"title": "Request Id",
+						"description": "Optional: attach the (new or existing) supplier to this request immediately by creating a pending RequestSupplier link. The request must belong to the current user.",
+						"examples": ["123e4567-e89b-12d3-a456-426614174000"]
 					}
 				},
 				"type": "object",
-				"required": ["id", "domain", "company_name", "email"],
-				"title": "SupplierResponse",
-				"description": "Minimal supplier information."
+				"required": ["company_name", "email"],
+				"title": "SupplierCreate",
+				"description": "Payload for manually creating/registering a new supplier."
 			},
 			"SupplierResponseResponse": {
 				"properties": {
@@ -1241,7 +1298,7 @@
 						"examples": ["2025-01-15T14:22:00Z"]
 					},
 					"supplier": {
-						"$ref": "#/components/schemas/SupplierResponse",
+						"$ref": "#/components/schemas/app__api__user_requests__schemas__SupplierResponse",
 						"description": "Supplier that sent the response"
 					}
 				},
@@ -1256,6 +1313,12 @@
 				],
 				"title": "SupplierResponseResponse",
 				"description": "Email response received from a supplier."
+			},
+			"SupplierSource": {
+				"type": "string",
+				"enum": ["manual", "parser", "admin", "import"],
+				"title": "SupplierSource",
+				"description": "Origin of a supplier record (for analytics + dedup rules)."
 			},
 			"ToggleSupplierRequest": {
 				"properties": {
@@ -1334,6 +1397,92 @@
 				"type": "object",
 				"required": ["loc", "msg", "type"],
 				"title": "ValidationError"
+			},
+			"app__api__suppliers__schemas__SupplierResponse": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"format": "uuid",
+						"title": "Id",
+						"description": "Unique supplier identifier",
+						"examples": ["123e4567-e89b-12d3-a456-426614174000"]
+					},
+					"domain": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Domain",
+						"description": "Supplier domain",
+						"examples": ["example-supplier.ru"]
+					},
+					"company_name": {
+						"type": "string",
+						"title": "Company Name",
+						"description": "Company name",
+						"examples": ["ООО ПромПоставка"]
+					},
+					"email": {
+						"type": "string",
+						"title": "Email",
+						"description": "Contact email",
+						"examples": ["sales@example-supplier.ru"]
+					},
+					"from_source": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "From Source",
+						"description": "How the supplier was added (from_source)",
+						"examples": ["manual"]
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Created At",
+						"description": "Creation timestamp",
+						"examples": ["2025-01-15T10:30:00Z"]
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"domain",
+					"company_name",
+					"email",
+					"from_source",
+					"created_at"
+				],
+				"title": "SupplierResponse",
+				"description": "Public representation of a supplier (after creation or lookup)."
+			},
+			"app__api__user_requests__schemas__SupplierResponse": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"format": "uuid",
+						"title": "Id",
+						"description": "Supplier identifier",
+						"examples": ["123e4567-e89b-12d3-a456-426614174000"]
+					},
+					"domain": {
+						"type": "string",
+						"title": "Domain",
+						"description": "Supplier domain",
+						"examples": ["supplier.com"]
+					},
+					"company_name": {
+						"type": "string",
+						"title": "Company Name",
+						"description": "Company name",
+						"examples": ["Acme Supplies LLC"]
+					},
+					"email": {
+						"type": "string",
+						"title": "Email",
+						"description": "Primary contact email",
+						"examples": ["contact@supplier.com"]
+					}
+				},
+				"type": "object",
+				"required": ["id", "domain", "company_name", "email"],
+				"title": "SupplierResponse",
+				"description": "Minimal supplier information."
 			}
 		},
 		"securitySchemes": {
