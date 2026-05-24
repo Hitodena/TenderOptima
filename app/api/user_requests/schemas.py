@@ -401,15 +401,13 @@ class SupplierRemoveResponse(BaseModel):
     ]
 
 
-class RequestRemoveResponse(BaseModel):
-    """Confirmation response after deleting a user request (cascades to suppliers/responses)."""
-
+class RequestCloseResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: Annotated[
         uuid.UUID,
         Field(
-            description="Identifier of the deleted request",
+            description="Identifier of the closed request",
             examples=["123e4567-e89b-12d3-a456-426614174000"],
         ),
     ]

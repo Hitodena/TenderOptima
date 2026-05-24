@@ -29,7 +29,7 @@
 					</div>
 				</div>
 
-				<UButton v-if="request.status === RequestStatus.QUEUED || request.status === RequestStatus.COMPLETED"
+				<UButton v-if="request.status === RequestStatus.QUEUED || request.status === RequestStatus.COMPLETED || request.status === RequestStatus.CLOSED"
 					variant="outline" color="neutral" leading-icon="i-lucide-inbox" :to="`/requests/${id}/responses`"
 					class="shrink-0">
 					Ответы поставщиков
@@ -42,7 +42,7 @@
 			<div class="flex items-start justify-between mb-4 gap-4 flex-wrap">
 				<div>
 					<h2 class="text-lg font-semibold">Найденные поставщики</h2>
-					<p v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED"
+					<p v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED && request.status !== RequestStatus.CLOSED"
 						class="text-sm text-muted mt-0.5">
 						{{
 							suppliers.length ?
@@ -57,7 +57,7 @@
 						Поиск поставщиков
 					</UButton>
 					<UButton
-						v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED"
+						v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED && request.status !== RequestStatus.CLOSED"
 						size="lg" variant="outline" color="neutral" leading-icon="i-lucide-user-plus"
 						@click="showAddSupplier = true">
 						Добавить поставщика
@@ -89,6 +89,17 @@
 						Смотреть ответы
 					</UButton>
 				</div>
+				<div v-else-if="request.status === RequestStatus.CLOSED"
+					class="flex items-center gap-3 p-4 rounded-xl bg-warning/10 border border-warning/20">
+					<UIcon name="i-lucide-lock" class="w-5 h-5 text-warning shrink-0" />
+					<div>
+						<p class="text-sm font-medium">Запрос закрыт</p>
+					</div>
+					<UButton size="sm" variant="ghost" :to="`/requests/${id}/responses`" class="ml-auto"
+						trailing-icon="i-lucide-arrow-right">
+						Смотреть ответы
+					</UButton>
+				</div>
 				<div v-else>
 					<UAlert color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 						description="Отправляйте запросы только подходящим компаниям. Нерелевантные письма могут негативно влиять на репутацию вашей компании." />
@@ -112,7 +123,7 @@
 
 					<template #is_enabled-cell="{ row }">
 						<USwitch :model-value="row.original.is_enabled" size="sm"
-							:disabled="updatingToggle || request.status === RequestStatus.QUEUED || request.status === RequestStatus.COMPLETED"
+							:disabled="updatingToggle || request.status === RequestStatus.QUEUED || request.status === RequestStatus.COMPLETED || request.status === RequestStatus.CLOSED"
 							@update:model-value="(val: any) => handleToggle(row.original, Boolean(val))" />
 					</template>
 
@@ -144,7 +155,7 @@
 					</template>
 
 					<template #actions-cell="{ row }">
-						<div v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED"
+						<div v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED && request.status !== RequestStatus.CLOSED"
 							class="flex items-center justify-end gap-1">
 							<UButton v-if="confirmDeleteSupplierId === row.original.id" size="xs" color="error"
 								variant="soft" icon="i-lucide-check" :loading="deletingSupplierIds.has(row.original.id)"
@@ -165,12 +176,12 @@
 					</p>
 					<div class="flex items-center gap-2">
 						<UButton size="xs" variant="ghost" color="neutral"
-							:disabled="updatingToggle || request.status === RequestStatus.QUEUED || request.status === RequestStatus.COMPLETED || enabledCount === 0"
+							:disabled="updatingToggle || request.status === RequestStatus.QUEUED || request.status === RequestStatus.COMPLETED || request.status === RequestStatus.CLOSED || enabledCount === 0"
 							@click="deselectAll">
 							Снять все
 						</UButton>
 						<UButton size="xs" variant="ghost" color="primary"
-							:disabled="updatingToggle || request.status === RequestStatus.QUEUED || request.status === RequestStatus.COMPLETED || enabledCount === suppliers.length"
+							:disabled="updatingToggle || request.status === RequestStatus.QUEUED || request.status === RequestStatus.COMPLETED || request.status === RequestStatus.CLOSED || enabledCount === suppliers.length"
 							@click="selectAll">
 							Выбрать все
 						</UButton>
@@ -178,7 +189,7 @@
 				</div>
 			</UCard>
 
-			<div v-if="request.status !== RequestStatus.QUEUED && suppliers.length > 0 && request.status !== RequestStatus.COMPLETED"
+			<div v-if="request.status !== RequestStatus.QUEUED && suppliers.length > 0 && request.status !== RequestStatus.COMPLETED && request.status !== RequestStatus.CLOSED"
 				class="flex items-center gap-3">
 				<UButton size="lg" leading-icon="i-lucide-send" :disabled="enabledCount === 0"
 					@click="showParamsModal = true">
@@ -313,7 +324,7 @@ async function confirmDeleteSupplier(rsId: string) {
 }
 
 async function toggleAll(enabled: boolean) {
-	if (request.value?.status === RequestStatus.QUEUED) return
+	if (request.value?.status === RequestStatus.QUEUED || request.value?.status === RequestStatus.CLOSED) return
 	const toToggle = suppliers.value.filter(s => s.is_enabled !== enabled)
 	updatingToggle.value = true
 	actionError.value = ''

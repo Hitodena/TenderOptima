@@ -21,9 +21,9 @@ from app.api.user_requests.schemas import (
     Attachment,
     LaunchMailingResponse,
     ParserResult,
+    RequestCloseResponse,
     RequestCreate,
     RequestEmailUpdate,
-    RequestRemoveResponse,
     RequestResponse,
     RequestSupplierResponse,
     RequestUpdate,
@@ -728,31 +728,33 @@ async def remove_supplier_from_request(
     return SupplierRemoveResponse(id=request_supplier_id)
 
 
-@router.delete(
-    "/{request_id}",
-    response_model=RequestRemoveResponse,
-    summary="Delete a request (cascades to all linked suppliers and responses)",
+@router.post(
+    "/{request_id}/close",
+    response_model=RequestCloseResponse,
+    summary="Close a request by setting status to closed",
     responses={
-        200: {"description": "Request successfully deleted"},
+        200: {"description": "Request successfully closed"},
+        400: {
+            "description": "Request already closed or in invalid state for closing"
+        },
         401: {"description": "Missing or invalid authentication credentials"},
         404: {"description": "Request not found or does not belong to user"},
     },
 )
-async def delete_request(
+async def close_request(
     request_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
-) -> RequestRemoveResponse:
-    """Deletes the request and all its associations (suppliers, responses). Attachments on disk are not auto-removed."""
+) -> RequestCloseResponse:
     request = await RequestDAO.get_by_id(session, request_id)
     if not request or request.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
         )
-    deleted = await RequestDAO.delete(session, request_id)
-    if not deleted:
+    if request.status == RequestStatus.CLOSED:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Request already closed",
         )
-
-    return RequestRemoveResponse(id=request_id)
+    await RequestDAO.update_status(session, request_id, RequestStatus.CLOSED)
+    return RequestCloseResponse(id=request_id)

@@ -51,10 +51,12 @@
 				<div class="flex items-center justify-between mb-5">
 					<div>
 						<h2 class="text-xl font-semibold">История запросов</h2>
-						<p class="text-sm text-muted mt-0.5">Все ваши поисковые запросы</p>
+						<p class="text-sm text-muted mt-0.5">Ваши поисковые запросы</p>
 					</div>
 					<UInput v-model="search" placeholder="Поиск..." icon="i-lucide-search" class="w-56" size="sm" />
 				</div>
+
+				<UTabs v-model="activeTab" :items="tabs" :content="false" :ui="{ list: 'mb-4' }" />
 
 				<div v-if="loadingHistory" class="space-y-3">
 					<USkeleton v-for="i in 5" :key="i" class="h-18 w-full rounded-xl" />
@@ -91,15 +93,19 @@
 									</p>
 								</div>
 								<div class="flex items-center gap-1 shrink-0">
-									<UButton color="error" variant="ghost" size="xs"
-										:icon="confirmDeleteId === req.id ? 'i-lucide-check' : 'i-lucide-trash-2'"
-										:loading="deletingId === req.id" class="opacity-0 group-hover:opacity-100"
-										:class="confirmDeleteId === req.id ? 'opacity-100 text-error' : ''"
-										@click.stop="handleDeleteClick(req.id)" />
-									<UIcon v-if="confirmDeleteId !== req.id" name="i-lucide-chevron-right"
-										class="w-4 h-4 text-muted" />
-									<UButton v-if="confirmDeleteId === req.id" color="neutral" variant="ghost" size="xs"
-										icon="i-lucide-x" @click.stop="confirmDeleteId = null" />
+									<template v-if="req.status !== RequestStatus.CLOSED">
+										<UButton :color="confirmCloseId === req.id ? 'warning' : 'neutral'" variant="ghost" size="xs"
+											:leading-icon="confirmCloseId === req.id ? 'i-lucide-check' : 'i-lucide-lock'"
+											:label="confirmCloseId === req.id ? 'Подтвердить' : 'Закрыть'"
+											:loading="closingId === req.id" class="opacity-0 group-hover:opacity-100"
+											:class="confirmCloseId === req.id ? 'opacity-100' : ''"
+											@click.stop="handleCloseClick(req.id)" />
+										<UIcon v-if="confirmCloseId !== req.id" name="i-lucide-chevron-right"
+											class="w-4 h-4 text-muted" />
+										<UButton v-if="confirmCloseId === req.id" color="neutral" variant="ghost" size="xs"
+											icon="i-lucide-x" @click.stop="confirmCloseId = null" />
+									</template>
+									<UIcon v-else name="i-lucide-chevron-right" class="w-4 h-4 text-muted" />
 								</div>
 							</div>
 						</UCard>
@@ -118,7 +124,7 @@
 
 				<div v-else class="text-center py-16">
 					<UIcon name="i-lucide-inbox" class="w-12 h-12 mx-auto mb-3 text-muted opacity-40" />
-					<p class="text-muted">{{ search ? 'Ничего не найдено' : 'Запросов пока нет' }}</p>
+					<p class="text-muted">{{ search ? 'Ничего не найдено' : (activeTab === 'active' ? 'Активных запросов пока нет' : 'Закрытых запросов пока нет') }}</p>
 					<p v-if="!search" class="text-xs text-muted mt-1">Создайте первый запрос выше</p>
 				</div>
 			</div>
@@ -129,7 +135,7 @@
 
 <script lang="ts" setup>
 import type { RequestResponse } from '#shared/types'
-import { getRequestStatusColor, getRequestStatusLabel } from '#shared/types'
+import { getRequestStatusColor, getRequestStatusLabel, RequestStatus } from '#shared/types'
 import { z } from 'zod'
 
 const { post, get, del } = useApi()
@@ -175,13 +181,21 @@ const loadingHistory = ref(true)
 const loadingMore = ref(false)
 const page = ref(1)
 const search = ref('')
-const confirmDeleteId = ref<string | null>(null)
-const deletingId = ref<string | null>(null)
+const confirmCloseId = ref<string | null>(null)
+const closingId = ref<string | null>(null)
+const activeTab = ref<'active' | 'closed'>('active')
+const tabs = [
+	{ label: 'Активные', icon: 'i-lucide-activity', value: 'active' },
+	{ label: 'Закрытые', icon: 'i-lucide-archive', value: 'closed' }
+]
 
 const filteredHistory = computed(() => {
 	const q = search.value.toLowerCase()
-	if (!q) return allHistory.value
-	return allHistory.value.filter(r =>
+	let list = activeTab.value === 'active'
+		? allHistory.value.filter(r => r.status !== RequestStatus.CLOSED)
+		: allHistory.value.filter(r => r.status === RequestStatus.CLOSED)
+	if (!q) return list
+	return list.filter(r =>
 		r.query.toLowerCase().includes(q) ||
 		(r.delivery_region?.toLowerCase().includes(q) ?? false)
 	)
@@ -211,27 +225,28 @@ async function fetchHistory() {
 
 await fetchHistory()
 
-watch(search, () => { page.value = 1 })
+	watch(search, () => { page.value = 1 })
+	watch(activeTab, () => { page.value = 1; confirmCloseId.value = null })
 
-onMounted(() => {
-	document.addEventListener('click', () => { confirmDeleteId.value = null })
-})
+	onMounted(() => {
+		document.addEventListener('click', () => { confirmCloseId.value = null })
+	})
 
-async function handleDeleteClick(id: string) {
-	if (confirmDeleteId.value !== id) {
-		confirmDeleteId.value = id
-		return
+	async function handleCloseClick(id: string) {
+		if (confirmCloseId.value !== id) {
+			confirmCloseId.value = id
+			return
+		}
+		closingId.value = id
+		confirmCloseId.value = null
+		try {
+			await post(`/requests/${id}/close`)
+			allHistory.value = allHistory.value.map(r => r.id === id ? { ...r, status: 'closed' } : r)
+		} catch { }
+		finally {
+			closingId.value = null
+		}
 	}
-	deletingId.value = id
-	confirmDeleteId.value = null
-	try {
-		await del(`/requests/${id}`)
-		allHistory.value = allHistory.value.filter(r => r.id !== id)
-	} catch { }
-	finally {
-		deletingId.value = null
-	}
-}
 
 const sentinel = ref<HTMLElement | null>(null)
 
