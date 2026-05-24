@@ -74,3 +74,45 @@ class UserDAO(BaseDAO[User]):
                 email=email,
             )
             raise
+
+    @classmethod
+    async def update_contact_info(
+        cls,
+        session: AsyncSession,
+        user: User,
+        full_name: str | None = None,
+        contact_email: str | None = None,
+        business_info: str | None = None,
+    ) -> User:
+        logger.debug(
+            "Updating user contact info",
+            model=cls.model,
+            user_id=user.id,
+            full_name=full_name,
+            contact_email=contact_email,
+            business_info=business_info,
+        )
+        try:
+            if full_name is not None:
+                user.full_name = full_name
+            if contact_email is not None:
+                user.contact_email = contact_email
+            if business_info is not None:
+                user.business_info = business_info
+            session.add(user)
+            await session.flush()
+            await session.refresh(user)
+            await session.commit()
+            logger.info(
+                "User contact info updated", model=cls.model, user_id=user.id
+            )
+            return user
+        except Exception as exc:
+            await session.rollback()
+            logger.exception(
+                "Failed to update user contact info",
+                error=str(exc),
+                model=cls.model,
+                user_id=user.id,
+            )
+            raise

@@ -34,7 +34,9 @@ class RequestSupplier(IDMixinUUID, TimestampMixin, Base):
     __tablename__ = "request_suppliers"
 
     request_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("requests.id"), nullable=False
+        UUID(as_uuid=True),
+        ForeignKey("requests.id", ondelete="CASCADE"),
+        nullable=False,
     )
     supplier_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("suppliers.id"), nullable=False
@@ -53,11 +55,14 @@ class RequestSupplier(IDMixinUUID, TimestampMixin, Base):
     smtp_message_id: Mapped[str | None] = mapped_column()
 
     request: Mapped["Request"] = relationship(  # noqa: F821 # type: ignore
-        back_populates="request_suppliers"
+        back_populates="request_suppliers",
     )
     supplier: Mapped[Supplier] = relationship(
-        back_populates="request_suppliers"
+        back_populates="request_suppliers",
     )
     response: Mapped["SupplierResponse | None"] = relationship(  # noqa: F821 # type: ignore
-        back_populates="request_supplier", uselist=False
+        back_populates="request_supplier",
+        uselist=False,
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )

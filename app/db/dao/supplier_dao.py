@@ -164,6 +164,52 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
             raise
 
     @classmethod
+    async def delete_for_request(
+        cls, session: AsyncSession, rs_id: uuid.UUID, request_id: uuid.UUID
+    ) -> bool:
+        logger.debug(
+            "Deleting request-supplier link",
+            model=cls.model,
+            rs_id=rs_id,
+            request_id=request_id,
+        )
+        try:
+            stmt = select(cls.model).where(
+                cls.model.id == rs_id,
+                cls.model.request_id == request_id,
+            )
+            result = await session.execute(stmt)
+            instance = result.scalar_one_or_none()
+            if not instance:
+                logger.info(
+                    "RequestSupplier not found for delete",
+                    model=cls.model,
+                    rs_id=rs_id,
+                    request_id=request_id,
+                )
+                return False
+            await session.delete(instance)
+            await session.flush()
+            await session.commit()
+            logger.info(
+                "RequestSupplier deleted",
+                model=cls.model.__name__,
+                rs_id=rs_id,
+                request_id=request_id,
+            )
+            return True
+        except Exception as exc:
+            await session.rollback()
+            logger.exception(
+                "Failed to delete request-supplier link",
+                error=str(exc),
+                model=cls.model,
+                rs_id=rs_id,
+                request_id=request_id,
+            )
+            raise
+
+    @classmethod
     async def mark_status(
         cls,
         session: AsyncSession,

@@ -8,7 +8,7 @@
 					<p class="text-muted text-sm">Найдите подходящих поставщиков. Поиск занимает 10–30 секунд.</p>
 				</div>
 
-				<UCard class="shadow-sm mb-4">
+				<UCard class="shadow-sm mb-4 min-h-80">
 					<UForm :schema="schema" :state="form" @submit="handleSearch" class="space-y-5">
 						<UFormField label="Что ищете?" name="query" required hint="Минимум 3 символа">
 							<UInput v-model="form.query" placeholder="Промышленные насосы, картонные коробки..."
@@ -63,7 +63,7 @@
 				<template v-else-if="filteredHistory.length">
 					<div class="space-y-2">
 						<UCard v-for="req in visibleHistory" :key="req.id"
-							class="cursor-pointer hover:shadow-md transition-all hover:-translate-y-px"
+							class="group cursor-pointer hover:shadow-md transition-all hover:-translate-y-px"
 							@click="navigateTo(`/requests/${req.id}`)">
 							<div class="flex items-center gap-4">
 								<div
@@ -81,7 +81,7 @@
 									<p class="text-xs text-muted flex items-center gap-2">
 										<span class="flex items-center gap-1">
 											<UIcon name="i-lucide-map-pin" class="w-3 h-3" />
-											{{ req.delivery_region ?? 'Регион не указан' }}
+											{{ req.delivery_region }}
 										</span>
 										<span>·</span>
 										<span class="flex items-center gap-1">
@@ -90,7 +90,17 @@
 										</span>
 									</p>
 								</div>
-								<UIcon name="i-lucide-chevron-right" class="w-4 h-4 text-muted shrink-0" />
+								<div class="flex items-center gap-1 shrink-0">
+									<UButton color="error" variant="ghost" size="xs"
+										:icon="confirmDeleteId === req.id ? 'i-lucide-check' : 'i-lucide-trash-2'"
+										:loading="deletingId === req.id" class="opacity-0 group-hover:opacity-100"
+										:class="confirmDeleteId === req.id ? 'opacity-100 text-error' : ''"
+										@click.stop="handleDeleteClick(req.id)" />
+									<UIcon v-if="confirmDeleteId !== req.id" name="i-lucide-chevron-right"
+										class="w-4 h-4 text-muted" />
+									<UButton v-if="confirmDeleteId === req.id" color="neutral" variant="ghost" size="xs"
+										icon="i-lucide-x" @click.stop="confirmDeleteId = null" />
+								</div>
 							</div>
 						</UCard>
 					</div>
@@ -122,7 +132,7 @@ import type { RequestResponse } from '#shared/types'
 import { getRequestStatusColor, getRequestStatusLabel } from '#shared/types'
 import { z } from 'zod'
 
-const { post, get } = useApi()
+const { post, get, del } = useApi()
 
 const schema = z.object({
 	query: z.string().min(3, 'Минимум 3 символа').max(500, 'Максимум 500 символов'),
@@ -165,6 +175,8 @@ const loadingHistory = ref(true)
 const loadingMore = ref(false)
 const page = ref(1)
 const search = ref('')
+const confirmDeleteId = ref<string | null>(null)
+const deletingId = ref<string | null>(null)
 
 const filteredHistory = computed(() => {
 	const q = search.value.toLowerCase()
@@ -200,6 +212,26 @@ async function fetchHistory() {
 await fetchHistory()
 
 watch(search, () => { page.value = 1 })
+
+onMounted(() => {
+	document.addEventListener('click', () => { confirmDeleteId.value = null })
+})
+
+async function handleDeleteClick(id: string) {
+	if (confirmDeleteId.value !== id) {
+		confirmDeleteId.value = id
+		return
+	}
+	deletingId.value = id
+	confirmDeleteId.value = null
+	try {
+		await del(`/requests/${id}`)
+		allHistory.value = allHistory.value.filter(r => r.id !== id)
+	} catch { }
+	finally {
+		deletingId.value = null
+	}
+}
 
 const sentinel = ref<HTMLElement | null>(null)
 

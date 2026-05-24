@@ -29,7 +29,7 @@ class RegisterCreate(BaseModel):
         ),
     ]
     full_name: Annotated[
-        str | None,
+        str,
         Field(
             default=None,
             description="Optional full legal name of the user",
@@ -112,5 +112,56 @@ class UserResponse(BaseModel):
         Field(
             description="User's full name if provided during registration",
             examples=["John Doe"],
+        ),
+    ]
+    contact_email: Annotated[
+        str | None,
+        Field(
+            description="Optional contact email different from login (used in email signatures)",
+            examples=["sales@corp.ru"],
+        ),
+    ]
+    business_info: Annotated[
+        str | None,
+        Field(
+            description="Custom signature / business card text appended to request emails (overrides default)",
+            examples=[
+                "С Уважением,\nспециалист отдела закупок\nИван Иванов\n(Email для связи: ivan@corp.ru)"
+            ],
+        ),
+    ]
+
+
+class UserUpdate(BaseModel):
+    """Payload for updating user profile fields."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, from_attributes=True)
+
+    full_name: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description="Full legal name of the user",
+            min_length=2,
+            max_length=100,
+            examples=["John Doe"],
+        ),
+    ]
+    contact_email: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description="Contact email different from login",
+            examples=["sales@corp.ru"],
+        ),
+    ]
+    business_info: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description="Custom signature / business card text",
+            examples=[
+                "С Уважением,\nспециалист отдела закупок\nИван Иванов\n(Email для связи: ivan@corp.ru)"
+            ],
         ),
     ]

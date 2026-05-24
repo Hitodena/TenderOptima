@@ -1,3 +1,4 @@
+import uuid
 from typing import Any
 
 from loguru import logger
@@ -53,5 +54,34 @@ class BaseDAO[T: Base]:
                 error=str(exc),
                 model=cls.model,
                 filters=kwargs,
+            )
+            raise
+
+    @classmethod
+    async def delete(
+        cls, session: AsyncSession, id: uuid.UUID | str | int
+    ) -> bool:
+        logger.debug("Deleting instance", model=cls.model, id=id)
+        try:
+            instance = await session.get(cls.model, id)
+            if not instance:
+                logger.info(
+                    "Instance not found for delete",
+                    model=cls.model.__name__,
+                    id=id,
+                )
+                return False
+            await session.delete(instance)
+            await session.flush()
+            await session.commit()
+            logger.info("Instance deleted", model=cls.model.__name__, id=id)
+            return True
+        except Exception as exc:
+            await session.rollback()
+            logger.exception(
+                "Failed to delete instance",
+                error=str(exc),
+                model=cls.model,
+                id=id,
             )
             raise

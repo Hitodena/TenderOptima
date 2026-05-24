@@ -48,7 +48,6 @@
 							suppliers.length ?
 								'Включите нужных и нажмите «Отправить запрос»' :
 								'Добавьте поставщиков для рассылки'
-
 						}}
 					</p>
 				</div>
@@ -65,7 +64,6 @@
 					</UButton>
 				</div>
 			</div>
-
 
 			<div>
 				<div v-if="request.status === RequestStatus.QUEUED"
@@ -91,7 +89,7 @@
 						Смотреть ответы
 					</UButton>
 				</div>
-				<div v-else="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED">
+				<div v-else>
 					<UAlert color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 						description="Отправляйте запросы только подходящим компаниям. Нерелевантные письма могут негативно влиять на репутацию вашей компании." />
 				</div>
@@ -123,8 +121,7 @@
 							<div class="w-7 h-7 rounded-lg bg-elevated flex items-center justify-center shrink-0">
 								<UIcon name="i-lucide-building-2" class="w-3.5 h-3.5 text-muted" />
 							</div>
-							<span class="font-medium truncate max-w-50">{{ row.original.supplier?.company_name
-							}}</span>
+							<span class="font-medium truncate max-w-50">{{ row.original.supplier?.company_name }}</span>
 						</div>
 					</template>
 
@@ -144,6 +141,20 @@
 						<UBadge :color="getSupplierStatusColor(row.original.status)" variant="subtle" size="sm">
 							{{ getSupplierStatusLabel(row.original.status) }}
 						</UBadge>
+					</template>
+
+					<template #actions-cell="{ row }">
+						<div v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED"
+							class="flex items-center justify-end gap-1">
+							<UButton v-if="confirmDeleteSupplierId === row.original.id" size="xs" color="error"
+								variant="soft" icon="i-lucide-check" :loading="deletingSupplierIds.has(row.original.id)"
+								@click.stop="confirmDeleteSupplier(row.original.id)" />
+							<UButton v-if="confirmDeleteSupplierId === row.original.id" size="xs" color="neutral"
+								variant="ghost" icon="i-lucide-x" @click.stop="confirmDeleteSupplierId = null" />
+							<UButton v-else size="xs" color="error" variant="ghost" icon="i-lucide-trash-2"
+								:loading="deletingSupplierIds.has(row.original.id)"
+								@click.stop="confirmDeleteSupplierId = row.original.id" />
+						</div>
 					</template>
 				</UTable>
 
@@ -166,6 +177,7 @@
 					</div>
 				</div>
 			</UCard>
+
 			<div v-if="request.status !== RequestStatus.QUEUED && suppliers.length > 0 && request.status !== RequestStatus.COMPLETED"
 				class="flex items-center gap-3">
 				<UButton size="lg" leading-icon="i-lucide-send" :disabled="enabledCount === 0"
@@ -203,7 +215,7 @@ import type { TableColumn } from '@nuxt/ui'
 
 const route = useRoute()
 const id = route.params.id as string
-const { get, patch, post } = useApi()
+const { get, patch, post, del } = useApi()
 
 const request = ref<RequestResponse | null>(null)
 const suppliers = ref<RequestSupplierResponse[]>([])
@@ -214,6 +226,8 @@ const actionError = ref('')
 const showParamsModal = ref(false)
 const showAddSupplier = ref(false)
 const supplierSearch = ref('')
+const confirmDeleteSupplierId = ref<string | null>(null)
+const deletingSupplierIds = reactive(new Set<string>())
 
 const filteredSuppliers = computed(() => {
 	if (!supplierSearch.value) return suppliers.value
@@ -248,13 +262,11 @@ async function fetchSuppliers() {
 }
 
 await fetchRequest()
-
 if (request.value) await fetchSuppliers()
 
 const enabledCount = computed(() => suppliers.value.filter(s => s.is_enabled).length)
-
 const statusColor = computed(() => getRequestStatusColor(request.value?.status ?? ''))
-const statusLabel = computed(() => getRequestStatusLabel(request.value?.status ?? ""))
+const statusLabel = computed(() => getRequestStatusLabel(request.value?.status ?? ''))
 
 const supplierColumns: TableColumn<RequestSupplierResponse>[] = [
 	{ accessorKey: 'is_enabled', header: 'Рассылка' },
@@ -262,6 +274,7 @@ const supplierColumns: TableColumn<RequestSupplierResponse>[] = [
 	{ accessorKey: 'domain', header: 'Домен' },
 	{ accessorKey: 'email', header: 'Email' },
 	{ accessorKey: 'status', header: 'Статус' },
+	{ id: 'actions', header: '' },
 ]
 
 function formatDate(iso: string) {
@@ -281,6 +294,21 @@ async function handleToggle(rs: RequestSupplierResponse, newVal: boolean) {
 		actionError.value = typeof detail === 'string' ? detail : 'Не удалось изменить выбор поставщика'
 	} finally {
 		updatingToggle.value = false
+	}
+}
+
+async function confirmDeleteSupplier(rsId: string) {
+	confirmDeleteSupplierId.value = null
+	deletingSupplierIds.add(rsId)
+	actionError.value = ''
+	try {
+		await del(`/requests/${id}/suppliers/${rsId}`)
+		suppliers.value = suppliers.value.filter(s => s.id !== rsId)
+	} catch (e: any) {
+		const detail = e?.response?.data?.detail
+		actionError.value = typeof detail === 'string' ? detail : 'Не удалось удалить поставщика'
+	} finally {
+		deletingSupplierIds.delete(rsId)
 	}
 }
 

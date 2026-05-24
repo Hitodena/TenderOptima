@@ -1,7 +1,7 @@
 <template>
     <UModal v-model:open="isOpen" :title="step === 'params' ? 'Параметры письма поставщикам' : 'Редактирование письма'"
         :description="step === 'params' ? 'Заполните описание и укажите дополнительные параметры' : 'Проверьте и отредактируйте письмо перед отправкой'"
-        :ui="{ content: step === 'params' ? 'max-w-5xl' : 'max-w-5xl' }">
+        :ui="{ content: 'max-w-5xl' }">
         <template #body>
 
             <div v-if="step === 'params'">
@@ -35,7 +35,7 @@
                                 <UInput v-model="form.newLabel" placeholder="Требование (цена, сроки, условия...)"
                                     class="flex-1" size="lg" @keyup.enter="addLabel" />
                                 <button type="button"
-                                    class="w-8 h-8 flex items-center justify-center rounded text-muted hover:text-primary hover:bg-elevated transition-colors  disabled:opacity-40 disabled:cursor-not-allowed"
+                                    class="w-8 h-8 flex items-center justify-center rounded text-muted hover:text-primary hover:bg-elevated transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                                     :disabled="!form.newLabel.trim()" @click="addLabel">
                                     <UIcon name="i-lucide-plus" class="w-4 h-4" />
                                 </button>
@@ -54,6 +54,15 @@
                                 </UButton>
                             </template>
                         </UFileUpload>
+                    </div>
+
+                    <div>
+                        <p class="text-sm font-semibold mb-1">Визитная карточка</p>
+                        <p class="text-xs text-muted mb-3">Добавляется в конце письма. Изменения сохранятся в профиле.
+                        </p>
+                        <UTextarea v-model="form.businessInfo"
+                            placeholder="С Уважением,&#10;специалист отдела закупок&#10;Иван Иванов" :rows="4"
+                            class="w-full" />
                     </div>
                 </div>
 
@@ -89,7 +98,7 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <UAlert v-if="error" color="error" variant="soft" icon="i-lucide-circle-alert" :description="error" />
 
                 <div class="flex justify-between pt-2">
@@ -108,13 +117,13 @@
 </template>
 
 <script lang="ts" setup>
-import type { AttachmentInfo, RequestResponse, RequestUpdate } from '#shared/types'
+import type { AttachmentInfo, RequestResponse, RequestUpdate, UserResponse, UserUpdate } from '#shared/types'
 
 const props = defineProps<{ request?: RequestResponse | null }>()
 const isOpen = defineModel<boolean>('open', { default: false })
 const emit = defineEmits<{ launched: [] }>()
 
-const { patch, post } = useApi()
+const { patch, post, get } = useApi()
 const toast = useToast()
 
 type Step = 'params' | 'confirm'
@@ -137,7 +146,10 @@ const form = reactive({
     ] as string[],
     newLabel: '',
     emailMessage: '',
+    businessInfo: '',
 })
+
+const originalBusinessInfo = ref('')
 
 const filesToUpload = ref<File[]>([])
 const uploadedAttachments = ref<AttachmentInfo[]>([])
@@ -170,9 +182,24 @@ function loadFromRequest() {
     }
 }
 
-watch(() => isOpen.value, open => {
-    if (open) { loadFromRequest(); step.value = 'params' }
-    else { error.value = null; errors.description = '' }
+async function loadBusinessInfo() {
+    try {
+        const user = await get<UserResponse>('/auth/me')
+        const val = user.business_info ?? ''
+        form.businessInfo = val
+        originalBusinessInfo.value = val
+    } catch { }
+}
+
+watch(() => isOpen.value, async (open) => {
+    if (open) {
+        loadFromRequest()
+        step.value = 'params'
+        await loadBusinessInfo()
+    } else {
+        error.value = null
+        errors.description = ''
+    }
 }, { immediate: true })
 
 watch(() => props.request, () => { if (isOpen.value) loadFromRequest() })
@@ -243,6 +270,12 @@ async function goToConfirm() {
             additional_params: form.labels.length > 0 ? form.labels : null,
         }
         await patch(`/requests/${props.request.id}`, body)
+
+        if (form.businessInfo !== originalBusinessInfo.value) {
+            const userPayload: UserUpdate = { business_info: form.businessInfo || null }
+            await patch('/auth/me', userPayload)
+            originalBusinessInfo.value = form.businessInfo
+        }
 
         if (filesToUpload.value.length > 0) {
             const uploadFormData = new FormData()

@@ -4,12 +4,18 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.auth.schemas import RegisterCreate, TokenResponse, UserResponse
+from app.api.auth.schemas import (
+    RegisterCreate,
+    TokenResponse,
+    UserResponse,
+    UserUpdate,
+)
 from app.api.deps import get_current_user, get_session
 from app.db.dao import UserDAO
 from app.db.models import User
 from app.utils.jwt_utils import create_access_token
 from app.utils.security import hash_password, verify_password
+from app.utils.user_utils import build_business_info
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -46,6 +52,10 @@ async def register(
         hashed_password=hashed_password,
         full_name=request.full_name,
         company_name=request.company_name,
+    )
+    business_info = build_business_info(user)
+    await UserDAO.update_contact_info(
+        session, user, business_info=business_info
     )
 
     access_token = create_access_token(data={"sub": user.email})
@@ -100,8 +110,40 @@ async def get_user(
     Returns profile data for the currently authenticated user using the
     provided JWT.
     """
-    return UserResponse(
-        id=current_user.id,
-        email=current_user.email,
-        full_name=current_user.full_name,
+    return UserResponse.model_validate(current_user)
+
+
+@router.patch(
+    "/me",
+    response_model=UserResponse,
+    summary="Update current authenticated user profile",
+    responses={
+        200: {"description": "User profile updated successfully"},
+        204: {"description": "No fields to update"},
+        401: {"description": "Missing or invalid JWT"},
+        422: {"description": "Validation error in request payload"},
+    },
+)
+async def update_user(
+    request: UserUpdate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> UserResponse:
+    """
+    Updates profile fields for the currently authenticated user.
+    """
+    has_updates = any(
+        getattr(request, field) is not None
+        for field in ["full_name", "contact_email", "business_info"]
     )
+    if not has_updates:
+        return UserResponse.model_validate(current_user)
+
+    updated_user = await UserDAO.update_contact_info(
+        session,
+        current_user,
+        full_name=request.full_name,
+        contact_email=request.contact_email,
+        business_info=request.business_info,
+    )
+    return UserResponse.model_validate(updated_user)

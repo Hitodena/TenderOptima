@@ -10,14 +10,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_config_instance, get_current_user, get_session
 from app.api.user_requests.schemas import (
-    AttachmentInfo,
+    Attachment,
     LaunchMailingResponse,
     ParserResult,
     RequestCreate,
+    RequestRemoveResponse,
     RequestResponse,
     RequestSupplierResponse,
     RequestUpdate,
     SearchResult,
+    SupplierRemoveResponse,
     SupplierResponse,
     SupplierResponseResponse,
     ToggleSupplierRequest,
@@ -449,7 +451,7 @@ async def update_request_additional_params(
 
 @router.post(
     "/{request_id}/attachments",
-    response_model=list[AttachmentInfo],
+    response_model=list[Attachment],
     summary="Upload attachments for a request",
     responses={
         200: {"description": "Attachments uploaded successfully"},
@@ -465,7 +467,7 @@ async def upload_attachments(
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
     config: Annotated[Config, Depends(get_config_instance)],
-) -> list[AttachmentInfo]:
+) -> list[Attachment]:
     """Upload files to be attached to emails for this request."""
     request = await RequestDAO.get_by_id(session, request_id)
     if not request or request.user_id != current_user.id:
@@ -494,7 +496,7 @@ async def upload_attachments(
             detail=f"Cannot create upload directory '{upload_dir}'. Check server configuration.",
         ) from exc
 
-    request_upload_dir = upload_dir / str(request_id) 
+    request_upload_dir = upload_dir / str(request_id)
     try:
         request_upload_dir.mkdir(parents=True, exist_ok=True)
     except PermissionError as exc:
@@ -503,7 +505,7 @@ async def upload_attachments(
             detail=f"Cannot create request upload directory '{request_upload_dir}'. Check server configuration.",
         ) from exc
 
-    results: list[AttachmentInfo] = []
+    results: list[Attachment] = []
     existing_paths = request.attachment_paths or []
 
     for file in files:
@@ -535,7 +537,7 @@ async def upload_attachments(
         content = await file.read()
         file_path.write_bytes(content)
 
-        attachment_info = AttachmentInfo(
+        attachment_info = Attachment(
             filename=safe_filename,
             content_type=file.content_type,
             size=len(content),
@@ -590,3 +592,68 @@ async def update_request_email_message(
 
     updated = await RequestDAO.get_by_id(session, request_id)
     return RequestResponse.model_validate(updated)
+
+
+@router.delete(
+    "/{request_id}/suppliers/{request_supplier_id}",
+    response_model=SupplierRemoveResponse,
+    summary="Remove a supplier from a request",
+    responses={
+        200: {"description": "Supplier successfully removed from the request"},
+        401: {"description": "Missing or invalid authentication credentials"},
+        404: {
+            "description": "Request not found, does not belong to user, or supplier link not found"
+        },
+    },
+)
+async def remove_supplier_from_request(
+    request_id: uuid.UUID,
+    request_supplier_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> SupplierRemoveResponse:
+    """Removes the association between a supplier and the request (does not delete the supplier itself)."""
+    request = await RequestDAO.get_by_id(session, request_id)
+    if not request or request.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
+        )
+
+    deleted = await RequestSupplierDAO.delete(session, request_supplier_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Request supplier link not found",
+        )
+
+    return SupplierRemoveResponse(id=request_supplier_id)
+
+
+@router.delete(
+    "/{request_id}",
+    response_model=RequestRemoveResponse,
+    summary="Delete a request (cascades to all linked suppliers and responses)",
+    responses={
+        200: {"description": "Request successfully deleted"},
+        401: {"description": "Missing or invalid authentication credentials"},
+        404: {"description": "Request not found or does not belong to user"},
+    },
+)
+async def delete_request(
+    request_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> RequestRemoveResponse:
+    """Deletes the request and all its associations (suppliers, responses). Attachments on disk are not auto-removed."""
+    request = await RequestDAO.get_by_id(session, request_id)
+    if not request or request.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
+        )
+    deleted = await RequestDAO.delete(session, request_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
+        )
+
+    return RequestRemoveResponse(id=request_id)

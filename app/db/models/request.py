@@ -27,5 +27,7 @@ class Request(IDMixinUUID, TimestampMixin, Base):
 
     user: Mapped["User"] = relationship(back_populates="requests")  # type: ignore # noqa: F821
     request_suppliers: Mapped[list["RequestSupplier"]] = relationship(  # noqa: F821 # type: ignore
-        back_populates="request"
+        back_populates="request",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )

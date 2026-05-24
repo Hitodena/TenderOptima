@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Config, get_config
 from app.db.dao.user_dao import UserDAO
+from app.db.models import User
 from app.services.db_service import db_manager
 from app.utils.jwt_utils import decode_access_token
 
@@ -46,3 +47,14 @@ async def get_current_user(
 def get_config_instance() -> Config:
     """Get config instance"""
     return get_config()
+
+
+async def get_admin(user: Annotated[User, Depends(get_current_user)]):
+    """Check if current user is admin"""
+    if not user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Required admin status",
+        )
+
+    return user

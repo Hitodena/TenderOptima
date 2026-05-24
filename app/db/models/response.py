@@ -14,7 +14,7 @@ class SupplierResponse(IDMixinUUID, TimestampMixin, Base):
 
     request_supplier_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("request_suppliers.id"),
+        ForeignKey("request_suppliers.id", ondelete="CASCADE"),
         unique=True,
         nullable=False,
     )
@@ -34,10 +34,16 @@ class SupplierResponse(IDMixinUUID, TimestampMixin, Base):
     )
 
     request_supplier: Mapped["RequestSupplier"] = relationship(  # noqa: F821 # type: ignore
-        back_populates="response"
+        back_populates="response",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        single_parent=True,
     )
     analysis: Mapped["ResponseAnalysis | None"] = relationship(
-        back_populates="response", uselist=False
+        back_populates="response",
+        uselist=False,
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
 
 
@@ -46,7 +52,7 @@ class ResponseAnalysis(IDMixinUUID, TimestampMixin, Base):
 
     response_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("supplier_responses.id"),
+        ForeignKey("supplier_responses.id", ondelete="CASCADE"),
         unique=True,
         nullable=False,
     )
@@ -73,5 +79,8 @@ class ResponseAnalysis(IDMixinUUID, TimestampMixin, Base):
     raw_llm_response: Mapped[dict | None] = mapped_column(JSON)
 
     response: Mapped[SupplierResponse] = relationship(
-        back_populates="analysis"
+        back_populates="analysis",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        single_parent=True,
     )

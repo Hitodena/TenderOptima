@@ -1,4 +1,5 @@
 from app.db.models import Request, User
+from app.utils.user_utils import build_business_info
 
 
 def build_request_email_body(
@@ -20,7 +21,11 @@ def build_request_email_body(
     if params:
         if isinstance(params, list) and params:
             labels_block = (
-                "\n" + "\n".join(f"- {label}" for label in params) + "\n"
+                "\n"
+                + "\n".join(
+                    f"{i}. {label}" for i, label in enumerate(params, 1)
+                )
+                + "\n"
             )
 
     plain_body = (
@@ -32,9 +37,7 @@ def build_request_email_body(
         "-------------------------------------"
         f"{labels_block}"
         "-------------------------------------\n\n"
-        "С Уважением,\n"
-        f"{user.full_name or user.company_name or 'Менеджер по закупкам'}\n"
-        f"{user.email}"
+        f"{user.business_info or build_business_info(user)}\n"
     )
 
     return plain_body

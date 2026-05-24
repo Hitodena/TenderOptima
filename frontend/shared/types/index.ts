@@ -7,6 +7,8 @@ export interface UserResponse {
 	id: string;
 	email: string;
 	full_name: string | null;
+	contact_email?: string | null;
+	business_info?: string | null;
 }
 
 export interface RegisterCreate {
@@ -16,6 +18,12 @@ export interface RegisterCreate {
 	company_name?: string | null;
 	agree_terms: boolean;
 	agree_marketing: boolean;
+}
+
+export interface UserUpdate {
+	full_name?: string | null;
+	contact_email?: string | null;
+	business_info?: string | null;
 }
 
 export interface RequestCreate {
