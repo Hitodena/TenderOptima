@@ -42,7 +42,8 @@
 			<div class="flex items-start justify-between mb-4 gap-4 flex-wrap">
 				<div>
 					<h2 class="text-lg font-semibold">Найденные поставщики</h2>
-					<p class="text-sm text-muted mt-0.5">
+					<p v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED"
+						class="text-sm text-muted mt-0.5">
 						{{
 							suppliers.length ?
 								'Включите нужных и нажмите «Отправить запрос»' :
@@ -51,11 +52,18 @@
 						}}
 					</p>
 				</div>
-				<UButton v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED"
-					size="sm" variant="outline" color="neutral" leading-icon="i-lucide-user-plus"
-					@click="showAddSupplier = true">
-					Добавить поставщика
-				</UButton>
+				<div class="flex items-center gap-2 shrink-0">
+					<UButton v-if="request.status == RequestStatus.DRAFT" size="lg" variant="outline" color="neutral"
+						leading-icon="i-lucide-search" :loading="searching" @click="runSearch">
+						Поиск поставщиков
+					</UButton>
+					<UButton
+						v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED"
+						size="lg" variant="outline" color="neutral" leading-icon="i-lucide-user-plus"
+						@click="showAddSupplier = true">
+						Добавить поставщика
+					</UButton>
+				</div>
 			</div>
 
 
@@ -72,14 +80,27 @@
 						Смотреть ответы
 					</UButton>
 				</div>
-				<div v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED">
+				<div v-else-if="request.status === RequestStatus.COMPLETED"
+					class="flex items-center gap-3 p-4 rounded-xl bg-success/10 border border-success/20">
+					<UIcon name="i-lucide-check" class="w-5 h-5 text-success shrink-0" />
+					<div>
+						<p class="text-sm font-medium">Рассылка завершена</p>
+					</div>
+					<UButton size="sm" variant="ghost" :to="`/requests/${id}/responses`" class="ml-auto"
+						trailing-icon="i-lucide-arrow-right">
+						Смотреть ответы
+					</UButton>
+				</div>
+				<div v-else="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED">
 					<UAlert color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 						description="Отправляйте запросы только подходящим компаниям. Нерелевантные письма могут негативно влиять на репутацию вашей компании." />
 				</div>
 			</div>
 
 			<UCard class="mb-4 mt-4">
-				<UTable :data="suppliers" :columns="supplierColumns" :loading="loadingSuppliers">
+				<UInput v-model="supplierSearch" placeholder="Поиск поставщиков..." icon="i-lucide-search"
+					class="w-full sm:w-64 mb-3" size="sm" />
+				<UTable :data="filteredSuppliers" :columns="supplierColumns" :loading="loadingSuppliers">
 					<template #empty>
 						<div class="flex flex-col items-center justify-center py-12 gap-3">
 							<UIcon name="i-lucide-users" class="w-10 h-10 text-muted" />
@@ -129,7 +150,7 @@
 				<div class="px-4 py-3 border-t border-default flex items-center justify-between gap-3 flex-wrap">
 					<p class="text-sm text-muted">
 						Выбрано <span class="font-semibold text-highlighted">{{ enabledCount }}</span> из {{
-							suppliers.length }}
+							filteredSuppliers.length }}
 					</p>
 					<div class="flex items-center gap-2">
 						<UButton size="xs" variant="ghost" color="neutral"
@@ -153,8 +174,6 @@
 				</UButton>
 				<p v-if="enabledCount === 0" class="text-xs text-muted">Включите хотя бы одного поставщика</p>
 			</div>
-
-
 
 			<RequestParamsModal v-model:open="showParamsModal" :request="request" @launched="onLaunched" />
 			<AddSupplierModal v-model:open="showAddSupplier" :request-id="id" @added="fetchSuppliers" />
@@ -184,7 +203,7 @@ import type { TableColumn } from '@nuxt/ui'
 
 const route = useRoute()
 const id = route.params.id as string
-const { get, patch } = useApi()
+const { get, patch, post } = useApi()
 
 const request = ref<RequestResponse | null>(null)
 const suppliers = ref<RequestSupplierResponse[]>([])
@@ -194,6 +213,17 @@ const updatingToggle = ref(false)
 const actionError = ref('')
 const showParamsModal = ref(false)
 const showAddSupplier = ref(false)
+const supplierSearch = ref('')
+
+const filteredSuppliers = computed(() => {
+	if (!supplierSearch.value) return suppliers.value
+	const q = supplierSearch.value.toLowerCase()
+	return suppliers.value.filter(s =>
+		s.supplier?.company_name?.toLowerCase().includes(q) ||
+		s.supplier?.email?.toLowerCase().includes(q) ||
+		s.supplier?.domain?.toLowerCase().includes(q)
+	)
+})
 
 async function fetchRequest() {
 	loading.value = true
@@ -272,6 +302,24 @@ async function toggleAll(enabled: boolean) {
 
 const selectAll = () => toggleAll(true)
 const deselectAll = () => toggleAll(false)
+
+const searching = ref(false)
+
+async function runSearch() {
+	if (searching.value || !request.value) return
+	searching.value = true
+	actionError.value = ''
+	try {
+		await post(`/requests/${id}/search`)
+		await fetchSuppliers()
+		if (request.value) request.value.status = RequestStatus.ACTIVE
+	} catch (e: any) {
+		const detail = e?.response?.data?.detail
+		actionError.value = typeof detail === 'string' ? detail : 'Не удалось выполнить поиск поставщиков'
+	} finally {
+		searching.value = false
+	}
+}
 
 function onLaunched() {
 	if (request.value) request.value.status = RequestStatus.QUEUED

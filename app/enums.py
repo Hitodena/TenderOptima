@@ -4,8 +4,8 @@ from enum import StrEnum
 class RequestStatus(StrEnum):
     """Lifecycle status of a user search/mailing request."""
 
-    DRAFT = "draft" # after creating request
-    ACTIVE = "active" # after search
+    DRAFT = "draft"  # after creating request
+    ACTIVE = "active"  # after search
     QUEUED = "queued"  # mailing in progress (matches frontend)
     COMPLETED = "completed"  # terminal state after send_emails finishes
 
@@ -26,5 +26,5 @@ class SupplierSource(StrEnum):
 
     MANUAL = "manual"  # added by user via /suppliers POST
     PARSER = "parser"  # discovered via Google parser
-    ADMIN = "admin"     # reserved for future bulk admin import
-    IMPORT = "import"   # reserved for CSV/Excel bulk
+    ADMIN = "admin"  # reserved for future bulk admin import
+    IMPORT = "import"  # reserved for CSV/Excel bulk

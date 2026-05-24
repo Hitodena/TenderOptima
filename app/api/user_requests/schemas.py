@@ -38,6 +38,32 @@ class RequestCreate(BaseModel):
     ]
 
 
+class AttachmentInfo(BaseModel):
+    """Attachment information for uploads."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    filename: Annotated[
+        str,
+        Field(description="Original filename", examples=["quote.pdf"]),
+    ]
+    content_type: Annotated[
+        str | None,
+        Field(description="MIME type", examples=["application/pdf"]),
+    ]
+    size: Annotated[
+        int,
+        Field(description="File size in bytes", examples=[245678]),
+    ]
+    path: Annotated[
+        str,
+        Field(
+            description="Server path",
+            examples=["/app/uploads/abc-uuid/quote.pdf"],
+        ),
+    ]
+
+
 class RequestUpdate(BaseModel):
     """Payload for updating optional fields and additional parameters before launching the request."""  # noqa: E501
 
@@ -59,6 +85,13 @@ class RequestUpdate(BaseModel):
         Field(
             default=None,
             description="Selected optional and custom parameters for the outgoing email",
+        ),
+    ]
+    attachments: Annotated[
+        list[AttachmentInfo] | None,
+        Field(
+            default=None,
+            description="List of attachments to include in the email",
         ),
     ]
 
@@ -93,13 +126,6 @@ class RequestResponse(BaseModel):
         Field(
             description="Current lifecycle status of the request",
             examples=[RequestStatus.ACTIVE],
-        ),
-    ]
-    tracking_id: Annotated[
-        uuid.UUID,
-        Field(
-            description="Unique tracking identifier",
-            examples=["123e4567-e89b-12d3-a456-426614174000"],
         ),
     ]
     delivery_region: Annotated[
@@ -210,7 +236,7 @@ class Attachment(BaseModel):
         str | None,
         Field(
             description="Server path where the file is stored",
-            examples=["/uploads/attachments/quote.pdf"],
+            examples=["/app/uploads/abc-uuid/quote.pdf"],
         ),
     ]
 

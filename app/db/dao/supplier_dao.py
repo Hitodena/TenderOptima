@@ -107,10 +107,8 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
         try:
             stmt = (
                 select(cls.model)
-                .join(cls.model.request)
-                .where(Request.tracking_id == tracking_id)
+                .where(cls.model.tracking_id == tracking_id)  # ← без джоина
                 .options(selectinload(cls.model.response))
-                .order_by(cls.model.sent_at.desc())
             )
             result = await session.execute(stmt)
             instance = result.scalar_one_or_none()
@@ -183,7 +181,7 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
             smtp_message_id=smtp_message_id,
         )
         try:
-            request_supplier.status = status.value
+            request_supplier.status = status
             if sent_at is not None:
                 request_supplier.sent_at = sent_at
             if smtp_message_id is not None:

@@ -42,6 +42,19 @@
                             </div>
                         </div>
                     </div>
+
+                    <div>
+                        <UFileUpload :model-value="filesToUpload" @update:model-value="handleFilesUpdate" multiple
+                            accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp" :interactive="true"
+                            :description="uploadDescription" layout="list" class="w-full min-h-35" position="inside">
+                            <template #actions="{ open }">
+                                <UButton type="button" variant="outline" @click="open()">
+                                    <UIcon name="i-lucide-paperclip" class="w-4 h-4 mr-2" />
+                                    Выбрать файлы
+                                </UButton>
+                            </template>
+                        </UFileUpload>
+                    </div>
                 </div>
 
                 <UAlert v-if="error" color="error" variant="soft" icon="i-lucide-circle-alert" :description="error"
@@ -65,6 +78,18 @@
                 <UTextarea v-model="form.emailMessage" :rows="20" class="w-full font-mono text-sm"
                     placeholder="Текст письма загружается..." />
 
+                <div v-if="uploadedAttachments.length > 0" class="mb-4">
+                    <p class="text-sm font-semibold mb-2">Вложения ({{ uploadedAttachments.length }}/2)</p>
+                    <div class="space-y-2">
+                        <div v-for="(att, idx) in uploadedAttachments" :key="idx"
+                            class="flex items-center gap-2 text-sm p-2 bg-elevated/50 rounded-lg">
+                            <UIcon name="i-lucide-paperclip" class="w-4 h-4 text-primary shrink-0" />
+                            <span class="flex-1 truncate">{{ att.filename }}</span>
+                            <span class="text-xs text-muted">{{ formatBytes(att.size) }}</span>
+                        </div>
+                    </div>
+                </div>
+                
                 <UAlert v-if="error" color="error" variant="soft" icon="i-lucide-circle-alert" :description="error" />
 
                 <div class="flex justify-between pt-2">
@@ -83,7 +108,7 @@
 </template>
 
 <script lang="ts" setup>
-import type { RequestResponse, RequestUpdate } from '#shared/types'
+import type { AttachmentInfo, RequestResponse, RequestUpdate } from '#shared/types'
 
 const props = defineProps<{ request?: RequestResponse | null }>()
 const isOpen = defineModel<boolean>('open', { default: false })
@@ -114,10 +139,22 @@ const form = reactive({
     emailMessage: '',
 })
 
+const filesToUpload = ref<File[]>([])
+const uploadedAttachments = ref<AttachmentInfo[]>([])
+
 const errors = reactive({ description: '' })
 const loading = ref(false)
 const loadingMessage = ref(false)
 const error = ref<string | null>(null)
+
+const { public: publicConfig } = useRuntimeConfig()
+const MAX_UPLOAD_FILES = publicConfig.maxUploadFiles as number
+const MAX_UPLOAD_SIZE = publicConfig.maxUploadSize as number
+
+const uploadDescription = computed(() => {
+    const sizeMb = Math.round(MAX_UPLOAD_SIZE / 1024 / 1024)
+    return `Добавьте до ${MAX_UPLOAD_FILES} файлов (PDF, DOC/DOCX, XLS/XLSX, TXT, JPG/PNG/WEBP). Максимум ${MAX_UPLOAD_FILES} файла, до ${sizeMb} МБ каждый`
+})
 
 function loadFromRequest() {
     const r = props.request
@@ -148,6 +185,42 @@ function addLabel() {
 
 function removeLabel(idx: number) { form.labels.splice(idx, 1) }
 
+function formatBytes(bytes: number): string {
+    if (bytes === 0) return '0 Б'
+    const k = 1024
+    const sizes = ['Б', 'КБ', 'МБ', 'ГБ']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
+function handleFilesUpdate(newFiles: File[] | null | undefined) {
+    let arr = newFiles ? [...newFiles] : []
+    const sizeMb = Math.round(MAX_UPLOAD_SIZE / 1024 / 1024)
+
+    let filtered = arr.filter((f) => {
+        if (f.size > MAX_UPLOAD_SIZE) {
+            toast.add({
+                title: 'Файл слишком большой',
+                description: `${f.name} превышает ${sizeMb} МБ`,
+                color: 'error',
+            })
+            return false
+        }
+        return true
+    })
+
+    if (filtered.length > MAX_UPLOAD_FILES) {
+        toast.add({
+            title: `Максимум ${MAX_UPLOAD_FILES} файла`,
+            description: 'Уже добавлено максимальное количество файлов',
+            color: 'warning',
+        })
+        filtered = filtered.slice(0, MAX_UPLOAD_FILES)
+    }
+
+    filesToUpload.value = filtered
+}
+
 function close() { isOpen.value = false }
 
 function validate() {
@@ -170,6 +243,21 @@ async function goToConfirm() {
             additional_params: form.labels.length > 0 ? form.labels : null,
         }
         await patch(`/requests/${props.request.id}`, body)
+
+        if (filesToUpload.value.length > 0) {
+            const uploadFormData = new FormData()
+            for (const file of filesToUpload.value) {
+                uploadFormData.append('files', file)
+            }
+            try {
+                const uploaded = await post<AttachmentInfo[]>(`/requests/${props.request.id}/attachments`, uploadFormData)
+                uploadedAttachments.value = uploaded
+            } catch (uploadErr: any) {
+                const detail = uploadErr?.response?.data?.detail
+                error.value = typeof detail === 'string' ? detail : 'Ошибка при загрузке файлов'
+                return
+            }
+        }
 
         const updated = await patch<RequestResponse>(`/requests/${props.request.id}/email_message`)
 

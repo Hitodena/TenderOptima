@@ -39,6 +39,9 @@ class RequestSupplier(IDMixinUUID, TimestampMixin, Base):
     supplier_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("suppliers.id"), nullable=False
     )
+    tracking_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), default=uuid.uuid4, unique=True, nullable=False
+    )
 
     sent_to_email: Mapped[str | None] = mapped_column()
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

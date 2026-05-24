@@ -8,15 +8,19 @@ import re
 import smtplib
 import uuid
 from datetime import UTC, datetime
+from email import encoders
 from email.header import decode_header
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from pathlib import Path
 
 from bs4 import BeautifulSoup
 from loguru import logger
 
 from app.celery_app.celery_config import app
 from app.celery_app.context import WorkerContext
-from app.core.config import get_config
+from app.core import get_config
 from app.db.dao import RequestDAO, RequestSupplierDAO, SupplierResponseDAO
 from app.enums import RequestStatus, RequestSupplierStatus
 from app.utils.email_utils import build_request_email_body
@@ -52,6 +56,7 @@ def _extract_body(msg: email.message.Message) -> str:
 
 
 def _extract_attachments(msg: email.message.Message) -> list[dict]:
+    """Extract attachments including raw data (for internal saving during poll)."""
     attachments = []
     for part in msg.walk():
         if "attachment" in part.get("Content-Disposition", ""):
@@ -65,6 +70,7 @@ def _extract_attachments(msg: email.message.Message) -> list[dict]:
                     "content_type": part.get_content_type(),
                     "size": len(data) if data else 0,
                     "path": None,
+                    "data": data,
                 }
             )
     return attachments
@@ -122,9 +128,40 @@ async def send_emails(self, request_id: str) -> dict:
     failed = 0
     results: list[tuple] = []
     plain_body = ""
+    attachment_data: list[dict] = []
+    if request.attachment_paths:
+        for p_str in request.attachment_paths:
+            p = Path(p_str)
+            if p.is_file():
+                try:
+                    data = p.read_bytes()
+                    filename = p.name
+                    if "_" in filename:
+                        pref, rest = filename.split("_", 1)
+                        if len(pref) == 32 and all(
+                            c in "0123456789abcdefABCDEF" for c in pref
+                        ):
+                            filename = rest
+                    attachment_data.append(
+                        {"filename": filename, "data": data}
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to read attachment",
+                        path=str(p),
+                        error=str(exc),
+                    )
+            else:
+                logger.warning(
+                    "Attachment missing", path=str(p), request_id=request_id
+                )
 
     try:
-        smtp = smtplib.SMTP_SSL(config.smtp_host, config.smtp_port)
+        smtp = smtplib.SMTP(config.smtp_host, config.smtp_port)
+        smtp.ehlo()
+        smtp.starttls()
+        smtp.ehlo()
+
         smtp.login(config.smtp_user, config.smtp_password)
     except smtplib.SMTPException as exc:
         logger.exception("SMTP connection failed", error=str(exc))
@@ -141,27 +178,43 @@ async def send_emails(self, request_id: str) -> dict:
                     supplier_id=str(supplier.id),
                     domain=supplier.domain,
                 )
-                results.append((rs.id, RequestSupplierStatus.FAILED))
+                results.append(
+                    (rs.id, RequestSupplierStatus.FAILED, None, None)
+                )
                 failed += 1
                 continue
 
             user = rs.request.user
+            rs_tracking_id = uuid.uuid4()
             plain_body = build_request_email_body(request, user)
 
-            msg = MIMEText(plain_body, "plain", "utf-8")
+            if attachment_data:
+                msg = MIMEMultipart()
+                msg.attach(MIMEText(plain_body, "plain", "utf-8"))
+                for att in attachment_data:
+                    part = MIMEBase("application", "octet-stream")
+                    part.set_payload(att["data"])
+                    encoders.encode_base64(part)
+                    part.add_header(
+                        "Content-Disposition",
+                        f'attachment; filename="{att["filename"]}"',
+                    )
+                    msg.attach(part)
+            else:
+                msg = MIMEText(plain_body, "plain", "utf-8")
             msg["From"] = (
                 f"{user.company_name or 'TenderOptima'} <{config.smtp_user}>"
             )
             msg["To"] = recipient
             msg["Subject"] = (
-                f"[TID-{request.tracking_id}] "
+                f"[TID-{rs_tracking_id}] "
                 f"Запрос коммерческого предложения — {request.query}"
             )
 
             try:
                 smtp.sendmail(config.smtp_user, recipient, msg.as_string())
                 results.append(
-                    (rs.id, RequestSupplierStatus.SENT, msg["Message-ID"])
+                    (rs.id, "sent", msg["Message-ID"], rs_tracking_id)
                 )
                 sent += 1
                 logger.info(
@@ -173,13 +226,13 @@ async def send_emails(self, request_id: str) -> dict:
                     domain=supplier.domain,
                     error=str(exc),
                 )
-                results.append((rs.id, RequestSupplierStatus.FAILED))
+                results.append((rs.id, RequestSupplierStatus.FAILED, None))
                 failed += 1
     finally:
         smtp.quit()
 
     async with db_manager.session() as session:
-        for rs_id, status, message_id in results:
+        for rs_id, status, message_id, rs_tracking_id in results:
             rs = await RequestSupplierDAO.get_supplier_by_id(session, rs_id)
             if rs:
                 await RequestSupplierDAO.mark_status(
@@ -192,6 +245,7 @@ async def send_emails(self, request_id: str) -> dict:
                 await RequestSupplierDAO.update_body_text(
                     session, rs.id, plain_body
                 )
+                rs.tracking_id = rs_tracking_id
 
         await RequestDAO.update_status(
             session, uuid.UUID(request_id), RequestStatus.COMPLETED
@@ -299,13 +353,96 @@ async def poll_imap(self) -> dict:
 
                     email_body_text = _parse_email_body(item["body"])
 
+                    processed_attachments: list[dict] = []
+                    raw_attachments: list[dict] = item.get("attachments") or []
+                    if raw_attachments:
+                        upload_dir = Path(config.upload_dir)
+                        request_dir = upload_dir / str(rs.request_id)
+                        supplier_dir = request_dir / f"supplier_{rs.id}"
+                        try:
+                            supplier_dir.mkdir(parents=True, exist_ok=True)
+                        except PermissionError as exc:
+                            logger.error(
+                                "Permission denied creating attachment directory",
+                                path=str(supplier_dir),
+                                error=str(exc),
+                            )
+                            processed_attachments = [
+                                {
+                                    "filename": att.get("filename"),
+                                    "content_type": att.get("content_type"),
+                                    "size": att.get("size"),
+                                    "path": None,
+                                }
+                                for att in raw_attachments
+                            ]
+                        else:
+                            for att in raw_attachments:
+                                filename = (
+                                    att.get("filename") or "attachment.bin"
+                                )
+                                safe_filename = Path(
+                                    str(filename)
+                                ).name.replace("..", "_")
+                                data: bytes | None = att.get("data")
+                                if data:
+                                    unique_filename = (
+                                        f"{uuid.uuid4().hex}_{safe_filename}"
+                                    )
+                                    file_path = supplier_dir / unique_filename
+                                    try:
+                                        file_path.write_bytes(data)
+                                        processed_attachments.append(
+                                            {
+                                                "filename": safe_filename,
+                                                "content_type": att.get(
+                                                    "content_type"
+                                                ),
+                                                "size": len(data),
+                                                "path": str(file_path),
+                                            }
+                                        )
+                                        logger.info(
+                                            "Saved reply attachment",
+                                            rs_id=str(rs.id),
+                                            filename=safe_filename,
+                                            path=str(file_path),
+                                        )
+                                    except Exception as exc:
+                                        logger.exception(
+                                            "Failed to write attachment file",
+                                            filename=safe_filename,
+                                            error=str(exc),
+                                        )
+                                        processed_attachments.append(
+                                            {
+                                                "filename": safe_filename,
+                                                "content_type": att.get(
+                                                    "content_type"
+                                                ),
+                                                "size": len(data),
+                                                "path": None,
+                                            }
+                                        )
+                                else:
+                                    processed_attachments.append(
+                                        {
+                                            "filename": safe_filename,
+                                            "content_type": att.get(
+                                                "content_type"
+                                            ),
+                                            "size": att.get("size"),
+                                            "path": None,
+                                        }
+                                    )
+
                     await SupplierResponseDAO.create(
                         session,
                         request_supplier_id=rs.id,
                         imap_id=item["uid_str"],
                         subject=item["subject"],
                         raw_body=email_body_text,
-                        attachments=item["attachments"],
+                        attachments=processed_attachments or None,
                         extracted_text=item["body"],
                         received_at=item["received_at"],
                     )

@@ -44,13 +44,21 @@ class BlacklistResponse(BaseModel):
     ]
     domain: Annotated[
         str,
-        Field(description="The blacklisted domain name", examples=["example.com"]),
+        Field(
+            description="The blacklisted domain name", examples=["example.com"]
+        ),
     ]
     reason: Annotated[
         str | None,
-        Field(description="Reason provided when the domain was blacklisted", examples=["Spam source"]),
+        Field(
+            description="Reason provided when the domain was blacklisted",
+            examples=["Spam source"],
+        ),
     ]
     created_at: Annotated[
         datetime,
-        Field(description="Timestamp when the entry was created", examples=["2025-01-15T10:30:00Z"]),
+        Field(
+            description="Timestamp when the entry was created",
+            examples=["2025-01-15T10:30:00Z"],
+        ),
     ]

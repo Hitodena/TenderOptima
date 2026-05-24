@@ -9,6 +9,10 @@ export default defineNuxtConfig({
 	runtimeConfig: {
 		public: {
 			apiBase: '/api',
+			maxUploadFiles: Number(import.meta.env.MAX_UPLOAD_FILES ?? '2'),
+			maxUploadSize: Number(
+				import.meta.env.MAX_UPLOAD_SIZE ?? (10 * 1024 * 1024).toString(),
+			),
 		},
 	},
 

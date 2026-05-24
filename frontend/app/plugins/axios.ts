@@ -12,6 +12,9 @@ export default defineNuxtPlugin(() => {
 		if (auth.token.value) {
 			req.headers.Authorization = `Bearer ${auth.token.value}`;
 		}
+		if (req.data instanceof FormData) {
+			delete req.headers['Content-Type'];
+		}
 		return req;
 	});
 

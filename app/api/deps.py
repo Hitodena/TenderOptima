@@ -5,6 +5,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import Config, get_config
 from app.db.dao.user_dao import UserDAO
 from app.services.db_service import db_manager
 from app.utils.jwt_utils import decode_access_token
@@ -40,3 +41,8 @@ async def get_current_user(
         )
 
     return user
+
+
+def get_config_instance() -> Config:
+    """Get config instance"""
+    return get_config()

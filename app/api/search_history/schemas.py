@@ -28,7 +28,10 @@ class SearchHistoryResponse(BaseModel):
     ]
     results_count: Annotated[
         int | None,
-        Field(description="Number of results returned by the search (if available)", examples=[20]),
+        Field(
+            description="Number of results returned by the search (if available)",
+            examples=[20],
+        ),
     ]
     request_id: Annotated[
         uuid.UUID | None,
@@ -39,5 +42,8 @@ class SearchHistoryResponse(BaseModel):
     ]
     created_at: Annotated[
         datetime,
-        Field(description="Timestamp when the search was recorded", examples=["2025-01-15T10:30:00Z"]),
+        Field(
+            description="Timestamp when the search was recorded",
+            examples=["2025-01-15T10:30:00Z"],
+        ),
     ]

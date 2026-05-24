@@ -1,14 +1,16 @@
 import uuid
+from pathlib import Path
 from typing import Annotated
 from urllib.parse import urlparse
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_session
+from app.api.deps import get_config_instance, get_current_user, get_session
 from app.api.user_requests.schemas import (
+    AttachmentInfo,
     LaunchMailingResponse,
     ParserResult,
     RequestCreate,
@@ -21,7 +23,7 @@ from app.api.user_requests.schemas import (
     ToggleSupplierRequest,
 )
 from app.celery_app.tasks.email_tasks import send_emails
-from app.core import get_config
+from app.core.config import ALLOWED_CONTENT_TYPES, Config
 from app.db.dao import (
     BlacklistedDomainDAO,
     RequestDAO,
@@ -35,7 +37,6 @@ from app.enums import RequestStatus, RequestSupplierStatus
 from app.utils.email_utils import build_request_email_body
 
 router = APIRouter(prefix="/requests", tags=["Requests"])
-config = get_config()
 
 
 def _extract_domain(raw: str) -> str:
@@ -87,6 +88,7 @@ async def search_suppliers(
     request_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
+    config: Annotated[Config, Depends(get_config_instance)],
 ) -> SearchResult:
     """Runs an external parser search, filters blacklisted domains, and saves valid suppliers."""  # noqa: E501
     request = await RequestDAO.get_by_id(session, request_id)
@@ -229,17 +231,22 @@ async def launch_mailing(
             status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
         )
 
-    if request.status != RequestStatus.ACTIVE:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot launch mailing in status '{request.status}'",
-        )
-
     pending_count = await RequestSupplierDAO.count_pending(session, request.id)
     if pending_count == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No pending suppliers. Run /search first.",
+        )
+
+    if request.status == RequestStatus.DRAFT:
+        await RequestDAO.update_status(
+            session, request_id, status=RequestStatus.ACTIVE
+        )
+
+    if request.status != RequestStatus.ACTIVE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot launch mailing in status '{request.status}'",
         )
 
     send_emails.delay(str(request_id))  # type: ignore
@@ -438,6 +445,117 @@ async def update_request_additional_params(
 
     updated = await RequestDAO.get_by_id(session, request_id)
     return RequestResponse.model_validate(updated)
+
+
+@router.post(
+    "/{request_id}/attachments",
+    response_model=list[AttachmentInfo],
+    summary="Upload attachments for a request",
+    responses={
+        200: {"description": "Attachments uploaded successfully"},
+        401: {"description": "Missing or invalid authentication credentials"},
+        404: {"description": "Request not found or does not belong to user"},
+        413: {"description": "File too large"},
+        415: {"description": "Unsupported file type"},
+    },
+)
+async def upload_attachments(
+    request_id: uuid.UUID,
+    files: list[UploadFile],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    config: Annotated[Config, Depends(get_config_instance)],
+) -> list[AttachmentInfo]:
+    """Upload files to be attached to emails for this request."""
+    request = await RequestDAO.get_by_id(session, request_id)
+    if not request or request.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
+        )
+
+    if request.status == RequestStatus.QUEUED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot upload attachments to a queued request",
+        )
+
+    if len(files) > config.max_upload_files:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Maximum {config.max_upload_files} files allowed per request",
+        )
+
+    upload_dir = Path(config.upload_dir)
+    try:
+        upload_dir.mkdir(parents=True, exist_ok=True)
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Cannot create upload directory '{upload_dir}'. Check server configuration.",
+        ) from exc
+
+    request_upload_dir = upload_dir / str(request_id) 
+    try:
+        request_upload_dir.mkdir(parents=True, exist_ok=True)
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Cannot create request upload directory '{request_upload_dir}'. Check server configuration.",
+        ) from exc
+
+    results: list[AttachmentInfo] = []
+    existing_paths = request.attachment_paths or []
+
+    for file in files:
+        if file.size and file.size > config.max_upload_size:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"File {file.filename} exceeds max upload size",
+            )
+
+        if (
+            file.content_type
+            and file.content_type not in ALLOWED_CONTENT_TYPES
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                detail=f"File type {file.content_type} not supported",
+            )
+
+        if not file.filename:
+            raise HTTPException(
+                status_code=status.HTTP_417_EXPECTATION_FAILED,
+                detail="File name not found",
+            )
+
+        safe_filename = Path(file.filename).name.replace("..", "_")
+        unique_filename = f"{uuid.uuid4().hex}_{safe_filename}"
+        file_path = request_upload_dir / unique_filename
+
+        content = await file.read()
+        file_path.write_bytes(content)
+
+        attachment_info = AttachmentInfo(
+            filename=safe_filename,
+            content_type=file.content_type,
+            size=len(content),
+            path=str(file_path),
+        )
+        results.append(attachment_info)
+        existing_paths.append(str(file_path))
+
+    await RequestDAO.update_attachment_paths(
+        session, request_id, existing_paths
+    )
+
+    logger.info(
+        "Attachments uploaded",
+        request_id=str(request_id),
+        count=len(results),
+        user_id=str(current_user.id),
+    )
+
+    return results
 
 
 @router.patch(

@@ -126,6 +126,43 @@ class RequestDAO(BaseDAO[Request]):
             raise
 
     @classmethod
+    async def update_attachment_paths(
+        cls,
+        session: AsyncSession,
+        request_id: uuid.UUID,
+        attachment_paths: list[str] | None,
+    ) -> None:
+        logger.debug(
+            "Updating request attachment_paths",
+            model=cls.model,
+            request_id=request_id,
+        )
+        try:
+            stmt = (
+                update(cls.model)
+                .where(cls.model.id == request_id)
+                .values(attachment_paths=attachment_paths)
+            )
+            await session.execute(stmt)
+            await session.flush()
+            await session.commit()
+
+            logger.info(
+                "Updated request attachment_paths",
+                model=cls.model.__name__,
+                request_id=request_id,
+            )
+        except Exception as exc:
+            await session.rollback()
+            logger.exception(
+                "Failed to update request attachment_paths",
+                error=str(exc),
+                model=cls.model,
+                request_id=request_id,
+            )
+            raise
+
+    @classmethod
     async def update_status(
         cls,
         session: AsyncSession,

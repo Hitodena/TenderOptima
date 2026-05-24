@@ -31,6 +31,9 @@ ENV PATH="/app/.venv/bin:$PATH" \
 RUN mkdir -p /app/celerybeat && \
 	chown -R appuser:appgroup /app/celerybeat
 
+RUN mkdir -p /app/uploads && \
+	chown -R appuser:appgroup /app/uploads
+
 USER appuser
 
 FROM base AS api

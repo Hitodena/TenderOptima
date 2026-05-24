@@ -5,6 +5,18 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app import ENV_FILE
 
+ALLOWED_CONTENT_TYPES: set[str] = {
+    "application/pdf",
+    "application/msword",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "text/plain",
+}
+
 
 class LogLevel(StrEnum):
     DEBUG = "DEBUG"
@@ -61,6 +73,17 @@ class Config(BaseSettings):
 
     # Parser
     parser_url: str
+
+    # Upload
+    upload_dir: str = "/app/uploads"
+    max_upload_files: int = 2
+    max_upload_size: int = 10 * 1024 * 1024
+
+    # CORS
+    cors_origins: list[str] = ["http://localhost:3000"]
+    cors_allow_credentials: bool = True
+    cors_allow_methods: str = "*"
+    cors_allow_headers: str = "*"
 
     def build_db_url(self) -> str:
         """Build SQLAlchemy URL scheme

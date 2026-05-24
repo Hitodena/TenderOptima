@@ -21,14 +21,15 @@ async def lifespan(app: FastAPI):
     await db_manager.close()
 
 
+config = get_config()
 app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=config.cors_origins,
+    allow_credentials=config.cors_allow_credentials,
+    allow_methods=config.cors_allow_methods.split(","),
+    allow_headers=config.cors_allow_headers.split(","),
 )
 
 app.include_router(api_router)

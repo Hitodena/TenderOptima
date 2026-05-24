@@ -26,6 +26,14 @@ export interface RequestCreate {
 export interface RequestUpdate {
 	description: string;
 	additional_params?: string[] | null;
+	attachments?: AttachmentInfo[] | null;
+}
+
+export interface AttachmentInfo {
+	filename: string;
+	content_type: string | null;
+	size: number;
+	path: string;
 }
 
 export interface RequestResponse {
@@ -33,7 +41,6 @@ export interface RequestResponse {
 	user_id: string;
 	query: string;
 	status: RequestStatus;
-	tracking_id: string;
 	delivery_region: string;
 	description: string;
 	created_at: string;

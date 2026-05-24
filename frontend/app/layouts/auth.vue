@@ -1,5 +1,5 @@
 <template>
-	<UHeader class="h-20 border-b border-default">
+	<UHeader :toggle="false" class="h-20 border-b border-default">
 		<template #left>
 			<ULink to="/"
 				class="flex items-center gap-2 font-bold text-2xl text-highlighted hover:opacity-80 transition-opacity">
