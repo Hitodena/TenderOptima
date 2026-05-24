@@ -21,6 +21,7 @@ class Request(IDMixinUUID, TimestampMixin, Base):
     additional_params: Mapped[list | None] = mapped_column(JSON)
 
     email_message: Mapped[str | None] = mapped_column(Text)
+    email_subject: Mapped[str | None] = mapped_column()
     attachment_paths: Mapped[list | None] = mapped_column(JSON)
 
     status: Mapped[str] = mapped_column(nullable=False)  # aka Enum

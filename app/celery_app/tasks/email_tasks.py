@@ -23,7 +23,10 @@ from app.celery_app.context import WorkerContext
 from app.core import get_config
 from app.db.dao import RequestDAO, RequestSupplierDAO, SupplierResponseDAO
 from app.enums import RequestStatus, RequestSupplierStatus
-from app.utils.email_utils import build_request_email_body
+from app.utils.email_utils import (
+    build_request_email_body,
+    build_request_email_subject,
+)
 from app.utils.short_id import generate_tid
 
 config = get_config()
@@ -188,6 +191,7 @@ async def send_emails(self, request_id: str) -> dict:
             user = rs.request.user
             rs_tracking_id = generate_tid()
             plain_body = build_request_email_body(request, user)
+            base_subject = build_request_email_subject(request)
 
             if attachment_data:
                 msg = MIMEMultipart()
@@ -207,10 +211,7 @@ async def send_emails(self, request_id: str) -> dict:
                 f"{user.company_name or 'TenderOptima'} <{config.smtp_user}>"
             )
             msg["To"] = recipient
-            msg["Subject"] = (
-                f"Запрос коммерческого предложения — {request.query}"
-                f"[TID-{rs_tracking_id}] "
-            )
+            msg["Subject"] = f"{base_subject} [TID-{rs_tracking_id}] "
 
             try:
                 smtp.sendmail(config.smtp_user, recipient, msg.as_string())

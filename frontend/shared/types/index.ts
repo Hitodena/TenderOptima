@@ -54,6 +54,7 @@ export interface RequestResponse {
 	created_at: string;
 	additional_params?: string[] | null;
 	email_message: string | null;
+	email_subject?: string | null;
 	attachment_paths: string[] | null;
 }
 
@@ -134,6 +135,7 @@ export const RequestStatus = {
 	ACTIVE: 'active',
 	QUEUED: 'queued',
 	COMPLETED: 'completed',
+	CLOSED: "closed"
 } as const;
 
 export type RequestStatus = (typeof RequestStatus)[keyof typeof RequestStatus];
@@ -162,6 +164,7 @@ export const REQUEST_STATUS_COLOR: Record<RequestStatus, BadgeColor> = {
 	[RequestStatus.ACTIVE]: 'success',
 	[RequestStatus.QUEUED]: 'warning',
 	[RequestStatus.COMPLETED]: 'success',
+	[RequestStatus.CLOSED]: 'info',
 };
 
 export const REQUEST_STATUS_LABEL: Record<RequestStatus, string> = {
@@ -169,6 +172,8 @@ export const REQUEST_STATUS_LABEL: Record<RequestStatus, string> = {
 	[RequestStatus.ACTIVE]: 'Активный',
 	[RequestStatus.QUEUED]: 'В очереди на рассылку',
 	[RequestStatus.COMPLETED]: 'Завершён',
+	[RequestStatus.CLOSED]: 'Закрыт',
+
 };
 
 export const SUPPLIER_STATUS_COLOR: Record<RequestSupplierStatus, BadgeColor> =

@@ -1,14 +1,21 @@
 <template>
     <UModal v-model:open="isOpen" :title="step === 'params'
-            ? 'Параметры письма поставщикам'
-            : 'Редактирование письма'
+        ? 'Параметры письма поставщикам'
+        : 'Редактирование письма'
         " :description="step === 'params'
             ? 'Заполните описание и укажите дополнительные параметры'
             : 'Проверьте и отредактируйте письмо перед отправкой'
-        " :ui="{ content: 'max-w-5xl' }">
+            " :ui="{ content: 'max-w-5xl' }">
         <template #body>
             <div v-if="step === 'params'">
                 <div class="space-y-6">
+                    <UFormField label="Тема письма" :required="false">
+                        <UInput v-model="form.emailSubject" placeholder="Запрос коммерческого предложения — ..."
+                            class="w-full" size="lg" :class="errors.emailSubject ? 'ring-2 ring-error rounded-lg' : ''"
+                            maxlength="255" />
+                        <p v-if="errors.emailSubject" class="text-xs text-error mt-1">{{ errors.emailSubject }}</p>
+                    </UFormField>
+
                     <UFormField label="Описание товара/услуги" required>
                         <UTextarea v-model="form.description"
                             placeholder="Опишите детально товар или услугу, технические характеристики, объёмы..."
@@ -18,6 +25,7 @@
                             {{ errors.description }}
                         </p>
                     </UFormField>
+
 
                     <div>
                         <p class="text-sm font-semibold mb-1">Дополнительные параметры</p>
@@ -64,7 +72,7 @@
                         </UFileUpload>
                     </div>
 
-                    <div class="border-t pt-4 mt-2">
+                    <div>
                         <p class="text-sm font-semibold mb-1">Визитная карточка</p>
                         <p class="text-xs text-muted mb-3">
                             Добавляется в конце письма. Изменения сохранятся в профиле.
@@ -95,8 +103,17 @@
                     отредактировать текст перед отправкой.
                 </div>
 
-                <UTextarea v-model="form.emailMessage" :rows="20" class="w-full font-mono text-sm"
-                    placeholder="Текст письма загружается..." />
+                <div>
+                    <p class="text-sm font-semibold mb-1">Тема письма</p>
+                    <p class="text-xs text-muted mb-3">Будет использована как тема email. Изменения сохранятся.</p>
+                    <UInput v-model="form.emailSubject" class="w-full font-medium" size="lg" maxlength="255" />
+                </div>
+
+                <div>
+                    <p class="text-sm font-semibold mb-1">Тело письма</p>
+                    <UTextarea v-model="form.emailMessage" :rows="20" class="w-full font-mono text-sm"
+                        placeholder="Текст письма загружается..." />
+                </div>
 
                 <div v-if="uploadedAttachments.length > 0" class="mb-4">
                     <p class="text-sm font-semibold mb-2">
@@ -170,6 +187,7 @@ const form = reactive({
     newLabel: "",
     emailMessage: "",
     businessInfo: "",
+    emailSubject: "",
 })
 
 const originalBusinessInfo = ref("")
@@ -177,7 +195,7 @@ const originalBusinessInfo = ref("")
 const filesToUpload = ref<File[]>([])
 const uploadedAttachments = ref<AttachmentInfo[]>([])
 
-const errors = reactive({ description: "" })
+const errors = reactive({ description: "", emailSubject: "" })
 const loading = ref(false)
 const loadingMessage = ref(false)
 const error = ref<string | null>(null)
@@ -212,6 +230,8 @@ function loadFromRequest() {
     if (ap && Array.isArray(ap) && ap.length > 0) {
         form.labels = [...ap]
     }
+    const defaultSubject = r.query ? `Запрос коммерческого предложения — ${r.query}` : ""
+    form.emailSubject = r.email_subject || defaultSubject
 }
 
 async function loadBusinessInfo() {
@@ -233,6 +253,7 @@ watch(
         } else {
             error.value = null
             errors.description = ""
+            errors.emailSubject = ""
         }
     },
     { immediate: true },
@@ -297,6 +318,7 @@ function close() {
 
 function validate() {
     errors.description = ""
+    errors.emailSubject = ""
     if (!form.description || form.description.trim().length < 3) {
         errors.description = "Обязательное поле, минимум 3 символа"
         return false
@@ -345,6 +367,7 @@ async function goToConfirm() {
 
         const updated = await patch<RequestResponse>(
             `/requests/${props.request.id}/email_message`,
+            { email_subject: form.emailSubject || null },
         )
 
         if (updated?.email_message) {
@@ -367,11 +390,10 @@ async function handleLaunch() {
     loading.value = true
     error.value = null
     try {
-        if (form.emailMessage) {
-            await patch(`/requests/${props.request.id}/email_message`, {
-                email_message: form.emailMessage,
-            })
-        }
+        // defensive: ensure subject persisted before launch (sends email_message if edited)
+        const emailPayload: any = { email_subject: form.emailSubject || null }
+        if (form.emailMessage) emailPayload.email_message = form.emailMessage
+        await patch(`/requests/${props.request.id}/email_message`, emailPayload)
 
         await post(`/requests/${props.request.id}/launch`)
 

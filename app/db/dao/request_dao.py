@@ -48,6 +48,40 @@ class RequestDAO(BaseDAO[Request]):
             raise
 
     @classmethod
+    async def update_email_subject(
+        cls, session: AsyncSession, request_id: UUID, email_subject: str | None
+    ) -> None:
+        logger.debug(
+            "Updating request email_subject",
+            model=cls.model,
+            request_id=request_id,
+        )
+        try:
+            stmt = (
+                update(cls.model)
+                .where(cls.model.id == request_id)
+                .values(email_subject=email_subject)
+            )
+            await session.execute(stmt)
+            await session.flush()
+            await session.commit()
+
+            logger.info(
+                "Updated request email_subject",
+                model=cls.model.__name__,
+                request_id=request_id,
+            )
+        except Exception as exc:
+            await session.rollback()
+            logger.exception(
+                "Failed to update request email_subject",
+                error=str(exc),
+                model=cls.model,
+                request_id=request_id,
+            )
+            raise
+
+    @classmethod
     async def get_by_id(
         cls, session: AsyncSession, request_id: uuid.UUID
     ) -> Request | None:

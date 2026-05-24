@@ -7,7 +7,8 @@ class RequestStatus(StrEnum):
     DRAFT = "draft"  # after creating request
     ACTIVE = "active"  # after search
     QUEUED = "queued"  # mailing in progress (matches frontend)
-    COMPLETED = "completed"  # terminal state after send_emails finishes
+    COMPLETED = "completed"  # terminal state after send_emails finished
+    CLOSED = "closed"  # user closed request
 
 
 class RequestSupplierStatus(StrEnum):

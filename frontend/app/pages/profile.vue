@@ -74,8 +74,7 @@
 										class="w-full" />
 								</UFormField>
 
-								<UFormField label="Контактный email" name="contact_email"
-									hint="Используется в подписи писем поставщикам">
+								<UFormField label="Контактный email" name="contact_email">
 									<UInput v-model="form.contact_email" type="email" placeholder="sales@company.ru"
 										icon="i-lucide-mail" class="w-full" />
 								</UFormField>

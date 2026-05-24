@@ -22,6 +22,7 @@ from app.api.user_requests.schemas import (
     LaunchMailingResponse,
     ParserResult,
     RequestCreate,
+    RequestEmailUpdate,
     RequestRemoveResponse,
     RequestResponse,
     RequestSupplierResponse,
@@ -663,15 +664,25 @@ async def update_request_email_message(
     request_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
+    email_update: RequestEmailUpdate,
 ) -> RequestResponse:
-    """Updates the generated email message for the request."""
+    """Updates the generated email message for the request (and optionally persists email_subject from user edit)."""
     request = await RequestDAO.get_by_id(session, request_id)
     if not request or request.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
         )
 
-    email_message = build_request_email_body(request, current_user)
+    if email_update.email_subject:
+        await RequestDAO.update_email_subject(
+            session, request_id, email_update.email_subject
+        )
+
+    email_message = (
+        email_update.email_message
+        if email_update.email_message is not None
+        else build_request_email_body(request, current_user)
+    )
     await RequestDAO.update_email_message(
         session,
         request_id,

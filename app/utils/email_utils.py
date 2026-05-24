@@ -15,6 +15,9 @@ def build_request_email_body(
     Returns:
         Formatted email body string
     """
+    if request.email_message and request.email_message.strip():
+        return request.email_message.strip()
+
     labels_block = ""
 
     params = request.additional_params
@@ -43,3 +46,20 @@ def build_request_email_body(
     )
 
     return plain_body
+
+
+def build_request_email_subject(request: Request) -> str:
+    """Build email subject for supplier request (single source of truth + fallback).
+
+    Uses user-provided subject if present and non-empty (after strip, capped to 255),
+    otherwise the fixed default template based on request.query.
+
+    Args:
+        request: The request object (must have .email_subject and .query)
+
+    Returns:
+        Subject string safe for email header
+    """
+    if request.email_subject and request.email_subject.strip():
+        return request.email_subject.strip()
+    return f"Запрос коммерческого предложения — {request.query}"

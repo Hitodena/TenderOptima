@@ -102,6 +102,14 @@ class RequestResponse(BaseModel):
             description="Generated email message of the request",
         ),
     ]
+    email_subject: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description="User-editable email subject",
+            max_length=255,
+        ),
+    ]
     created_at: Annotated[
         datetime,
         Field(
@@ -357,6 +365,9 @@ class RequestUpdate(BaseModel):
             description="Selected optional and custom parameters for the outgoing email",
         ),
     ]
+    email_subject: Annotated[
+        str | None, Field(default=None, max_length=255)
+    ] = None
     attachments: Annotated[
         list[Attachment] | None,
         Field(
@@ -364,6 +375,16 @@ class RequestUpdate(BaseModel):
             description="List of attachments to include in the email",
         ),
     ]
+
+
+class RequestEmailUpdate(BaseModel):
+    """Optional payload accepted by PATCH /email_message (in addition to body regeneration)."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    email_subject: Annotated[str | None, Field(default=None)] = None
+
+    email_message: Annotated[str | None, Field(default=None)] = None
 
 
 class SupplierRemoveResponse(BaseModel):
