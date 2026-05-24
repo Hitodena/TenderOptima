@@ -8,11 +8,11 @@
 					<p class="text-muted text-sm">Найдите подходящих поставщиков. Поиск занимает 10–30 секунд.</p>
 				</div>
 
-				<UCard class="shadow-sm mb-4 min-h-80">
+				<UCard class="shadow-sm mb-4">
 					<UForm :schema="schema" :state="form" @submit="handleSearch" class="space-y-5">
 						<UFormField label="Что ищете?" name="query" required hint="Минимум 3 символа">
 							<UInput v-model="form.query" placeholder="Промышленные насосы, картонные коробки..."
-								icon="i-lucide-search" size="lg" class="w-full" autofocus />
+								icon="i-lucide-search" size="lg" class="w-full" />
 						</UFormField>
 
 						<UFormField label="Регион доставки" name="delivery_region" required>

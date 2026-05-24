@@ -24,10 +24,11 @@ from app.core import get_config
 from app.db.dao import RequestDAO, RequestSupplierDAO, SupplierResponseDAO
 from app.enums import RequestStatus, RequestSupplierStatus
 from app.utils.email_utils import build_request_email_body
+from app.utils.short_id import generate_tid
 
 config = get_config()
 
-TRACKING_ID_RE = re.compile(r"\[TID-([0-9a-f-]{36})\]", re.IGNORECASE)
+TRACKING_ID_RE = re.compile(r"\[TID-([A-Za-z0-9]{6,12})\]", re.IGNORECASE)
 
 
 def _decode_header_value(value: str) -> str:
@@ -185,7 +186,7 @@ async def send_emails(self, request_id: str) -> dict:
                 continue
 
             user = rs.request.user
-            rs_tracking_id = uuid.uuid4()
+            rs_tracking_id = generate_tid()
             plain_body = build_request_email_body(request, user)
 
             if attachment_data:
@@ -207,8 +208,8 @@ async def send_emails(self, request_id: str) -> dict:
             )
             msg["To"] = recipient
             msg["Subject"] = (
-                f"[TID-{rs_tracking_id}] "
                 f"Запрос коммерческого предложения — {request.query}"
+                f"[TID-{rs_tracking_id}] "
             )
 
             try:
@@ -314,7 +315,7 @@ async def poll_imap(self) -> dict:
                     {
                         "uid": uid,
                         "uid_str": uid_str,
-                        "tracking_id": uuid.UUID(match.group(1)),
+                        "tracking_id": match.group(1),
                         "subject": subject,
                         "body": body,
                         "attachments": attachments,

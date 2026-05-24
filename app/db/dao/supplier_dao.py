@@ -97,7 +97,7 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
 
     @classmethod
     async def get_by_tracking_id(
-        cls, session: AsyncSession, tracking_id: uuid.UUID
+        cls, session: AsyncSession, tracking_id: str
     ) -> RequestSupplier | None:
         logger.debug(
             "Getting instance by tracking id",

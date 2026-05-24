@@ -1,11 +1,12 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Text
+from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.models.base import Base, IDMixinUUID, TimestampMixin
+from app.utils.short_id import generate_tid
 
 
 class Supplier(IDMixinUUID, TimestampMixin, Base):
@@ -41,8 +42,8 @@ class RequestSupplier(IDMixinUUID, TimestampMixin, Base):
     supplier_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("suppliers.id"), nullable=False
     )
-    tracking_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), default=uuid.uuid4, unique=True, nullable=False
+    tracking_id: Mapped[str] = mapped_column(
+        String(16), default=generate_tid, unique=True, nullable=False
     )
 
     sent_to_email: Mapped[str | None] = mapped_column()

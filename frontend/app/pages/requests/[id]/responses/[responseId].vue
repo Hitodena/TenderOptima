@@ -43,7 +43,8 @@
 				</template>
 
 				<div class="prose prose-sm dark:prose-invert max-w-none">
-					<pre v-if="response.raw_body"
+					<pre
+v-if="response.raw_body"
 						class="whitespace-pre-wrap font-sans text-sm text-default bg-transparent p-0 m-0">
 		{{ response.raw_body }}</pre>
 					<p v-else class="text-muted italic">Письмо без содержимого</p>
@@ -59,15 +60,19 @@
 				</template>
 
 				<div class="flex flex-wrap gap-2">
-					<a v-for="file in response.attachments" :key="file.filename" :href="file.path ?? '#'"
-						target="_blank"
-						class="flex items-center gap-2 px-3 py-2 rounded-lg border border-default hover:bg-elevated transition-colors text-sm cursor-pointer">
+					<button
+						v-for="file in response.attachments"
+						:key="file.filename"
+						type="button"
+						class="flex items-center gap-2 px-3 py-2 rounded-lg border border-default hover:bg-elevated transition-colors text-sm cursor-pointer"
+						@click="downloadAttachment(file)"
+					>
 						<UIcon :name="fileIcon(file.content_type)" class="w-4 h-4 text-primary" />
 						<span class="truncate max-w-48">{{ file.filename }}</span>
 						<span v-if="file.size" class="text-xs text-muted shrink-0">
 							{{ formatSize(file.size) }}
 						</span>
-					</a>
+					</button>
 				</div>
 			</UCard>
 
@@ -91,6 +96,8 @@ const route = useRoute()
 const id = route.params.id as string
 const responseId = route.params.responseId as string
 const { get } = useApi()
+const { $axios } = useNuxtApp()
+const toast = useToast()
 
 const response = ref<SupplierResponseResponse | null>(null)
 const loading = ref(true)
@@ -129,5 +136,24 @@ function fileIcon(contentType: string | null) {
 	if (contentType.includes('sheet') || contentType.includes('excel')) return 'i-lucide-table'
 	if (contentType.includes('word')) return 'i-lucide-file-text'
 	return 'i-lucide-file'
+}
+
+async function downloadAttachment(file: { filename: string; path: string | null }) {
+	if (!file.path) return
+	try {
+		const serveUrl = `/requests/attachments/serve?attachment_path=${encodeURIComponent(file.path)}`
+		const resp = await $axios.get(serveUrl, { responseType: 'blob' })
+		const blobUrl = URL.createObjectURL(resp.data)
+		const a = document.createElement('a')
+		a.href = blobUrl
+		a.download = file.filename || 'attachment'
+		document.body.appendChild(a)
+		a.click()
+		a.remove()
+		URL.revokeObjectURL(blobUrl)
+	} catch (e: unknown) {
+		console.error('Download failed', e)
+		toast.add({ title: 'Не удалось скачать', description: 'Попробуйте позже', color: 'error' })
+	}
 }
 </script>

@@ -187,7 +187,7 @@
 				<p v-if="enabledCount === 0" class="text-xs text-muted">Включите хотя бы одного поставщика</p>
 			</div>
 
-			<RequestParamsModal v-model:open="showParamsModal" :request="request" @launched="onLaunched" />
+			<RequestParamsModal v-model:open="showParamsModal" :request="request" :supplier-count="enabledCount" @launched="onLaunched" />
 			<AddSupplierModal v-model:open="showAddSupplier" :request-id="id" @added="fetchSuppliers" />
 
 		</template>

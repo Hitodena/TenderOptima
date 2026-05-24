@@ -1,10 +1,18 @@
 import uuid
 from pathlib import Path
 from typing import Annotated
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
+from fastapi.responses import FileResponse
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,6 +53,29 @@ def _extract_domain(raw: str) -> str:
     parsed = urlparse(raw)
     host = parsed.netloc or parsed.path
     return host.removeprefix("www.")
+
+
+def _resolve_and_validate_attachment_path(
+    raw_path: str, upload_dir: str
+) -> Path | None:
+    """Sanitize, handle legacy full paths, return safe Path under upload_dir or None."""
+    try:
+        decoded = unquote(raw_path)
+        p = Path(decoded)
+        if "uploads" in p.parts:
+            idx = p.parts.index("uploads")
+            rel = Path(*p.parts[idx + 1 :])
+        else:
+            rel = p
+        base = Path(upload_dir).resolve()
+        candidate = (base / rel).resolve(strict=False)
+        if not str(candidate).startswith(str(base)):
+            return None
+        if candidate.is_file():
+            return candidate
+        return None
+    except Exception:
+        return None
 
 
 @router.post(
@@ -558,6 +589,63 @@ async def upload_attachments(
     )
 
     return results
+
+
+@router.get(
+    "/attachments/serve",
+    summary="Download a private attachment (user-uploaded or reply)",
+    responses={
+        200: {"content": {"application/octet-stream": {}}},
+        400: {"detail": "Invalid attachment path"},
+        403: {"detail": "Not authorized for this attachment"},
+        404: {"detail": "Attachment not found"},
+    },
+)
+async def serve_attachment(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    config: Annotated[Config, Depends(get_config_instance)],
+    attachment_path: str = Query(
+        ..., description="Stored attachment path (full or relative)"
+    ),
+) -> FileResponse:
+    """Authenticated download. Validates ownership via request_id in path."""
+    candidate = _resolve_and_validate_attachment_path(
+        attachment_path, config.upload_dir
+    )
+    if candidate is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Attachment not found",
+        )
+
+    try:
+        rel = Path(unquote(attachment_path))
+        if "uploads" in rel.parts:
+            idx = rel.parts.index("uploads")
+            req_part = rel.parts[idx + 1]
+        else:
+            req_part = rel.parts[0]
+        request_id = uuid.UUID(str(req_part))
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid attachment path",
+        ) from None
+
+    req = await RequestDAO.get_by_id(session, request_id)
+    if not req or req.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized for this attachment",
+        )
+
+    filename = candidate.name
+    return FileResponse(
+        path=str(candidate),
+        filename=filename,
+        media_type="application/octet-stream",
+    )
 
 
 @router.patch(
