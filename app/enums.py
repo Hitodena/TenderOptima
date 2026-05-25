@@ -17,9 +17,7 @@ class RequestSupplierStatus(StrEnum):
     PENDING = "pending"  # found via search or manual add, waiting to be mailed
     SENT = "sent"  # SMTP send succeeded
     FAILED = "failed"  # SMTP error
-    REPLIED = (
-        "replied"  # IMAP poll detected reply → SupplierResponse row created
-    )
+    REPLIED = "replied"  # IMAP poll detected reply → EmailMessage row created
 
 
 class SupplierSource(StrEnum):
@@ -29,3 +27,10 @@ class SupplierSource(StrEnum):
     PARSER = "parser"  # discovered via Google parser
     ADMIN = "admin"  # reserved for future bulk admin import
     IMPORT = "import"  # reserved for CSV/Excel bulk
+
+
+class EmailMessageDirection(StrEnum):
+    """Direction of an EmailMessage (threaded conversation item)."""
+
+    INCOMING = "incoming"
+    OUTGOING = "outgoing"

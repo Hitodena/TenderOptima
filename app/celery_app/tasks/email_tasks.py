@@ -21,8 +21,12 @@ from loguru import logger
 from app.celery_app.celery_config import app
 from app.celery_app.context import WorkerContext
 from app.core import get_config
-from app.db.dao import RequestDAO, RequestSupplierDAO, SupplierResponseDAO
-from app.enums import RequestStatus, RequestSupplierStatus
+from app.db.dao import EmailMessageDAO, RequestDAO, RequestSupplierDAO
+from app.enums import (
+    EmailMessageDirection,
+    RequestStatus,
+    RequestSupplierStatus,
+)
 from app.utils.email_utils import (
     build_request_email_body,
     build_request_email_subject,
@@ -107,6 +111,141 @@ def _parse_email_body(raw_body: str) -> str:
     lines = [line for line in lines if not line.strip().startswith(">")]
 
     return "\n".join(lines)
+
+
+def _prepare_attachments(attachment_paths: list[str] | None) -> list[dict]:
+    """Load attachment files into dicts with filename+data (strips uuid_ prefix if present)."""
+    if not attachment_paths:
+        return []
+    data_list: list[dict] = []
+    for p_str in attachment_paths:
+        p = Path(p_str)
+        if p.is_file():
+            try:
+                raw = p.read_bytes()
+                filename = p.name
+                if "_" in filename:
+                    pref, rest = filename.split("_", 1)
+                    if len(pref) == 32 and all(
+                        c in "0123456789abcdefABCDEF" for c in pref
+                    ):
+                        filename = rest
+                data_list.append({"filename": filename, "data": raw})
+            except Exception as exc:
+                logger.warning(
+                    "Failed to read attachment for reply",
+                    path=str(p),
+                    error=str(exc),
+                )
+        else:
+            logger.warning("Attachment missing for reply", path=str(p))
+    return data_list
+
+
+def _send_mime(msg: email.message.Message, recipient: str) -> None:
+    """Connect, auth, send one message, quit. Raises on SMTP error (caller retries)."""
+    smtp = smtplib.SMTP(config.smtp_host, config.smtp_port)
+    try:
+        smtp.ehlo()
+        smtp.starttls()
+        smtp.ehlo()
+        smtp.login(config.smtp_user, config.smtp_password)
+        smtp.sendmail(config.smtp_user, recipient, msg.as_string())
+    finally:
+        try:
+            smtp.quit()
+        except Exception:
+            pass
+
+
+@app.task(name="mail.reply", bind=True, max_retries=3, default_retry_delay=60)
+@_async_task
+async def send_reply(
+    self, rs_id: str, body: str, attachment_paths: list[str] | None = None
+) -> dict:
+    """Send a reply in an existing thread. Creates outgoing EmailMessage row. Uses last incoming message's Message-ID for In-Reply-To when available."""
+    db_manager = _get_db_manager()
+    rs_uuid = uuid.UUID(rs_id)
+
+    async with db_manager.session() as session:
+        rs = await RequestSupplierDAO.get_supplier_by_id(session, rs_uuid)
+        if not rs:
+            logger.error("RequestSupplier not found for reply", rs_id=rs_id)
+            return {"status": "error", "reason": "rs_not_found"}
+
+    supplier = rs.supplier
+    recipient = rs.sent_to_email or supplier.email
+    if not recipient:
+        logger.warning("No recipient for reply", rs_id=rs_id)
+        return {"status": "error", "reason": "no_recipient"}
+
+    user = rs.request.user
+    request = rs.request
+
+    att_data = _prepare_attachments(attachment_paths)
+    if att_data:
+        msg = MIMEMultipart()
+        msg.attach(MIMEText(body, "plain", "utf-8"))
+        for att in att_data:
+            part = MIMEBase("application", "octet-stream")
+            part.set_payload(att["data"])
+            encoders.encode_base64(part)
+            part.add_header(
+                "Content-Disposition",
+                f'attachment; filename="{att["filename"]}"',
+            )
+            msg.attach(part)
+    else:
+        msg = MIMEText(body, "plain", "utf-8")
+
+    msg["From"] = f"{user.company_name or 'TenderOptima'} <{config.smtp_user}>"
+    msg["To"] = recipient
+    subject = f"Re: {request.query} [TID-{rs.tracking_id}]"
+    msg["Subject"] = subject
+
+    in_reply_to = rs.smtp_message_id
+    async with db_manager.session() as session:
+        thread = await EmailMessageDAO.get_thread(session, rs_uuid)
+        for m in reversed(thread):  # latest first
+            if m.message_id:
+                in_reply_to = m.message_id
+                break
+    if in_reply_to:
+        msg["In-Reply-To"] = in_reply_to
+        msg["References"] = in_reply_to
+
+    if not msg.get("Message-ID"):
+        msg["Message-ID"] = email.utils.make_msgid(
+            domain=config.smtp_host or "localhost"
+        )
+
+    try:
+        _send_mime(msg, recipient)
+        logger.info("Reply sent via SMTP", rs_id=rs_id, recipient=recipient)
+    except smtplib.SMTPException as exc:
+        logger.exception(
+            "SMTP send failed for reply", rs_id=rs_id, error=str(exc)
+        )
+        raise self.retry(exc=exc) from exc  # type: ignore[attr-defined]
+
+    async with db_manager.session() as session:
+        await EmailMessageDAO.create(
+            session,
+            request_supplier_id=rs.id,
+            direction=EmailMessageDirection.OUTGOING,
+            message_id=msg["Message-ID"],
+            in_reply_to=in_reply_to,
+            subject=subject,
+            raw_body=body,
+            attachments=att_data or None,
+            received_at=datetime.now(UTC),
+        )
+        # keep status as REPLIED
+        await RequestSupplierDAO.mark_status(
+            session, rs, RequestSupplierStatus.REPLIED
+        )
+
+    return {"status": "sent", "rs_id": rs_id, "message_id": msg["Message-ID"]}
 
 
 @app.task(name="mail.send", bind=True, max_retries=3, default_retry_delay=60)
@@ -216,7 +355,14 @@ async def send_emails(self, request_id: str) -> dict:
             try:
                 smtp.sendmail(config.smtp_user, recipient, msg.as_string())
                 results.append(
-                    (rs.id, "sent", msg["Message-ID"], rs_tracking_id)
+                    (
+                        rs.id,
+                        RequestSupplierStatus.SENT,
+                        msg["Message-ID"],
+                        rs_tracking_id,
+                        msg["Subject"],
+                        plain_body,
+                    )
                 )
                 sent += 1
                 logger.info(
@@ -228,13 +374,29 @@ async def send_emails(self, request_id: str) -> dict:
                     domain=supplier.domain,
                     error=str(exc),
                 )
-                results.append((rs.id, RequestSupplierStatus.FAILED, None))
+                results.append(
+                    (
+                        rs.id,
+                        RequestSupplierStatus.FAILED,
+                        None,
+                        None,
+                        None,
+                        None,
+                    )
+                )
                 failed += 1
     finally:
         smtp.quit()
 
     async with db_manager.session() as session:
-        for rs_id, status, message_id, rs_tracking_id in results:
+        for (
+            rs_id,
+            status,
+            message_id,
+            rs_tracking_id,
+            subject,
+            body_for_msg,
+        ) in results:
             rs = await RequestSupplierDAO.get_supplier_by_id(session, rs_id)
             if rs:
                 await RequestSupplierDAO.mark_status(
@@ -244,10 +406,25 @@ async def send_emails(self, request_id: str) -> dict:
                     sent_at=datetime.now(UTC),
                     smtp_message_id=message_id,
                 )
-                await RequestSupplierDAO.update_body_text(
-                    session, rs.id, plain_body
-                )
-                rs.tracking_id = rs_tracking_id
+                if body_for_msg:
+                    await RequestSupplierDAO.update_body_text(
+                        session, rs.id, body_for_msg
+                    )
+                if rs_tracking_id:
+                    rs.tracking_id = rs_tracking_id
+
+                if status == RequestSupplierStatus.SENT and message_id:
+                    await EmailMessageDAO.create(
+                        session,
+                        request_supplier_id=rs.id,
+                        direction=EmailMessageDirection.OUTGOING,
+                        message_id=message_id,
+                        in_reply_to=None,
+                        subject=subject,
+                        raw_body=body_for_msg,
+                        attachments=attachment_data or None,
+                        received_at=datetime.now(UTC),
+                    )
 
         await RequestDAO.update_status(
             session, uuid.UUID(request_id), RequestStatus.COMPLETED
@@ -321,6 +498,8 @@ async def poll_imap(self) -> dict:
                         "body": body,
                         "attachments": attachments,
                         "received_at": received_at,
+                        "message_id": msg.get("Message-ID"),
+                        "in_reply_to": msg.get("In-Reply-To"),
                     }
                 )
 
@@ -345,11 +524,10 @@ async def poll_imap(self) -> dict:
                         skipped += 1
                         continue
 
-                    if rs.response is not None:
-                        logger.debug(
-                            "Response already exists, skipping",
-                            rs_id=str(rs.id),
-                        )
+                    existing = await EmailMessageDAO.get_by_imap_id(
+                        session, item["uid_str"]
+                    )
+                    if existing:
                         skipped += 1
                         continue
 
@@ -438,9 +616,12 @@ async def poll_imap(self) -> dict:
                                         }
                                     )
 
-                    await SupplierResponseDAO.create(
+                    await EmailMessageDAO.create(
                         session,
                         request_supplier_id=rs.id,
+                        direction=EmailMessageDirection.INCOMING,
+                        message_id=item.get("message_id"),
+                        in_reply_to=item.get("in_reply_to"),
                         imap_id=item["uid_str"],
                         subject=item["subject"],
                         raw_body=email_body_text,

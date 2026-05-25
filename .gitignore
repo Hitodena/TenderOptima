@@ -5,6 +5,7 @@ logs
 .kilo
 .ruff_cache
 __pycache__
+.pytest_cache
 
 .output
 .data

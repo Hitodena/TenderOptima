@@ -110,6 +110,43 @@ export interface SupplierResponseResponse {
 	supplier: Supplier;
 }
 
+export interface SupplierSummary {
+	id: string;
+	domain: string;
+	company_name: string | null;
+	email: string | null;
+}
+
+export interface ThreadSummary {
+	rs_id: string;
+	supplier: SupplierSummary;
+	last_message: ThreadMessage | null;
+	message_count: number;
+	unread: boolean;
+}
+
+export interface ThreadMessage {
+	id: string;
+	direction: 'incoming' | 'outgoing';
+	subject: string | null;
+	body: string | null;
+	received_at: string | null;
+}
+
+export interface Message {
+	id: string;
+	direction: 'incoming' | 'outgoing';
+	subject: string | null;
+	raw_body: string | null;
+	attachments: Attachment[] | null;
+	received_at: string | null;
+}
+
+export interface ReplyPayload {
+	body: string;
+}
+
+
 export interface BlacklistCreate {
 	domain: string;
 	reason?: string | null;
@@ -135,7 +172,7 @@ export const RequestStatus = {
 	ACTIVE: 'active',
 	QUEUED: 'queued',
 	COMPLETED: 'completed',
-	CLOSED: "closed"
+	CLOSED: 'closed',
 } as const;
 
 export type RequestStatus = (typeof RequestStatus)[keyof typeof RequestStatus];
@@ -173,7 +210,6 @@ export const REQUEST_STATUS_LABEL: Record<RequestStatus, string> = {
 	[RequestStatus.QUEUED]: 'В очереди на рассылку',
 	[RequestStatus.COMPLETED]: 'Завершён',
 	[RequestStatus.CLOSED]: 'Закрыт',
-
 };
 
 export const SUPPLIER_STATUS_COLOR: Record<RequestSupplierStatus, BadgeColor> =

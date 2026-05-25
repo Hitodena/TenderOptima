@@ -9,23 +9,24 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.models.base import Base, IDMixinUUID, TimestampMixin
 
 
-class SupplierResponse(IDMixinUUID, TimestampMixin, Base):
-    __tablename__ = "supplier_responses"
+class EmailMessage(IDMixinUUID, TimestampMixin, Base):
+    __tablename__ = "email_messages"
 
     request_supplier_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("request_suppliers.id", ondelete="CASCADE"),
-        unique=True,
         nullable=False,
     )
+
+    direction: Mapped[str] = mapped_column(nullable=False, default="incoming")
+    message_id: Mapped[str | None] = mapped_column()
+    in_reply_to: Mapped[str | None] = mapped_column()
 
     imap_id: Mapped[str | None] = mapped_column()
     subject: Mapped[str | None] = mapped_column()
     raw_body: Mapped[str | None] = mapped_column(Text)
     attachments: Mapped[list | None] = mapped_column(JSON)
-
     extracted_text: Mapped[str | None] = mapped_column(Text)
-
     received_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
     )
@@ -34,10 +35,7 @@ class SupplierResponse(IDMixinUUID, TimestampMixin, Base):
     )
 
     request_supplier: Mapped["RequestSupplier"] = relationship(  # noqa: F821 # type: ignore
-        back_populates="response",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
-        single_parent=True,
+        back_populates="email_messages",
     )
     analysis: Mapped["ResponseAnalysis | None"] = relationship(
         back_populates="response",
@@ -52,7 +50,7 @@ class ResponseAnalysis(IDMixinUUID, TimestampMixin, Base):
 
     response_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("supplier_responses.id", ondelete="CASCADE"),
+        ForeignKey("email_messages.id", ondelete="CASCADE"),
         unique=True,
         nullable=False,
     )
@@ -78,7 +76,7 @@ class ResponseAnalysis(IDMixinUUID, TimestampMixin, Base):
 
     raw_llm_response: Mapped[dict | None] = mapped_column(JSON)
 
-    response: Mapped[SupplierResponse] = relationship(
+    response: Mapped["EmailMessage"] = relationship(
         back_populates="analysis",
         cascade="all, delete-orphan",
         passive_deletes=True,

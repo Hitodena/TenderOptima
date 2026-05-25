@@ -104,6 +104,12 @@ class CeleryConfig:
             routing_key="mail.poll",
             priority=5,
         ),
+        Queue(
+            "mail_reply",
+            mail_exchange,
+            routing_key="mail.reply",
+            priority=7,
+        ),
     )
 
     # Routing
@@ -115,6 +121,10 @@ class CeleryConfig:
         "mail.poll": {
             "queue": "mail_poll",
             "routing_key": "mail.poll",
+        },
+        "mail.reply": {
+            "queue": "mail_reply",
+            "routing_key": "mail.reply",
         },
     }
 
@@ -137,8 +147,8 @@ class CeleryConfig:
     beat_schedule = {
         "poll-imap": {
             "task": "mail.poll",
-            "schedule": crontab(minute="*/5"),
+            "schedule": crontab(minute="*/1"),
             "args": (),
-            "options": {"queue": "mail_poll", "expires": 240},
+            "options": {"queue": "mail_poll", "expires": 600},
         },
     }

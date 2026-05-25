@@ -1,7 +1,7 @@
 from .base import Base, IDMixinUUID, TimestampMixin
 from .blacklisted_domain import BlacklistedDomain
 from .request import Request
-from .response import ResponseAnalysis, SupplierResponse
+from .response import EmailMessage, ResponseAnalysis
 from .search import SearchHistory
 from .subscription import Subscription
 from .supplier import RequestSupplier, Supplier
@@ -13,7 +13,7 @@ __all__ = [
     "TimestampMixin",
     "BlacklistedDomain",
     "Request",
-    "SupplierResponse",
+    "EmailMessage",
     "ResponseAnalysis",
     "SearchHistory",
     "Subscription",

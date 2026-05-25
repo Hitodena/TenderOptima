@@ -61,9 +61,10 @@ class RequestSupplier(IDMixinUUID, TimestampMixin, Base):
     supplier: Mapped[Supplier] = relationship(
         back_populates="request_suppliers",
     )
-    response: Mapped["SupplierResponse | None"] = relationship(  # noqa: F821 # type: ignore
+    email_messages: Mapped[list["EmailMessage"]] = relationship(  # noqa: F821 # type: ignore
         back_populates="request_supplier",
-        uselist=False,
         cascade="all, delete-orphan",
+        uselist=True,
         passive_deletes=True,
+        order_by="EmailMessage.received_at",
     )

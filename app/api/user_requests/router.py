@@ -19,8 +19,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_config_instance, get_current_user, get_session
 from app.api.user_requests.schemas import (
     Attachment,
+    EmailMessageResponse,
     LaunchMailingResponse,
+    Message,
     ParserResult,
+    ReplyPayload,
     RequestCloseResponse,
     RequestCreate,
     RequestEmailUpdate,
@@ -30,21 +33,24 @@ from app.api.user_requests.schemas import (
     SearchResult,
     SupplierRemoveResponse,
     SupplierResponse,
-    SupplierResponseResponse,
+    ThreadSummary,
     ToggleSupplierRequest,
 )
-from app.celery_app.tasks.email_tasks import send_emails
+from app.celery_app.tasks.email_tasks import send_emails, send_reply
 from app.core.config import ALLOWED_CONTENT_TYPES, Config
 from app.db.dao import (
     BlacklistedDomainDAO,
+    EmailMessageDAO,
     RequestDAO,
     RequestSupplierDAO,
     SearchHistoryDAO,
     SupplierDAO,
-    SupplierResponseDAO,
 )
 from app.db.models import User
-from app.enums import RequestStatus, RequestSupplierStatus
+from app.enums import (
+    RequestStatus,
+    RequestSupplierStatus,
+)
 from app.utils.email_utils import build_request_email_body
 
 router = APIRouter(prefix="/requests", tags=["Requests"])
@@ -339,7 +345,7 @@ async def get_request(
 
 @router.get(
     "/{request_id}/responses",
-    response_model=list[SupplierResponseResponse],
+    response_model=list[EmailMessageResponse],
     summary="List supplier responses for a request",
     responses={
         200: {
@@ -353,7 +359,7 @@ async def get_responses(
     request_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
-) -> list[SupplierResponseResponse]:
+) -> list[EmailMessageResponse]:
     """Returns all supplier email responses associated with the given request."""  # noqa: E501
     request = await RequestDAO.get_by_id(session, request_id)
     if not request or request.user_id != current_user.id:
@@ -361,10 +367,111 @@ async def get_responses(
             status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
         )
 
-    responses = await SupplierResponseDAO.get_by_request(session, request_id)
-    return [
-        SupplierResponseResponse.from_orm_with_supplier(r) for r in responses
-    ]
+    responses = await EmailMessageDAO.get_by_request(session, request_id)
+    return [EmailMessageResponse.from_orm_with_supplier(r) for r in responses]
+
+
+@router.get(
+    "/{request_id}/threads",
+    response_model=list[ThreadSummary],
+    summary="List email threads (suppliers that have replied) for a request",
+    responses={
+        200: {"description": "Threads with last message preview"},
+        401: {"description": "Missing or invalid authentication credentials"},
+        404: {"description": "Request not found or does not belong to user"},
+    },
+)
+async def get_threads(
+    request_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> list[ThreadSummary]:
+    """Returns only RequestSuppliers that have >=1 EmailMessage."""
+    request = await RequestDAO.get_by_id(session, request_id)
+    if not request or request.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
+        )
+
+    raw = await EmailMessageDAO.get_threads_summary(session, request_id)
+    return [ThreadSummary.model_validate(item) for item in raw]
+
+
+@router.get(
+    "/{request_id}/suppliers/{rs_id}/messages",
+    response_model=list[Message],
+    summary="Full chronological thread (all EmailMessages) for one supplier",
+    responses={
+        200: {"description": "Ordered list of messages in the conversation"},
+        401: {"description": "Missing or invalid authentication credentials"},
+        404: {
+            "description": "RequestSupplier not found, no access, or no messages"
+        },
+    },
+)
+async def get_thread_messages(
+    request_id: uuid.UUID,
+    rs_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> list[Message]:
+    """Ownership check + load via EmailMessageDAO.get_thread (already ordered asc)."""
+    rs = await RequestSupplierDAO.get_supplier_by_id(session, rs_id)
+    if not rs or str(rs.request_id) != str(request_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Request supplier not found for this request",
+        )
+    req = await RequestDAO.get_by_id(session, request_id)
+    if not req or req.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
+        )
+
+    messages = await EmailMessageDAO.get_thread(session, rs_id)
+
+    return [Message.model_validate(message) for message in messages]
+
+
+@router.post(
+    "/{request_id}/suppliers/{rs_id}/reply",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Queue an outgoing reply in the thread (creates EmailMessage after sending)",
+    responses={
+        202: {"description": "Reply queued for sending"},
+        400: {"description": "Empty body or validation error"},
+        401: {"description": "Missing or invalid authentication credentials"},
+        404: {"description": "RS not found or not owned"},
+    },
+)
+async def post_reply(
+    request_id: uuid.UUID,
+    rs_id: uuid.UUID,
+    payload: ReplyPayload,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """Validates ownership, queues send_reply Celery task. Returns 202 immediately."""
+    rs = await RequestSupplierDAO.get_supplier_by_id(session, rs_id)
+    if not rs or str(rs.request_id) != str(request_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Request supplier not found",
+        )
+    req = await RequestDAO.get_by_id(session, request_id)
+    if not req or req.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
+        )
+
+    if not payload.body or not payload.body.strip():
+        raise HTTPException(
+            status_code=400, detail="Reply body cannot be empty"
+        )
+
+    send_reply.delay(str(rs_id), payload.body, None)  # type: ignore
+
+    return {"status": "queued", "rs_id": str(rs_id)}
 
 
 @router.get(

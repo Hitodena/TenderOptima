@@ -1,8 +1,8 @@
 """Clear
 
-Revision ID: f59a337a4a45
+Revision ID: cf208df5ccd1
 Revises: 
-Create Date: 2026-05-23 23:10:07.052147
+Create Date: 2026-05-25 01:56:17.969869
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = 'f59a337a4a45'
+revision: str = 'cf208df5ccd1'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -24,8 +24,10 @@ def upgrade() -> None:
     op.create_table('users',
     sa.Column('email', sa.String(), nullable=False),
     sa.Column('hashed_password', sa.String(), nullable=False),
-    sa.Column('full_name', sa.String(), nullable=True),
+    sa.Column('full_name', sa.String(), nullable=False),
     sa.Column('company_name', sa.String(), nullable=True),
+    sa.Column('contact_email', sa.String(), nullable=True),
+    sa.Column('business_info', sa.Text(), nullable=True),
     sa.Column('is_admin', sa.Boolean(), nullable=False),
     sa.Column('agree_terms', sa.Boolean(), nullable=False),
     sa.Column('agree_marketing', sa.Boolean(), nullable=False),
@@ -53,15 +55,14 @@ def upgrade() -> None:
     sa.Column('description', sa.Text(), nullable=True),
     sa.Column('additional_params', postgresql.JSON(astext_type=sa.Text()), nullable=True),
     sa.Column('email_message', sa.Text(), nullable=True),
+    sa.Column('email_subject', sa.String(), nullable=True),
     sa.Column('attachment_paths', postgresql.JSON(astext_type=sa.Text()), nullable=True),
     sa.Column('status', sa.String(), nullable=False),
-    sa.Column('tracking_id', sa.UUID(), nullable=False),
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
-    sa.PrimaryKeyConstraint('id'),
-    sa.UniqueConstraint('tracking_id')
+    sa.PrimaryKeyConstraint('id')
     )
     op.create_table('subscriptions',
     sa.Column('user_id', sa.UUID(), nullable=False),
@@ -93,6 +94,7 @@ def upgrade() -> None:
     op.create_table('request_suppliers',
     sa.Column('request_id', sa.UUID(), nullable=False),
     sa.Column('supplier_id', sa.UUID(), nullable=False),
+    sa.Column('tracking_id', sa.String(length=16), nullable=False),
     sa.Column('sent_to_email', sa.String(), nullable=True),
     sa.Column('sent_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('body_text', sa.Text(), nullable=True),
@@ -102,9 +104,10 @@ def upgrade() -> None:
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['request_id'], ['requests.id'], ),
+    sa.ForeignKeyConstraint(['request_id'], ['requests.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['supplier_id'], ['suppliers.id'], ),
-    sa.PrimaryKeyConstraint('id')
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('tracking_id')
     )
     op.create_table('search_history',
     sa.Column('user_id', sa.UUID(), nullable=False),
@@ -119,8 +122,11 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_table('supplier_responses',
+    op.create_table('email_messages',
     sa.Column('request_supplier_id', sa.UUID(), nullable=False),
+    sa.Column('direction', sa.String(), nullable=False),
+    sa.Column('message_id', sa.String(), nullable=True),
+    sa.Column('in_reply_to', sa.String(), nullable=True),
     sa.Column('imap_id', sa.String(), nullable=True),
     sa.Column('subject', sa.String(), nullable=True),
     sa.Column('raw_body', sa.Text(), nullable=True),
@@ -131,9 +137,8 @@ def upgrade() -> None:
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['request_supplier_id'], ['request_suppliers.id'], ),
-    sa.PrimaryKeyConstraint('id'),
-    sa.UniqueConstraint('request_supplier_id')
+    sa.ForeignKeyConstraint(['request_supplier_id'], ['request_suppliers.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
     )
     op.create_table('response_analyses',
     sa.Column('response_id', sa.UUID(), nullable=False),
@@ -153,7 +158,7 @@ def upgrade() -> None:
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['response_id'], ['supplier_responses.id'], ),
+    sa.ForeignKeyConstraint(['response_id'], ['email_messages.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('response_id')
     )
@@ -164,7 +169,7 @@ def downgrade() -> None:
     """Downgrade schema."""
     # ### commands auto generated by Alembic - please adjust! ###
     op.drop_table('response_analyses')
-    op.drop_table('supplier_responses')
+    op.drop_table('email_messages')
     op.drop_table('search_history')
     op.drop_table('request_suppliers')
     op.drop_table('suppliers')

@@ -5,9 +5,10 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.db.models import (
-    SupplierResponse as SupplierResponseDB,
+    EmailMessage as EmailMessageDB,
 )
 from app.enums import (
+    EmailMessageDirection,
     RequestStatus,
     RequestSupplierStatus,
 )
@@ -242,7 +243,7 @@ class SupplierResponse(BaseModel):
     ]
 
 
-class SupplierResponseResponse(BaseModel):
+class EmailMessageResponse(BaseModel):
     """Email response received from a supplier."""
 
     model_config = ConfigDict(from_attributes=True)
@@ -286,8 +287,8 @@ class SupplierResponseResponse(BaseModel):
 
     @classmethod
     def from_orm_with_supplier(
-        cls, response: SupplierResponseDB
-    ) -> "SupplierResponseResponse":
+        cls, response: EmailMessageDB
+    ) -> "EmailMessageResponse":
         return cls(
             id=response.id,
             subject=response.subject,
@@ -343,7 +344,7 @@ class ToggleSupplierRequest(BaseModel):
 
 
 class RequestUpdate(BaseModel):
-    """Payload for updating optional fields and additional parameters before launching the request."""  # noqa: E501
+    """Payload for updating optional fields and additional parameters before launching the request."""
 
     model_config = ConfigDict(str_strip_whitespace=True, from_attributes=True)
 
@@ -354,7 +355,7 @@ class RequestUpdate(BaseModel):
             min_length=3,
             max_length=2000,
             examples=[
-                "Высоконапорные центробежные насосы для химической промышленности"  # noqa: E501
+                "Высоконапорные центробежные насосы для химической промышленности"
             ],
         ),
     ]
@@ -411,3 +412,36 @@ class RequestCloseResponse(BaseModel):
             examples=["123e4567-e89b-12d3-a456-426614174000"],
         ),
     ]
+
+
+class ThreadSummary(BaseModel):
+    """Left panel thread list item. Only for RS that have >=1 EmailMessage."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    rs_id: str
+    supplier: SupplierResponse
+    last_message: dict | None = None
+    message_count: int
+    unread: bool
+
+
+class Message(BaseModel):
+    """Single email in a thread (center panel). body = raw_body for v1."""
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    id: uuid.UUID
+    direction: EmailMessageDirection
+    subject: str | None = None
+    raw_body: str | None = Field(
+        default=None,
+    )
+    attachments: list[Attachment] | None = None
+    received_at: datetime | None = None
+
+
+class ReplyPayload(BaseModel):
+    """Payload for POST /.../reply . Attachments deferred."""
+
+    body: Annotated[str, Field(min_length=1, max_length=50000)]

@@ -105,10 +105,8 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
             tracking_id=tracking_id,
         )
         try:
-            stmt = (
-                select(cls.model)
-                .where(cls.model.tracking_id == tracking_id)  # ← без джоина
-                .options(selectinload(cls.model.response))
+            stmt = select(cls.model).where(
+                cls.model.tracking_id == tracking_id
             )
             result = await session.execute(stmt)
             instance = result.scalar_one_or_none()
@@ -142,7 +140,16 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
     ) -> RequestSupplier | None:
         logger.debug("Getting supplier by id", model=cls.model, rs_id=rs_id)
         try:
-            instance = await session.get(cls.model, rs_id)
+            stmt = (
+                select(cls.model)
+                .where(cls.model.id == rs_id)
+                .options(
+                    selectinload(cls.model.supplier),
+                    selectinload(cls.model.request).selectinload(Request.user),
+                )
+            )
+            result = await session.execute(stmt)
+            instance = result.scalar_one_or_none()
             if instance:
                 logger.info(
                     "Got supplier",
