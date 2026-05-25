@@ -96,8 +96,8 @@
 					</div>
 				</div>
 				<div v-else-if="request.status === RequestStatus.CLOSED"
-					class="flex items-center gap-3 p-4 rounded-xl bg-secondary/10 border border-secondary/20">
-					<UIcon name="i-lucide-lock" class="w-5 h-5 text-secondary shrink-0" />
+					class="flex items-center gap-3 p-4 rounded-xl bg-neutral/10 border border-neutral/20">
+					<UIcon name="i-lucide-lock" class="w-5 h-5 text-neutral shrink-0" />
 					<div>
 						<p class="text-sm font-medium">Запрос закрыт</p>
 					</div>
