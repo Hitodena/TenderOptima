@@ -164,6 +164,7 @@ export interface ReplyPayload {
 
 export const RequestStatus = {
 	DRAFT: 'draft',
+	SEARCHING: 'searching',
 	ACTIVE: 'active',
 	QUEUED: 'queued',
 	COMPLETED: 'completed',
@@ -193,6 +194,7 @@ type BadgeColor =
 
 export const REQUEST_STATUS_COLOR: Record<RequestStatus, BadgeColor> = {
 	[RequestStatus.DRAFT]: 'neutral',
+	[RequestStatus.SEARCHING]: 'warning',
 	[RequestStatus.ACTIVE]: 'success',
 	[RequestStatus.QUEUED]: 'warning',
 	[RequestStatus.COMPLETED]: 'success',
@@ -201,6 +203,7 @@ export const REQUEST_STATUS_COLOR: Record<RequestStatus, BadgeColor> = {
 
 export const REQUEST_STATUS_LABEL: Record<RequestStatus, string> = {
 	[RequestStatus.DRAFT]: 'Черновик',
+	[RequestStatus.SEARCHING]: 'Поиск поставщиков',
 	[RequestStatus.ACTIVE]: 'Активный',
 	[RequestStatus.QUEUED]: 'В очереди на рассылку',
 	[RequestStatus.COMPLETED]: 'Завершён',

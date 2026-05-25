@@ -2,11 +2,12 @@ from enum import StrEnum
 
 
 class RequestStatus(StrEnum):
-    """Lifecycle status of a user search/mailing request."""
+    """Lifecycle status of a user search/mailing request (DRAFT -> SEARCHING -> ACTIVE etc)."""
 
     DRAFT = "draft"  # after creating request
+    SEARCHING = "searching"  # background parser task running (long timeout)
     ACTIVE = "active"  # after search
-    QUEUED = "queued"  # mailing in progress (matches frontend)
+    QUEUED = "queued"  # mailing in progress
     COMPLETED = "completed"  # terminal state after send_emails finished
     CLOSED = "closed"  # user closed request
 

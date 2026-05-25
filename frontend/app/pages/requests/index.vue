@@ -5,7 +5,7 @@
 			<div class="mb-12">
 				<div class="text-center mb-8">
 					<h1 class="text-3xl font-bold text-highlighted mb-2">Поиск поставщиков</h1>
-					<p class="text-muted text-sm">Найдите подходящих поставщиков. Поиск занимает 10–30 секунд.</p>
+					<p class="text-muted text-sm">Найдите подходящих поставщиков. Поиск может занять до 5–10 минут.</p>
 				</div>
 
 				<UCard class="shadow-sm mb-4">
@@ -20,20 +20,7 @@
 								class="w-full" />
 						</UFormField>
 
-						<div v-if="loading" class="flex flex-col items-center gap-3 py-4">
-							<div class="relative">
-								<div class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-									<UIcon name="i-lucide-search" class="w-5 h-5 text-primary animate-pulse" />
-								</div>
-								<div class="absolute inset-0 rounded-full border-2 border-primary/30 animate-ping" />
-							</div>
-							<div class="text-center">
-								<p class="text-sm font-medium">{{ searchStep }}</p>
-								<p class="text-xs text-muted mt-0.5">Это займёт 10–30 секунд</p>
-							</div>
-						</div>
-
-						<UButton v-else type="submit" block size="lg" leading-icon="i-lucide-search">
+						<UButton type="submit" block size="lg" leading-icon="i-lucide-search" :disabled="loading">
 							Найти поставщиков
 						</UButton>
 
@@ -72,20 +59,24 @@ const schema = z.object({
 const form = reactive({ query: '', delivery_region: '' })
 const loading = ref(false)
 const error = ref<string | null>(null)
-const searchStep = ref('Создаём запрос...')
+const toast = useToast()
 
 async function handleSearch() {
 	if (loading.value) return
 	error.value = null
 	loading.value = true
 	try {
-		searchStep.value = 'Создаём запрос...'
 		const created = await post<RequestResponse>('/requests/', {
 			query: form.query.trim(),
 			delivery_region: form.delivery_region.trim(),
 		})
-		searchStep.value = 'Ищем поставщиков...'
 		await post(`/requests/${created.id}/search`)
+		toast.add({
+			title: 'Поиск в процессе',
+			description: 'Запущен поиск поставщиков. Результаты появятся в запросе через некоторое время.',
+			color: 'warning',
+			icon: 'i-lucide-search',
+		})
 		await navigateTo(`/requests/${created.id}`)
 	} catch (e: any) {
 		const detail = e?.response?.data?.detail
@@ -94,7 +85,6 @@ async function handleSearch() {
 			: 'Не удалось запустить поиск. Попробуйте ещё раз.'
 	} finally {
 		loading.value = false
-		searchStep.value = 'Создаём запрос...'
 	}
 }
 </script>

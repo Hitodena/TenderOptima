@@ -87,10 +87,9 @@ class CeleryConfig:
     }
     task_default_priority = 0
 
-    # Exchanges
     mail_exchange = Exchange("mail", type="direct", durable=True)
+    parser_exchange = Exchange("parser", type="direct", durable=True)
 
-    # Queues
     task_queues = (
         Queue(
             "mail_send",
@@ -110,6 +109,12 @@ class CeleryConfig:
             routing_key="mail.reply",
             priority=7,
         ),
+        Queue(
+            "parser_search",
+            parser_exchange,
+            routing_key="parser.search",
+            priority=3,
+        ),
     )
 
     # Routing
@@ -126,9 +131,16 @@ class CeleryConfig:
             "queue": "mail_reply",
             "routing_key": "mail.reply",
         },
+        "parser.search": {
+            "queue": "parser_search",
+            "routing_key": "parser.search",
+        },
     }
 
-    include = ["app.celery_app.tasks.email_tasks"]
+    include = [
+        "app.celery_app.tasks.email_tasks",
+        "app.celery_app.tasks.parser_tasks",
+    ]
 
     # Logging
     worker_log_format = (

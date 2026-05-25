@@ -214,6 +214,31 @@ class LaunchMailingResponse(BaseModel):
     ]
 
 
+class TaskQueuedResponse(BaseModel):
+    """Base response for any background task successfully queued (for reuse)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    status: Annotated[
+        str,
+        Field(
+            description="Task queue status",
+            examples=["search_queued", "queued"],
+        ),
+    ]
+    request_id: Annotated[
+        str,
+        Field(
+            description="ID of the request",
+            examples=["123e4567-e89b-12d3-a456-426614174000"],
+        ),
+    ]
+
+
+class SearchQueuedResponse(TaskQueuedResponse):
+    """Response when supplier search has been queued as a long-running background task."""
+
+
 class SupplierResponse(BaseModel):
     """Minimal supplier information."""
 

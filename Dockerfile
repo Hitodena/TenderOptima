@@ -52,7 +52,8 @@ CMD ["uvicorn", "parser.main:app", "--host", "0.0.0.0", "--port", "8010"]
 FROM base AS worker
 
 CMD ["celery", "-A", "app.celery_app.celery_config", "worker", \
-	"--pool=prefork", "--loglevel=info", "--concurrency=4", "--queues", "mail_send,mail_poll,mail_reply"]
+	"--pool=prefork", "--loglevel=info", "--concurrency=4", \
+	"--queues", "mail_send,mail_poll,mail_reply,parser_search"]
 
 FROM base AS beat
 

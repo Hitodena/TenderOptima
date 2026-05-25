@@ -1,9 +1,8 @@
 import uuid
 from pathlib import Path
 from typing import Annotated
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote
 
-import httpx
 from fastapi import (
     APIRouter,
     Depends,
@@ -22,7 +21,6 @@ from app.api.user_requests.schemas import (
     EmailMessageResponse,
     LaunchMailingResponse,
     Message,
-    ParserResult,
     ReplyPayload,
     RequestCloseResponse,
     RequestCreate,
@@ -30,7 +28,7 @@ from app.api.user_requests.schemas import (
     RequestResponse,
     RequestSupplierResponse,
     RequestUpdate,
-    SearchResult,
+    SearchQueuedResponse,
     SupplierRemoveResponse,
     SupplierResponse,
     ThreadSummary,
@@ -39,12 +37,9 @@ from app.api.user_requests.schemas import (
 from app.celery_app.tasks.email_tasks import send_emails, send_reply
 from app.core.config import ALLOWED_CONTENT_TYPES, Config
 from app.db.dao import (
-    BlacklistedDomainDAO,
     EmailMessageDAO,
     RequestDAO,
     RequestSupplierDAO,
-    SearchHistoryDAO,
-    SupplierDAO,
 )
 from app.db.models import User
 from app.enums import (
@@ -54,12 +49,6 @@ from app.enums import (
 from app.utils.email_utils import build_request_email_body
 
 router = APIRouter(prefix="/requests", tags=["Requests"])
-
-
-def _extract_domain(raw: str) -> str:
-    parsed = urlparse(raw)
-    host = parsed.netloc or parsed.path
-    return host.removeprefix("www.")
 
 
 def _resolve_and_validate_attachment_path(
@@ -101,7 +90,7 @@ async def create_request(
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> RequestResponse:
-    """Creates a new request in 'draft' status. The request can later be searched and mailed."""  # noqa: E501
+    """Creates a new request in 'draft' status. The request can later be searched and mailed."""
     request = await RequestDAO.create(
         session,
         user_id=current_user.id,
@@ -114,23 +103,24 @@ async def create_request(
 
 @router.post(
     "/{request_id}/search",
-    response_model=SearchResult,
-    summary="Search for suppliers and save results",
+    response_model=SearchQueuedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Queue supplier search task",
     responses={
-        200: {"description": "Search completed and suppliers saved"},
+        202: {
+            "description": "Search task queued (background parser with long timeout)"
+        },
         400: {"description": "Request is not in a searchable state"},
         401: {"description": "Missing or invalid authentication credentials"},
         404: {"description": "Request not found or does not belong to user"},
-        502: {"description": "External parser service unavailable"},
     },
 )
 async def search_suppliers(
     request_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
-    config: Annotated[Config, Depends(get_config_instance)],
-) -> SearchResult:
-    """Runs an external parser search, filters blacklisted domains, and saves valid suppliers."""  # noqa: E501
+) -> SearchQueuedResponse:
+    """Queues async parser search task (dedicated queue, 400s/600s limits). Task sets SEARCHING then ACTIVE on success or reverts to DRAFT on failure."""  # noqa: E501
     request = await RequestDAO.get_by_id(session, request_id)
     if not request or request.user_id != current_user.id:
         raise HTTPException(
@@ -143,106 +133,12 @@ async def search_suppliers(
             detail=f"Cannot search in status '{request.status}'",
         )
 
-    parser_query = request.query
-    if request.delivery_region:
-        parser_query = f"{parser_query} {request.delivery_region}"
+    from app.celery_app.tasks.parser_tasks import run_parser_search
 
-    try:
-        async with httpx.AsyncClient(timeout=120) as client:
-            resp = await client.post(
-                config.parser_url,
-                json={
-                    "query": parser_query,
-                    "elements": 5,
-                    "user_id": str(current_user.id),
-                    "region": request.delivery_region,
-                },
-            )
-            resp.raise_for_status()
-            raw_results: list[dict] = resp.json().get("results", [])
-    except httpx.HTTPError as exc:
-        logger.exception("Parser service error", error=str(exc))
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Parser service unavailable",
-        ) from exc
-
-    results = [ParserResult(**r) for r in raw_results]
-    logger.info(
-        "Parser returned results",
-        count=len(results),
-        request_id=str(request_id),
-    )
-
-    blacklisted = await BlacklistedDomainDAO.get_domains_set(
-        session, current_user.id
-    )
-
-    saved = 0
-    skipped_blacklisted = 0
-    skipped_no_email = 0
-
-    for result in results:
-        domain = _extract_domain(result.domain)
-
-        if domain in blacklisted:
-            logger.debug("Domain blacklisted, skipping", domain=domain)
-            skipped_blacklisted += 1
-            continue
-
-        if not result.emails:
-            logger.debug("No emails found, skipping", domain=domain)
-            skipped_no_email += 1
-            continue
-
-        supplier = await SupplierDAO.get_or_create_by_domain(
-            session,
-            domain=domain,
-            defaults={
-                "company_name": result.page_title or domain,
-                "main_email": result.emails[0],
-                "from_source": result.engine,
-                "extra_emails": result.emails,
-            },
-        )
-
-        existing = await RequestSupplierDAO.get_by_request_and_supplier(
-            session, request_id=request.id, supplier_id=supplier.id
-        )
-        if not existing:
-            await RequestSupplierDAO.create(
-                session,
-                request_id=request.id,
-                supplier_id=supplier.id,
-                sent_to_email=result.emails[0],
-                sent_status=RequestSupplierStatus.PENDING,
-                smtp_message_id=None,
-            )
-            saved += 1
-
-    await SearchHistoryDAO.create(
-        session,
-        user_id=current_user.id,
-        query=parser_query,
-        raw_search_body={"results": raw_results},
-        results_count=len(results),
-        request_id=request.id,
-    )
-
-    await RequestDAO.update_status(session, request.id, RequestStatus.ACTIVE)
-
-    logger.info(
-        "Search done",
-        request_id=str(request_id),
-        saved=saved,
-        skipped_blacklisted=skipped_blacklisted,
-        skipped_no_email=skipped_no_email,
-    )
-    return SearchResult(
-        saved_suppliers=saved,
-        skipped_blacklisted=skipped_blacklisted,
-        skipped_no_email=skipped_no_email,
-        request_id=request.id,
+    run_parser_search.delay(str(request_id)) # type: ignore
+    logger.info("parser.search task queued", request_id=str(request_id))
+    return SearchQueuedResponse(
+        status="search_queued", request_id=str(request_id)
     )
 
 
