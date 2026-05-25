@@ -192,8 +192,8 @@
 </template>
 
 <script lang="ts" setup>
-
 import type { Message, ThreadSummary } from '#shared/types'
+import { v4 as uuidv4 } from 'uuid'
 
 const route = useRoute()
 const id = route.params.id as string
@@ -277,7 +277,7 @@ async function sendReply() {
 	sendingReply.value = true
 	replyError.value = null
 	const optimistic: Message = {
-		id: crypto.randomUUID(),
+		id: uuidv4(),
 		direction: 'outgoing',
 		subject: null,
 		raw_body: replyBody.value,
