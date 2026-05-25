@@ -200,8 +200,9 @@ async def search_suppliers(
             domain=domain,
             defaults={
                 "company_name": result.page_title or domain,
-                "email": result.emails[0],
+                "main_email": result.emails[0],
                 "from_source": result.engine,
+                "extra_emails": result.emails,
             },
         )
 
@@ -214,7 +215,7 @@ async def search_suppliers(
                 request_id=request.id,
                 supplier_id=supplier.id,
                 sent_to_email=result.emails[0],
-                status=RequestSupplierStatus.PENDING,
+                sent_status=RequestSupplierStatus.PENDING,
                 smtp_message_id=None,
             )
             saved += 1
@@ -501,7 +502,7 @@ async def get_suppliers(
         RequestSupplierResponse(
             id=rs.id,
             supplier=SupplierResponse.model_validate(rs.supplier),
-            status=RequestSupplierStatus(rs.status),
+            sent_status=RequestSupplierStatus(rs.sent_status),
             is_enabled=rs.is_enabled,
             sent_at=rs.sent_at,
         )
@@ -546,7 +547,7 @@ async def toggle_supplier(
     return RequestSupplierResponse(
         id=rs.id,
         supplier=SupplierResponse.model_validate(rs.supplier),
-        status=RequestSupplierStatus(rs.status),
+        sent_status=RequestSupplierStatus(rs.sent_status),
         is_enabled=rs.is_enabled,
         sent_at=rs.sent_at,
     )

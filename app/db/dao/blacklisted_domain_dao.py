@@ -41,7 +41,7 @@ class BlacklistedDomainDAO(BaseDAO[BlacklistedDomain]):
             raise
 
     @classmethod
-    async def delete(
+    async def delete_domain(
         cls, session: AsyncSession, domain_id: uuid.UUID, user_id: uuid.UUID
     ) -> bool:
         logger.debug(

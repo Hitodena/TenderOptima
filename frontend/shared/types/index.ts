@@ -54,13 +54,14 @@ export interface RequestResponse {
 	created_at: string;
 	additional_params?: string[] | null;
 	email_message: string | null;
+	email_subject: string | null;
 	attachment_paths: string[] | null;
 }
 
 export interface RequestSupplierResponse {
 	id: string;
 	supplier: Supplier;
-	status: RequestSupplierStatus;
+	sent_status: RequestSupplierStatus;
 	is_enabled: boolean;
 	sent_at: string | null;
 }
@@ -97,9 +98,13 @@ export interface Supplier {
 	id: string;
 	domain: string | null;
 	company_name: string;
-	email: string;
+	main_email: string;
+	extra_emails: string[];
 }
 
+export interface SupplierEmailUpdate {
+	main_email: string;
+}
 export interface SupplierResponseResponse {
 	id: string;
 	subject: string | null;

@@ -174,7 +174,7 @@ async def send_reply(
             return {"status": "error", "reason": "rs_not_found"}
 
     supplier = rs.supplier
-    recipient = rs.sent_to_email or supplier.email
+    recipient = rs.sent_to_email or supplier.main_email
     if not recipient:
         logger.warning("No recipient for reply", rs_id=rs_id)
         return {"status": "error", "reason": "no_recipient"}
@@ -313,7 +313,7 @@ async def send_emails(self, request_id: str) -> dict:
     try:
         for rs in pending:
             supplier = rs.supplier
-            recipient = rs.sent_to_email or supplier.email
+            recipient = rs.sent_to_email or supplier.main_email
 
             if not recipient:
                 logger.warning(

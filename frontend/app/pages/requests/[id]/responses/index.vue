@@ -82,8 +82,8 @@
 						<p class="font-semibold truncate text-sm md:text-base">
 							{{ selectedThread?.supplier.company_name }}
 						</p>
-						<p v-if="selectedThread?.supplier.email" class="text-[11px] md:text-xs text-muted truncate">
-							{{ selectedThread.supplier.email }}
+						<p v-if="selectedThread?.supplier.main_email" class="text-[11px] md:text-xs text-muted truncate">
+							{{ selectedThread.supplier.main_email }}
 						</p>
 					</div>
 					<div class="flex items-center gap-1.5 shrink-0">
@@ -275,19 +275,6 @@ const loadingThreads = ref(true)
 const threadSearch = ref('')
 const selectedRsId = ref<string | null>(null)
 
-const filteredThreads = computed(() => {
-	const q = threadSearch.value.toLowerCase()
-	if (!q) return threads.value
-	return threads.value.filter(t =>
-		t.supplier.company_name.toLowerCase().includes(q) ||
-		t.supplier.email.toLowerCase().includes(q)
-	)
-})
-
-const selectedThread = computed(() =>
-	threads.value.find(t => t.rs_id === selectedRsId.value) ?? null
-)
-
 async function fetchThreads() {
 	loadingThreads.value = true
 	try {
@@ -298,6 +285,23 @@ async function fetchThreads() {
 		loadingThreads.value = false
 	}
 }
+
+onMounted(() => {
+	fetchThreads()
+})
+
+const filteredThreads = computed(() => {
+	const q = threadSearch.value.toLowerCase()
+	if (!q) return threads.value
+	return threads.value.filter(t =>
+		t.supplier.company_name.toLowerCase().includes(q) ||
+		t.supplier.main_email.toLowerCase().includes(q)
+	)
+})
+
+const selectedThread = computed(() =>
+	threads.value.find(t => t.rs_id === selectedRsId.value) ?? null
+)
 
 function selectThread(rsId: string) {
 	selectedRsId.value = rsId
@@ -447,14 +451,12 @@ async function downloadAttachment(att: Attachment) {
 }
 
 
-await fetchThreads()
-
-onMounted(() => {
+watch(threads, () => {
 	const hash = window.location.hash.replace('#', '')
 	if (hash && threads.value.find(t => t.rs_id === hash)) {
 		selectThread(hash)
 	}
-})
+}, { immediate: false })
 
 watch(latestIncomingId, (val) => { if (val) fetchAnalysis() })
 

@@ -68,7 +68,7 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
                 select(cls.model)
                 .where(
                     cls.model.request_id == request_id,
-                    cls.model.status == RequestSupplierStatus.PENDING.value,
+                    cls.model.sent_status == RequestSupplierStatus.PENDING,
                     cls.model.is_enabled.is_(True),
                 )
                 .options(
@@ -234,7 +234,7 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
             smtp_message_id=smtp_message_id,
         )
         try:
-            request_supplier.status = status
+            request_supplier.sent_status = status
             if sent_at is not None:
                 request_supplier.sent_at = sent_at
             if smtp_message_id is not None:
@@ -316,7 +316,7 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
         try:
             stmt = select(func.count()).where(
                 cls.model.request_id == request_id,
-                cls.model.status == RequestSupplierStatus.PENDING,
+                cls.model.sent_status == RequestSupplierStatus.PENDING,
                 cls.model.is_enabled.is_(True),
             )
             result = await session.execute(stmt)
@@ -523,5 +523,45 @@ class SupplierDAO(BaseDAO[Supplier]):
                 error=str(exc),
                 model=cls.model,
                 domain=domain,
+            )
+            raise
+
+    @classmethod
+    async def update_main_email(
+        cls, session: AsyncSession, supplier_id: uuid.UUID, main_email: str
+    ) -> Supplier | None:
+        logger.debug(
+            "Updating supplier main email",
+            model=cls.model,
+            supplier_id=supplier_id,
+            main_email=main_email,
+        )
+        try:
+            instance = await session.get(cls.model, supplier_id)
+            if instance:
+                instance.main_email = main_email
+                await session.flush()
+                await session.commit()
+                logger.info(
+                    "Updated supplier main email",
+                    model=cls.model.__name__,
+                    supplier_id=supplier_id,
+                    main_email=main_email,
+                )
+            else:
+                logger.info(
+                    "Supplier not found for update_main_email",
+                    model=cls.model.__name__,
+                    supplier_id=supplier_id,
+                )
+            return instance
+        except Exception as exc:
+            await session.rollback()
+            logger.exception(
+                "Failed to update supplier main email",
+                error=str(exc),
+                model=cls.model,
+                supplier_id=supplier_id,
+                main_email=main_email,
             )
             raise

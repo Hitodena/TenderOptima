@@ -102,7 +102,9 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
             )
             .distinct()
         )
-        rs_ids = [row[0] for row in (await session.execute(rs_id_stmt)).all()]
+        rs_ids: list[RequestSupplier] = [
+            row[0] for row in (await session.execute(rs_id_stmt)).all()
+        ]
         if not rs_ids:
             return []
 
@@ -153,7 +155,10 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
                         "id": str(sup.id),
                         "domain": sup.domain,
                         "company_name": sup.company_name,
-                        "email": sup.email,
+                        "main_email": sup.main_email,
+                        "extra_emails": sup.extra_emails,
+                        "from_source": sup.from_source,
+                        "created_at": sup.created_at,
                     },
                     "last_message": last_msg,
                     "message_count": message_count,

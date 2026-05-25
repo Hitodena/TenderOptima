@@ -12,6 +12,32 @@ class BaseDAO[T: Base]:
     model: type[T]
 
     @classmethod
+    async def get_by_id(
+        cls, session: AsyncSession, id: uuid.UUID | str | int
+    ) -> T | None:
+        logger.debug("Getting instance by id", model=cls.model, id=id)
+        try:
+            result = await session.get(cls.model, id)
+            if result:
+                logger.info(
+                    "Got instance by id", model=cls.model.__name__, id=id
+                )
+            else:
+                logger.info(
+                    "Instance not found by id", model=cls.model.__name__, id=id
+                )
+            return result
+        except Exception as exc:
+            await session.rollback()
+            logger.exception(
+                "Failed to get instance by id",
+                error=str(exc),
+                model=cls.model,
+                id=id,
+            )
+            raise
+
+    @classmethod
     async def create(cls, session: AsyncSession, **values: Any) -> T:
         logger.debug("Creating instance", model=cls.model, values=values)
         new_instance = cls.model(**values)

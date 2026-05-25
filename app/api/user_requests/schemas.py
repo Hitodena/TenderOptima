@@ -234,11 +234,25 @@ class SupplierResponse(BaseModel):
         str,
         Field(description="Company name", examples=["Acme Supplies LLC"]),
     ]
-    email: Annotated[
+    main_email: Annotated[
         str,
         Field(
             description="Primary contact email",
             examples=["contact@supplier.com"],
+        ),
+    ]
+    extra_emails: Annotated[
+        list[str] | None,
+        Field(
+            description="Extra emails",
+            examples=[["contact@supplier.com", "contact2@supplier.com"]],
+        ),
+    ]
+    from_source: Annotated[
+        str | None,
+        Field(
+            description="How the supplier was added (from_source)",
+            examples=["manual"],
         ),
     ]
 
@@ -317,7 +331,7 @@ class RequestSupplierResponse(BaseModel):
         SupplierResponse,
         Field(description="Supplier information"),
     ]
-    status: Annotated[
+    sent_status: Annotated[
         RequestSupplierStatus,
         Field(
             description="Current status of the supplier request",

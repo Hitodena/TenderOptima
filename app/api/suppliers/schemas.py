@@ -1,5 +1,4 @@
 import uuid
-from datetime import datetime
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -86,22 +85,29 @@ class SupplierResponse(BaseModel):
     company_name: Annotated[
         str, Field(description="Company name", examples=["ООО ПромПоставка"])
     ]
-    email: Annotated[
+    main_email: Annotated[
         str,
         Field(
             description="Contact email", examples=["sales@example-supplier.ru"]
         ),
     ]
-    from_source: Annotated[
-        str | None,
+    extra_emails: Annotated[
+        list[str] | None,
         Field(
-            description="How the supplier was added (from_source)",
-            examples=["manual"],
+            description="Contact email", examples=["sales@example-supplier.ru"]
         ),
     ]
-    created_at: Annotated[
-        datetime,
+
+
+class SupplierMainEmailUpdate(BaseModel):
+    """Payload for updating supplier's main email."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    main_email: Annotated[
+        EmailStr,
         Field(
-            description="Creation timestamp", examples=["2025-01-15T10:30:00Z"]
+            description="New main email address (must exist in current emails)",
+            examples=["sales@example-supplier.ru"],
         ),
     ]

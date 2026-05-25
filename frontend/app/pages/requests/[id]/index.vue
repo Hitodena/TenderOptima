@@ -138,12 +138,17 @@
 					</template>
 
 					<template #email-cell="{ row }">
-						<span class="text-sm text-muted">{{ row.original.supplier?.email }}</span>
+						<div class="flex items-center gap-2">
+							<span class="text-sm text-muted">{{ row.original.supplier.main_email }}</span>
+							<UButton v-if="!isTerminalStatus && row.original.supplier.extra_emails?.length > 1"
+								size="xs" color="neutral" variant="ghost" icon="i-lucide-pencil"
+								@click.stop="openEditEmailModal(row.original.supplier)" />
+						</div>
 					</template>
 
 					<template #status-cell="{ row }">
-						<UBadge :color="getSupplierStatusColor(row.original.status)" variant="subtle" size="sm">
-							{{ getSupplierStatusLabel(row.original.status) }}
+						<UBadge :color="getSupplierStatusColor(row.original.sent_status)" variant="subtle" size="sm">
+							{{ getSupplierStatusLabel(row.original.sent_status) }}
 						</UBadge>
 					</template>
 
@@ -195,6 +200,7 @@
 			<RequestParamsModal v-model:open="showParamsModal" :request="request" :supplier-count="enabledCount"
 				@launched="onLaunched" />
 			<AddSupplierModal v-model:open="showAddSupplier" :request-id="id" @added="fetchSuppliers" />
+			<EditSupplierEmailModal v-model:open="showEditEmail" :supplier="emailSupplier" @saved="onEmailSaved" />
 
 		</template>
 
@@ -210,6 +216,7 @@
 </template>
 
 <script lang="ts" setup>
+import type { RequestResponse, RequestSupplierResponse, Supplier } from '#shared/types'
 import {
 	getRequestStatusColor,
 	getRequestStatusLabel,
@@ -232,6 +239,8 @@ const updatingToggle = ref(false)
 const actionError = ref('')
 const showParamsModal = ref(false)
 const showAddSupplier = ref(false)
+const showEditEmail = ref(false)
+const emailSupplier = ref<Supplier | null>(null)
 const supplierSearch = ref('')
 const confirmDeleteSupplierId = ref<string | null>(null)
 const deletingSupplierIds = reactive(new Set<string>())
@@ -247,10 +256,11 @@ const filteredSuppliers = computed(() => {
 	const q = supplierSearch.value.toLowerCase()
 	return suppliers.value.filter(s =>
 		s.supplier?.company_name?.toLowerCase().includes(q) ||
-		s.supplier?.email?.toLowerCase().includes(q) ||
+		s.supplier?.main_email?.toLowerCase().includes(q) ||
 		s.supplier?.domain?.toLowerCase().includes(q)
 	)
 })
+
 
 async function fetchRequest() {
 	loading.value = true
@@ -298,7 +308,9 @@ const supplierColumns = computed<TableColumn<RequestSupplierResponse>[]>(() => {
 
 
 function formatDate(iso: string) {
-	return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
+	const d = new Date(iso)
+	const pad = (n: number) => String(n).padStart(2, '0')
+	return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`
 }
 
 async function handleToggle(rs: RequestSupplierResponse, newVal: boolean) {
@@ -374,15 +386,24 @@ function onLaunched() {
 }
 
 function getRowClass(row: TableRow<RequestSupplierResponse>) {
-	return row.original.status === RequestSupplierStatus.REPLIED
+	return row.original.sent_status === RequestSupplierStatus.REPLIED
 		? 'cursor-pointer hover:bg-elevated/50 transition-colors'
 		: ''
 }
 
 function onRowSelect(e: Event, row: TableRow<RequestSupplierResponse>) {
 	const rs = row.original
-	if (rs.status === RequestSupplierStatus.REPLIED) {
+	if (rs.sent_status === RequestSupplierStatus.REPLIED) {
 		navigateTo(`/requests/${id}/responses#${rs.id}`)
 	}
+}
+
+function openEditEmailModal(supplier: Supplier) {
+	emailSupplier.value = supplier
+	showEditEmail.value = true
+}
+
+function onEmailSaved() {
+	fetchSuppliers()
 }
 </script>

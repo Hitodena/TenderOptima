@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, String, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSON, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.models.base import Base, IDMixinUUID, TimestampMixin
@@ -15,7 +15,8 @@ class Supplier(IDMixinUUID, TimestampMixin, Base):
     domain: Mapped[str | None] = mapped_column(unique=True)
     company_name: Mapped[str] = mapped_column(nullable=False)
 
-    email: Mapped[str] = mapped_column(unique=False, nullable=False)
+    main_email: Mapped[str] = mapped_column(nullable=False)
+    extra_emails: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     from_source: Mapped[str | None] = mapped_column()
 
     added_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -49,7 +50,7 @@ class RequestSupplier(IDMixinUUID, TimestampMixin, Base):
     sent_to_email: Mapped[str | None] = mapped_column()
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     body_text: Mapped[str | None] = mapped_column(Text)
-    status: Mapped[str] = mapped_column(nullable=False)  # aka Enum
+    sent_status: Mapped[str] = mapped_column(nullable=False)  # aka Enum
 
     is_enabled: Mapped[bool] = mapped_column(default=True)
 
