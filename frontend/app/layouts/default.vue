@@ -58,6 +58,20 @@ const navItems = computed<NavigationMenuItem[]>(() => [
 		icon: 'i-lucide-layers',
 		active: isRequestsActive.value,
 		to: '/requests',
+		children: [
+			{
+				label: 'Поиск',
+				icon: 'i-lucide-search',
+				to: '/requests',
+				description: "Начать новый поиск."
+			},
+			{
+				label: 'История',
+				icon: 'i-lucide-history',
+				to: '/requests/history',
+				description: "Показать полную историю запросов."
+			},
+		],
 	},
 	{
 		label: 'Анализ ТЗ',
@@ -71,8 +85,8 @@ const navItems = computed<NavigationMenuItem[]>(() => [
 		disabled: true,
 		badge: { label: 'Скоро', color: 'neutral', variant: 'subtle', size: 'sm' },
 	},
-
 ])
+
 
 
 const userMenuItems = computed<DropdownMenuItem[][]>(() => [

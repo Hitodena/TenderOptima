@@ -13,6 +13,15 @@
 
 			<div class="flex items-start justify-between mb-6 gap-4">
 				<div class="min-w-0">
+					<UButton
+						to="/requests"
+						variant="ghost"
+						color="neutral"
+						size="sm"
+						leading-icon="i-lucide-arrow-left"
+						class="-ml-1 mb-2">
+						К запросам
+					</UButton>
 					<div class="flex items-center gap-3 mb-1 flex-wrap">
 						<h1 class="text-2xl font-bold text-highlighted truncate">{{ request.query }}</h1>
 						<UBadge :color="statusColor" variant="subtle" size="lg">{{ statusLabel }}</UBadge>
@@ -31,7 +40,7 @@
 
 				<UButton
 					v-if="request.status === RequestStatus.QUEUED || request.status === RequestStatus.COMPLETED || request.status === RequestStatus.CLOSED"
-					variant="outline" color="neutral" leading-icon="i-lucide-inbox" :to="`/requests/${id}/responses`"
+					variant="outline" color="neutral" leading-icon="i-lucide-inbox" :to="`/requests/${id}/responses`" size="lg"
 					class="shrink-0">
 					Ответы поставщиков
 				</UButton>
@@ -85,10 +94,6 @@
 					<div>
 						<p class="text-sm font-medium">Рассылка завершена</p>
 					</div>
-					<UButton size="sm" variant="ghost" :to="`/requests/${id}/responses`" class="ml-auto"
-						trailing-icon="i-lucide-arrow-right">
-						Смотреть ответы
-					</UButton>
 				</div>
 				<div v-else-if="request.status === RequestStatus.CLOSED"
 					class="flex items-center gap-3 p-4 rounded-xl bg-secondary/10 border border-secondary/20">
@@ -96,10 +101,6 @@
 					<div>
 						<p class="text-sm font-medium">Запрос закрыт</p>
 					</div>
-					<UButton size="sm" variant="ghost" :to="`/requests/${id}/responses`" class="ml-auto"
-						trailing-icon="i-lucide-arrow-right">
-						Смотреть ответы
-					</UButton>
 				</div>
 				<div v-else>
 					<UAlert color="info" variant="soft" icon="i-lucide-info" class="mb-4"
@@ -111,7 +112,8 @@
 				<UInput v-model="supplierSearch" placeholder="Поиск поставщиков..." icon="i-lucide-search"
 					class="w-full sm:w-64 mb-3" size="sm" />
 
-				<UTable :data="filteredSuppliers" :columns="supplierColumns" :loading="loadingSuppliers">
+				<UTable :data="filteredSuppliers" :columns="supplierColumns" :loading="loadingSuppliers"
+					:meta="{ class: { tr: getRowClass } }" @select="onRowSelect">
 					<template #empty>
 						<div class="flex flex-col items-center justify-center py-12 gap-3">
 							<UIcon name="i-lucide-users" class="w-10 h-10 text-muted" />
@@ -151,19 +153,7 @@
 					</template>
 
 					<template #status-cell="{ row }">
-						<!--
-							Если поставщик ответил — бейдж становится кликабельной ссылкой
-							на inbox с якорем #rs_id, чтобы сразу открыть нужный тред.
-						-->
-						<NuxtLink v-if="row.original.status === RequestSupplierStatus.REPLIED"
-							:to="`/requests/${id}/responses#${row.original.id}`" class="inline-flex">
-							<UBadge :color="getSupplierStatusColor(row.original.status)" variant="subtle" size="sm"
-								class="cursor-pointer hover:opacity-80 transition-opacity">
-								<UIcon name="i-lucide-mail-open" class="w-3 h-3 mr-1" />
-								{{ getSupplierStatusLabel(row.original.status) }}
-							</UBadge>
-						</NuxtLink>
-						<UBadge v-else :color="getSupplierStatusColor(row.original.status)" variant="subtle" size="sm">
+						<UBadge :color="getSupplierStatusColor(row.original.status)" variant="subtle" size="sm">
 							{{ getSupplierStatusLabel(row.original.status) }}
 						</UBadge>
 					</template>
@@ -171,20 +161,22 @@
 					<template #actions-cell="{ row }">
 						<div v-if="!isTerminalStatus" class="flex items-center justify-end gap-1">
 							<template v-if="confirmDeleteSupplierId === row.original.id">
-								<UButton size="xs" color="error" variant="soft" icon="i-lucide-check"
+								<UButton size="md" color="error" variant="soft" icon="i-lucide-check"
 									:loading="deletingSupplierIds.has(row.original.id)"
 									@click.stop="confirmDeleteSupplier(row.original.id)" />
-								<UButton size="xs" color="neutral" variant="ghost" icon="i-lucide-x"
+								<UButton size="md" color="neutral" variant="ghost" icon="i-lucide-x"
 									@click.stop="confirmDeleteSupplierId = null" />
 							</template>
-							<UButton v-else size="xs" color="error" variant="ghost" icon="i-lucide-trash-2"
+							<UButton v-else size="md" color="error" variant="ghost" icon="i-lucide-trash-2"
 								:loading="deletingSupplierIds.has(row.original.id)"
 								@click.stop="confirmDeleteSupplierId = row.original.id" />
 						</div>
 					</template>
 				</UTable>
 
-				<div class="px-4 py-3 border-t border-default flex items-center justify-between gap-3 flex-wrap">
+
+				<div v-if="!isTerminalStatus"
+					class="px-4 py-3 border-t border-default flex items-center justify-between gap-3 flex-wrap">
 					<p class="text-sm text-muted">
 						Выбрано <span class="font-semibold text-highlighted">{{ enabledCount }}</span> из
 						{{ filteredSuppliers.length }}
@@ -237,7 +229,7 @@ import {
 	RequestStatus,
 	RequestSupplierStatus,
 } from '#shared/types'
-import type { TableColumn } from '@nuxt/ui'
+import type { TableColumn, TableRow } from '@nuxt/ui'
 
 const route = useRoute()
 const id = route.params.id as string
@@ -300,14 +292,21 @@ const enabledCount = computed(() => suppliers.value.filter(s => s.is_enabled).le
 const statusColor = computed(() => getRequestStatusColor(request.value?.status ?? ''))
 const statusLabel = computed(() => getRequestStatusLabel(request.value?.status ?? ''))
 
-const supplierColumns: TableColumn<RequestSupplierResponse>[] = [
-	{ accessorKey: 'is_enabled', header: 'Рассылка' },
-	{ accessorKey: 'company_name', header: 'Компания' },
-	{ accessorKey: 'domain', header: 'Домен' },
-	{ accessorKey: 'email', header: 'Email' },
-	{ accessorKey: 'status', header: 'Статус' },
-	{ id: 'actions', header: '' },
-]
+const supplierColumns = computed<TableColumn<RequestSupplierResponse>[]>(() => {
+	const cols: TableColumn<RequestSupplierResponse>[] = []
+	if (!isTerminalStatus.value) {
+		cols.push({ accessorKey: 'is_enabled', header: 'Рассылка' })
+	}
+	cols.push({ accessorKey: 'company_name', header: 'Компания' })
+	if (!isTerminalStatus.value) {
+		cols.push({ accessorKey: 'domain', header: 'Домен' })
+	}
+	cols.push({ accessorKey: 'email', header: 'Email' })
+	cols.push({ accessorKey: 'status', header: 'Статус' })
+	cols.push({ id: 'actions', header: '' })
+	return cols
+})
+
 
 function formatDate(iso: string) {
 	return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -383,5 +382,18 @@ async function runSearch() {
 
 function onLaunched() {
 	if (request.value) request.value.status = RequestStatus.QUEUED
+}
+
+function getRowClass(row: TableRow<RequestSupplierResponse>) {
+	return row.original.status === RequestSupplierStatus.REPLIED
+		? 'cursor-pointer hover:bg-elevated/50 transition-colors'
+		: ''
+}
+
+function onRowSelect(e: Event, row: TableRow<RequestSupplierResponse>) {
+	const rs = row.original
+	if (rs.status === RequestSupplierStatus.REPLIED) {
+		navigateTo(`/requests/${id}/responses#${rs.id}`)
+	}
 }
 </script>
