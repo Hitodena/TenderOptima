@@ -54,7 +54,6 @@ export interface RequestResponse {
 	created_at: string;
 	additional_params?: string[] | null;
 	email_message: string | null;
-	email_subject?: string | null;
 	attachment_paths: string[] | null;
 }
 
@@ -110,43 +109,6 @@ export interface SupplierResponseResponse {
 	supplier: Supplier;
 }
 
-export interface SupplierSummary {
-	id: string;
-	domain: string;
-	company_name: string | null;
-	email: string | null;
-}
-
-export interface ThreadSummary {
-	rs_id: string;
-	supplier: SupplierSummary;
-	last_message: ThreadMessage | null;
-	message_count: number;
-	unread: boolean;
-}
-
-export interface ThreadMessage {
-	id: string;
-	direction: 'incoming' | 'outgoing';
-	subject: string | null;
-	body: string | null;
-	received_at: string | null;
-}
-
-export interface Message {
-	id: string;
-	direction: 'incoming' | 'outgoing';
-	subject: string | null;
-	raw_body: string | null;
-	attachments: Attachment[] | null;
-	received_at: string | null;
-}
-
-export interface ReplyPayload {
-	body: string;
-}
-
-
 export interface BlacklistCreate {
 	domain: string;
 	reason?: string | null;
@@ -165,6 +127,34 @@ export interface SearchHistoryResponse {
 	results_count: number | null;
 	request_id: string | null;
 	created_at: string;
+}
+
+/** GET /requests/{id}/threads */
+export interface ThreadSummary {
+	rs_id: string;
+	supplier: Supplier;
+	last_message: {
+		body: string | null;
+		received_at: string | null;
+		direction: 'incoming' | 'outgoing';
+	} | null;
+	message_count: number;
+	unread: boolean;
+}
+
+/** GET /requests/{id}/suppliers/{rs_id}/messages */
+export interface Message {
+	id: string;
+	direction: 'incoming' | 'outgoing';
+	subject: string | null;
+	raw_body: string | null;
+	attachments: Attachment[] | null;
+	received_at: string | null;
+}
+
+/** POST /requests/{id}/suppliers/{rs_id}/reply — body */
+export interface ReplyPayload {
+	body: string;
 }
 
 export const RequestStatus = {
@@ -201,7 +191,7 @@ export const REQUEST_STATUS_COLOR: Record<RequestStatus, BadgeColor> = {
 	[RequestStatus.ACTIVE]: 'success',
 	[RequestStatus.QUEUED]: 'warning',
 	[RequestStatus.COMPLETED]: 'success',
-	[RequestStatus.CLOSED]: 'info',
+	[RequestStatus.CLOSED]: 'neutral',
 };
 
 export const REQUEST_STATUS_LABEL: Record<RequestStatus, string> = {

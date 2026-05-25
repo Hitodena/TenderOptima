@@ -29,7 +29,8 @@
 					</div>
 				</div>
 
-				<UButton v-if="request.status === RequestStatus.QUEUED || request.status === RequestStatus.COMPLETED || request.status === RequestStatus.CLOSED"
+				<UButton
+					v-if="request.status === RequestStatus.QUEUED || request.status === RequestStatus.COMPLETED || request.status === RequestStatus.CLOSED"
 					variant="outline" color="neutral" leading-icon="i-lucide-inbox" :to="`/requests/${id}/responses`"
 					class="shrink-0">
 					Ответы поставщиков
@@ -45,9 +46,9 @@
 					<p v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED && request.status !== RequestStatus.CLOSED"
 						class="text-sm text-muted mt-0.5">
 						{{
-							suppliers.length ?
-								'Включите нужных и нажмите «Отправить запрос»' :
-								'Добавьте поставщиков для рассылки'
+							suppliers.length
+								? 'Включите нужных и нажмите «Отправить запрос»'
+								: 'Добавьте поставщиков для рассылки'
 						}}
 					</p>
 				</div>
@@ -109,6 +110,7 @@
 			<UCard class="mb-4 mt-4">
 				<UInput v-model="supplierSearch" placeholder="Поиск поставщиков..." icon="i-lucide-search"
 					class="w-full sm:w-64 mb-3" size="sm" />
+
 				<UTable :data="filteredSuppliers" :columns="supplierColumns" :loading="loadingSuppliers">
 					<template #empty>
 						<div class="flex flex-col items-center justify-center py-12 gap-3">
@@ -123,7 +125,7 @@
 
 					<template #is_enabled-cell="{ row }">
 						<USwitch :model-value="row.original.is_enabled" size="sm"
-							:disabled="updatingToggle || request.status === RequestStatus.QUEUED || request.status === RequestStatus.COMPLETED || request.status === RequestStatus.CLOSED"
+							:disabled="updatingToggle || isTerminalStatus"
 							@update:model-value="(val: any) => handleToggle(row.original, Boolean(val))" />
 					</template>
 
@@ -149,19 +151,32 @@
 					</template>
 
 					<template #status-cell="{ row }">
-						<UBadge :color="getSupplierStatusColor(row.original.status)" variant="subtle" size="sm">
+						<!--
+							Если поставщик ответил — бейдж становится кликабельной ссылкой
+							на inbox с якорем #rs_id, чтобы сразу открыть нужный тред.
+						-->
+						<NuxtLink v-if="row.original.status === RequestSupplierStatus.REPLIED"
+							:to="`/requests/${id}/responses#${row.original.id}`" class="inline-flex">
+							<UBadge :color="getSupplierStatusColor(row.original.status)" variant="subtle" size="sm"
+								class="cursor-pointer hover:opacity-80 transition-opacity">
+								<UIcon name="i-lucide-mail-open" class="w-3 h-3 mr-1" />
+								{{ getSupplierStatusLabel(row.original.status) }}
+							</UBadge>
+						</NuxtLink>
+						<UBadge v-else :color="getSupplierStatusColor(row.original.status)" variant="subtle" size="sm">
 							{{ getSupplierStatusLabel(row.original.status) }}
 						</UBadge>
 					</template>
 
 					<template #actions-cell="{ row }">
-						<div v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED && request.status !== RequestStatus.CLOSED"
-							class="flex items-center justify-end gap-1">
-							<UButton v-if="confirmDeleteSupplierId === row.original.id" size="xs" color="error"
-								variant="soft" icon="i-lucide-check" :loading="deletingSupplierIds.has(row.original.id)"
-								@click.stop="confirmDeleteSupplier(row.original.id)" />
-							<UButton v-if="confirmDeleteSupplierId === row.original.id" size="xs" color="neutral"
-								variant="ghost" icon="i-lucide-x" @click.stop="confirmDeleteSupplierId = null" />
+						<div v-if="!isTerminalStatus" class="flex items-center justify-end gap-1">
+							<template v-if="confirmDeleteSupplierId === row.original.id">
+								<UButton size="xs" color="error" variant="soft" icon="i-lucide-check"
+									:loading="deletingSupplierIds.has(row.original.id)"
+									@click.stop="confirmDeleteSupplier(row.original.id)" />
+								<UButton size="xs" color="neutral" variant="ghost" icon="i-lucide-x"
+									@click.stop="confirmDeleteSupplierId = null" />
+							</template>
 							<UButton v-else size="xs" color="error" variant="ghost" icon="i-lucide-trash-2"
 								:loading="deletingSupplierIds.has(row.original.id)"
 								@click.stop="confirmDeleteSupplierId = row.original.id" />
@@ -171,17 +186,16 @@
 
 				<div class="px-4 py-3 border-t border-default flex items-center justify-between gap-3 flex-wrap">
 					<p class="text-sm text-muted">
-						Выбрано <span class="font-semibold text-highlighted">{{ enabledCount }}</span> из {{
-							filteredSuppliers.length }}
+						Выбрано <span class="font-semibold text-highlighted">{{ enabledCount }}</span> из
+						{{ filteredSuppliers.length }}
 					</p>
 					<div class="flex items-center gap-2">
 						<UButton size="xs" variant="ghost" color="neutral"
-							:disabled="updatingToggle || request.status === RequestStatus.QUEUED || request.status === RequestStatus.COMPLETED || request.status === RequestStatus.CLOSED || enabledCount === 0"
-							@click="deselectAll">
+							:disabled="updatingToggle || isTerminalStatus || enabledCount === 0" @click="deselectAll">
 							Снять все
 						</UButton>
 						<UButton size="xs" variant="ghost" color="primary"
-							:disabled="updatingToggle || request.status === RequestStatus.QUEUED || request.status === RequestStatus.COMPLETED || request.status === RequestStatus.CLOSED || enabledCount === suppliers.length"
+							:disabled="updatingToggle || isTerminalStatus || enabledCount === suppliers.length"
 							@click="selectAll">
 							Выбрать все
 						</UButton>
@@ -189,8 +203,7 @@
 				</div>
 			</UCard>
 
-			<div v-if="request.status !== RequestStatus.QUEUED && suppliers.length > 0 && request.status !== RequestStatus.COMPLETED && request.status !== RequestStatus.CLOSED"
-				class="flex items-center gap-3">
+			<div v-if="!isTerminalStatus && suppliers.length > 0" class="flex items-center gap-3">
 				<UButton size="lg" leading-icon="i-lucide-send" :disabled="enabledCount === 0"
 					@click="showParamsModal = true">
 					Отправить запрос поставщикам
@@ -198,7 +211,8 @@
 				<p v-if="enabledCount === 0" class="text-xs text-muted">Включите хотя бы одного поставщика</p>
 			</div>
 
-			<RequestParamsModal v-model:open="showParamsModal" :request="request" :supplier-count="enabledCount" @launched="onLaunched" />
+			<RequestParamsModal v-model:open="showParamsModal" :request="request" :supplier-count="enabledCount"
+				@launched="onLaunched" />
 			<AddSupplierModal v-model:open="showAddSupplier" :request-id="id" @added="fetchSuppliers" />
 
 		</template>
@@ -221,6 +235,7 @@ import {
 	getSupplierStatusColor,
 	getSupplierStatusLabel,
 	RequestStatus,
+	RequestSupplierStatus,
 } from '#shared/types'
 import type { TableColumn } from '@nuxt/ui'
 
@@ -239,6 +254,12 @@ const showAddSupplier = ref(false)
 const supplierSearch = ref('')
 const confirmDeleteSupplierId = ref<string | null>(null)
 const deletingSupplierIds = reactive(new Set<string>())
+
+const isTerminalStatus = computed(() =>
+	request.value?.status === RequestStatus.QUEUED ||
+	request.value?.status === RequestStatus.COMPLETED ||
+	request.value?.status === RequestStatus.CLOSED
+)
 
 const filteredSuppliers = computed(() => {
 	if (!supplierSearch.value) return suppliers.value
@@ -324,13 +345,13 @@ async function confirmDeleteSupplier(rsId: string) {
 }
 
 async function toggleAll(enabled: boolean) {
-	if (request.value?.status === RequestStatus.QUEUED || request.value?.status === RequestStatus.CLOSED) return
+	if (isTerminalStatus.value) return
 	const toToggle = suppliers.value.filter(s => s.is_enabled !== enabled)
 	updatingToggle.value = true
 	actionError.value = ''
 	try {
 		await Promise.all(toToggle.map(s => patch(`/requests/${id}/suppliers/${s.id}`, { is_enabled: enabled })))
-		toToggle.forEach(s => s.is_enabled = enabled)
+		toToggle.forEach(s => { s.is_enabled = enabled })
 	} catch (e: any) {
 		const detail = e?.response?.data?.detail
 		actionError.value = typeof detail === 'string' ? detail : 'Не удалось изменить выбор поставщиков'
