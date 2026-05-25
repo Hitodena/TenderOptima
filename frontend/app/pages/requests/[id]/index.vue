@@ -13,12 +13,7 @@
 
 			<div class="flex items-start justify-between mb-6 gap-4">
 				<div class="min-w-0">
-					<UButton
-						to="/requests"
-						variant="ghost"
-						color="neutral"
-						size="sm"
-						leading-icon="i-lucide-arrow-left"
+					<UButton to="/requests" variant="ghost" color="neutral" size="sm" leading-icon="i-lucide-arrow-left"
 						class="-ml-1 mb-2">
 						К запросам
 					</UButton>
@@ -40,8 +35,8 @@
 
 				<UButton
 					v-if="request.status === RequestStatus.QUEUED || request.status === RequestStatus.COMPLETED || request.status === RequestStatus.CLOSED"
-					variant="outline" color="neutral" leading-icon="i-lucide-inbox" :to="`/requests/${id}/responses`" size="lg"
-					class="shrink-0">
+					variant="outline" color="neutral" leading-icon="i-lucide-inbox" :to="`/requests/${id}/responses`"
+					size="lg" class="shrink-0">
 					Ответы поставщиков
 				</UButton>
 			</div>
@@ -77,30 +72,24 @@
 
 			<div>
 				<div v-if="request.status === RequestStatus.QUEUED"
-					class="flex items-center gap-3 p-4 rounded-xl bg-warning/10 border border-warning/20">
+					class="flex items-center gap-3 p-4 rounded-xl bg-warning/10">
 					<UIcon name="i-lucide-clock" class="w-5 h-5 text-warning shrink-0" />
 					<div>
 						<p class="text-sm font-medium">Рассылка в очереди</p>
 						<p class="text-xs text-muted">Письма отправляются в фоновом режиме</p>
 					</div>
-					<UButton size="sm" variant="ghost" :to="`/requests/${id}/responses`" class="ml-auto"
+					<UButton size="sm" variant="ghost" :to="`/requests/${id}/responses`" class="ml-auto" color="warning"
 						trailing-icon="i-lucide-arrow-right">
 						Смотреть ответы
 					</UButton>
 				</div>
-				<div v-else-if="request.status === RequestStatus.COMPLETED"
-					class="flex items-center gap-3 p-4 rounded-xl bg-success/10 border border-success/20">
-					<UIcon name="i-lucide-check" class="w-5 h-5 text-success shrink-0" />
-					<div>
-						<p class="text-sm font-medium">Рассылка завершена</p>
-					</div>
+				<div v-else-if="request.status === RequestStatus.COMPLETED">
+					<UAlert color="success" variant="soft" icon="i-lucide-check" class="mb-4"
+						description="Рассылка завершена" />
 				</div>
-				<div v-else-if="request.status === RequestStatus.CLOSED"
-					class="flex items-center gap-3 p-4 rounded-xl bg-neutral/10 border border-neutral/20">
-					<UIcon name="i-lucide-lock" class="w-5 h-5 text-neutral shrink-0" />
-					<div>
-						<p class="text-sm font-medium">Запрос закрыт</p>
-					</div>
+				<div v-else-if="request.status === RequestStatus.CLOSED">
+					<UAlert color="neutral" variant="soft" icon="i-lucide-lock" class="mb-4"
+						description="Запрос закрыт" />
 				</div>
 				<div v-else>
 					<UAlert color="info" variant="soft" icon="i-lucide-info" class="mb-4"
