@@ -18,6 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_config_instance, get_current_user, get_session
 from app.api.user_requests.schemas import (
     Attachment,
+    BulkToggleSuppliersRequest,
+    BulkToggleSuppliersResponse,
     EmailMessageResponse,
     LaunchMailingResponse,
     Message,
@@ -32,7 +34,6 @@ from app.api.user_requests.schemas import (
     SupplierRemoveResponse,
     SupplierResponse,
     ThreadSummary,
-    ToggleSupplierRequest,
 )
 from app.celery_app.tasks.email_tasks import send_emails, send_reply
 from app.core.config import ALLOWED_CONTENT_TYPES, Config
@@ -135,7 +136,7 @@ async def search_suppliers(
 
     from app.celery_app.tasks.parser_tasks import run_parser_search
 
-    run_parser_search.delay(str(request_id)) # type: ignore
+    run_parser_search.delay(str(request_id))  # type: ignore
     logger.info("parser.search task queued", request_id=str(request_id))
     return SearchQueuedResponse(
         status="search_queued", request_id=str(request_id)
@@ -407,46 +408,38 @@ async def get_suppliers(
 
 
 @router.patch(
-    "/{request_id}/suppliers/{request_supplier_id}",
-    response_model=RequestSupplierResponse,
-    summary="Toggle supplier enabled status for a request",
+    "/{request_id}/suppliers/enabled",
+    response_model=BulkToggleSuppliersResponse,
+    summary="Bulk toggle supplier enabled status for a request",
     responses={
-        200: {"description": "Supplier enabled status updated"},
+        200: {"description": "Supplier enabled statuses updated"},
         401: {"description": "Missing or invalid authentication credentials"},
-        404: {"description": "Request or supplier not found"},
+        404: {"description": "Request not found or no matching suppliers"},
     },
 )
-async def toggle_supplier(
+async def toggle_suppliers_bulk(
     request_id: uuid.UUID,
-    request_supplier_id: uuid.UUID,
-    body: ToggleSupplierRequest,
+    body: BulkToggleSuppliersRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
-) -> RequestSupplierResponse:
-    """Updates the enabled status of a supplier for a specific request."""
+) -> BulkToggleSuppliersResponse:
+    """Updates enabled status for multiple request suppliers in one transaction."""
     request = await RequestDAO.get_by_id(session, request_id)
     if not request or request.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
         )
 
-    rs = await RequestSupplierDAO.set_enabled(
-        session, request_supplier_id, body.is_enabled
+    updated = await RequestSupplierDAO.set_enabled_bulk(
+        session, request_id, body.ids, body.is_enabled
     )
-    if not rs:
+    if updated == 0:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Request supplier not found",
+            detail="No matching request suppliers found",
         )
 
-    await session.refresh(rs, ["supplier"])
-    return RequestSupplierResponse(
-        id=rs.id,
-        supplier=SupplierResponse.model_validate(rs.supplier),
-        sent_status=RequestSupplierStatus(rs.sent_status),
-        is_enabled=rs.is_enabled,
-        sent_at=rs.sent_at,
-    )
+    return BulkToggleSuppliersResponse(updated=updated)
 
 
 @router.patch(

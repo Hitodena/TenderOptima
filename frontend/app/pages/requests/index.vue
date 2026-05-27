@@ -5,7 +5,7 @@
 			<div class="mb-12">
 				<div class="text-center mb-8">
 					<h1 class="text-3xl font-bold text-highlighted mb-2">Поиск поставщиков</h1>
-					<p class="text-muted text-sm">Найдите подходящих поставщиков. Поиск может занять до 5–10 минут.</p>
+					<p class="text-muted text-sm">Найдите подходящих поставщиков. Поиск может занять до нескольких минут.</p>
 				</div>
 
 				<UCard class="shadow-sm mb-4">

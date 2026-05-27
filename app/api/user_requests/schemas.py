@@ -373,12 +373,28 @@ class RequestSupplierResponse(BaseModel):
     ]
 
 
-class ToggleSupplierRequest(BaseModel):
-    """Request to toggle supplier enabled status."""
+class BulkToggleSuppliersRequest(BaseModel):
+    """Bulk update enabled status for request suppliers."""
 
+    ids: Annotated[
+        list[uuid.UUID],
+        Field(
+            min_length=1,
+            description="RequestSupplier identifiers to update",
+        ),
+    ]
     is_enabled: Annotated[
         bool,
-        Field(description="New enabled status for the supplier"),
+        Field(description="New enabled status for the listed suppliers"),
+    ]
+
+
+class BulkToggleSuppliersResponse(BaseModel):
+    """Result of bulk enabled status update."""
+
+    updated: Annotated[
+        int,
+        Field(description="Number of request suppliers updated"),
     ]
 
 

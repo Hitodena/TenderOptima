@@ -1,278 +1,215 @@
-import asyncio
-from pathlib import Path
+"""
+Search manager — Yandex only.
+Handles region normalisation, query modification, deduplication, and domain exclusion.
+"""
+
 from urllib.parse import urlparse, urlunparse
 
 from loguru import logger
 
-from parser.google_parser import parse_google
-from parser.yandex_parser import yandex_fetch_all
+from .yandex_parser import yandex_fetch_all
+
+_REGION_MAP: dict[str, int] = {
+    "ru": 225,
+    "by": 149,
+    "kk": 159,
+    "kz": 159,
+    "uz": 191,
+    "tr": 225,
+    "com": 225,
+}
 
 
-def normalize_link(link: str) -> str:
-    """
-    Normalize URL for deduplication: lowercase scheme and netloc,
-    remove trailing slash, ignore query and fragment.
-    """
+def _get_search_type(region_code: int) -> str:
+    if region_code == 149:
+        return "SEARCH_TYPE_BE"
+    if region_code == 159:
+        return "SEARCH_TYPE_KK"
+    if region_code == 191:
+        return "SEARCH_TYPE_UZ"
+    if region_code == 225:
+        return "SEARCH_TYPE_RU"
+    return "SEARCH_TYPE_COM"
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _normalize_link(link: str) -> str:
+    """Lowercase scheme/netloc, strip trailing slash, drop query & fragment."""
     parsed = urlparse(link)
     scheme = parsed.scheme.lower() or "https"
     netloc = parsed.netloc.lower()
     path = parsed.path.rstrip("/")
-    normalized = urlunparse((scheme, netloc, path, "", "", ""))
-    return normalized
+    return urlunparse((scheme, netloc, path, "", "", ""))
 
 
-def add_city_to_queries(original_query: str, city_name: str) -> str:
+def _clean_domain(raw: str) -> str:
+    """Strip scheme, www, and path — return bare hostname."""
+    return (
+        raw.replace("https://", "")
+        .replace("http://", "")
+        .replace("www.", "")
+        .split("/")[0]
+        .lower()
+    )
+
+
+def _add_city_to_queries(query: str, city: str) -> str:
     """
-    Добавляет название города к каждому подзапросу, разделенному запятой
-
-    Args:
-        original_query: "купить стулья, стулья от производителя"
-        city_name: "Минск"
-
-    Returns:
-        "купить стулья Минск, стулья от производителя Минск"
+    Append city name to every comma-separated sub-query.
+    "купить стулья, стулья оптом" + "Минск" → "купить стулья Минск, стулья оптом Минск"
     """
-    queries = [q.strip() for q in original_query.split(",") if q.strip()]
-    modified_queries = [f"{query} {city_name}" for query in queries]
-    return ", ".join(modified_queries)
+    parts = [q.lower().strip() for q in query.split(",") if q.strip()]
+    return ", ".join(f"{q} {city.lower()}" for q in parts)
 
 
-def prepare_query_for_region(
-    original_query: str, region_object: dict | None
-) -> str:
-    """
-    Модифицирует запрос в зависимости от типа региона
-
-    Args:
-        original_query: Исходный запрос пользователя
-        region_object: Объект региона с полями name, type, yandexId, googleCode
-
-    Returns:
-        Модифицированный или оригинальный запрос
-    """
-    if not region_object or not isinstance(region_object, dict):
-        return original_query
-
-    if region_object.get("type") == "country":
-        logger.info(
-            f"Region is country, using original query: {original_query}"
-        )
-        return original_query
-
-    city_name = region_object.get("name", "")
-    if city_name:
-        modified_query = add_city_to_queries(original_query, city_name)
-        logger.info(
-            f"Region is city/oblast: '{original_query}' -> '{modified_query}'"
-        )
-        return modified_query
-
-    return original_query
-
-
-def build_exclusion_query(
-    query: str, excluded_domains: list[str], search_engine: str
-) -> str:
-    """
-    Строит модифицированный поисковый запрос с исключениями доменов.
-
-    Args:
-        query: Оригинальный поисковый запрос
-        excluded_domains: Список доменов для исключения
-        search_engine: Поисковая система ("google" или "yandex")
-
-    Returns:
-        Модифицированный запрос с исключениями
-    """
-    if not excluded_domains:
+def _prepare_query(query: str, region_name: str) -> str:
+    if not region_name:
         return query
-
-    exclusions = []
-    for domain in excluded_domains:
-        clean_domain = (
-            domain.replace("https://", "")
-            .replace("http://", "")
-            .replace("www.", "")
-        )
-        if search_engine == "google":
-            exclusions.append(f"-site:{clean_domain}")
-        elif search_engine == "yandex":
-            exclusions.append(f"-site:{clean_domain}")
-
-    if exclusions:
-        modified_query = f"{query} {' '.join(exclusions)}"
-        logger.info(
-            f"Modified {search_engine} query with exclusions: '{query}' -> '{modified_query}'"
-        )
-        return modified_query
-
-    return query
+    modified = _add_city_to_queries(query, region_name)
+    logger.info(
+        "Query city-modified",
+        query=query,
+        modified=modified,
+    )
+    return modified
 
 
-def get_yandex_region_code(region) -> int:
+def _resolve_region(region: str | int | dict) -> tuple[int, str]:
     """
-    Convert region string to Yandex region code.
+    Resolve region to (region_id, region_name).
 
     Args:
-        region: Region string (e.g., 'ru', 'by', 'ua', 'kz')
+        region: ISO-2 string, Yandex region int, or region dict.
 
     Returns:
-        Yandex region code (int)
+        Tuple of (region_id, region_name).
     """
-    region_mapping = {
-        "ru": 225,
-        "by": 149,
-        "ua": 187,
-        "kz": 159,
-        "uz": 191,
-        "kg": 118,
-        "tj": 186,
-        "tm": 189,
-        "am": 7,
-        "az": 10,
-        "ge": 35,
-        "md": 139,
-    }
-
+    region_name = ""
+    if isinstance(region, int):
+        return region, ""
     if isinstance(region, str):
-        return region_mapping.get(region.lower(), 225)
-    elif isinstance(region, int):
-        return region
-    elif isinstance(region, dict):
-        yandex_id = region.get("yandexId") or region.get("yandex_id")
-        if yandex_id:
-            return yandex_id
+        region_name = region
+        code = _REGION_MAP.get(region.lower())
+        if code is None:
+            logger.warning(
+                "Unknown region string, defaulting to 225 (RU)",
+                region=region,
+            )
+            return 225, region_name
+        return code, region_name
+    if isinstance(region, dict):
+        yid = region.get("yandexId") or region.get("yandex_id")
+        if yid:
+            return int(yid), ""
+        iso = region.get("googleCode") or region.get("iso", "")
+        if iso:
+            region_name = iso
+            return _REGION_MAP.get(iso.lower(), 225), region_name
+    return 225, region_name
 
-    return 225
+
+def _is_excluded(domain_raw: str, excluded: list[str]) -> bool:
+    clean = _clean_domain(domain_raw)
+    for ex in excluded:
+        ex_clean = _clean_domain(ex)
+        if clean == ex_clean or clean.endswith("." + ex_clean):
+            return True
+    return False
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 
 async def fetch_all(
     query: str,
     user_id: str,
     elements: int,
-    region: str | dict,
-    google_search_api: str,
-    google_search_id: str,
-    yandex_key_file: Path,
+    region_name: str,
+    yandex_api_key: str,
     yandex_folder_id: str,
-    excluded_domains: list[str] = [],
+    excluded_domains: list[str] | None = None,
 ) -> list[dict]:
     """
-    Unified fetcher: queries Google and Yandex in parallel,
-    merges and deduplicates results by normalized URL.
+    Run Yandex search, deduplicate by normalised URL, filter excluded domains.
 
     Args:
-        query (str): Search query.
-        user_id (str): ID of the requesting user.
-        elements (int): Total results.
-        region (Union[str, dict]): Region code or region object
-        google_search_api (str): Google API token.
-        google_search_id (str): Google CSE ID.
-        yandex_key_file (Path): Path to Yandex key file.
-        yandex_folder_id (str): Yandex folder ID.
-        excluded_domains (list[str]): list of domains to exclude from search
+        query:             Raw search query from caller.
+        user_id:           Caller identifier propagated to results.
+        elements:          Max result count.
+        region_name:       Region name (ISO-2 or Yandex region name).
+        yandex_api_key:    Yandex Cloud Api-Key.
+        yandex_folder_id:  Yandex Cloud folder ID.
+        excluded_domains:  Domains to drop from results.
 
     Returns:
-        list[dict]: Deduplicated list of combined results.
+        Deduplicated, filtered list of result dicts.
     """
+    excluded_domains = excluded_domains or []
 
-    logger.info(f"Excluded domains: {excluded_domains}")
-    logger.info(f"Region: {region}")
+    # region_code, resolved_name = _resolve_region(region_name)
+    modified_query = _prepare_query(query, region_name)
+    # search_type = _get_search_type(region_code)
 
-    region_object = region if isinstance(region, dict) else None
-    modified_query = prepare_query_for_region(query, region_object)
-
-    google_query = build_exclusion_query(
-        modified_query, excluded_domains, "google"
-    )
-    yandex_query = modified_query
-
-    logger.info(f"Original query: {query}")
-    logger.info(f"Modified query for search: {modified_query}")
-
-    google_task = parse_google(
-        query=google_query,
+    logger.info(
+        "Search start",
+        query=query,
+        modified_query=modified_query,
         elements=elements,
-        region=region
-        if isinstance(region, str)
-        else region.get("googleCode", "ru"),
-        user_id=user_id,
-        token=google_search_api,
-        cust=google_search_id,
+        region=region_name,
+        excluded_domains=len(excluded_domains),
     )
 
-    region_code = get_yandex_region_code(region)
-    logger.info(f"Yandex search with region: {region} -> code: {region_code}")
-
-    yandex_task = yandex_fetch_all(
-        key_file=yandex_key_file,
+    raw_results = await yandex_fetch_all(
+        api_key=yandex_api_key,
         folder_id=yandex_folder_id,
         user_id=user_id,
-        query=yandex_query,
+        query=modified_query,
         total_results=elements,
-        region=region_code,
     )
 
-    tasks = [task for task in [google_task, yandex_task]]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-
-    combined: list[dict] = []
-    for res in results:
-        if res and not isinstance(res, Exception) and isinstance(res, list):
-            combined.extend(res)
-
-    if not combined:
-        logger.warning("No results from any engine; returning empty list.")
+    if not raw_results:
+        logger.warning("Yandex returned no results")
         return []
 
-    seen = set()
-    unique_results: list[dict] = []
-    for item in combined:
-        link = item.get("domain", "")
-        norm = normalize_link(link)
+    # Deduplicate by normalised URL
+    seen: set[str] = set()
+    unique: list[dict] = []
+    for item in raw_results:
+        norm = _normalize_link(item.get("domain", ""))
         if norm not in seen:
             seen.add(norm)
-            unique_results.append(item)
+            unique.append(item)
         else:
-            logger.debug(f"Duplicate skipped: {link}")
-
-    filtered_results: list[dict] = []
-    excluded_count = 0
-
-    for item in unique_results:
-        domain = item.get("domain", "")
-        clean_domain = (
-            domain.replace("https://", "")
-            .replace("http://", "")
-            .replace("www.", "")
-            .split("/")[0]
-        )
-
-        is_excluded = False
-        for excluded_domain in excluded_domains:
-            excluded_clean = (
-                excluded_domain.replace("https://", "")
-                .replace("http://", "")
-                .replace("www.", "")
+            logger.debug(
+                "Duplicate skipped",
+                domain=item.get("domain"),
             )
-            if clean_domain == excluded_clean or clean_domain.endswith(
-                "." + excluded_clean
-            ):
-                is_excluded = True
-                excluded_count += 1
-                logger.info(
-                    f"Excluded domain from results: {domain} (matches {excluded_domain})"
-                )
-                break
 
-        if not is_excluded:
-            filtered_results.append(item)
+    # Filter excluded domains
+    filtered: list[dict] = []
+    excluded_count = 0
+    for item in unique:
+        domain = item.get("domain", "")
+        if _is_excluded(domain, excluded_domains):
+            excluded_count += 1
+            logger.debug(
+                "Excluded",
+                domain=item.get("domain"),
+            )
+        else:
+            filtered.append(item)
 
     logger.info(
-        f"Post-filtering: {len(filtered_results)} results after excluding {excluded_count} domains"
+        "Search done",
+        raw=len(raw_results),
+        unique=len(unique),
+        excluded=excluded_count,
+        final=len(filtered),
     )
-    logger.info(
-        f"Final results: {len(filtered_results)} unique out of {len(combined)} total"
-    )
-
-    return filtered_results
+    return filtered

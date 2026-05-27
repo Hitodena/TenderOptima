@@ -99,13 +99,15 @@
 						description="Запрос закрыт" />
 				</div>
 				<div v-else-if="request.status === RequestStatus.SEARCHING"
-					class="flex items-center gap-3 p-4 rounded-xl bg-warning/10">
-					<UIcon name="i-lucide-search" class="w-5 h-5 text-warning shrink-0" />
-					<div>
-						<p class="text-sm font-medium">Поиск поставщиков в процессе</p>
-						<p class="text-xs text-muted">Это может занять до 5–10 минут. Обновите страницу, чтобы увидеть
-							результаты.</p>
+					class="flex flex-col gap-3 p-4 rounded-xl bg-warning/10">
+					<div class="flex items-center gap-3">
+						<UIcon name="i-lucide-search" class="w-5 h-5 text-warning shrink-0" />
+						<div class="min-w-0 flex-1">
+							<p class="text-sm font-medium">Поиск поставщиков в процессе</p>
+							<p class="text-xs text-muted">Результаты появятся автоматически</p>
+						</div>
 					</div>
+					<UProgress v-model="searchProgress" :max="100" status color="warning" size="sm" />
 				</div>
 				<div v-else>
 					<UAlert color="info" variant="soft" icon="i-lucide-info" class="mb-4"
@@ -131,10 +133,15 @@
 										Добавить поставщика
 									</UButton>
 								</div>
-								<div v-else class="flex flex-col items-center justify-center py-12 gap-3">
+								<div v-else
+									class="flex flex-col items-center justify-center py-12 gap-4 w-full max-w-sm mx-auto px-4">
 									<UIcon name="i-lucide-search" class="w-10 h-10 text-warning" />
-									<p class="text-muted">Поиск поставщиков в процессе...</p>
-									<p class="text-xs text-muted">Может занять до 5–10 минут. Обновите страницу.</p>
+									<div class="w-full text-center space-y-1">
+										<p class="text-sm font-medium">Поиск поставщиков в процессе</p>
+										<p class="text-xs text-muted">{{ searchRemainingLabel }}</p>
+									</div>
+									<UProgress v-model="searchProgress" :max="100" status color="warning" size="md"
+										class="w-full" />
 								</div>
 							</template>
 
@@ -151,7 +158,7 @@
 										<UIcon name="i-lucide-building-2" class="w-3.5 h-3.5 text-muted" />
 									</div>
 									<span class="font-medium truncate max-w-50">{{ row.original.supplier?.company_name
-										}}</span>
+									}}</span>
 								</div>
 							</template>
 
@@ -254,6 +261,10 @@ import {
 	RequestSupplierStatus,
 } from '#shared/types'
 import type { TableColumn, TableRow } from '@nuxt/ui'
+import { useIntervalFn } from '@vueuse/core'
+
+const SEARCH_POLL_INTERVAL_MS = 5_000
+const SEARCH_EXPECTED_DURATION_MS = 2 * 60 * 1000
 
 const route = useRoute()
 const id = route.params.id as string
@@ -264,6 +275,7 @@ const suppliers = ref<RequestSupplierResponse[]>([])
 const loading = ref(true)
 const loadingSuppliers = ref(false)
 const updatingToggle = ref(false)
+const suppressToggleEvents = ref(false)
 const actionError = ref('')
 const toast = useToast()
 const showParamsModal = ref(false)
@@ -303,19 +315,119 @@ async function fetchRequest() {
 	}
 }
 
-async function fetchSuppliers() {
-	loadingSuppliers.value = true
+async function fetchSuppliers(silent = false) {
+	if (!silent) loadingSuppliers.value = true
 	try {
 		suppliers.value = await get<RequestSupplierResponse[]>(`/requests/${id}/suppliers`)
 	} catch {
 		suppliers.value = []
 	} finally {
-		loadingSuppliers.value = false
+		if (!silent) loadingSuppliers.value = false
 	}
 }
 
 await fetchRequest()
 if (request.value) await fetchSuppliers()
+
+const searchProgress = ref(0)
+const searchStartedAt = ref<number | null>(null)
+
+const isSearching = computed(
+	() => request.value?.status === RequestStatus.SEARCHING,
+)
+
+const searchRemainingLabel = computed(() => {
+	if (!searchStartedAt.value) return ''
+	if (searchProgress.value >= 99) return 'Завершение...'
+	const remainingMinutes = Math.ceil(
+		((100 - searchProgress.value) / 100) * (SEARCH_EXPECTED_DURATION_MS / 60_000),
+	)
+	return remainingMinutes > 0
+		? `Осталось ~${remainingMinutes} мин`
+		: 'Завершение...'
+})
+
+function updateSearchProgress() {
+	if (!searchStartedAt.value) return
+	const elapsed = Date.now() - searchStartedAt.value
+	searchProgress.value = Math.min(
+		99,
+		Math.round((elapsed / SEARCH_EXPECTED_DURATION_MS) * 100),
+	)
+}
+
+async function pollSearchStatus() {
+	if (!request.value) return
+	if (request.value.status !== RequestStatus.SEARCHING) return
+
+	try {
+		const updated = await get<RequestResponse>(`/requests/${id}`)
+		request.value = updated
+
+		if (updated.status !== RequestStatus.SEARCHING) {
+			stopSearchTimers()
+			await fetchSuppliers(true)
+
+			if (updated.status === RequestStatus.ACTIVE) {
+				toast.add({
+					title: 'Поиск завершён',
+					description: 'Поставщики добавлены в запрос.',
+					color: 'success',
+					icon: 'i-lucide-check',
+				})
+			} else if (updated.status === RequestStatus.DRAFT) {
+				toast.add({
+					title: 'Ошибка поиска',
+					description: 'Не удалось найти поставщиков. Попробуйте снова.',
+					color: 'error',
+					icon: 'i-lucide-circle-alert',
+				})
+			}
+		}
+	} catch {
+		// retry on next interval
+	}
+}
+
+function stopSearchTimers() {
+	pauseSearchProgress()
+	pauseSearchPolling()
+}
+
+function resetSearchTracking() {
+	stopSearchTimers()
+	searchProgress.value = 0
+	searchStartedAt.value = null
+}
+
+function startSearchTracking() {
+	if (searchStartedAt.value == null) {
+		searchStartedAt.value = Date.now()
+	}
+	updateSearchProgress()
+	resumeSearchProgress()
+	resumeSearchPolling()
+	void pollSearchStatus()
+}
+
+const { pause: pauseSearchProgress, resume: resumeSearchProgress } = useIntervalFn(
+	updateSearchProgress,
+	1_000,
+	{ immediate: false },
+)
+
+const { pause: pauseSearchPolling, resume: resumeSearchPolling } = useIntervalFn(
+	pollSearchStatus,
+	SEARCH_POLL_INTERVAL_MS,
+	{ immediate: false },
+)
+
+watch(isSearching, (searching) => {
+	if (searching) startSearchTracking()
+	else resetSearchTracking()
+}, { immediate: true })
+
+onUnmounted(resetSearchTracking)
 
 const enabledCount = computed(() => suppliers.value.filter(s => s.is_enabled).length)
 const statusColor = computed(() => getRequestStatusColor(request.value?.status ?? ''))
@@ -343,20 +455,42 @@ function formatDate(iso: string) {
 	return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`
 }
 
-async function handleToggle(rs: RequestSupplierResponse, newVal: boolean) {
-	const oldVal = rs.is_enabled
-	rs.is_enabled = newVal
+async function updateSuppliersEnabled(ids: string[], enabled: boolean) {
+	if (ids.length === 0 || isTerminalStatus.value) return
+
+	const targets = suppliers.value.filter(s => ids.includes(s.id))
+	if (targets.length === 0) return
+
+	const snapshot = new Map(targets.map(s => [s.id, s.is_enabled]))
+
 	updatingToggle.value = true
 	actionError.value = ''
+	suppressToggleEvents.value = true
+
+	for (const s of targets) {
+		s.is_enabled = enabled
+	}
+
 	try {
-		await patch(`/requests/${id}/suppliers/${rs.id}`, { is_enabled: newVal })
+		await patch(`/requests/${id}/suppliers/enabled`, { ids, is_enabled: enabled })
 	} catch (e: any) {
-		rs.is_enabled = oldVal
+		for (const s of targets) {
+			s.is_enabled = snapshot.get(s.id)!
+		}
 		const detail = e?.response?.data?.detail
-		actionError.value = typeof detail === 'string' ? detail : 'Не удалось изменить выбор поставщика'
+		actionError.value = typeof detail === 'string'
+			? detail
+			: 'Не удалось изменить выбор поставщиков'
 	} finally {
 		updatingToggle.value = false
+		await nextTick()
+		suppressToggleEvents.value = false
 	}
+}
+
+async function handleToggle(rs: RequestSupplierResponse, newVal: boolean) {
+	if (suppressToggleEvents.value || rs.is_enabled === newVal) return
+	await updateSuppliersEnabled([rs.id], newVal)
 }
 
 async function confirmDeleteSupplier(rsId: string) {
@@ -375,19 +509,10 @@ async function confirmDeleteSupplier(rsId: string) {
 }
 
 async function toggleAll(enabled: boolean) {
-	if (isTerminalStatus.value) return
-	const toToggle = suppliers.value.filter(s => s.is_enabled !== enabled)
-	updatingToggle.value = true
-	actionError.value = ''
-	try {
-		await Promise.all(toToggle.map(s => patch(`/requests/${id}/suppliers/${s.id}`, { is_enabled: enabled })))
-		toToggle.forEach(s => { s.is_enabled = enabled })
-	} catch (e: any) {
-		const detail = e?.response?.data?.detail
-		actionError.value = typeof detail === 'string' ? detail : 'Не удалось изменить выбор поставщиков'
-	} finally {
-		updatingToggle.value = false
-	}
+	const ids = suppliers.value
+		.filter(s => s.is_enabled !== enabled)
+		.map(s => s.id)
+	await updateSuppliersEnabled(ids, enabled)
 }
 
 const selectAll = () => toggleAll(true)

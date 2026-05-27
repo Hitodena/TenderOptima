@@ -373,41 +373,48 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
             raise
 
     @classmethod
-    async def set_enabled(
-        cls, session: AsyncSession, rs_id: uuid.UUID, enabled: bool
-    ) -> RequestSupplier | None:
+    async def set_enabled_bulk(
+        cls,
+        session: AsyncSession,
+        request_id: uuid.UUID,
+        rs_ids: list[uuid.UUID],
+        enabled: bool,
+    ) -> int:
         logger.debug(
-            "Setting enabled status",
+            "Bulk setting enabled status",
             model=cls.model,
-            rs_id=rs_id,
+            request_id=request_id,
+            count=len(rs_ids),
             enabled=enabled,
         )
+        if not rs_ids:
+            return 0
         try:
-            instance = await session.get(cls.model, rs_id)
-            if instance:
+            stmt = select(cls.model).where(
+                cls.model.request_id == request_id,
+                cls.model.id.in_(rs_ids),
+            )
+            result = await session.execute(stmt)
+            instances = list(result.scalars().all())
+            for instance in instances:
                 instance.is_enabled = enabled
-                await session.flush()
-                await session.commit()
-                logger.info(
-                    "Set enabled status on supplier",
-                    model=cls.model,
-                    rs_id=rs_id,
-                    enabled=enabled,
-                )
-            else:
-                logger.info(
-                    "Supplier not found for set_enabled",
-                    model=cls.model,
-                    rs_id=rs_id,
-                )
-            return instance
+            await session.flush()
+            await session.commit()
+            logger.info(
+                "Bulk set enabled status on suppliers",
+                model=cls.model,
+                request_id=request_id,
+                updated=len(instances),
+                enabled=enabled,
+            )
+            return len(instances)
         except Exception as exc:
             await session.rollback()
             logger.exception(
-                "Failed to set enabled status on supplier",
+                "Failed bulk set enabled status on suppliers",
                 error=str(exc),
                 model=cls.model,
-                rs_id=rs_id,
+                request_id=request_id,
                 enabled=enabled,
             )
             raise
