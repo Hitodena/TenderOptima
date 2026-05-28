@@ -12,7 +12,7 @@ config = get_config()
 
 
 app = Celery("tenderoptima")
-app.config_from_object("app.celery_app.celery_config:CeleryConfig")
+app.config_from_object("backend.celery_app.celery_config:CeleryConfig")
 
 
 @worker_process_init.connect
@@ -138,8 +138,8 @@ class CeleryConfig:
     }
 
     include = [
-        "app.celery_app.tasks.email_tasks",
-        "app.celery_app.tasks.parser_tasks",
+        "backend.celery_app.tasks.email_tasks",
+        "backend.celery_app.tasks.parser_tasks",
     ]
 
     # Logging

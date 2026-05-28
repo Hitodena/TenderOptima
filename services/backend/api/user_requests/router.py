@@ -15,38 +15,28 @@ from fastapi.responses import FileResponse
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import get_config_instance, get_current_user, get_session
+from backend.api.deps import (
+    get_config_instance,
+    get_current_user,
+    get_request_or_404,
+    get_session,
+)
 from backend.api.user_requests.schemas import (
     Attachment,
-    BulkToggleSuppliersRequest,
-    BulkToggleSuppliersResponse,
-    EmailMessageResponse,
     LaunchMailingResponse,
-    Message,
-    ReplyPayload,
     RequestCloseResponse,
     RequestCreate,
     RequestEmailUpdate,
     RequestResponse,
-    RequestSupplierResponse,
     RequestUpdate,
     SearchQueuedResponse,
-    SupplierRemoveResponse,
-    SupplierResponse,
-    ThreadSummary,
 )
-from backend.celery_app.tasks.email_tasks import send_emails, send_reply
+from backend.celery_app.tasks.email_tasks import send_emails
+from backend.celery_app.tasks.parser_tasks import run_parser_search
 from backend.core.config import ALLOWED_CONTENT_TYPES, Config
-from backend.db.dao import (
-    EmailMessageDAO,
-    RequestDAO,
-    RequestSupplierDAO,
-)
+from backend.db.dao import RequestDAO, RequestSupplierDAO
 from backend.db.models import User
-from backend.enums import (
-    RequestStatus,
-    RequestSupplierStatus,
-)
+from backend.enums import RequestStatus
 from backend.utils.email_utils import build_request_email_body
 
 router = APIRouter(prefix="/requests", tags=["Requests"])
@@ -80,18 +70,13 @@ def _resolve_and_validate_attachment_path(
     response_model=RequestResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a new supplier search request",
-    responses={
-        201: {"description": "Request successfully created in draft status"},
-        401: {"description": "Missing or invalid authentication credentials"},
-        422: {"description": "Validation error in request payload"},
-    },
 )
 async def create_request(
     body: RequestCreate,
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> RequestResponse:
-    """Creates a new request in 'draft' status. The request can later be searched and mailed."""
+    """Create a draft request with query and delivery region."""
     request = await RequestDAO.create(
         session,
         user_id=current_user.id,
@@ -107,34 +92,20 @@ async def create_request(
     response_model=SearchQueuedResponse,
     status_code=status.HTTP_202_ACCEPTED,
     summary="Queue supplier search task",
-    responses={
-        202: {
-            "description": "Search task queued (background parser with long timeout)"
-        },
-        400: {"description": "Request is not in a searchable state"},
-        401: {"description": "Missing or invalid authentication credentials"},
-        404: {"description": "Request not found or does not belong to user"},
-    },
 )
 async def search_suppliers(
     request_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> SearchQueuedResponse:
-    """Queues async parser search task (dedicated queue, 400s/600s limits). Task sets SEARCHING then ACTIVE on success or reverts to DRAFT on failure."""  # noqa: E501
-    request = await RequestDAO.get_by_id(session, request_id)
-    if not request or request.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
-        )
+    """Queue background parser search for an owned request in draft or active status."""
+    request = await get_request_or_404(request_id, session, current_user)
 
     if request.status not in (RequestStatus.DRAFT, RequestStatus.ACTIVE):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot search in status '{request.status}'",
         )
-
-    from app.celery_app.tasks.parser_tasks import run_parser_search
 
     run_parser_search.delay(str(request_id))  # type: ignore
     logger.info("parser.search task queued", request_id=str(request_id))
@@ -148,26 +119,14 @@ async def search_suppliers(
     response_model=LaunchMailingResponse,
     status_code=status.HTTP_202_ACCEPTED,
     summary="Queue email campaign for a request",
-    responses={
-        202: {"description": "Mailing task successfully queued"},
-        400: {
-            "description": "Request not in active state or no pending suppliers"  # noqa: E501
-        },
-        401: {"description": "Missing or invalid authentication credentials"},
-        404: {"description": "Request not found or does not belong to user"},
-    },
 )
 async def launch_mailing(
     request_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> LaunchMailingResponse:
-    """Queues a background task to send emails to all pending suppliers for this request."""  # noqa: E501
-    request = await RequestDAO.get_by_id(session, request_id)
-    if not request or request.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
-        )
+    """Queue Celery task to email all pending enabled suppliers for the request."""
+    request = await get_request_or_404(request_id, session, current_user)
 
     pending_count = await RequestSupplierDAO.count_pending(session, request.id)
     if pending_count == 0:
@@ -177,9 +136,10 @@ async def launch_mailing(
         )
 
     if request.status == RequestStatus.DRAFT:
-        await RequestDAO.update_status(
-            session, request_id, status=RequestStatus.ACTIVE
+        await RequestDAO.update_fields(
+            session, request_id, status=RequestStatus.ACTIVE.value
         )
+        request = await get_request_or_404(request_id, session, current_user)
 
     if request.status != RequestStatus.ACTIVE:
         raise HTTPException(
@@ -190,7 +150,9 @@ async def launch_mailing(
     send_emails.delay(str(request_id))  # type: ignore
     logger.info("send_emails task queued", request_id=str(request_id))
 
-    await RequestDAO.update_status(session, request.id, RequestStatus.QUEUED)
+    await RequestDAO.update_fields(
+        session, request.id, status=RequestStatus.QUEUED.value
+    )
 
     return LaunchMailingResponse(
         status=RequestStatus.QUEUED,
@@ -203,17 +165,17 @@ async def launch_mailing(
     "/",
     response_model=list[RequestResponse],
     summary="List all requests for the current user",
-    responses={
-        200: {"description": "List of all requests belonging to the user"},
-        401: {"description": "Missing or invalid authentication credentials"},
-    },
 )
 async def get_requests(
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[RequestResponse]:
-    """Returns all requests created by the authenticated user."""
-    requests = await RequestDAO.get_all_by_user(session, current_user.id)
+    """List all requests owned by the current user, newest first."""
+    requests = await RequestDAO.get_all(
+        session,
+        user_id=current_user.id,
+        order_by=RequestDAO.model.created_at.desc(),
+    )
     return [RequestResponse.model_validate(r) for r in requests]
 
 
@@ -221,237 +183,21 @@ async def get_requests(
     "/{request_id}",
     response_model=RequestResponse,
     summary="Retrieve a single request by ID",
-    responses={
-        200: {"description": "Request details returned"},
-        401: {"description": "Missing or invalid authentication credentials"},
-        404: {"description": "Request not found or does not belong to user"},
-    },
 )
 async def get_request(
     request_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> RequestResponse:
-    """Fetches a specific request if it belongs to the current user."""
-    request = await RequestDAO.get_by_id(session, request_id)
-    if not request or request.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
-        )
+    """Return one request by id if it belongs to the current user."""
+    request = await get_request_or_404(request_id, session, current_user)
     return RequestResponse.model_validate(request)
-
-
-@router.get(
-    "/{request_id}/responses",
-    response_model=list[EmailMessageResponse],
-    summary="List supplier responses for a request",
-    responses={
-        200: {
-            "description": "List of email responses received from suppliers"
-        },
-        401: {"description": "Missing or invalid authentication credentials"},
-        404: {"description": "Request not found or does not belong to user"},
-    },
-)
-async def get_responses(
-    request_id: uuid.UUID,
-    session: Annotated[AsyncSession, Depends(get_session)],
-    current_user: Annotated[User, Depends(get_current_user)],
-) -> list[EmailMessageResponse]:
-    """Returns all supplier email responses associated with the given request."""  # noqa: E501
-    request = await RequestDAO.get_by_id(session, request_id)
-    if not request or request.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
-        )
-
-    responses = await EmailMessageDAO.get_by_request(session, request_id)
-    return [EmailMessageResponse.from_orm_with_supplier(r) for r in responses]
-
-
-@router.get(
-    "/{request_id}/threads",
-    response_model=list[ThreadSummary],
-    summary="List email threads (suppliers that have replied) for a request",
-    responses={
-        200: {"description": "Threads with last message preview"},
-        401: {"description": "Missing or invalid authentication credentials"},
-        404: {"description": "Request not found or does not belong to user"},
-    },
-)
-async def get_threads(
-    request_id: uuid.UUID,
-    session: Annotated[AsyncSession, Depends(get_session)],
-    current_user: Annotated[User, Depends(get_current_user)],
-) -> list[ThreadSummary]:
-    """Returns only RequestSuppliers that have >=1 EmailMessage."""
-    request = await RequestDAO.get_by_id(session, request_id)
-    if not request or request.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
-        )
-
-    raw = await EmailMessageDAO.get_threads_summary(session, request_id)
-    return [ThreadSummary.model_validate(item) for item in raw]
-
-
-@router.get(
-    "/{request_id}/suppliers/{rs_id}/messages",
-    response_model=list[Message],
-    summary="Full chronological thread (all EmailMessages) for one supplier",
-    responses={
-        200: {"description": "Ordered list of messages in the conversation"},
-        401: {"description": "Missing or invalid authentication credentials"},
-        404: {
-            "description": "RequestSupplier not found, no access, or no messages"
-        },
-    },
-)
-async def get_thread_messages(
-    request_id: uuid.UUID,
-    rs_id: uuid.UUID,
-    session: Annotated[AsyncSession, Depends(get_session)],
-    current_user: Annotated[User, Depends(get_current_user)],
-) -> list[Message]:
-    """Ownership check + load via EmailMessageDAO.get_thread (already ordered asc)."""
-    rs = await RequestSupplierDAO.get_supplier_by_id(session, rs_id)
-    if not rs or str(rs.request_id) != str(request_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Request supplier not found for this request",
-        )
-    req = await RequestDAO.get_by_id(session, request_id)
-    if not req or req.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
-        )
-
-    messages = await EmailMessageDAO.get_thread(session, rs_id)
-
-    return [Message.model_validate(message) for message in messages]
-
-
-@router.post(
-    "/{request_id}/suppliers/{rs_id}/reply",
-    status_code=status.HTTP_202_ACCEPTED,
-    summary="Queue an outgoing reply in the thread (creates EmailMessage after sending)",
-    responses={
-        202: {"description": "Reply queued for sending"},
-        400: {"description": "Empty body or validation error"},
-        401: {"description": "Missing or invalid authentication credentials"},
-        404: {"description": "RS not found or not owned"},
-    },
-)
-async def post_reply(
-    request_id: uuid.UUID,
-    rs_id: uuid.UUID,
-    payload: ReplyPayload,
-    session: Annotated[AsyncSession, Depends(get_session)],
-    current_user: Annotated[User, Depends(get_current_user)],
-) -> dict:
-    """Validates ownership, queues send_reply Celery task. Returns 202 immediately."""
-    rs = await RequestSupplierDAO.get_supplier_by_id(session, rs_id)
-    if not rs or str(rs.request_id) != str(request_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Request supplier not found",
-        )
-    req = await RequestDAO.get_by_id(session, request_id)
-    if not req or req.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
-        )
-
-    if not payload.body or not payload.body.strip():
-        raise HTTPException(
-            status_code=400, detail="Reply body cannot be empty"
-        )
-
-    send_reply.delay(str(rs_id), payload.body, None)  # type: ignore
-
-    return {"status": "queued", "rs_id": str(rs_id)}
-
-
-@router.get(
-    "/{request_id}/suppliers",
-    response_model=list[RequestSupplierResponse],
-    summary="List suppliers for a request",
-    responses={
-        200: {"description": "List of suppliers associated with the request"},
-        401: {"description": "Missing or invalid authentication credentials"},
-        404: {"description": "Request not found or does not belong to user"},
-    },
-)
-async def get_suppliers(
-    request_id: uuid.UUID,
-    session: Annotated[AsyncSession, Depends(get_session)],
-    current_user: Annotated[User, Depends(get_current_user)],
-) -> list[RequestSupplierResponse]:
-    """Returns all suppliers associated with the given request."""
-    request = await RequestDAO.get_by_id(session, request_id)
-    if not request or request.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
-        )
-
-    suppliers = await RequestSupplierDAO.get_by_request(session, request_id)
-    return [
-        RequestSupplierResponse(
-            id=rs.id,
-            supplier=SupplierResponse.model_validate(rs.supplier),
-            sent_status=RequestSupplierStatus(rs.sent_status),
-            is_enabled=rs.is_enabled,
-            sent_at=rs.sent_at,
-        )
-        for rs in suppliers
-    ]
-
-
-@router.patch(
-    "/{request_id}/suppliers/enabled",
-    response_model=BulkToggleSuppliersResponse,
-    summary="Bulk toggle supplier enabled status for a request",
-    responses={
-        200: {"description": "Supplier enabled statuses updated"},
-        401: {"description": "Missing or invalid authentication credentials"},
-        404: {"description": "Request not found or no matching suppliers"},
-    },
-)
-async def toggle_suppliers_bulk(
-    request_id: uuid.UUID,
-    body: BulkToggleSuppliersRequest,
-    session: Annotated[AsyncSession, Depends(get_session)],
-    current_user: Annotated[User, Depends(get_current_user)],
-) -> BulkToggleSuppliersResponse:
-    """Updates enabled status for multiple request suppliers in one transaction."""
-    request = await RequestDAO.get_by_id(session, request_id)
-    if not request or request.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
-        )
-
-    updated = await RequestSupplierDAO.set_enabled_bulk(
-        session, request_id, body.ids, body.is_enabled
-    )
-    if updated == 0:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No matching request suppliers found",
-        )
-
-    return BulkToggleSuppliersResponse(updated=updated)
 
 
 @router.patch(
     "/{request_id}",
     response_model=RequestResponse,
-    summary="Update optional fields and additional parameters for the request email",  # noqa: E501
-    responses={
-        200: {"description": "Request parameters updated"},
-        401: {"description": "Missing or invalid authentication credentials"},
-        404: {"description": "Request not found or does not belong to user"},
-        422: {"description": "Validation Error"},
-    },
+    summary="Update optional fields and additional parameters for the request email",
 )
 async def update_request_additional_params(
     request_id: uuid.UUID,
@@ -459,21 +205,14 @@ async def update_request_additional_params(
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> RequestResponse:
-    """Updates description, additional_params JSON"""
-    request = await RequestDAO.get_by_id(session, request_id)
-    if not request or request.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
-        )
-
-    additional_params_data = body.additional_params
-    await RequestDAO.update_additional_params(
+    """Update description and additional_params before mailing."""
+    await get_request_or_404(request_id, session, current_user)
+    await RequestDAO.update_fields(
         session,
         request_id,
-        additional_params=additional_params_data,
+        additional_params=body.additional_params,
         description=body.description,
     )
-
     updated = await RequestDAO.get_by_id(session, request_id)
     return RequestResponse.model_validate(updated)
 
@@ -482,13 +221,6 @@ async def update_request_additional_params(
     "/{request_id}/attachments",
     response_model=list[Attachment],
     summary="Upload attachments for a request",
-    responses={
-        200: {"description": "Attachments uploaded successfully"},
-        401: {"description": "Missing or invalid authentication credentials"},
-        404: {"description": "Request not found or does not belong to user"},
-        413: {"description": "File too large"},
-        415: {"description": "Unsupported file type"},
-    },
 )
 async def upload_attachments(
     request_id: uuid.UUID,
@@ -497,12 +229,8 @@ async def upload_attachments(
     current_user: Annotated[User, Depends(get_current_user)],
     config: Annotated[Config, Depends(get_config_instance)],
 ) -> list[Attachment]:
-    """Upload files to be attached to emails for this request."""
-    request = await RequestDAO.get_by_id(session, request_id)
-    if not request or request.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
-        )
+    """Upload one or more files and append their paths to the request."""
+    request = await get_request_or_404(request_id, session, current_user)
 
     if request.status == RequestStatus.QUEUED:
         raise HTTPException(
@@ -575,8 +303,8 @@ async def upload_attachments(
         results.append(attachment_info)
         existing_paths.append(str(file_path))
 
-    await RequestDAO.update_attachment_paths(
-        session, request_id, existing_paths
+    await RequestDAO.update_fields(
+        session, request_id, attachment_paths=existing_paths
     )
 
     logger.info(
@@ -591,13 +319,7 @@ async def upload_attachments(
 
 @router.get(
     "/attachments/serve",
-    summary="Download a private attachment (user-uploaded or reply)",
-    responses={
-        200: {"content": {"application/octet-stream": {}}},
-        400: {"detail": "Invalid attachment path"},
-        403: {"detail": "Not authorized for this attachment"},
-        404: {"detail": "Attachment not found"},
-    },
+    summary="Download a private attachment",
 )
 async def serve_attachment(
     session: Annotated[AsyncSession, Depends(get_session)],
@@ -607,7 +329,7 @@ async def serve_attachment(
         ..., description="Stored attachment path (full or relative)"
     ),
 ) -> FileResponse:
-    """Authenticated download. Validates ownership via request_id in path."""
+    """Stream an attachment file after path sanitization and ownership check."""
     candidate = _resolve_and_validate_attachment_path(
         attachment_path, config.upload_dir
     )
@@ -631,12 +353,7 @@ async def serve_attachment(
             detail="Invalid attachment path",
         ) from None
 
-    req = await RequestDAO.get_by_id(session, request_id)
-    if not req or req.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized for this attachment",
-        )
+    await get_request_or_404(request_id, session, current_user)
 
     filename = candidate.name
     return FileResponse(
@@ -650,12 +367,6 @@ async def serve_attachment(
     "/{request_id}/email_message",
     response_model=RequestResponse,
     summary="Update email message for a request",
-    responses={
-        200: {"description": "Email message updated"},
-        401: {"description": "Missing or invalid authentication credentials"},
-        404: {"description": "Request not found or does not belong to user"},
-        422: {"description": "Validation Error"},
-    },
 )
 async def update_request_email_message(
     request_id: uuid.UUID,
@@ -663,16 +374,12 @@ async def update_request_email_message(
     current_user: Annotated[User, Depends(get_current_user)],
     email_update: RequestEmailUpdate,
 ) -> RequestResponse:
-    """Updates the generated email message for the request (and optionally persists email_subject from user edit)."""
-    request = await RequestDAO.get_by_id(session, request_id)
-    if not request or request.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
-        )
+    """Persist edited email subject/body or regenerate body from request data."""
+    request = await get_request_or_404(request_id, session, current_user)
 
     if email_update.email_subject:
-        await RequestDAO.update_email_subject(
-            session, request_id, email_update.email_subject
+        await RequestDAO.update_fields(
+            session, request_id, email_subject=email_update.email_subject
         )
 
     email_message = (
@@ -680,7 +387,7 @@ async def update_request_email_message(
         if email_update.email_message is not None
         else build_request_email_body(request, current_user)
     )
-    await RequestDAO.update_email_message(
+    await RequestDAO.update_fields(
         session,
         request_id,
         email_message=email_message,
@@ -690,68 +397,24 @@ async def update_request_email_message(
     return RequestResponse.model_validate(updated)
 
 
-@router.delete(
-    "/{request_id}/suppliers/{request_supplier_id}",
-    response_model=SupplierRemoveResponse,
-    summary="Remove a supplier from a request",
-    responses={
-        200: {"description": "Supplier successfully removed from the request"},
-        401: {"description": "Missing or invalid authentication credentials"},
-        404: {
-            "description": "Request not found, does not belong to user, or supplier link not found"
-        },
-    },
-)
-async def remove_supplier_from_request(
-    request_id: uuid.UUID,
-    request_supplier_id: uuid.UUID,
-    session: Annotated[AsyncSession, Depends(get_session)],
-    current_user: Annotated[User, Depends(get_current_user)],
-) -> SupplierRemoveResponse:
-    """Removes the association between a supplier and the request (does not delete the supplier itself)."""
-    request = await RequestDAO.get_by_id(session, request_id)
-    if not request or request.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
-        )
-
-    deleted = await RequestSupplierDAO.delete(session, request_supplier_id)
-    if not deleted:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Request supplier link not found",
-        )
-
-    return SupplierRemoveResponse(id=request_supplier_id)
-
-
 @router.post(
     "/{request_id}/close",
     response_model=RequestCloseResponse,
-    summary="Close a request by setting status to closed",
-    responses={
-        200: {"description": "Request successfully closed"},
-        400: {
-            "description": "Request already closed or in invalid state for closing"
-        },
-        401: {"description": "Missing or invalid authentication credentials"},
-        404: {"description": "Request not found or does not belong to user"},
-    },
+    summary="Close a request",
 )
 async def close_request(
     request_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> RequestCloseResponse:
-    request = await RequestDAO.get_by_id(session, request_id)
-    if not request or request.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
-        )
+    """Set request status to closed; rejects already closed requests."""
+    request = await get_request_or_404(request_id, session, current_user)
     if request.status == RequestStatus.CLOSED:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Request already closed",
         )
-    await RequestDAO.update_status(session, request_id, RequestStatus.CLOSED)
+    await RequestDAO.update_fields(
+        session, request_id, status=RequestStatus.CLOSED.value
+    )
     return RequestCloseResponse(id=request_id)

@@ -140,9 +140,11 @@ definePageMeta({ layout: 'auth' })
 const { post } = useApi()
 const auth = useAuthStore()
 
-if (auth.isAuthenticated.value) {
-	await navigateTo('/requests')
-}
+onMounted(() => {
+	if (auth.isAuthenticated.value) {
+		void navigateTo('/requests')
+	}
+})
 
 const tabs = [
 	{ label: 'Войти', slot: 'login', icon: 'i-lucide-log-in' },

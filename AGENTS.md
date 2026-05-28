@@ -65,13 +65,13 @@ Root infrastructure: `docker-compose.yml`, `.env`, `.dockerignore`.
 
 ### 1. Context from agentmemory (start of task)
 
-Before non-trivial work, restore project context:
+Before work, restore project context:
 
 - **New session / "where did we leave off"** → skill `handoff` (`.cursor/skills/agentmemory/handoff/`) → MCP `memory_sessions`, `memory_recall`
 - **"What did we do recently"** → skill `recap`
 - **Find past decisions** → skill `recall` → MCP `memory_smart_search`
 
-After significant decisions (architecture, conventions, non-obvious trade-offs) → skill `remember` → MCP `memory_save` with `concepts` and `files`.
+After decisions (architecture, conventions, non-obvious trade-offs) → skill `remember` → MCP `memory_save` with `concepts` and `files`.
 
 **Do not invent** agentmemory observations — only report what MCP returned.
 
@@ -193,10 +193,10 @@ docker compose up -d --build
 | Service                    | Dockerfile                     | Port |
 | -------------------------- | ------------------------------ | ---- |
 | api, worker, beat, migrate | `services/backend/Dockerfile`  | 8000 |
-| api_parser                 | `services/parser/Dockerfile`   | 8010 |
+| parser                     | `services/parser/Dockerfile`   | 8010 |
 | frontend                   | `services/frontend/Dockerfile` | 3000 |
 
-For worker in Docker: `PARSER_URL=http://api_parser:8010/search`
+For worker in Docker: `PARSER_URL=http://parser:8010/search` (set in `docker-compose.yml` for the worker service)
 
 ### Tests
 

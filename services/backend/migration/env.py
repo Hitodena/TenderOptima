@@ -1,5 +1,11 @@
 import asyncio
+import sys
 from logging.config import fileConfig
+from pathlib import Path
+
+_services_dir = Path(__file__).resolve().parents[2]
+if str(_services_dir) not in sys.path:
+    sys.path.insert(0, str(_services_dir))
 
 from alembic import context
 from sqlalchemy import pool
@@ -7,6 +13,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from backend.core.config import get_config
+import backend.db.models
 from backend.db.models.base import Base
 
 # this is the Alembic Config object, which provides

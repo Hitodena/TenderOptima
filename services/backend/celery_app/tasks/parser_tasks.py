@@ -1,13 +1,10 @@
-import asyncio
-import functools
 import uuid
 
 import httpx
 from loguru import logger
 
-from backend.api.user_requests.schemas import ParserResult
 from backend.celery_app.celery_config import app
-from backend.celery_app.context import WorkerContext
+from backend.celery_app.utils import async_task, get_db_manager
 from backend.core import get_config
 from backend.db.dao import (
     BlacklistedDomainDAO,
@@ -17,25 +14,9 @@ from backend.db.dao import (
     SupplierDAO,
 )
 from backend.enums import RequestStatus, RequestSupplierStatus
-from backend.utils.search_utils import extract_domain
+from backend.schemas import ParserResult
 
 config = get_config()
-
-
-def _get_db_manager():
-    ctx = WorkerContext._instance
-    if ctx is None or ctx.db_manager is None:
-        raise RuntimeError("WorkerContext is not initialized")
-    return ctx.db_manager
-
-
-def _async_task(func):
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        loop = asyncio.get_event_loop()
-        return loop.run_until_complete(func(*args, **kwargs))
-
-    return wrapper
 
 
 @app.task(
@@ -46,9 +27,9 @@ def _async_task(func):
     max_retries=1,
     default_retry_delay=60,
 )
-@_async_task
+@async_task
 async def run_parser_search(self, request_id: str) -> dict:
-    db_manager = _get_db_manager()
+    db_manager = get_db_manager()
     req_uuid = uuid.UUID(request_id)
     parser_query: str | None = None
     user_uuid: uuid.UUID | None = None
@@ -62,8 +43,8 @@ async def run_parser_search(self, request_id: str) -> dict:
             parser_query = f"{parser_query} {request.delivery_region}"
         user_uuid = request.user_id
         delivery_region = request.delivery_region
-        await RequestDAO.update_status(
-            session, req_uuid, RequestStatus.SEARCHING
+        await RequestDAO.update_fields(
+            session, req_uuid, status=RequestStatus.SEARCHING.value
         )
 
     try:
@@ -96,20 +77,22 @@ async def run_parser_search(self, request_id: str) -> dict:
         skipped_blacklisted = 0
         skipped_no_email = 0
 
+        candidates: list[tuple[str, ParserResult]] = []
         for result in results:
-            domain = extract_domain(result.domain)
-
-            if domain in blacklisted:
-                logger.debug("Domain blacklisted, skipping", domain=domain)
+            if result.domain in blacklisted:
+                logger.debug(
+                    "Domain blacklisted, skipping", domain=result.domain
+                )
                 skipped_blacklisted += 1
                 continue
-
             if not result.emails:
-                logger.debug("No emails found, skipping", domain=domain)
+                logger.debug("No emails found, skipping", domain=result.domain)
                 skipped_no_email += 1
                 continue
+            candidates.append((result.domain, result))
 
-            async with db_manager.session() as session:
+        async with db_manager.session() as session:
+            for domain, result in candidates:
                 supplier = await SupplierDAO.get_or_create_by_domain(
                     session,
                     domain=domain,
@@ -120,10 +103,11 @@ async def run_parser_search(self, request_id: str) -> dict:
                         "extra_emails": result.emails,
                     },
                 )
-
                 existing = (
                     await RequestSupplierDAO.get_by_request_and_supplier(
-                        session, request_id=req_uuid, supplier_id=supplier.id
+                        session,
+                        request_id=req_uuid,
+                        supplier_id=supplier.id,
                     )
                 )
                 if not existing:
@@ -136,7 +120,6 @@ async def run_parser_search(self, request_id: str) -> dict:
                     )
                     saved += 1
 
-        async with db_manager.session() as session:
             await SearchHistoryDAO.create(
                 session,
                 user_id=user_uuid,
@@ -145,9 +128,8 @@ async def run_parser_search(self, request_id: str) -> dict:
                 results_count=len(results),
                 request_id=req_uuid,
             )
-
-            await RequestDAO.update_status(
-                session, req_uuid, RequestStatus.ACTIVE
+            await RequestDAO.update_fields(
+                session, req_uuid, status=RequestStatus.ACTIVE.value
             )
 
         logger.info(
@@ -165,10 +147,14 @@ async def run_parser_search(self, request_id: str) -> dict:
         }
 
     except httpx.HTTPError as exc:
-        logger.exception("Parser service error in task", error=str(exc))
+        logger.exception(
+            "Parser service error in task",
+            parser_url=config.parser_url,
+            error=str(exc),
+        )
         async with db_manager.session() as session:
-            await RequestDAO.update_status(
-                session, req_uuid, RequestStatus.DRAFT
+            await RequestDAO.update_fields(
+                session, req_uuid, status=RequestStatus.DRAFT.value
             )
         return {"error": "parser_failed"}
 
@@ -179,7 +165,7 @@ async def run_parser_search(self, request_id: str) -> dict:
             error=str(exc),
         )
         async with db_manager.session() as session:
-            await RequestDAO.update_status(
-                session, req_uuid, RequestStatus.DRAFT
+            await RequestDAO.update_fields(
+                session, req_uuid, status=RequestStatus.DRAFT.value
             )
         return {"error": "failed"}

@@ -82,7 +82,8 @@
 						<p class="font-semibold truncate text-sm md:text-base">
 							{{ selectedThread?.supplier.company_name }}
 						</p>
-						<p v-if="selectedThread?.supplier.main_email" class="text-[11px] md:text-xs text-muted truncate">
+						<p v-if="selectedThread?.supplier.main_email"
+							class="text-[11px] md:text-xs text-muted truncate">
 							{{ selectedThread.supplier.main_email }}
 						</p>
 					</div>
@@ -120,7 +121,7 @@
 											: 'Вы' }}
 									</span>
 									<span class="text-xs text-muted">
-										{{ msg.received_at ? formatDate(msg.received_at) : '' }}
+										{{ msg.received_at ? formatDateTime(msg.received_at) : '' }}
 									</span>
 								</div>
 
@@ -257,6 +258,7 @@ const route = useRoute()
 const id = route.params.id as string
 const { get, post } = useApi()
 const toast = useToast()
+const { formatDateTime, formatDateShort } = useFormatDate()
 
 const isMobile = ref(false)
 onMounted(() => {
@@ -459,22 +461,6 @@ watch(threads, () => {
 }, { immediate: false })
 
 watch(latestIncomingId, (val) => { if (val) fetchAnalysis() })
-
-
-function formatDate(iso: string) {
-	return new Date(iso).toLocaleDateString('ru-RU', {
-		day: '2-digit', month: '2-digit', year: 'numeric',
-		hour: '2-digit', minute: '2-digit',
-	})
-}
-
-function formatDateShort(iso: string) {
-	const d = new Date(iso)
-	const now = new Date()
-	if (d.toDateString() === now.toDateString())
-		return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
-	return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })
-}
 
 function formatBytes(b: number) {
 	if (b < 1024) return `${b} Б`

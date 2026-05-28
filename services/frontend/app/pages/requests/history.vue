@@ -94,9 +94,9 @@
 <script lang="ts" setup>
 import type { RequestResponse } from '#shared/types'
 import { getRequestStatusColor, getRequestStatusLabel, RequestStatus } from '#shared/types'
-import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 
 const { post, get } = useApi()
+const { formatDate } = useFormatDate()
 
 const PAGE_SIZE = 10
 
@@ -153,7 +153,9 @@ watch(search, () => { page.value = 1 })
 watch(activeTab, () => { page.value = 1; confirmCloseId.value = null })
 
 onMounted(() => {
-	document.addEventListener('click', () => { confirmCloseId.value = null })
+	const dismissConfirm = () => { confirmCloseId.value = null }
+	document.addEventListener('click', dismissConfirm)
+	onUnmounted(() => document.removeEventListener('click', dismissConfirm))
 })
 
 async function handleCloseClick(id: string) {
@@ -191,9 +193,4 @@ onMounted(() => {
 	onUnmounted(() => observer.disconnect())
 })
 
-function formatDate(iso: string) {
-	return new Date(iso).toLocaleDateString('ru-RU', {
-		day: '2-digit', month: '2-digit', year: 'numeric',
-	})
-}
 </script>

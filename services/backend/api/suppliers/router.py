@@ -4,10 +4,14 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import get_current_user, get_session
+from backend.api.deps import get_current_user, get_request_or_404, get_session
 from backend.api.suppliers.schemas import (
+    BulkToggleSuppliersRequest,
+    BulkToggleSuppliersResponse,
+    RequestSupplierResponse,
     SupplierCreate,
     SupplierMainEmailUpdate,
+    SupplierRemoveResponse,
     SupplierResponse,
 )
 from backend.db.dao import RequestDAO, RequestSupplierDAO, SupplierDAO
@@ -15,26 +19,27 @@ from backend.db.models import User
 from backend.enums import RequestSupplierStatus
 
 router = APIRouter(prefix="/suppliers", tags=["Suppliers"])
+request_suppliers_router = APIRouter(prefix="/requests", tags=["Suppliers"])
 
 
 @router.post(
     "/",
     response_model=SupplierResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Manually create/register a new supplier (optionally attach to a request)",  # noqa: E501
+    summary="Manually create/register a new supplier (optionally attach to a request)",
     responses={
         200: {
-            "description": "Existing supplier reused and attached to the provided request"  # noqa: E501
+            "description": "Existing supplier reused and attached to the provided request"
         },
         201: {
-            "description": "New supplier created (and attached to request if request_id provided)"  # noqa: E501
+            "description": "New supplier created (and attached to request if request_id provided)"
         },
         401: {"description": "Missing or invalid authentication credentials"},
         404: {
-            "description": "Request not found or does not belong to current user"  # noqa: E501
+            "description": "Request not found or does not belong to current user"
         },
         409: {
-            "description": "Supplier with this domain already exists (when called without request_id)"  # noqa: E501
+            "description": "Supplier with this domain already exists (when called without request_id)"
         },
         422: {"description": "Validation error in request payload"},
     },
@@ -145,7 +150,84 @@ async def update_supplier_main_email(
             detail="Email not found in supplier's email list",
         )
 
-    updated = await SupplierDAO.update_main_email(
-        session, supplier_id, normalized_email
+    updated = await SupplierDAO.update_fields(
+        session, supplier_id, main_email=normalized_email
     )
     return SupplierResponse.model_validate(updated)
+
+
+@request_suppliers_router.get(
+    "/{request_id}/suppliers",
+    response_model=list[RequestSupplierResponse],
+    summary="List suppliers for a request",
+)
+async def list_request_suppliers(
+    request_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> list[RequestSupplierResponse]:
+    """List request-supplier links for an owned request with nested supplier data."""
+    await get_request_or_404(request_id, session, current_user)
+    suppliers = await RequestSupplierDAO.get_by_request(session, request_id)
+    return [
+        RequestSupplierResponse(
+            id=rs.id,
+            supplier=SupplierResponse.model_validate(rs.supplier),
+            sent_status=RequestSupplierStatus(rs.sent_status),
+            is_enabled=rs.is_enabled,
+            sent_at=rs.sent_at,
+        )
+        for rs in suppliers
+    ]
+
+
+@request_suppliers_router.patch(
+    "/{request_id}/suppliers/enabled",
+    response_model=BulkToggleSuppliersResponse,
+    summary="Bulk toggle supplier enabled status for a request",
+)
+async def toggle_suppliers_bulk(
+    request_id: uuid.UUID,
+    body: BulkToggleSuppliersRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> BulkToggleSuppliersResponse:
+    """Enable or disable multiple request-supplier rows in one transaction."""
+    await get_request_or_404(request_id, session, current_user)
+    updated = await RequestSupplierDAO.set_enabled_bulk(
+        session, request_id, body.ids, body.is_enabled
+    )
+    if updated == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No matching request suppliers found",
+        )
+    return BulkToggleSuppliersResponse(updated=updated)
+
+
+@request_suppliers_router.delete(
+    "/{request_id}/suppliers/{request_supplier_id}",
+    response_model=SupplierRemoveResponse,
+    summary="Remove a supplier from a request",
+)
+async def remove_supplier_from_request(
+    request_id: uuid.UUID,
+    request_supplier_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> SupplierRemoveResponse:
+    """Remove a supplier link from the request without deleting the supplier row."""
+    await get_request_or_404(request_id, session, current_user)
+    rs = await RequestSupplierDAO.get_by_id(session, request_supplier_id)
+    if not rs or rs.request_id != request_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Request supplier link not found",
+        )
+    deleted = await RequestSupplierDAO.delete(session, request_supplier_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Request supplier link not found",
+        )
+    return SupplierRemoveResponse(id=request_supplier_id)

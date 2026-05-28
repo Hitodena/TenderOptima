@@ -88,7 +88,7 @@ async def remove_from_blacklist(
     """
     Deletes a specific blacklist entry if it belongs to the current user.
     """
-    deleted = await BlacklistedDomainDAO.delete_domain(
+    deleted = await BlacklistedDomainDAO.delete_by_id(
         session, domain_id, current_user.id
     )
     if not deleted:

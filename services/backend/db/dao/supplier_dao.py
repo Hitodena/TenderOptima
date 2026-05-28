@@ -1,5 +1,4 @@
 import uuid
-from datetime import datetime
 
 from loguru import logger
 from sqlalchemy import func, select
@@ -17,42 +16,6 @@ from backend.enums import RequestSupplierStatus
 
 class RequestSupplierDAO(BaseDAO[RequestSupplier]):
     model = RequestSupplier
-
-    @classmethod
-    async def update_body_text(
-        cls, session: AsyncSession, rs_id: uuid.UUID, body_text: str
-    ) -> None:
-        logger.debug(
-            "Updating request supplier body_text",
-            model=cls.model,
-            rs_id=rs_id,
-        )
-        try:
-            instance = await session.get(cls.model, rs_id)
-            if instance:
-                instance.body_text = body_text
-                await session.flush()
-                await session.commit()
-                logger.info(
-                    "Updated request supplier body_text",
-                    model=cls.model.__name__,
-                    rs_id=rs_id,
-                )
-            else:
-                logger.info(
-                    "Request supplier not found for update_body_text",
-                    model=cls.model,
-                    rs_id=rs_id,
-                )
-        except Exception as exc:
-            await session.rollback()
-            logger.exception(
-                "Failed to update request supplier body_text",
-                error=str(exc),
-                model=cls.model,
-                rs_id=rs_id,
-            )
-            raise
 
     @classmethod
     async def get_pending_by_request(
@@ -135,14 +98,19 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
             raise
 
     @classmethod
-    async def get_supplier_by_id(
-        cls, session: AsyncSession, rs_id: uuid.UUID
+    async def get_by_id(
+        cls, session: AsyncSession, id: uuid.UUID | str | int
     ) -> RequestSupplier | None:
-        logger.debug("Getting supplier by id", model=cls.model, rs_id=rs_id)
+        """Load RequestSupplier by primary key with supplier and request.user."""
+        logger.debug(
+            "Getting request supplier by id with relations",
+            model=cls.model,
+            id=id,
+        )
         try:
             stmt = (
                 select(cls.model)
-                .where(cls.model.id == rs_id)
+                .where(cls.model.id == id)
                 .options(
                     selectinload(cls.model.supplier),
                     selectinload(cls.model.request).selectinload(Request.user),
@@ -152,108 +120,24 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
             instance = result.scalar_one_or_none()
             if instance:
                 logger.info(
-                    "Got supplier",
+                    "Got request supplier by id",
                     model=cls.model,
-                    instance=instance,
-                    rs_id=rs_id,
+                    id=id,
                 )
             else:
-                logger.info("Supplier not found", model=cls.model, rs_id=rs_id)
+                logger.info(
+                    "Request supplier not found by id",
+                    model=cls.model,
+                    id=id,
+                )
             return instance
         except Exception as exc:
             await session.rollback()
             logger.exception(
-                "Failed to get supplier by id",
+                "Failed to get request supplier by id",
                 error=str(exc),
                 model=cls.model,
-                rs_id=rs_id,
-            )
-            raise
-
-    @classmethod
-    async def delete_for_request(
-        cls, session: AsyncSession, rs_id: uuid.UUID, request_id: uuid.UUID
-    ) -> bool:
-        logger.debug(
-            "Deleting request-supplier link",
-            model=cls.model,
-            rs_id=rs_id,
-            request_id=request_id,
-        )
-        try:
-            stmt = select(cls.model).where(
-                cls.model.id == rs_id,
-                cls.model.request_id == request_id,
-            )
-            result = await session.execute(stmt)
-            instance = result.scalar_one_or_none()
-            if not instance:
-                logger.info(
-                    "RequestSupplier not found for delete",
-                    model=cls.model,
-                    rs_id=rs_id,
-                    request_id=request_id,
-                )
-                return False
-            await session.delete(instance)
-            await session.flush()
-            await session.commit()
-            logger.info(
-                "RequestSupplier deleted",
-                model=cls.model.__name__,
-                rs_id=rs_id,
-                request_id=request_id,
-            )
-            return True
-        except Exception as exc:
-            await session.rollback()
-            logger.exception(
-                "Failed to delete request-supplier link",
-                error=str(exc),
-                model=cls.model,
-                rs_id=rs_id,
-                request_id=request_id,
-            )
-            raise
-
-    @classmethod
-    async def mark_status(
-        cls,
-        session: AsyncSession,
-        request_supplier: RequestSupplier,
-        status: RequestSupplierStatus,
-        sent_at: datetime | None = None,
-        smtp_message_id: str | None = None,
-    ) -> None:
-        logger.debug(
-            "Marking status",
-            model=cls.model,
-            request_supplier=request_supplier,
-            status=status,
-            sent_at=sent_at,
-            smtp_message_id=smtp_message_id,
-        )
-        try:
-            request_supplier.sent_status = status
-            if sent_at is not None:
-                request_supplier.sent_at = sent_at
-            if smtp_message_id is not None:
-                request_supplier.smtp_message_id = smtp_message_id
-            await session.flush()
-            await session.commit()
-            logger.info(
-                "Marked status",
-                model=cls.model,
-                request_supplier=request_supplier,
-            )
-        except Exception as exc:
-            await session.rollback()
-            logger.exception(
-                "Failed to mark status",
-                error=str(exc),
-                model=cls.model,
-                request_supplier=request_supplier,
-                status=status,
+                id=id,
             )
             raise
 
@@ -530,45 +414,5 @@ class SupplierDAO(BaseDAO[Supplier]):
                 error=str(exc),
                 model=cls.model,
                 domain=domain,
-            )
-            raise
-
-    @classmethod
-    async def update_main_email(
-        cls, session: AsyncSession, supplier_id: uuid.UUID, main_email: str
-    ) -> Supplier | None:
-        logger.debug(
-            "Updating supplier main email",
-            model=cls.model,
-            supplier_id=supplier_id,
-            main_email=main_email,
-        )
-        try:
-            instance = await session.get(cls.model, supplier_id)
-            if instance:
-                instance.main_email = main_email
-                await session.flush()
-                await session.commit()
-                logger.info(
-                    "Updated supplier main email",
-                    model=cls.model.__name__,
-                    supplier_id=supplier_id,
-                    main_email=main_email,
-                )
-            else:
-                logger.info(
-                    "Supplier not found for update_main_email",
-                    model=cls.model.__name__,
-                    supplier_id=supplier_id,
-                )
-            return instance
-        except Exception as exc:
-            await session.rollback()
-            logger.exception(
-                "Failed to update supplier main email",
-                error=str(exc),
-                model=cls.model,
-                supplier_id=supplier_id,
-                main_email=main_email,
             )
             raise

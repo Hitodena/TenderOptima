@@ -55,7 +55,7 @@ async def register(
     )
     business_info = build_business_info(user)
     await UserDAO.update_contact_info(
-        session, user, business_info=business_info
+        session, user.id, business_info=business_info
     )
 
     access_token = create_access_token(data={"sub": user.email})
@@ -141,7 +141,7 @@ async def update_user(
 
     updated_user = await UserDAO.update_contact_info(
         session,
-        current_user,
+        current_user.id,
         full_name=request.full_name,
         contact_email=request.contact_email,
         business_info=request.business_info,

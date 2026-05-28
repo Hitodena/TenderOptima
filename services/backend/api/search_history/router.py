@@ -27,5 +27,9 @@ async def get_search_history(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[SearchHistoryResponse]:
     """Returns all search history entries belonging to the current user, ordered by creation time."""  # noqa: E501
-    items = await SearchHistoryDAO.get_all_by_user(session, current_user.id)
+    items = await SearchHistoryDAO.get_all(
+        session,
+        user_id=current_user.id,
+        order_by=SearchHistoryDAO.model.created_at.desc(),
+    )
     return [SearchHistoryResponse.model_validate(i) for i in items]

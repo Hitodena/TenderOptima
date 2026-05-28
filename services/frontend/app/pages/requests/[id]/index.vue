@@ -98,18 +98,7 @@
 					<UAlert color="neutral" variant="soft" icon="i-lucide-lock" class="mb-4"
 						description="Запрос закрыт" />
 				</div>
-				<div v-else-if="request.status === RequestStatus.SEARCHING"
-					class="flex flex-col gap-3 p-4 rounded-xl bg-warning/10">
-					<div class="flex items-center gap-3">
-						<UIcon name="i-lucide-search" class="w-5 h-5 text-warning shrink-0" />
-						<div class="min-w-0 flex-1">
-							<p class="text-sm font-medium">Поиск поставщиков в процессе</p>
-							<p class="text-xs text-muted">Результаты появятся автоматически</p>
-						</div>
-					</div>
-					<UProgress v-model="searchProgress" :max="100" status color="warning" size="sm" />
-				</div>
-				<div v-else>
+				<div v-else-if="request.status === RequestStatus.DRAFT || request.status === RequestStatus.ACTIVE">
 					<UAlert color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 						description="Отправляйте запросы только подходящим компаниям. Нерелевантные письма могут негативно влиять на репутацию вашей компании." />
 				</div>
@@ -251,7 +240,7 @@
 </template>
 
 <script lang="ts" setup>
-import type { RequestResponse, RequestSupplierResponse, Supplier } from '#shared/types'
+import type { RequestSupplierResponse, Supplier } from '#shared/types'
 import {
 	getRequestStatusColor,
 	getRequestStatusLabel,
@@ -261,23 +250,32 @@ import {
 	RequestSupplierStatus,
 } from '#shared/types'
 import type { TableColumn, TableRow } from '@nuxt/ui'
-import { useIntervalFn } from '@vueuse/core'
-
-const SEARCH_POLL_INTERVAL_MS = 5_000
-const SEARCH_EXPECTED_DURATION_MS = 2 * 60 * 1000
 
 const route = useRoute()
 const id = route.params.id as string
-const { get, patch, post, del } = useApi()
+const { post } = useApi()
+const { formatDate } = useFormatDate()
 
-const request = ref<RequestResponse | null>(null)
-const suppliers = ref<RequestSupplierResponse[]>([])
-const loading = ref(true)
-const loadingSuppliers = ref(false)
-const updatingToggle = ref(false)
-const suppressToggleEvents = ref(false)
-const actionError = ref('')
-const toast = useToast()
+const {
+	request,
+	suppliers,
+	loading,
+	loadingSuppliers,
+	updatingToggle,
+	suppressToggleEvents,
+	actionError,
+	fetchRequest,
+	fetchSuppliers,
+	updateSuppliersEnabled,
+	removeSupplier,
+} = useRequestDetail(id)
+
+const { searchProgress, searchRemainingLabel } = useSearchPolling(
+	id,
+	request,
+	() => fetchSuppliers(true),
+)
+
 const showParamsModal = ref(false)
 const showAddSupplier = ref(false)
 const showEditEmail = ref(false)
@@ -304,130 +302,8 @@ const filteredSuppliers = computed(() => {
 })
 
 
-async function fetchRequest() {
-	loading.value = true
-	try {
-		request.value = await get<RequestResponse>(`/requests/${id}`)
-	} catch {
-		request.value = null
-	} finally {
-		loading.value = false
-	}
-}
-
-async function fetchSuppliers(silent = false) {
-	if (!silent) loadingSuppliers.value = true
-	try {
-		suppliers.value = await get<RequestSupplierResponse[]>(`/requests/${id}/suppliers`)
-	} catch {
-		suppliers.value = []
-	} finally {
-		if (!silent) loadingSuppliers.value = false
-	}
-}
-
 await fetchRequest()
 if (request.value) await fetchSuppliers()
-
-const searchProgress = ref(0)
-const searchStartedAt = ref<number | null>(null)
-
-const isSearching = computed(
-	() => request.value?.status === RequestStatus.SEARCHING,
-)
-
-const searchRemainingLabel = computed(() => {
-	if (!searchStartedAt.value) return ''
-	if (searchProgress.value >= 99) return 'Завершение...'
-	const remainingMinutes = Math.ceil(
-		((100 - searchProgress.value) / 100) * (SEARCH_EXPECTED_DURATION_MS / 60_000),
-	)
-	return remainingMinutes > 0
-		? `Осталось ~${remainingMinutes} мин`
-		: 'Завершение...'
-})
-
-function updateSearchProgress() {
-	if (!searchStartedAt.value) return
-	const elapsed = Date.now() - searchStartedAt.value
-	searchProgress.value = Math.min(
-		99,
-		Math.round((elapsed / SEARCH_EXPECTED_DURATION_MS) * 100),
-	)
-}
-
-async function pollSearchStatus() {
-	if (!request.value) return
-	if (request.value.status !== RequestStatus.SEARCHING) return
-
-	try {
-		const updated = await get<RequestResponse>(`/requests/${id}`)
-		request.value = updated
-
-		if (updated.status !== RequestStatus.SEARCHING) {
-			stopSearchTimers()
-			await fetchSuppliers(true)
-
-			if (updated.status === RequestStatus.ACTIVE) {
-				toast.add({
-					title: 'Поиск завершён',
-					description: 'Поставщики добавлены в запрос.',
-					color: 'success',
-					icon: 'i-lucide-check',
-				})
-			} else if (updated.status === RequestStatus.DRAFT) {
-				toast.add({
-					title: 'Ошибка поиска',
-					description: 'Не удалось найти поставщиков. Попробуйте снова.',
-					color: 'error',
-					icon: 'i-lucide-circle-alert',
-				})
-			}
-		}
-	} catch {
-		// retry on next interval
-	}
-}
-
-function stopSearchTimers() {
-	pauseSearchProgress()
-	pauseSearchPolling()
-}
-
-function resetSearchTracking() {
-	stopSearchTimers()
-	searchProgress.value = 0
-	searchStartedAt.value = null
-}
-
-function startSearchTracking() {
-	if (searchStartedAt.value == null) {
-		searchStartedAt.value = Date.now()
-	}
-	updateSearchProgress()
-	resumeSearchProgress()
-	resumeSearchPolling()
-	void pollSearchStatus()
-}
-
-const { pause: pauseSearchProgress, resume: resumeSearchProgress } = useIntervalFn(
-	updateSearchProgress,
-	1_000,
-	{ immediate: false },
-)
-
-const { pause: pauseSearchPolling, resume: resumeSearchPolling } = useIntervalFn(
-	pollSearchStatus,
-	SEARCH_POLL_INTERVAL_MS,
-	{ immediate: false },
-)
-
-watch(isSearching, (searching) => {
-	if (searching) startSearchTracking()
-	else resetSearchTracking()
-}, { immediate: true })
-
-onUnmounted(resetSearchTracking)
 
 const enabledCount = computed(() => suppliers.value.filter(s => s.is_enabled).length)
 const statusColor = computed(() => getRequestStatusColor(request.value?.status ?? ''))
@@ -449,66 +325,23 @@ const supplierColumns = computed<TableColumn<RequestSupplierResponse>[]>(() => {
 })
 
 
-function formatDate(iso: string) {
-	const d = new Date(iso)
-	const pad = (n: number) => String(n).padStart(2, '0')
-	return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`
-}
-
-async function updateSuppliersEnabled(ids: string[], enabled: boolean) {
-	if (ids.length === 0 || isTerminalStatus.value) return
-
-	const targets = suppliers.value.filter(s => ids.includes(s.id))
-	if (targets.length === 0) return
-
-	const snapshot = new Map(targets.map(s => [s.id, s.is_enabled]))
-
-	updatingToggle.value = true
-	actionError.value = ''
-	suppressToggleEvents.value = true
-
-	for (const s of targets) {
-		s.is_enabled = enabled
-	}
-
-	try {
-		await patch(`/requests/${id}/suppliers/enabled`, { ids, is_enabled: enabled })
-	} catch (e: any) {
-		for (const s of targets) {
-			s.is_enabled = snapshot.get(s.id)!
-		}
-		const detail = e?.response?.data?.detail
-		actionError.value = typeof detail === 'string'
-			? detail
-			: 'Не удалось изменить выбор поставщиков'
-	} finally {
-		updatingToggle.value = false
-		await nextTick()
-		suppressToggleEvents.value = false
-	}
-}
-
 async function handleToggle(rs: RequestSupplierResponse, newVal: boolean) {
-	if (suppressToggleEvents.value || rs.is_enabled === newVal) return
+	if (suppressToggleEvents.value || rs.is_enabled === newVal || isTerminalStatus.value) return
 	await updateSuppliersEnabled([rs.id], newVal)
 }
 
 async function confirmDeleteSupplier(rsId: string) {
 	confirmDeleteSupplierId.value = null
 	deletingSupplierIds.add(rsId)
-	actionError.value = ''
 	try {
-		await del(`/requests/${id}/suppliers/${rsId}`)
-		suppliers.value = suppliers.value.filter(s => s.id !== rsId)
-	} catch (e: any) {
-		const detail = e?.response?.data?.detail
-		actionError.value = typeof detail === 'string' ? detail : 'Не удалось удалить поставщика'
+		await removeSupplier(rsId)
 	} finally {
 		deletingSupplierIds.delete(rsId)
 	}
 }
 
 async function toggleAll(enabled: boolean) {
+	if (isTerminalStatus.value) return
 	const ids = suppliers.value
 		.filter(s => s.is_enabled !== enabled)
 		.map(s => s.id)
@@ -527,12 +360,6 @@ async function runSearch() {
 	try {
 		await post(`/requests/${id}/search`)
 		if (request.value) request.value.status = RequestStatus.SEARCHING
-		toast.add({
-			title: 'Поиск в процессе',
-			description: 'Запущен поиск поставщиков. Результаты появятся в запросе через некоторое время.',
-			color: 'warning',
-			icon: 'i-lucide-search',
-		})
 	} catch (e: any) {
 		const detail = e?.response?.data?.detail
 		actionError.value = typeof detail === 'string' ? detail : 'Не удалось выполнить поиск поставщиков'

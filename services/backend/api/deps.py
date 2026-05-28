@@ -1,3 +1,4 @@
+import uuid
 from collections.abc import AsyncGenerator
 from typing import Annotated
 
@@ -6,8 +7,9 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.config import Config, get_config
+from backend.db.dao import RequestDAO
 from backend.db.dao.user_dao import UserDAO
-from backend.db.models import User
+from backend.db.models import Request, User
 from backend.services.db_service import db_manager
 from backend.utils.jwt_utils import decode_access_token
 
@@ -47,6 +49,21 @@ async def get_current_user(
 def get_config_instance() -> Config:
     """Get config instance"""
     return get_config()
+
+
+async def get_request_or_404(
+    request_id: uuid.UUID,
+    session: AsyncSession,
+    current_user: User,
+) -> Request:
+    """Load request owned by current user or raise 404."""
+    request = await RequestDAO.get_by_id(session, request_id)
+    if not request or request.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Request not found",
+        )
+    return request
 
 
 async def get_admin(user: Annotated[User, Depends(get_current_user)]):
