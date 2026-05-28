@@ -1,0 +1,26 @@
+{
+	"mcpServers": {
+		"codegraph": {
+			"type": "stdio",
+			"command": "codegraph",
+			"args": ["serve", "--mcp", "--path", "${workspaceFolder}"]
+		},
+		"nuxt-ui": {
+			"type": "http",
+			"url": "https://ui.nuxt.com/mcp"
+		},
+		"nuxt": {
+			"type": "http",
+			"url": "https://nuxt.com/mcp",
+			"headers": {}
+		},
+		"agentmemory": {
+			"command": "npx",
+			"args": ["-y", "@agentmemory/mcp"],
+			"env": {
+				"AGENTMEMORY_URL": "${AGENTMEMORY_URL}",
+				"AGENTMEMORY_SECRET": "${AGENTMEMORY_SECRET}"
+			}
+		}
+	}
+}

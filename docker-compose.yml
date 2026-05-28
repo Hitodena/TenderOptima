@@ -48,11 +48,11 @@ services:
 
   migrate:
     build:
-      context: .
+      context: ./services/backend
       target: base
     image: tenderoptima/migrate:latest
     container_name: tenderoptima_migrate
-    command: alembic upgrade head
+    command: alembic -c backend/alembic.ini upgrade head
     env_file:
       - .env
     depends_on:
@@ -62,16 +62,16 @@ services:
       - tenderoptima_network
     restart: on-failure
 
-  api:
+  backend:
     build:
-      context: .
-      target: api
-    image: tenderoptima/api:latest
-    container_name: tenderoptima_api
+      context: ./services/backend
+      target: backend
+    image: tenderoptima/backend:latest
+    container_name: tenderoptima_backend
     restart: unless-stopped
     env_file: .env
     ports:
-      - "${API_PORT:-8000}:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -90,11 +90,10 @@ services:
     networks:
       - tenderoptima_network
 
-  api_parser:
+  parser:
     build:
-      context: .
-      target: parser_api
-    image: tenderoptima/api_parser:latest
+      context: ./services/parser
+    image: tenderoptima/parser:latest
     container_name: tenderoptima_parser
     restart: unless-stopped
     env_file: .env
@@ -118,7 +117,7 @@ services:
 
   worker:
     build:
-      context: .
+      context: ./services/backend
       target: worker
     image: tenderoptima/worker:latest
     container_name: tenderoptima_worker
@@ -131,11 +130,13 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      parser:
+        condition: service_healthy
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "celery -A app.celery_app.celery_config inspect ping -d celery@$$HOSTNAME || exit 1",
+          "celery -A backend.celery_app.celery_config inspect ping -d celery@$$HOSTNAME || exit 1",
         ]
       interval: 60s
       timeout: 15s
@@ -148,7 +149,7 @@ services:
 
   beat:
     build:
-      context: .
+      context: ./services/backend
       target: beat
     image: tenderoptima/beat:latest
     container_name: tenderoptima_beat
@@ -173,17 +174,17 @@ services:
 
   frontend:
     build:
-      context: ./frontend
+      context: ./services/frontend
       dockerfile: Dockerfile
     image: tenderoptima/frontend:latest
     container_name: tenderoptima_frontend
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${FRONTEND_PORT:-3000}:3000"
     env_file:
-      - ./frontend/.env
+      - ./services/frontend/.env
     depends_on:
-      api:
+      backend:
         condition: service_healthy
     networks:
       - tenderoptima_network

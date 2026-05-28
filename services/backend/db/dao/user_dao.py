@@ -1,0 +1,85 @@
+from loguru import logger
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.db.dao.base_dao import BaseDAO
+from backend.db.models import User
+
+
+class UserDAO(BaseDAO[User]):
+    model = User
+
+    @classmethod
+    async def get_by_email(
+        cls, session: AsyncSession, email: str
+    ) -> User | None:
+        logger.debug("Getting user by email", model=cls.model, email=email)
+        try:
+            stmt = select(cls.model).where(cls.model.email == email)
+            result = await session.execute(stmt)
+            instance = result.scalar_one_or_none()
+            if instance:
+                logger.info(
+                    "Got user",
+                    instance=instance,
+                    model=cls.model,
+                    email=email,
+                )
+            else:
+                logger.info(
+                    "User not found",
+                    model=cls.model,
+                    email=email,
+                )
+            return instance
+        except Exception as exc:
+            await session.rollback()
+            logger.exception(
+                "Failed to get user by email",
+                error=str(exc),
+                model=cls.model,
+                email=email,
+            )
+            raise
+
+    @classmethod
+    async def update_contact_info(
+        cls,
+        session: AsyncSession,
+        user: User,
+        full_name: str | None = None,
+        contact_email: str | None = None,
+        business_info: str | None = None,
+    ) -> User:
+        logger.debug(
+            "Updating user contact info",
+            model=cls.model,
+            user_id=user.id,
+            full_name=full_name,
+            contact_email=contact_email,
+            business_info=business_info,
+        )
+        try:
+            if full_name is not None:
+                user.full_name = full_name
+            if contact_email is not None:
+                user.contact_email = contact_email
+            if business_info is not None:
+                user.business_info = business_info
+            session.add(user)
+            await session.flush()
+            await session.refresh(user)
+            await session.commit()
+            logger.info(
+                "User contact info updated", model=cls.model, user_id=user.id
+            )
+            return user
+        except Exception as exc:
+            await session.rollback()
+            logger.exception(
+                "Failed to update user contact info",
+                error=str(exc),
+                model=cls.model,
+                user_id=user.id,
+            )
+            raise
