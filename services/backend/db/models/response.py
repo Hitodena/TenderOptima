@@ -1,8 +1,7 @@
 import uuid
 from datetime import datetime
-from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, Text
+from sqlalchemy import DateTime, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import JSON, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -46,6 +45,8 @@ class EmailMessage(IDMixinUUID, TimestampMixin, Base):
 
 
 class ResponseAnalysis(IDMixinUUID, TimestampMixin, Base):
+    """LLM output for supplier email vs user-defined requirements."""
+
     __tablename__ = "response_analyses"
 
     response_id: Mapped[uuid.UUID] = mapped_column(
@@ -54,27 +55,9 @@ class ResponseAnalysis(IDMixinUUID, TimestampMixin, Base):
         unique=True,
         nullable=False,
     )
-
-    llm_model: Mapped[str] = mapped_column(nullable=False)
-
-    offered_price_per_unit: Mapped[Decimal | None] = mapped_column(
-        Numeric(12, 2)
-    )
-    offered_currency: Mapped[str | None] = mapped_column()
-    offered_quantity: Mapped[int | None] = mapped_column(Integer)
-    offered_delivery_days: Mapped[int | None] = mapped_column(Integer)
-    quality_description: Mapped[str | None] = mapped_column(Text)
-
-    meets_price: Mapped[bool | None] = mapped_column(Boolean)
-    meets_quantity: Mapped[bool | None] = mapped_column(Boolean)
-    meets_deadline: Mapped[bool | None] = mapped_column(Boolean)
-    meets_quality: Mapped[bool | None] = mapped_column(Boolean)
-
-    match_score: Mapped[int | None] = mapped_column(Integer)
-
-    summary: Mapped[str | None] = mapped_column(Text)
-
+    llm_model: Mapped[str] = mapped_column(nullable=False, default="")
     raw_llm_response: Mapped[dict | None] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(nullable=False, default="active")
 
     response: Mapped["EmailMessage"] = relationship(
         back_populates="analysis",

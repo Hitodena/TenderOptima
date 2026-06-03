@@ -60,7 +60,7 @@
 
                     <div>
                         <UFileUpload :model-value="filesToUpload" multiple
-                            accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp" :interactive="true"
+                            accept=".pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp" :interactive="true"
                             :description="uploadDescription" layout="list" class="w-full min-h-35" position="inside"
                             @update:model-value="handleFilesUpdate">
                             <template #actions="{ open }">
@@ -126,7 +126,7 @@
                             <span class="flex-1 truncate">{{ att.filename }}</span>
                             <span class="text-xs text-muted">{{
                                 formatBytes(att.size)
-                                }}</span>
+                            }}</span>
                         </div>
                     </div>
                 </div>

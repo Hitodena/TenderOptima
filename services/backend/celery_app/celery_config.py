@@ -89,6 +89,7 @@ class CeleryConfig:
 
     mail_exchange = Exchange("mail", type="direct", durable=True)
     parser_exchange = Exchange("parser", type="direct", durable=True)
+    analysis_exchange = Exchange("analysis", type="direct", durable=True)
 
     task_queues = (
         Queue(
@@ -115,6 +116,12 @@ class CeleryConfig:
             routing_key="parser.search",
             priority=3,
         ),
+        Queue(
+            "analysis",
+            analysis_exchange,
+            routing_key="analysis",
+            priority=6,
+        ),
     )
 
     # Routing
@@ -135,11 +142,20 @@ class CeleryConfig:
             "queue": "parser_search",
             "routing_key": "parser.search",
         },
+        "analysis.tz": {
+            "queue": "analysis",
+            "routing_key": "analysis",
+        },
+        "analysis.email": {
+            "queue": "analysis",
+            "routing_key": "analysis",
+        },
     }
 
     include = [
         "backend.celery_app.tasks.email_tasks",
         "backend.celery_app.tasks.parser_tasks",
+        "backend.celery_app.tasks.analysis_tasks",
     ]
 
     # Logging

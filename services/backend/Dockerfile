@@ -10,10 +10,14 @@ RUN uv sync --frozen --no-dev
 
 FROM python:3.12-slim AS base
 
-RUN apt-get update && apt-get install -y --no-install-recommends curl && \
-	rm -rf /var/lib/apt/lists/* && \
-	groupadd --gid 1001 appgroup && \
-	useradd --uid 1001 --gid appgroup --no-create-home appuser
+RUN apt-get update && apt-get install -y --no-install-recommends \
+	curl \
+	tesseract-ocr \
+	tesseract-ocr-eng \
+	tesseract-ocr-rus \
+	&& rm -rf /var/lib/apt/lists/* \
+	&& groupadd --gid 1001 appgroup \
+	&& useradd --uid 1001 --gid appgroup --no-create-home appuser
 
 WORKDIR /app
 
@@ -41,7 +45,7 @@ FROM base AS worker
 
 CMD ["celery", "-A", "backend.celery_app.celery_config", "worker", \
 	"--pool=prefork", "--loglevel=info", "--concurrency=4", \
-	"--queues", "mail_send,mail_poll,mail_reply,parser_search"]
+	"--queues", "mail_send,mail_poll,mail_reply,parser_search,analysis"]
 
 FROM base AS beat
 

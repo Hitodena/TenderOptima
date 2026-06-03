@@ -26,10 +26,15 @@ export default defineNuxtPlugin(() => {
 			if (status === 401) {
 				const auth = useAuthStore();
 				auth.clearToken();
-				await navigateTo('/auth');
+				if (import.meta.client) {
+					await navigateTo('/auth');
+				}
 			}
 
-			if (!error.response || status === 502 || status >= 500) {
+			if (
+				import.meta.client &&
+				(!error.response || status === 502 || status >= 500)
+			) {
 				const toast = useToast();
 				toast.add({
 					title: 'Внутренняя ошибка сервера',

@@ -9,8 +9,6 @@ ALLOWED_CONTENT_TYPES: set[str] = {
     "application/pdf",
     "application/msword",
     "application/vnd.ms-excel",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "image/jpeg",
     "image/png",
     "image/webp",
@@ -73,6 +71,11 @@ class Config(BaseSettings):
 
     # Parser
     parser_url: str
+
+    # OpenAI
+    openai_api_key: str
+    openai_model: str
+    openai_base_url: str
 
     # Upload
     upload_dir: str = "/app/uploads"

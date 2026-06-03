@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 from backend.db.dao.base_dao import BaseDAO
 from backend.db.models import EmailMessage, RequestSupplier
 from backend.enums import EmailMessageDirection
-from backend.schemas.thread import ThreadSummaryRow
+from backend.schemas import ThreadSummaryRow
 
 
 class EmailMessageDAO(BaseDAO[EmailMessage]):

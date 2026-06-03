@@ -5,6 +5,7 @@ from .response import EmailMessage, ResponseAnalysis
 from .search import SearchHistory
 from .subscription import Subscription
 from .supplier import RequestSupplier, Supplier
+from .tz_analysis import TZAnalysis
 from .user import User
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "Supplier",
     "RequestSupplier",
     "User",
+    "TZAnalysis",
 ]

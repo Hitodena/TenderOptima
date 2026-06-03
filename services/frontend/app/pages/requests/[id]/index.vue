@@ -301,10 +301,6 @@ const filteredSuppliers = computed(() => {
 	)
 })
 
-
-await fetchRequest()
-if (request.value) await fetchSuppliers()
-
 const enabledCount = computed(() => suppliers.value.filter(s => s.is_enabled).length)
 const statusColor = computed(() => getRequestStatusColor(request.value?.status ?? ''))
 const statusLabel = computed(() => getRequestStatusLabel(request.value?.status ?? ''))
@@ -324,6 +320,10 @@ const supplierColumns = computed<TableColumn<RequestSupplierResponse>[]>(() => {
 	return cols
 })
 
+onMounted(async () => {
+	await fetchRequest()
+	if (request.value) await fetchSuppliers()
+})
 
 async function handleToggle(rs: RequestSupplierResponse, newVal: boolean) {
 	if (suppressToggleEvents.value || rs.is_enabled === newVal || isTerminalStatus.value) return

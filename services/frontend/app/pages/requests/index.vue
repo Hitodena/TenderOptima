@@ -36,9 +36,9 @@
 
 			<div class="text-center">
 				<UButton to="/requests/history" size="lg" variant="outline" color="neutral" leading-icon="i-lucide-history">
-					Открыть полную историю запросов
+					История запросов
 				</UButton>
-				<p class="text-xs text-muted mt-2">Все запросы, статусы и ответы поставщиков</p>
+				<p class="text-xs text-muted mt-2">Активные, в обработке и завершённые</p>
 			</div>
 
 		</div>

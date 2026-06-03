@@ -51,6 +51,7 @@ if (auth.isAuthenticated.value) {
 }
 
 const isRequestsActive = computed(() => route.path.startsWith('/requests'))
+const isTzAnalysisActive = computed(() => route.path.startsWith('/tz-analysis'))
 
 const navItems = computed<NavigationMenuItem[]>(() => [
 	{
@@ -76,8 +77,22 @@ const navItems = computed<NavigationMenuItem[]>(() => [
 	{
 		label: 'Анализ ТЗ',
 		icon: 'i-lucide-file-search',
-		disabled: true,
-		badge: { label: 'Скоро', color: 'neutral', variant: 'subtle', size: 'sm' },
+		active: isTzAnalysisActive.value,
+		to: '/tz-analysis',
+		children: [
+			{
+				label: 'Новый анализ',
+				icon: 'i-lucide-scan-search',
+				to: '/tz-analysis',
+				description: 'Сравнение ТЗ с коммерческим предложением',
+			},
+			{
+				label: 'История',
+				icon: 'i-lucide-history',
+				to: '/tz-analysis/history',
+				description: 'Активные, в обработке и завершённые анализы',
+			},
+		],
 	},
 	{
 		label: 'Подписка',

@@ -175,15 +175,15 @@
 
 		<div v-if="showParamsPanel" class="shrink-0 border-l border-default flex flex-col" :class="isMobile
 			? 'absolute inset-0 z-20 w-full bg-default'
-			: 'w-64'">
+			: 'w-64 md:w-72'">
 
 			<div class="px-4 py-3 border-b border-default flex items-center justify-between gap-2">
-				<div class="flex items-center gap-2">
+				<div class="flex items-center gap-2 min-w-0">
 					<UButton v-if="isMobile" variant="ghost" color="neutral" size="xs" icon="i-lucide-arrow-left"
 						@click="showParamsPanel = false" />
-					<p class="text-sm font-semibold">Извлечённые параметры</p>
+					<p class="text-sm font-semibold truncate">Извлечённые параметры</p>
 				</div>
-				<div class="flex items-center gap-1">
+				<div class="flex items-center gap-1 shrink-0">
 					<UButton size="xs" variant="ghost" color="neutral" icon="i-lucide-refresh-cw" :loading="extracting"
 						:disabled="!latestIncomingId" @click="reExtract" />
 					<UButton v-if="paramsDirty" size="xs" variant="ghost" color="primary" icon="i-lucide-save"
@@ -198,30 +198,28 @@
 					<UIcon name="i-lucide-file-search" class="w-7 h-7 opacity-20" />
 					<p class="text-xs text-center">Выберите тред</p>
 				</div>
-
-				<div v-else-if="loadingAnalysis" class="space-y-3">
+				<div v-else-if="loadingAnalysis || analysisPolling" class="space-y-3">
 					<USkeleton v-for="i in 5" :key="i" class="h-12 w-full rounded-lg" />
 				</div>
-
-				<div v-else class="space-y-2.5">
-					<div v-if="extracting" class="flex items-center gap-2 text-xs text-muted mb-3">
+				<div v-else class="space-y-3">
+					<div v-if="extracting || analysisPolling"
+						class="flex items-center gap-2 text-xs text-muted">
 						<UIcon name="i-lucide-loader" class="w-3 h-3 animate-spin" />
 						AI извлекает параметры...
 					</div>
-
 					<div v-for="(value, label) in extractedParams" :key="label" class="space-y-0.5">
 						<p class="text-[11px] text-muted font-medium leading-tight">{{ label }}</p>
 						<div class="flex items-center gap-1">
 							<template v-if="editingParam === label">
-								<UInput v-model="editingValue" size="xs" class="flex-1" @keyup.enter="commitEdit(label)"
-									@keyup.escape="editingParam = null" />
+								<UInput v-model="editingValue" size="xs" class="flex-1"
+									@keyup.enter="commitEdit(label)" @keyup.escape="editingParam = null" />
 								<UButton size="xs" variant="ghost" color="primary" icon="i-lucide-check"
 									@click="commitEdit(label)" />
 								<UButton size="xs" variant="ghost" color="neutral" icon="i-lucide-x"
 									@click="editingParam = null" />
 							</template>
 							<template v-else>
-								<p class="text-xs flex-1 min-w-0 truncate"
+								<p class="text-xs flex-1 min-w-0"
 									:class="value ? 'text-default' : 'text-muted italic'">
 									{{ value ?? 'Не указано' }}
 								</p>
@@ -233,13 +231,29 @@
 							</template>
 						</div>
 					</div>
-
-					<div v-if="Object.keys(extractedParams).length === 0"
+					<div v-if="requirementMatches.length" class="pt-2 border-t border-default/60 space-y-2">
+						<p class="text-xs font-semibold">Соответствие требованиям</p>
+						<div v-for="(m, idx) in requirementMatches" :key="idx"
+							class="rounded-lg border border-default/60 p-2 space-y-1">
+							<div class="flex items-start gap-2">
+								<UIcon :name="matchStatusIcon(m.status)" class="w-4 h-4 shrink-0 mt-0.5"
+									:class="matchStatusClass(m.status)" />
+								<p class="text-xs font-medium flex-1">{{ m.requirement }}</p>
+							</div>
+							<p v-if="m.offer_value" class="text-[11px] text-muted pl-6">
+								Предложение: {{ m.offer_value }}
+							</p>
+							<p v-if="m.explanation" class="text-[11px] text-default/80 pl-6">
+								{{ m.explanation }}
+							</p>
+						</div>
+					</div>
+					<div v-if="Object.keys(extractedParams).length === 0 && !requirementMatches.length"
 						class="flex flex-col items-center justify-center py-8 gap-2 text-muted">
 						<UIcon name="i-lucide-file-x" class="w-7 h-7 opacity-20" />
 						<p class="text-xs text-center">Параметры не извлечены</p>
-						<UButton size="xs" variant="outline" leading-icon="i-lucide-zap" :disabled="!latestIncomingId"
-							@click="reExtract">
+						<UButton size="xs" variant="outline" leading-icon="i-lucide-zap"
+							:disabled="!latestIncomingId" @click="reExtract">
 							Извлечь
 						</UButton>
 					</div>
@@ -250,13 +264,22 @@
 </template>
 
 <script lang="ts" setup>
-import type { Attachment, Message, ThreadSummary } from '#shared/types'
+import type {
+	Attachment,
+	EmailAnalysisResponse,
+	Message,
+	RequirementMatch,
+	ThreadSummary,
+	TZAnalysisStatus,
+} from '#shared/types'
+import { TZAnalysisRunStatus } from '#shared/types'
+import { useRunStatusPolling } from '~/composables/useRunStatusPolling'
 
 definePageMeta({ layout: 'default' })
 
 const route = useRoute()
 const id = route.params.id as string
-const { get, post } = useApi()
+const { get, post, patch } = useApi()
 const toast = useToast()
 const { formatDateTime, formatDateShort } = useFormatDate()
 
@@ -270,7 +293,6 @@ onMounted(() => {
 
 
 const showParamsPanel = ref(true)
-
 
 const threads = ref<ThreadSummary[]>([])
 const loadingThreads = ref(true)
@@ -365,40 +387,93 @@ async function sendReply() {
 
 
 const extractedParams = ref<Record<string, string | null>>({})
+const requirementMatches = ref<RequirementMatch[]>([])
 const loadingAnalysis = ref(false)
 const savingParams = ref(false)
 const extracting = ref(false)
+const analysisPolling = ref(false)
 const paramsDirty = ref(false)
 const editingParam = ref<string | null>(null)
 const editingValue = ref('')
 
+function applyEmailAnalysis(data: EmailAnalysisResponse) {
+	const params: Record<string, string | null> = {}
+	for (const [k, v] of Object.entries(data.parameters || {})) {
+		params[k] = v ?? null
+	}
+	extractedParams.value = params
+	requirementMatches.value = data.matches || []
+	if (data.status === TZAnalysisRunStatus.PROCESSING) {
+		analysisPolling.value = true
+	}
+}
+
 async function fetchAnalysis() {
 	if (!latestIncomingId.value) {
 		extractedParams.value = {}
+		requirementMatches.value = []
+		analysisPolling.value = false
 		return
 	}
 	loadingAnalysis.value = true
 	paramsDirty.value = false
 	try {
-		// TODO: GET /responses/{latestIncomingId}/analysis
-		// const data = await get<{ params: Record<string, string | null> }>(
-		//   `/responses/${latestIncomingId.value}/analysis`
-		// )
-		// extractedParams.value = data.params
-		extractedParams.value = {}
+		const data = await get<EmailAnalysisResponse>(
+			`/responses/${latestIncomingId.value}/analysis`,
+		)
+		applyEmailAnalysis(data)
 	} catch {
 		extractedParams.value = {}
+		requirementMatches.value = []
+		analysisPolling.value = false
 	} finally {
 		loadingAnalysis.value = false
 	}
 }
 
+useRunStatusPolling(
+	analysisPolling,
+	async () => {
+		if (!latestIncomingId.value) return null
+		return get<EmailAnalysisResponse>(
+			`/responses/${latestIncomingId.value}/analysis`,
+		)
+	},
+	(data: EmailAnalysisResponse) => { applyEmailAnalysis(data) },
+	() => {
+		toast.add({
+			title: 'Анализ выполнен',
+			color: 'success',
+			icon: 'i-lucide-check',
+		})
+	},
+	() => {
+		toast.add({
+			title: 'Ошибка анализа',
+			color: 'error',
+			icon: 'i-lucide-circle-alert',
+		})
+	},
+)
+
 async function saveParams() {
 	if (!latestIncomingId.value) return
 	savingParams.value = true
 	try {
-		// TODO: PATCH /responses/{latestIncomingId}/analysis  body: { params }
-		// await patch(`/responses/${latestIncomingId.value}/analysis`, { params: extractedParams.value })
+		const parameters: Record<string, string | null> = {}
+		for (const [k, v] of Object.entries(extractedParams.value)) {
+			parameters[k] = v
+		}
+		const data = await patch<EmailAnalysisResponse>(
+			`/responses/${latestIncomingId.value}/analysis`,
+			{ parameters },
+		)
+		const params: Record<string, string | null> = {}
+		for (const [k, v] of Object.entries(data.parameters || {})) {
+			params[k] = v ?? null
+		}
+		extractedParams.value = params
+		requirementMatches.value = data.matches || []
 		paramsDirty.value = false
 		toast.add({ title: 'Параметры сохранены', color: 'success', icon: 'i-lucide-check' })
 	} catch (e: any) {
@@ -412,12 +487,40 @@ async function reExtract() {
 	if (!latestIncomingId.value) return
 	extracting.value = true
 	try {
-		// TODO: POST /responses/{latestIncomingId}/extract  → 202 Accepted
-		// await post(`/responses/${latestIncomingId.value}/extract`)
-		toast.add({ title: 'AI-извлечение пока не реализовано', color: 'info' })
+		const data = await post<EmailAnalysisResponse>(
+			`/responses/${latestIncomingId.value}/analyze`,
+		)
+		applyEmailAnalysis(data)
+		if (data.status !== TZAnalysisRunStatus.PROCESSING) {
+			toast.add({
+				title: 'Анализ выполнен',
+				color: 'success',
+				icon: 'i-lucide-check',
+			})
+		}
+	} catch (e: any) {
+		const detail = e?.response?.data?.detail
+		toast.add({
+			title: typeof detail === 'string' ? detail : 'Ошибка анализа',
+			color: 'error',
+		})
 	} finally {
 		extracting.value = false
 	}
+}
+
+function matchStatusIcon(status: TZAnalysisStatus) {
+	if (status === 'met') return 'i-lucide-circle-check'
+	if (status === 'partial') return 'i-lucide-circle-alert'
+	if (status === 'missing') return 'i-lucide-circle-x'
+	return 'i-lucide-circle-help'
+}
+
+function matchStatusClass(status: TZAnalysisStatus) {
+	if (status === 'met') return 'text-success'
+	if (status === 'partial') return 'text-warning'
+	if (status === 'missing') return 'text-error'
+	return 'text-muted'
 }
 
 function startEdit(label: string, value: string | null) {

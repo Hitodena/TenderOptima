@@ -121,7 +121,7 @@
 									</div>
 									<div>
 										<p class="text-xs text-muted mb-0.5">Телефон</p>
-										<a :href="publicConfig.contactPhoneHref"
+										<a :href="`tel:${publicConfig.contactPhone}`"
 											class="text-sm font-medium text-primary hover:underline underline-offset-2 transition-opacity hover:opacity-80">
 											{{ publicConfig.contactPhone }}
 										</a>

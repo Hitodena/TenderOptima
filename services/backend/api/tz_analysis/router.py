@@ -1,0 +1,426 @@
+import csv
+import io
+import tempfile
+import uuid
+from pathlib import Path
+from typing import Annotated
+
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
+from fastapi.responses import Response, StreamingResponse
+from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.api.deps import get_current_user, get_session
+from backend.api.tz_analysis.schemas import (
+    STATUS_LABELS,
+    TZAnalysisCompleteResponse,
+    TZAnalysisCreateRequest,
+    TZAnalysisDetailResponse,
+    TZAnalysisDocxRequest,
+    TZAnalysisHistoryPageResponse,
+    TZAnalysisListItem,
+    TZAnalysisPreviewResponse,
+    row_to_session,
+)
+from backend.celery_app.tasks.analysis_tasks import run_tz_analysis as queue_tz_analysis
+from backend.db.dao import TZAnalysisDAO
+from backend.db.models import User
+from backend.enums import TZAnalysisHistoryGroup, TZAnalysisRunStatus
+from backend.schemas.analysis import TZAnalysisItem
+from backend.services.analysis.docx_export import (
+    build_clarification_docx,
+    build_clarification_preview,
+)
+from backend.utils.tz_storage import save_tz_analysis_files
+
+router = APIRouter(prefix="/tz-analysis", tags=["TZ Analysis"])
+
+
+async def _save_upload(upload: UploadFile, dest_dir: Path) -> Path:
+    if not upload.filename:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File name is required",
+        )
+    safe_name = Path(upload.filename).name.replace("..", "_")
+    path = dest_dir / safe_name
+    path.write_bytes(await upload.read())
+    return path
+
+
+@router.post(
+    "/",
+    response_model=TZAnalysisDetailResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a draft TZ analysis",
+)
+async def create_tz_analysis(
+    body: TZAnalysisCreateRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> TZAnalysisDetailResponse:
+    """Create a draft analysis session before uploading TZ and KP files."""
+    row = await TZAnalysisDAO.create(
+        session,
+        user_id=current_user.id,
+        title=body.title.strip(),
+        tz_filename=None,
+        kp_filename=None,
+        items=[],
+        match_score=0,
+        met_count=0,
+        partial_count=0,
+        missing_count=0,
+        not_found_count=0,
+        llm_model="",
+        status=TZAnalysisRunStatus.DRAFT.value,
+    )
+    logger.info(
+        "TZ analysis draft created",
+        analysis_id=str(row.id),
+        user_id=str(current_user.id),
+    )
+    return row_to_session(row)
+
+
+@router.post(
+    "/{analysis_id}/run",
+    response_model=TZAnalysisDetailResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Upload files and queue TZ vs KP analysis",
+)
+async def run_tz_analysis(
+    analysis_id: uuid.UUID,
+    tz_file: Annotated[
+        UploadFile, File(description="Technical specification")
+    ],
+    kp_file: Annotated[UploadFile, File(description="Commercial proposal")],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> TZAnalysisDetailResponse:
+    """Save files for a draft analysis and enqueue background processing."""
+    row = await TZAnalysisDAO.get_by_id_and_user(
+        session, analysis_id, current_user.id
+    )
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found",
+        )
+    if row.status != TZAnalysisRunStatus.DRAFT.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot run analysis in status '{row.status}'",
+        )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        tz_path = await _save_upload(tz_file, tmp_path)
+        kp_path = await _save_upload(kp_file, tmp_path)
+        tz_name = tz_file.filename or tz_path.name
+        kp_name = kp_file.filename or kp_path.name
+
+        updated = await TZAnalysisDAO.update_fields(
+            session,
+            row.id,
+            tz_filename=tz_name,
+            kp_filename=kp_name,
+            status=TZAnalysisRunStatus.PROCESSING.value,
+        )
+        if not updated:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Analysis not found",
+            )
+        save_tz_analysis_files(row.id, tz_path, kp_path)
+
+    run_tz_analysis_task = queue_tz_analysis
+    run_tz_analysis_task.delay(str(row.id))  # type: ignore[attr-defined]
+    logger.info(
+        "TZ analysis queued",
+        analysis_id=str(row.id),
+        user_id=str(current_user.id),
+    )
+    refreshed = await TZAnalysisDAO.get_by_id_and_user(
+        session, analysis_id, current_user.id
+    )
+    if not refreshed:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found",
+        )
+    return row_to_session(refreshed)
+
+
+@router.get(
+    "/",
+    response_model=list[TZAnalysisListItem],
+    summary="List TZ analyses for current user",
+)
+async def list_tz_analyses(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> list[TZAnalysisListItem]:
+    rows = await TZAnalysisDAO.get_by_user(session, current_user.id)
+    return [TZAnalysisListItem.model_validate(r) for r in rows]
+
+
+@router.get(
+    "/history",
+    response_model=TZAnalysisHistoryPageResponse,
+    summary="Paginated TZ analysis history by lifecycle group",
+)
+async def get_tz_analysis_history(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    group: Annotated[
+        TZAnalysisHistoryGroup,
+        Query(description="History tab: active, processing, completed"),
+    ],
+    page: Annotated[int, Query(ge=1)] = 1,
+    size: Annotated[int, Query(ge=1, le=100)] = 10,
+    q: Annotated[
+        str | None,
+        Query(max_length=200, description="Search in TZ and KP filenames"),
+    ] = None,
+) -> TZAnalysisHistoryPageResponse:
+    rows, has_more = await TZAnalysisDAO.get_history_page_by_user(
+        session,
+        current_user.id,
+        group,
+        page=page,
+        size=size,
+        search=q,
+    )
+    return TZAnalysisHistoryPageResponse(
+        items=[TZAnalysisListItem.model_validate(r) for r in rows],
+        page=page,
+        size=size,
+        has_more=has_more,
+        group=group,
+    )
+
+
+@router.post(
+    "/{analysis_id}/complete",
+    response_model=TZAnalysisCompleteResponse,
+    summary="Mark TZ analysis as completed (archived)",
+)
+async def complete_tz_analysis(
+    analysis_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> TZAnalysisCompleteResponse:
+    row = await TZAnalysisDAO.get_by_id_and_user(
+        session, analysis_id, current_user.id
+    )
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found",
+        )
+    if row.status == TZAnalysisRunStatus.COMPLETED.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Analysis already completed",
+        )
+    if row.status == TZAnalysisRunStatus.PROCESSING.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Analysis is still processing",
+        )
+    updated = await TZAnalysisDAO.update_fields(
+        session,
+        row.id,
+        status=TZAnalysisRunStatus.COMPLETED.value,
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found",
+        )
+    return TZAnalysisCompleteResponse(
+        id=updated.id,
+        status=TZAnalysisRunStatus(updated.status),
+    )
+
+
+@router.get(
+    "/{analysis_id}",
+    response_model=TZAnalysisDetailResponse,
+    summary="Get TZ analysis by id",
+)
+async def get_tz_analysis(
+    analysis_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> TZAnalysisDetailResponse:
+    row = await TZAnalysisDAO.get_by_id_and_user(
+        session, analysis_id, current_user.id
+    )
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found",
+        )
+    return row_to_session(row)
+
+
+@router.get(
+    "/{analysis_id}/export.csv",
+    summary="Export TZ analysis as CSV",
+)
+async def export_tz_analysis_csv(
+    analysis_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> StreamingResponse:
+    row = await TZAnalysisDAO.get_by_id_and_user(
+        session, analysis_id, current_user.id
+    )
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found",
+        )
+    if row.status != TZAnalysisRunStatus.ACTIVE.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Analysis is not ready for export",
+        )
+
+    items = [TZAnalysisItem(**item) for item in (row.items or [])]
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(
+        [
+            "№",
+            "Требование",
+            "Ссылка ТЗ",
+            "Предложение",
+            "Ссылка КП",
+            "Статус",
+            "Объяснение",
+        ]
+    )
+    for idx, item in enumerate(items, start=1):
+        writer.writerow(
+            [
+                idx,
+                item.requirement,
+                item.requirement_ref or "",
+                item.offer_value or "",
+                item.offer_ref or "",
+                STATUS_LABELS.get(item.status, item.status.value),
+                item.explanation,
+            ]
+        )
+
+    buffer.seek(0)
+    filename = f"tz_analysis_{analysis_id}.csv"
+    return StreamingResponse(
+        iter([buffer.getvalue()]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post(
+    "/{analysis_id}/preview",
+    response_model=TZAnalysisPreviewResponse,
+    summary="Preview clarification letter for selected items",
+)
+async def preview_tz_analysis_letter(
+    analysis_id: uuid.UUID,
+    body: TZAnalysisDocxRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> TZAnalysisPreviewResponse:
+    row = await TZAnalysisDAO.get_by_id_and_user(
+        session, analysis_id, current_user.id
+    )
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found",
+        )
+    if row.status != TZAnalysisRunStatus.ACTIVE.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Analysis is not ready for preview",
+        )
+
+    items = [TZAnalysisItem(**item) for item in (row.items or [])]
+    if not body.selected_indices:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Select at least one item",
+        )
+
+    title, paragraphs, has_issues = build_clarification_preview(
+        items=items,
+        selected_indices=body.selected_indices,
+        organization=body.organization,
+        deadline_date=body.deadline_date,
+    )
+    return TZAnalysisPreviewResponse(
+        title=title,
+        paragraphs=paragraphs,
+        has_issues=has_issues,
+    )
+
+
+@router.post(
+    "/{analysis_id}/docx",
+    summary="Generate clarification DOCX for selected items",
+)
+async def export_tz_analysis_docx(
+    analysis_id: uuid.UUID,
+    body: TZAnalysisDocxRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> Response:
+    row = await TZAnalysisDAO.get_by_id_and_user(
+        session, analysis_id, current_user.id
+    )
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found",
+        )
+    if row.status != TZAnalysisRunStatus.ACTIVE.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Analysis is not ready for export",
+        )
+
+    items = [TZAnalysisItem(**item) for item in (row.items or [])]
+    if not body.selected_indices:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Select at least one item",
+        )
+
+    docx_bytes = build_clarification_docx(
+        items=items,
+        selected_indices=body.selected_indices,
+        organization=body.organization,
+        deadline_date=body.deadline_date,
+    )
+    filename = f"clarification_{analysis_id}.docx"
+    return Response(
+        content=docx_bytes,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument"
+            ".wordprocessingml.document"
+        ),
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

@@ -35,3 +35,29 @@ class EmailMessageDirection(StrEnum):
 
     INCOMING = "incoming"
     OUTGOING = "outgoing"
+
+
+class TZAnalysisHistoryGroup(StrEnum):
+    """Tab groups for the TZ analysis history page."""
+
+    DRAFT = "draft"
+    ACTIVE = "active"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+
+
+class TZAnalysisRunStatus(StrEnum):
+    """Lifecycle of a TZ vs KP analysis session."""
+
+    DRAFT = "draft"
+    ACTIVE = "active"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class TZAnalysisStatus(StrEnum):
+    MET = "met"
+    PARTIAL = "partial"
+    MISSING = "missing"
+    NOT_FOUND = "not_found"

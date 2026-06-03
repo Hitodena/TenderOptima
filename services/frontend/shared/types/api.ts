@@ -1,4 +1,9 @@
-import type { RequestStatus, RequestSupplierStatus } from './enums';
+import type {
+	RequestStatus,
+	RequestSupplierStatus,
+	TZAnalysisHistoryGroup,
+	TZAnalysisRunStatus,
+} from './enums';
 
 export interface TokenResponse {
 	access_token: string;
@@ -160,4 +165,87 @@ export interface Message {
 
 export interface ReplyPayload {
 	body: string;
+}
+
+export type TZAnalysisStatus = 'met' | 'partial' | 'missing' | 'not_found';
+
+export interface RequirementMatch {
+	requirement: string;
+	offer_value: string | null;
+	explanation: string | null;
+	status: TZAnalysisStatus;
+}
+
+export interface EmailAnalysisResponse {
+	message_id: string;
+	status?: TZAnalysisRunStatus;
+	parameters: Record<string, string>;
+	matches: RequirementMatch[];
+}
+
+export interface TZAnalysisItem {
+	requirement: string;
+	requirement_ref: string | null;
+	offer_value: string | null;
+	offer_ref: string | null;
+	explanation: string;
+	status: TZAnalysisStatus;
+}
+
+export interface TZAnalysisSession {
+	id: string | null;
+	title?: string | null;
+	status?: TZAnalysisRunStatus;
+	tz_filename: string | null;
+	kp_filename: string | null;
+	items: TZAnalysisItem[];
+	match_score: number;
+	met_count: number;
+	partial_count: number;
+	missing_count: number;
+	not_found_count: number;
+	created_at: string | null;
+}
+
+export interface TZAnalysisListItem {
+	id: string;
+	title: string;
+	tz_filename: string | null;
+	kp_filename: string | null;
+	status: TZAnalysisRunStatus;
+	match_score: number;
+	met_count: number;
+	partial_count: number;
+	missing_count: number;
+	not_found_count: number;
+	created_at: string;
+}
+
+export interface TZAnalysisHistoryPageResponse {
+	items: TZAnalysisListItem[];
+	page: number;
+	size: number;
+	has_more: boolean;
+	group: TZAnalysisHistoryGroup;
+}
+
+export interface TZAnalysisCompleteResponse {
+	id: string;
+	status: TZAnalysisRunStatus;
+}
+
+export interface TZAnalysisDocxRequest {
+	selected_indices: number[];
+	organization: string;
+	deadline_date?: string | null;
+}
+
+export interface TZAnalysisCreateRequest {
+	title: string;
+}
+
+export interface TZAnalysisPreviewResponse {
+	title: string;
+	paragraphs: string[];
+	has_issues: boolean;
 }

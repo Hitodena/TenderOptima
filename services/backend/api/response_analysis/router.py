@@ -1,0 +1,217 @@
+import uuid
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from loguru import logger
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from backend.api.deps import get_current_user, get_session
+from backend.api.response_analysis.schemas import (
+    EmailAnalysisPatch,
+    EmailAnalysisResponse,
+)
+from backend.celery_app.tasks.analysis_tasks import run_email_analysis
+from backend.db.dao import ResponseAnalysisDAO
+from backend.db.models import EmailMessage, Request, RequestSupplier, User
+from backend.enums import EmailMessageDirection, TZAnalysisRunStatus
+from backend.schemas.analysis import EmailAnalysisResult
+
+router = APIRouter(prefix="/responses", tags=["Response Analysis"])
+
+
+async def _get_owned_incoming_message(
+    session: AsyncSession,
+    message_id: uuid.UUID,
+    current_user: User,
+) -> tuple[EmailMessage, Request]:
+    stmt = (
+        select(EmailMessage)
+        .where(EmailMessage.id == message_id)
+        .options(
+            selectinload(EmailMessage.request_supplier).selectinload(
+                RequestSupplier.request
+            )
+        )
+    )
+    message = (await session.execute(stmt)).scalar_one_or_none()
+    if not message:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Message not found",
+        )
+    if message.direction != EmailMessageDirection.INCOMING.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Analysis is only available for incoming messages",
+        )
+    rs = message.request_supplier
+    if not rs or not rs.request:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Request not found",
+        )
+    request = rs.request
+    if request.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Message not found",
+        )
+    return message, request
+
+
+def _requirements_text(request: Request) -> str:
+    params = request.additional_params
+    if not params or not isinstance(params, list):
+        return ""
+    lines = [str(p).strip() for p in params if str(p).strip()]
+    return "\n".join(f"- {line}" for line in lines)
+
+
+def _analysis_to_response(
+    message_id: uuid.UUID,
+    row,
+) -> EmailAnalysisResponse:
+    if row.status == TZAnalysisRunStatus.PROCESSING.value:
+        return EmailAnalysisResponse(
+            message_id=str(message_id),
+            status=TZAnalysisRunStatus.PROCESSING,
+            parameters={},
+            matches=[],
+        )
+    if row.status == TZAnalysisRunStatus.FAILED.value:
+        return EmailAnalysisResponse(
+            message_id=str(message_id),
+            status=TZAnalysisRunStatus.FAILED,
+            parameters={},
+            matches=[],
+        )
+    if not row.raw_llm_response:
+        return EmailAnalysisResponse(
+            message_id=str(message_id),
+            status=TZAnalysisRunStatus(row.status),
+            parameters={},
+            matches=[],
+        )
+    result = EmailAnalysisResult(**row.raw_llm_response)
+    return EmailAnalysisResponse(
+        message_id=str(message_id),
+        status=TZAnalysisRunStatus(row.status),
+        **result.model_dump(),
+    )
+
+
+@router.post(
+    "/{message_id}/analyze",
+    response_model=EmailAnalysisResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Queue supplier email analysis against request requirements",
+)
+async def analyze_response(
+    message_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> EmailAnalysisResponse:
+    _message, request = await _get_owned_incoming_message(
+        session, message_id, current_user
+    )
+    if not _requirements_text(request):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Request has no additional_params requirements",
+        )
+
+    existing = await ResponseAnalysisDAO.get_by_response_id(
+        session, message_id
+    )
+    if existing:
+        if existing.status == TZAnalysisRunStatus.PROCESSING.value:
+            return _analysis_to_response(message_id, existing)
+        await ResponseAnalysisDAO.update_fields(
+            session,
+            existing.id,
+            raw_llm_response=None,
+            llm_model="",
+            status=TZAnalysisRunStatus.PROCESSING.value,
+        )
+        row = existing
+    else:
+        row = await ResponseAnalysisDAO.create(
+            session,
+            response_id=message_id,
+            llm_model="",
+            raw_llm_response=None,
+            status=TZAnalysisRunStatus.PROCESSING.value,
+        )
+
+    run_email_analysis.delay(str(message_id))  # type: ignore[attr-defined]
+    logger.info("Email analysis queued", message_id=str(message_id))
+    return _analysis_to_response(message_id, row)
+
+
+@router.get(
+    "/{message_id}/analysis",
+    response_model=EmailAnalysisResponse,
+    summary="Get saved email analysis",
+)
+async def get_response_analysis(
+    message_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> EmailAnalysisResponse:
+    await _get_owned_incoming_message(session, message_id, current_user)
+    row = await ResponseAnalysisDAO.get_by_response_id(session, message_id)
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found",
+        )
+    if row.status == TZAnalysisRunStatus.PROCESSING.value:
+        return _analysis_to_response(message_id, row)
+    if row.status == TZAnalysisRunStatus.FAILED.value:
+        return _analysis_to_response(message_id, row)
+    if not row.raw_llm_response:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found",
+        )
+    return _analysis_to_response(message_id, row)
+
+
+@router.patch(
+    "/{message_id}/analysis",
+    response_model=EmailAnalysisResponse,
+    summary="Update extracted parameters after manual edit",
+)
+async def patch_response_analysis(
+    message_id: uuid.UUID,
+    body: EmailAnalysisPatch,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> EmailAnalysisResponse:
+    await _get_owned_incoming_message(session, message_id, current_user)
+    row = await ResponseAnalysisDAO.get_by_response_id(session, message_id)
+    if not row or not row.raw_llm_response:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found",
+        )
+    if row.status != TZAnalysisRunStatus.ACTIVE.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Analysis is not ready for editing",
+        )
+
+    data = dict(row.raw_llm_response)
+    params = {k: (v or "") for k, v in body.parameters.items()}
+    data["parameters"] = params
+    await ResponseAnalysisDAO.update_fields(
+        session, row.id, raw_llm_response=data
+    )
+    result = EmailAnalysisResult(**data)
+    return EmailAnalysisResponse(
+        message_id=str(message_id),
+        status=TZAnalysisRunStatus.ACTIVE,
+        **result.model_dump(),
+    )

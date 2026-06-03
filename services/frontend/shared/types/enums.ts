@@ -18,3 +18,24 @@ export const RequestSupplierStatus = {
 
 export type RequestSupplierStatus =
 	(typeof RequestSupplierStatus)[keyof typeof RequestSupplierStatus];
+
+export const TZAnalysisHistoryGroup = {
+	DRAFT: 'draft',
+	ACTIVE: 'active',
+	PROCESSING: 'processing',
+	COMPLETED: 'completed',
+} as const;
+
+export type TZAnalysisHistoryGroup =
+	(typeof TZAnalysisHistoryGroup)[keyof typeof TZAnalysisHistoryGroup];
+
+export const TZAnalysisRunStatus = {
+	DRAFT: 'draft',
+	ACTIVE: 'active',
+	PROCESSING: 'processing',
+	COMPLETED: 'completed',
+	FAILED: 'failed',
+} as const;
+
+export type TZAnalysisRunStatus =
+	(typeof TZAnalysisRunStatus)[keyof typeof TZAnalysisRunStatus];

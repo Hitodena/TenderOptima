@@ -1,4 +1,8 @@
-import { RequestStatus, RequestSupplierStatus } from './enums';
+import {
+	RequestStatus,
+	RequestSupplierStatus,
+	TZAnalysisRunStatus,
+} from './enums';
 
 type BadgeColor =
 	| 'neutral'
@@ -48,6 +52,30 @@ export function getRequestStatusColor(s: string): BadgeColor {
 
 export function getRequestStatusLabel(s: string): string {
 	return REQUEST_STATUS_LABEL[s as RequestStatus] ?? s;
+}
+
+export const TZ_RUN_STATUS_COLOR: Record<TZAnalysisRunStatus, BadgeColor> = {
+	[TZAnalysisRunStatus.DRAFT]: 'neutral',
+	[TZAnalysisRunStatus.ACTIVE]: 'success',
+	[TZAnalysisRunStatus.PROCESSING]: 'warning',
+	[TZAnalysisRunStatus.COMPLETED]: 'neutral',
+	[TZAnalysisRunStatus.FAILED]: 'error',
+};
+
+export const TZ_RUN_STATUS_LABEL: Record<TZAnalysisRunStatus, string> = {
+	[TZAnalysisRunStatus.DRAFT]: 'Черновик',
+	[TZAnalysisRunStatus.ACTIVE]: 'Активный',
+	[TZAnalysisRunStatus.PROCESSING]: 'В очереди на обработку',
+	[TZAnalysisRunStatus.COMPLETED]: 'Завершен',
+	[TZAnalysisRunStatus.FAILED]: 'Ошибка',
+};
+
+export function getTzRunStatusColor(s: string): BadgeColor {
+	return TZ_RUN_STATUS_COLOR[s as TZAnalysisRunStatus] ?? 'neutral';
+}
+
+export function getTzRunStatusLabel(s: string): string {
+	return TZ_RUN_STATUS_LABEL[s as TZAnalysisRunStatus] ?? s;
 }
 
 export function getSupplierStatusColor(s: string): BadgeColor {

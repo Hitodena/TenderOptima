@@ -147,7 +147,9 @@ async function fetchHistory() {
 	}
 }
 
-await fetchHistory()
+onMounted(() => {
+	fetchHistory()
+})
 
 watch(search, () => { page.value = 1 })
 watch(activeTab, () => { page.value = 1; confirmCloseId.value = null })
