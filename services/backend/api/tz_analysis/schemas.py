@@ -19,6 +19,8 @@ class TZAnalysisListItem(BaseModel):
     title: str
     tz_filename: str | None = None
     kp_filename: str | None = None
+    kp_filenames: list[str] = []
+    confirmed: bool = False
     status: TZAnalysisRunStatus
     match_score: int
     met_count: int
@@ -81,12 +83,17 @@ class TZAnalysisDetailResponse(TZAnalysisSessionResult):
 
 def row_to_session(row) -> TZAnalysisSessionResult:
     items = [TZAnalysisItem(**item) for item in (row.items or [])]
+    kp_filenames = row.kp_filenames or []
+    if not kp_filenames and row.kp_filename:
+        kp_filenames = [row.kp_filename]
     return TZAnalysisSessionResult(
         id=str(row.id),
         title=row.title or None,
         status=TZAnalysisRunStatus(row.status),
         tz_filename=row.tz_filename,
         kp_filename=row.kp_filename,
+        kp_filenames=kp_filenames,
+        confirmed=bool(getattr(row, "confirmed", False)),
         items=items,
         match_score=row.match_score,
         met_count=row.met_count,

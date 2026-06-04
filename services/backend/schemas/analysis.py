@@ -10,6 +10,7 @@ class TZAnalysisItem(BaseModel):
     offer_ref: str | None = None
     explanation: str
     status: TZAnalysisStatus
+    kp_name: str | None = None
 
 
 class TZAnalysisResult(BaseModel):
@@ -22,6 +23,8 @@ class TZAnalysisSessionResult(BaseModel):
     status: TZAnalysisRunStatus = TZAnalysisRunStatus.PROCESSING
     tz_filename: str | None = None
     kp_filename: str | None = None
+    kp_filenames: list[str] = []
+    confirmed: bool = False
     items: list[TZAnalysisItem]
     match_score: int
     met_count: int

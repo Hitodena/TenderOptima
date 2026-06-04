@@ -82,9 +82,18 @@ async def run_tz_analysis(self, analysis_id: str) -> dict:
             )
         return {"error": "files_missing", "analysis_id": analysis_id}
 
-    tz_path, kp_path = paths
+    tz_path, kp_paths = paths
+    kp_display_names: list[str] | None = None
+    async with db_manager.session() as session:
+        row = await TZAnalysisDAO.get_by_id(session, aid)
+        if row and row.kp_filenames:
+            kp_display_names = list(row.kp_filenames)
     try:
-        result = await analyze_tz_files(tz_path, kp_path)
+        result = await analyze_tz_files(
+            tz_path,
+            kp_paths,
+            kp_display_names=kp_display_names,
+        )
     except (UnsupportedFileTypeError, OcrNotAvailableError, ValueError) as exc:
         logger.warning(
             "TZ analysis failed",
@@ -118,8 +127,10 @@ async def run_tz_analysis(self, analysis_id: str) -> dict:
             session,
             aid,
             tz_filename=result.tz_filename or tz_path.name,
-            kp_filename=result.kp_filename or kp_path.name,
+            kp_filename=result.kp_filename,
+            kp_filenames=result.kp_filenames,
             items=items_json,
+            confirmed=False,
             match_score=result.match_score,
             met_count=result.met_count,
             partial_count=result.partial_count,

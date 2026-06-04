@@ -30,7 +30,9 @@ from backend.api.tz_analysis.schemas import (
     TZAnalysisPreviewResponse,
     row_to_session,
 )
-from backend.celery_app.tasks.analysis_tasks import run_tz_analysis as queue_tz_analysis
+from backend.celery_app.tasks.analysis_tasks import (
+    run_tz_analysis as queue_tz_analysis,
+)
 from backend.db.dao import TZAnalysisDAO
 from backend.db.models import User
 from backend.enums import TZAnalysisHistoryGroup, TZAnalysisRunStatus
@@ -74,6 +76,8 @@ async def create_tz_analysis(
         title=body.title.strip(),
         tz_filename=None,
         kp_filename=None,
+        kp_filenames=[],
+        confirmed=False,
         items=[],
         match_score=0,
         met_count=0,
@@ -102,7 +106,10 @@ async def run_tz_analysis(
     tz_file: Annotated[
         UploadFile, File(description="Technical specification")
     ],
-    kp_file: Annotated[UploadFile, File(description="Commercial proposal")],
+    kp_files: Annotated[
+        list[UploadFile],
+        File(description="One or more commercial proposals"),
+    ],
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> TZAnalysisDetailResponse:
@@ -121,18 +128,31 @@ async def run_tz_analysis(
             detail=f"Cannot run analysis in status '{row.status}'",
         )
 
+    if not kp_files:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one KP file is required",
+        )
+
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
         tz_path = await _save_upload(tz_file, tmp_path)
-        kp_path = await _save_upload(kp_file, tmp_path)
+        kp_paths: list[Path] = []
+        kp_names: list[str] = []
+        for kp_upload in kp_files:
+            kp_path = await _save_upload(kp_upload, tmp_path)
+            kp_paths.append(kp_path)
+            kp_names.append(kp_upload.filename or kp_path.name)
         tz_name = tz_file.filename or tz_path.name
-        kp_name = kp_file.filename or kp_path.name
+        primary_kp = kp_names[0] if len(kp_names) == 1 else None
 
         updated = await TZAnalysisDAO.update_fields(
             session,
             row.id,
             tz_filename=tz_name,
-            kp_filename=kp_name,
+            kp_filename=primary_kp,
+            kp_filenames=kp_names,
+            confirmed=False,
             status=TZAnalysisRunStatus.PROCESSING.value,
         )
         if not updated:
@@ -140,7 +160,7 @@ async def run_tz_analysis(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Analysis not found",
             )
-        save_tz_analysis_files(row.id, tz_path, kp_path)
+        save_tz_analysis_files(row.id, tz_path, kp_paths)
 
     run_tz_analysis_task = queue_tz_analysis
     run_tz_analysis_task.delay(str(row.id))  # type: ignore[attr-defined]
@@ -189,7 +209,10 @@ async def get_tz_analysis_history(
     size: Annotated[int, Query(ge=1, le=100)] = 10,
     q: Annotated[
         str | None,
-        Query(max_length=200, description="Search in TZ and KP filenames"),
+        Query(
+            max_length=200,
+            description="Search in title, TZ/KP filenames and kp_filenames list",
+        ),
     ] = None,
 ) -> TZAnalysisHistoryPageResponse:
     rows, has_more = await TZAnalysisDAO.get_history_page_by_user(
@@ -253,6 +276,60 @@ async def complete_tz_analysis(
     )
 
 
+def _is_export_ready(status: str) -> bool:
+    return status in (
+        TZAnalysisRunStatus.ACTIVE.value,
+        TZAnalysisRunStatus.COMPLETED.value,
+    )
+
+
+@router.post(
+    "/{analysis_id}/confirm",
+    response_model=TZAnalysisDetailResponse,
+    summary="Confirm TZ analysis results after user review",
+)
+async def confirm_tz_analysis(
+    analysis_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> TZAnalysisDetailResponse:
+    row = await TZAnalysisDAO.get_by_id_and_user(
+        session, analysis_id, current_user.id
+    )
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found",
+        )
+    if row.status not in (
+        TZAnalysisRunStatus.ACTIVE.value,
+        TZAnalysisRunStatus.COMPLETED.value,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Analysis is not ready for confirmation",
+        )
+    if row.confirmed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Analysis already confirmed",
+        )
+    updated = await TZAnalysisDAO.confirm_analysis(
+        session, analysis_id, current_user.id
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found",
+        )
+    logger.info(
+        "TZ analysis confirmed",
+        analysis_id=str(analysis_id),
+        user_id=str(current_user.id),
+    )
+    return row_to_session(updated)
+
+
 @router.get(
     "/{analysis_id}",
     response_model=TZAnalysisDetailResponse,
@@ -291,7 +368,7 @@ async def export_tz_analysis_csv(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Analysis not found",
         )
-    if row.status != TZAnalysisRunStatus.ACTIVE.value:
+    if not _is_export_ready(row.status):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Analysis is not ready for export",
@@ -303,6 +380,7 @@ async def export_tz_analysis_csv(
     writer.writerow(
         [
             "№",
+            "КП",
             "Требование",
             "Ссылка ТЗ",
             "Предложение",
@@ -315,6 +393,7 @@ async def export_tz_analysis_csv(
         writer.writerow(
             [
                 idx,
+                item.kp_name or "",
                 item.requirement,
                 item.requirement_ref or "",
                 item.offer_value or "",
@@ -352,7 +431,7 @@ async def preview_tz_analysis_letter(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Analysis not found",
         )
-    if row.status != TZAnalysisRunStatus.ACTIVE.value:
+    if not _is_export_ready(row.status):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Analysis is not ready for preview",
@@ -396,7 +475,7 @@ async def export_tz_analysis_docx(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Analysis not found",
         )
-    if row.status != TZAnalysisRunStatus.ACTIVE.value:
+    if not _is_export_ready(row.status):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Analysis is not ready for export",

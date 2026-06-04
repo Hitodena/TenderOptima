@@ -74,6 +74,11 @@
 										class="w-full" />
 								</UFormField>
 
+								<UFormField label="Название компании" name="company_name">
+									<UInput v-model="form.company_name" placeholder="ООО «Ваша компания»"
+										icon="i-lucide-building-2" class="w-full" />
+								</UFormField>
+
 								<UFormField label="Контактный email" name="contact_email">
 									<UInput v-model="form.contact_email" type="email" placeholder="sales@company.ru"
 										icon="i-lucide-mail" class="w-full" />
@@ -182,6 +187,7 @@ try {
 const form = reactive({
 	business_info: user.value?.business_info ?? '',
 	full_name: user.value?.full_name ?? '',
+	company_name: user.value?.company_name ?? '',
 	contact_email: user.value?.contact_email ?? '',
 })
 
@@ -226,6 +232,7 @@ async function saveProfile() {
 	try {
 		const payload: UserUpdate = {
 			full_name: form.full_name || null,
+			company_name: form.company_name.trim() || null,
 			contact_email: form.contact_email || null,
 		}
 		await patch('/auth/me', payload)

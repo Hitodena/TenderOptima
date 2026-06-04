@@ -1,3 +1,4 @@
+import type { TZAnalysisStatus } from './api';
 import {
 	RequestStatus,
 	RequestSupplierStatus,
@@ -76,6 +77,28 @@ export function getTzRunStatusColor(s: string): BadgeColor {
 
 export function getTzRunStatusLabel(s: string): string {
 	return TZ_RUN_STATUS_LABEL[s as TZAnalysisRunStatus] ?? s;
+}
+
+export const TZ_ITEM_STATUS_COLOR: Record<TZAnalysisStatus, BadgeColor> = {
+	met: 'success',
+	partial: 'warning',
+	missing: 'error',
+	not_found: 'neutral',
+};
+
+export const TZ_ITEM_STATUS_LABEL: Record<TZAnalysisStatus, string> = {
+	met: 'Соответствует',
+	partial: 'Частично',
+	missing: 'Не соответствует',
+	not_found: 'Не найдено',
+};
+
+export function getTzItemStatusColor(s: TZAnalysisStatus): BadgeColor {
+	return TZ_ITEM_STATUS_COLOR[s] ?? 'neutral';
+}
+
+export function getTzItemStatusLabel(s: TZAnalysisStatus): string {
+	return TZ_ITEM_STATUS_LABEL[s] ?? s;
 }
 
 export function getSupplierStatusColor(s: string): BadgeColor {

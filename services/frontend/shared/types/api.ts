@@ -14,6 +14,7 @@ export interface UserResponse {
 	id: string;
 	email: string;
 	full_name: string | null;
+	company_name?: string | null;
 	contact_email?: string | null;
 	business_info?: string | null;
 }
@@ -29,6 +30,7 @@ export interface RegisterCreate {
 
 export interface UserUpdate {
 	full_name?: string | null;
+	company_name?: string | null;
 	contact_email?: string | null;
 	business_info?: string | null;
 }
@@ -190,6 +192,7 @@ export interface TZAnalysisItem {
 	offer_ref: string | null;
 	explanation: string;
 	status: TZAnalysisStatus;
+	kp_name?: string | null;
 }
 
 export interface TZAnalysisSession {
@@ -198,6 +201,8 @@ export interface TZAnalysisSession {
 	status?: TZAnalysisRunStatus;
 	tz_filename: string | null;
 	kp_filename: string | null;
+	kp_filenames?: string[];
+	confirmed?: boolean;
 	items: TZAnalysisItem[];
 	match_score: number;
 	met_count: number;
@@ -212,6 +217,8 @@ export interface TZAnalysisListItem {
 	title: string;
 	tz_filename: string | null;
 	kp_filename: string | null;
+	kp_filenames?: string[];
+	confirmed?: boolean;
 	status: TZAnalysisRunStatus;
 	match_score: number;
 	met_count: number;

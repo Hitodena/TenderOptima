@@ -16,6 +16,10 @@ class TZAnalysis(IDMixinUUID, TimestampMixin, Base):
     title: Mapped[str] = mapped_column(String(500), nullable=False, default="")
     tz_filename: Mapped[str | None] = mapped_column(String(512), nullable=True)
     kp_filename: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    kp_filenames: Mapped[list] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    confirmed: Mapped[bool] = mapped_column(nullable=False, default=False)
     items: Mapped[list] = mapped_column(JSON, nullable=False)
     match_score: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0

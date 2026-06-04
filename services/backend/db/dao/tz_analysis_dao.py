@@ -1,7 +1,7 @@
 import uuid
 
 from loguru import logger
-from sqlalchemy import or_, select
+from sqlalchemy import String, cast, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.dao.base_dao import BaseDAO
@@ -72,11 +72,13 @@ class TZAnalysisDAO(BaseDAO[TZAnalysis]):
             )
             if search:
                 pattern = f"%{search.strip()}%"
+                kp_filenames_text = cast(cls.model.kp_filenames, String)
                 stmt = stmt.where(
                     or_(
                         cls.model.title.ilike(pattern),
                         cls.model.tz_filename.ilike(pattern),
                         cls.model.kp_filename.ilike(pattern),
+                        kp_filenames_text.ilike(pattern),
                     )
                 )
             rows = list((await session.execute(stmt)).scalars().all())
@@ -119,3 +121,20 @@ class TZAnalysisDAO(BaseDAO[TZAnalysis]):
                 analysis_id=analysis_id,
             )
             raise
+
+    @classmethod
+    async def confirm_analysis(
+        cls,
+        session: AsyncSession,
+        analysis_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> TZAnalysis | None:
+        """Mark analysis as confirmed by the user after review."""
+        row = await cls.get_by_id_and_user(session, analysis_id, user_id)
+        if not row:
+            return None
+        return await cls.update_fields(
+            session,
+            analysis_id,
+            confirmed=True,
+        )

@@ -134,7 +134,12 @@ async def update_user(
     """
     has_updates = any(
         getattr(request, field) is not None
-        for field in ["full_name", "contact_email", "business_info"]
+        for field in [
+            "full_name",
+            "company_name",
+            "contact_email",
+            "business_info",
+        ]
     )
     if not has_updates:
         return UserResponse.model_validate(current_user)
@@ -143,6 +148,7 @@ async def update_user(
         session,
         current_user.id,
         full_name=request.full_name,
+        company_name=request.company_name,
         contact_email=request.contact_email,
         business_info=request.business_info,
     )

@@ -82,7 +82,7 @@
 
 			<div v-else class="text-center py-16">
 				<UIcon name="i-lucide-inbox" class="w-12 h-12 mx-auto mb-3 text-muted opacity-40" />
-				<p class="text-muted">{{ search ? 'Ничего не найдено' : (activeTab === 'active' ? 'Активных запросов пока нет' : 'Завершенных запросов пока нет') }}</p>
+				<p class="text-muted">{{ emptyMessage }}</p>
 				<p v-if="!search" class="text-xs text-muted mt-1">
 					<UButton to="/requests" variant="outline" size="sm" class="mt-2">Создать первый запрос</UButton>
 				</p>
@@ -107,22 +107,43 @@ const page = ref(1)
 const search = ref('')
 const confirmCloseId = ref<string | null>(null)
 const closingId = ref<string | null>(null)
-const activeTab = ref<'active' | 'closed'>('active')
-const tabs = [
-	{ label: 'Активные', icon: 'i-lucide-activity', value: 'active' },
-	{ label: 'Завершенные', icon: 'i-lucide-archive', value: 'closed' }
+type HistoryTab = 'active' | 'processing' | 'closed'
+
+const PROCESSING_STATUSES: RequestStatus[] = [
+	RequestStatus.SEARCHING,
+	RequestStatus.QUEUED,
 ]
 
+const activeTab = ref<HistoryTab>('active')
+const tabs = [
+	{ label: 'Активные', icon: 'i-lucide-activity', value: 'active' },
+	{
+		label: 'В обработке',
+		icon: 'i-lucide-loader',
+		value: 'processing',
+	},
+	{ label: 'Завершенные', icon: 'i-lucide-archive', value: 'closed' },
+]
+
+function matchesTab(status: RequestStatus, tab: HistoryTab): boolean {
+	if (tab === 'closed') return status === RequestStatus.CLOSED
+	if (tab === 'processing') return PROCESSING_STATUSES.includes(status)
+	return status !== RequestStatus.CLOSED
+		&& !PROCESSING_STATUSES.includes(status)
+}
+
 const filteredHistory = computed(() => {
-	const q = search.value.toLowerCase()
-	const list = activeTab.value === 'active'
-		? allHistory.value.filter(r => r.status !== RequestStatus.CLOSED)
-		: allHistory.value.filter(r => r.status === RequestStatus.CLOSED)
+	const q = search.value.trim().toLowerCase()
+	let list = allHistory.value.filter((r) => matchesTab(r.status, activeTab.value))
 	if (!q) return list
-	return list.filter(r =>
-		r.query.toLowerCase().includes(q) ||
-		(r.delivery_region?.toLowerCase().includes(q) ?? false)
-	)
+	return list.filter((r) => {
+		const haystack = [
+			r.query,
+			r.delivery_region,
+			getRequestStatusLabel(r.status),
+		].filter(Boolean).join(' ').toLowerCase()
+		return haystack.includes(q)
+	})
 })
 
 const visibleHistory = computed(() =>
@@ -132,6 +153,17 @@ const visibleHistory = computed(() =>
 const hasMore = computed(() =>
 	visibleHistory.value.length < filteredHistory.value.length
 )
+
+const emptyMessage = computed(() => {
+	if (search.value.trim()) return 'Ничего не найдено'
+	if (activeTab.value === 'processing') {
+		return 'Запросов в обработке пока нет'
+	}
+	if (activeTab.value === 'closed') {
+		return 'Завершенных запросов пока нет'
+	}
+	return 'Активных запросов пока нет'
+})
 
 async function fetchHistory() {
 	loadingHistory.value = true

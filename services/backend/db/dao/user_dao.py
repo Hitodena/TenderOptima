@@ -51,6 +51,7 @@ class UserDAO(BaseDAO[User]):
         session: AsyncSession,
         user_id: uuid.UUID,
         full_name: str | None = None,
+        company_name: str | None = None,
         contact_email: str | None = None,
         business_info: str | None = None,
     ) -> User:
@@ -60,6 +61,7 @@ class UserDAO(BaseDAO[User]):
             model=cls.model,
             user_id=user_id,
             full_name=full_name,
+            company_name=company_name,
             contact_email=contact_email,
             business_info=business_info,
         )
@@ -69,6 +71,8 @@ class UserDAO(BaseDAO[User]):
                 raise ValueError(f"User with id {user_id} not found")
             if full_name is not None:
                 user.full_name = full_name
+            if company_name is not None:
+                user.company_name = company_name
             if contact_email is not None:
                 user.contact_email = contact_email
             if business_info is not None:

@@ -8,15 +8,14 @@
 						Активные, в обработке и завершённые сравнения ТЗ с КП
 					</p>
 				</div>
-				<UButton to="/tz-analysis" variant="outline" color="neutral"
-					leading-icon="i-lucide-scan-search" size="lg" class="shrink-0">
-					Новый анализ
-				</UButton>
-			</div>
-
-			<div class="flex flex-col sm:flex-row gap-3 mb-4">
-				<UInput v-model="search" placeholder="Поиск по названию или файлам..." icon="i-lucide-search"
-					size="lg" class="flex-1" />
+				<div class="flex items-center gap-3 shrink-0">
+					<UInput v-model="search" placeholder="Поиск по анализам..." icon="i-lucide-search"
+						class="w-full sm:w-56" size="lg" />
+					<UButton to="/tz-analysis" variant="outline" color="neutral"
+						leading-icon="i-lucide-scan-search" size="lg" class="shrink-0">
+						Новый анализ
+					</UButton>
+				</div>
 			</div>
 
 			<UTabs v-model="activeTab" :items="tabs" :content="false" :ui="{ list: 'mb-4' }" />
@@ -25,9 +24,9 @@
 				<USkeleton v-for="i in 8" :key="i" class="h-18 w-full rounded-xl" />
 			</div>
 
-			<template v-else-if="historyItems.length">
+			<template v-else-if="visibleHistory.length">
 				<div class="space-y-2">
-					<UCard v-for="item in historyItems" :key="item.id"
+					<UCard v-for="item in visibleHistory" :key="item.id"
 						class="group cursor-pointer hover:shadow-md transition-all hover:-translate-y-px"
 						@click="openAnalysis(item)">
 						<div class="flex items-center gap-4">
@@ -44,8 +43,8 @@
 									</UBadge>
 								</div>
 								<p class="text-xs text-muted flex items-center gap-2 flex-wrap">
-									<span v-if="item.tz_filename && item.kp_filename" class="truncate">
-										{{ item.tz_filename }} · {{ item.kp_filename }}
+									<span v-if="displayFilesLabel(item)" class="truncate">
+										{{ displayFilesLabel(item) }}
 									</span>
 									<span v-else-if="item.status === TZAnalysisRunStatus.DRAFT" class="truncate">
 										Файлы не загружены
@@ -88,7 +87,7 @@
 					<UIcon name="i-lucide-loader" class="w-5 h-5 text-muted animate-spin" />
 				</div>
 
-				<p v-if="!hasMore && historyItems.length > 0" class="text-center text-xs text-muted py-4">
+				<p v-if="!hasMore && visibleHistory.length > 0" class="text-center text-xs text-muted py-4">
 					Все записи загружены
 				</p>
 			</template>
@@ -96,7 +95,7 @@
 			<div v-else class="text-center py-16">
 				<UIcon name="i-lucide-inbox" class="w-12 h-12 mx-auto mb-3 text-muted opacity-40" />
 				<p class="text-muted">{{ emptyMessage }}</p>
-				<UButton v-if="!search" to="/tz-analysis" variant="outline" size="sm" class="mt-3">
+				<UButton v-if="!search.trim()" to="/tz-analysis" variant="outline" size="sm" class="mt-3">
 					Новый анализ
 				</UButton>
 			</div>
@@ -105,7 +104,7 @@
 </template>
 
 <script lang="ts" setup>
-import type { TZAnalysisHistoryPageResponse, TZAnalysisListItem } from '#shared/types'
+import type { TZAnalysisListItem } from '#shared/types'
 import {
 	getTzRunStatusColor,
 	getTzRunStatusLabel,
@@ -120,10 +119,9 @@ const { formatDate } = useFormatDate()
 
 const PAGE_SIZE = 10
 
-const historyItems = ref<TZAnalysisListItem[]>([])
+const allAnalyses = ref<TZAnalysisListItem[]>([])
 const loadingHistory = ref(true)
 const loadingMore = ref(false)
-const hasMore = ref(false)
 const page = ref(1)
 const search = ref('')
 const confirmCompleteId = ref<string | null>(null)
@@ -141,6 +139,47 @@ const tabs = [
 	{ label: 'Завершен', icon: 'i-lucide-archive', value: TZAnalysisHistoryGroup.COMPLETED },
 ]
 
+function matchesTab(item: TZAnalysisListItem): boolean {
+	if (activeTab.value === TZAnalysisHistoryGroup.DRAFT) {
+		return item.status === TZAnalysisRunStatus.DRAFT
+	}
+	if (activeTab.value === TZAnalysisHistoryGroup.ACTIVE) {
+		return item.status === TZAnalysisRunStatus.ACTIVE
+	}
+	if (activeTab.value === TZAnalysisHistoryGroup.PROCESSING) {
+		return item.status === TZAnalysisRunStatus.PROCESSING
+	}
+	return item.status === TZAnalysisRunStatus.COMPLETED
+}
+
+function analysisSearchText(item: TZAnalysisListItem): string {
+	const parts = [
+		item.title,
+		item.tz_filename,
+		item.kp_filename,
+		...(item.kp_filenames ?? []),
+		getTzRunStatusLabel(item.status),
+	]
+	return parts.filter(Boolean).join(' ').toLowerCase()
+}
+
+const filteredHistory = computed(() => {
+	const q = search.value.trim().toLowerCase()
+	let list = allAnalyses.value.filter(matchesTab)
+	if (q) {
+		list = list.filter((item) => analysisSearchText(item).includes(q))
+	}
+	return list
+})
+
+const visibleHistory = computed(() =>
+	filteredHistory.value.slice(0, page.value * PAGE_SIZE),
+)
+
+const hasMore = computed(() =>
+	visibleHistory.value.length < filteredHistory.value.length,
+)
+
 const emptyMessage = computed(() => {
 	if (search.value.trim()) return 'Ничего не найдено'
 	if (activeTab.value === TZAnalysisHistoryGroup.DRAFT) {
@@ -155,6 +194,17 @@ const emptyMessage = computed(() => {
 	return 'Завершённых анализов пока нет'
 })
 
+function displayFilesLabel(item: TZAnalysisListItem): string | null {
+	if (!item.tz_filename) return null
+	const kpNames = item.kp_filenames?.length
+		? item.kp_filenames
+		: item.kp_filename
+			? [item.kp_filename]
+			: []
+	if (!kpNames.length) return item.tz_filename
+	return `${item.tz_filename} · ${kpNames.join(' · ')}`
+}
+
 function canComplete(status: string) {
 	return status === TZAnalysisRunStatus.ACTIVE
 }
@@ -163,53 +213,28 @@ function openAnalysis(item: TZAnalysisListItem) {
 	navigateTo(`/tz-analysis/${item.id}`)
 }
 
-async function fetchHistory(reset = true) {
-	if (reset) {
-		loadingHistory.value = true
-		page.value = 1
-	} else {
-		loadingMore.value = true
-	}
+async function fetchHistory() {
+	loadingHistory.value = true
 	try {
-		const q = search.value.trim()
-		const params = new URLSearchParams({
-			group: activeTab.value,
-			page: String(page.value),
-			size: String(PAGE_SIZE),
-		})
-		if (q) params.set('q', q)
-		const data = await get<TZAnalysisHistoryPageResponse>(
-			`/tz-analysis/history?${params.toString()}`,
+		const all = await get<TZAnalysisListItem[]>('/tz-analysis/')
+		allAnalyses.value = [...all].sort((a, b) =>
+			new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
 		)
-		if (reset) {
-			historyItems.value = data.items
-		} else {
-			historyItems.value = [...historyItems.value, ...data.items]
-		}
-		hasMore.value = data.has_more
 	} catch {
-		if (reset) historyItems.value = []
-		hasMore.value = false
+		allAnalyses.value = []
 	} finally {
 		loadingHistory.value = false
-		loadingMore.value = false
 	}
 }
 
 onMounted(() => {
-	fetchHistory(true)
+	fetchHistory()
 })
 
-let searchDebounce: ReturnType<typeof setTimeout> | null = null
-watch(search, () => {
-	if (searchDebounce) clearTimeout(searchDebounce)
-	searchDebounce = setTimeout(() => fetchHistory(true), 300)
-})
-
+watch(search, () => { page.value = 1 })
 watch(activeTab, () => {
 	page.value = 1
 	confirmCompleteId.value = null
-	fetchHistory(true)
 })
 
 onMounted(() => {
@@ -227,7 +252,13 @@ async function handleCompleteClick(id: string) {
 	confirmCompleteId.value = null
 	try {
 		await post(`/tz-analysis/${id}/complete`)
-		historyItems.value = historyItems.value.filter((r) => r.id !== id)
+		const idx = allAnalyses.value.findIndex((r) => r.id === id)
+		if (idx >= 0) {
+			allAnalyses.value[idx] = {
+				...allAnalyses.value[idx],
+				status: TZAnalysisRunStatus.COMPLETED,
+			}
+		}
 	} catch {
 		// ignore
 	} finally {
@@ -240,14 +271,12 @@ const sentinel = ref<HTMLElement | null>(null)
 onMounted(() => {
 	const observer = new IntersectionObserver((entries) => {
 		const entry = entries[0]
-		if (
-			entry?.isIntersecting
-			&& hasMore.value
-			&& !loadingMore.value
-			&& !loadingHistory.value
-		) {
-			page.value++
-			fetchHistory(false)
+		if (entry?.isIntersecting && hasMore.value && !loadingMore.value) {
+			loadingMore.value = true
+			setTimeout(() => {
+				page.value++
+				loadingMore.value = false
+			}, 300)
 		}
 	}, { threshold: 0.1 })
 

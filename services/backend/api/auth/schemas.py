@@ -114,6 +114,13 @@ class UserResponse(BaseModel):
             examples=["John Doe"],
         ),
     ]
+    company_name: Annotated[
+        str | None,
+        Field(
+            description="Company or organization name",
+            examples=["ООО «Поставщик»"],
+        ),
+    ]
     contact_email: Annotated[
         str | None,
         Field(
@@ -145,6 +152,16 @@ class UserUpdate(BaseModel):
             min_length=2,
             max_length=100,
             examples=["John Doe"],
+        ),
+    ]
+    company_name: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description="Company or organization name",
+            min_length=2,
+            max_length=150,
+            examples=["ООО «Поставщик»"],
         ),
     ]
     contact_email: Annotated[
