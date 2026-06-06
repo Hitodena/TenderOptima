@@ -112,35 +112,144 @@
 					description="Не удалось выполнить анализ. Создайте новый анализ и попробуйте снова." />
 			</template>
 
-			<template v-else-if="hasResults">
-				<div v-if="!analysis.confirmed"
-					class="mb-8 rounded-xl border border-warning/25 bg-warning/10 p-4 sm:p-5">
-					<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-						<div class="flex gap-3 min-w-0">
-							<UIcon name="i-lucide-info" class="w-5 h-5 shrink-0 text-warning mt-0.5" />
-							<div class="min-w-0 space-y-1">
-								<p class="text-sm font-semibold text-highlighted">Проверьте результаты</p>
-								<p class="text-sm text-muted">
-									Анализ выполнен. Просмотрите соответствия и при необходимости
-									скорректируйте выбор для письма, затем подтвердите.
-								</p>
-							</div>
+			<template v-else-if="needsRequirementsReview">
+				<div class="mb-8 rounded-xl border border-warning/25 bg-warning/10 p-4 sm:p-5">
+					<div class="flex gap-3 min-w-0">
+						<UIcon name="i-lucide-info" class="w-5 h-5 shrink-0 text-warning mt-0.5" />
+						<div class="min-w-0 space-y-1">
+							<p class="text-sm font-semibold text-highlighted">Проверьте извлечённые требования</p>
+							<p class="text-sm text-muted">
+								Система извлекла требования из ТЗ и предложения из КП.
+								Удалите лишние пункты, добавьте недостающие, затем подтвердите
+								для запуска сравнения.
+							</p>
 						</div>
-						<UButton color="warning" variant="solid" :loading="confirming" class="shrink-0 w-full sm:w-auto"
-							@click="confirmAnalysis">
-							Подтвердить
-						</UButton>
 					</div>
 				</div>
 
-				<div class="flex flex-wrap items-center gap-2 mb-8">
-					<UBadge color="primary" variant="subtle" size="lg">
-						{{ analysis.match_score }}% соответствия
-					</UBadge>
-					<UBadge color="success" variant="subtle">{{ analysis.met_count }} ок</UBadge>
-					<UBadge color="warning" variant="subtle">{{ analysis.partial_count }} частично</UBadge>
-					<UBadge color="error" variant="subtle">{{ analysis.missing_count }} нет</UBadge>
-					<UBadge color="neutral" variant="subtle">{{ analysis.not_found_count }} не найдено</UBadge>
+				<div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+					<UCard class="shadow-sm">
+						<template #header>
+							<div class="flex items-center justify-between gap-2">
+								<p class="font-semibold text-sm">Требования из ТЗ</p>
+								<UBadge color="neutral" variant="subtle" size="xs">
+									{{ editableRequirementsTz.length }}
+									{{ requirementWord(editableRequirementsTz.length) }}
+								</UBadge>
+							</div>
+						</template>
+
+						<div class="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
+							<div v-for="(req, idx) in editableRequirementsTz" :key="`tz-${idx}`"
+								class="flex items-start gap-2">
+								<UInput v-model="editableRequirementsTz[idx]" class="flex-1" size="sm" />
+								<UButton type="button" variant="ghost" color="neutral" size="xs"
+									icon="i-lucide-x" @click="removeTzRequirement(idx)" />
+							</div>
+							<p v-if="editableRequirementsTz.length === 0"
+								class="text-sm text-muted text-center py-4">
+								Нет извлечённых требований
+							</p>
+						</div>
+
+						<template #footer>
+							<UButton type="button" variant="outline" size="sm"
+								leading-icon="i-lucide-plus" @click="addTzRequirement">
+								Добавить требование
+							</UButton>
+						</template>
+					</UCard>
+
+					<div class="space-y-4">
+						<UCard v-for="group in kpRequirementsGroups" :key="`review-kp-${group.id}`"
+							class="shadow-sm">
+							<template #header>
+								<button type="button"
+									class="flex w-full items-center justify-between gap-2 text-left"
+									:aria-expanded="isReviewKpExpanded(group.id)"
+									@click.stop="toggleReviewKpExpand(group.id)">
+									<div class="flex items-center gap-2 min-w-0">
+										<UIcon
+											:name="isReviewKpExpanded(group.id)
+												? 'i-lucide-chevron-down'
+												: 'i-lucide-chevron-right'"
+											class="w-4 h-4 shrink-0 text-muted" />
+										<div class="min-w-0">
+											<p class="font-semibold text-sm">{{ group.label }}</p>
+											<p v-if="group.filename" class="text-xs text-muted truncate mt-0.5">
+												{{ group.filename }}
+											</p>
+										</div>
+									</div>
+									<UBadge color="neutral" variant="subtle" size="xs" class="shrink-0">
+										{{ group.items.length }}
+										{{ requirementWord(group.items.length) }}
+									</UBadge>
+								</button>
+							</template>
+
+							<template v-if="isReviewKpExpanded(group.id)" #footer>
+								<UButton type="button" variant="outline" size="sm"
+									leading-icon="i-lucide-plus"
+									@click="addKpRequirement(group.key)">
+									Добавить предложение
+								</UButton>
+							</template>
+
+							<div v-show="isReviewKpExpanded(group.id)"
+								class="space-y-3 max-h-[40vh] overflow-y-auto pr-1">
+								<div v-for="(_item, idx) in group.items" :key="`${group.key}-${idx}`"
+									class="flex items-start gap-2">
+									<UInput
+										v-model="editableRequirementsKp[group.key][idx]"
+										class="flex-1" size="sm" />
+									<UButton type="button" variant="ghost" color="neutral" size="xs"
+										icon="i-lucide-x"
+										@click="removeKpRequirement(group.key, idx)" />
+								</div>
+								<p v-if="group.items.length === 0"
+									class="text-sm text-muted text-center py-4">
+									Нет извлечённых предложений
+								</p>
+							</div>
+						</UCard>
+					</div>
+				</div>
+
+				<div class="flex flex-wrap items-center gap-2">
+					<UButton variant="outline" :loading="savingRequirements"
+						@click="saveRequirements">
+						Сохранить изменения
+					</UButton>
+					<UButton color="warning" variant="solid" :loading="confirming"
+						:disabled="!canConfirmRequirements" @click="confirmAnalysis">
+						Подтвердить и запустить сравнение
+					</UButton>
+				</div>
+			</template>
+
+			<template v-else-if="hasConfirmedResults">
+				<div class="flex flex-wrap items-end justify-between gap-4 mb-8">
+					<UFormField v-if="hasMultipleLetterKps" label="Основное КП" class="mb-0">
+						<USelect
+							:model-value="analysis.kp_filename"
+							:items="primaryKpOptions"
+							:loading="primaryKpSaving"
+							size="sm"
+							class="min-w-56"
+							@update:model-value="setPrimaryKp"
+						/>
+					</UFormField>
+					<div class="flex flex-wrap items-center gap-2">
+						<UBadge color="primary" variant="subtle" size="lg">
+							{{ analysis.match_score }}% соответствия
+							<span v-if="hasMultipleLetterKps" class="opacity-80">· основное КП</span>
+						</UBadge>
+						<UBadge color="success" variant="subtle">{{ analysis.met_count }} ок</UBadge>
+						<UBadge color="warning" variant="subtle">{{ analysis.partial_count }} частично</UBadge>
+						<UBadge color="error" variant="subtle">{{ analysis.missing_count }} нет</UBadge>
+						<UBadge color="neutral" variant="subtle">{{ analysis.not_found_count }} не найдено</UBadge>
+					</div>
 				</div>
 
 				<div class="space-y-10">
@@ -156,21 +265,37 @@
 						</template>
 
 						<div class="max-h-[70vh] overflow-y-auto pr-1 space-y-8">
-							<section v-for="group in kpItemGroups" :key="group.key" class="space-y-4">
-								<div class="sticky top-0 z-10 -mx-1 px-1 py-2 bg-default/95 backdrop-blur-sm
-									border-b border-default">
+							<section v-for="group in kpItemGroups" :key="`results-kp-${group.id}`" class="space-y-4">
+								<button type="button"
+									class="sticky top-0 z-10 -mx-1 px-1 py-2 w-full text-left
+										bg-default/95 backdrop-blur-sm border-b border-default"
+									:aria-expanded="isResultsKpExpanded(group.id)"
+									@click.stop="toggleResultsKpExpand(group.id)">
 									<div class="flex flex-wrap items-center gap-2">
+										<UIcon
+											:name="isResultsKpExpanded(group.id)
+												? 'i-lucide-chevron-down'
+												: 'i-lucide-chevron-right'"
+											class="w-4 h-4 shrink-0 text-muted" />
 										<p class="text-sm font-semibold text-highlighted">{{ group.label }}</p>
+										<UBadge v-if="analysis.kp_filename === group.key"
+											color="primary" variant="subtle" size="xs">
+											Основное
+										</UBadge>
 										<UBadge color="neutral" variant="subtle" size="xs">
 											{{ group.items.length }} {{ requirementWord(group.items.length) }}
 										</UBadge>
+										<UBadge v-if="getKpStats(group.key)"
+											color="primary" variant="outline" size="xs">
+											{{ getKpStats(group.key)?.match_score }}%
+										</UBadge>
 									</div>
-									<p v-if="group.filename" class="text-xs text-muted truncate mt-0.5">
+									<p v-if="group.filename" class="text-xs text-muted truncate mt-0.5 pl-6">
 										{{ group.filename }}
 									</p>
-								</div>
+								</button>
 
-								<div class="space-y-3">
+								<div v-show="isResultsKpExpanded(group.id)" class="space-y-3">
 									<UCard v-for="item in group.items" :key="item._index" variant="subtle"
 										:class="matchBorderClass(item.status)"
 										:ui="{ body: 'p-0 sm:p-0' }">
@@ -195,7 +320,7 @@
 														text-[11px] sm:text-xs leading-snug whitespace-normal">
 													{{ getTzItemStatusLabel(item.status) }}
 												</UBadge>
-												<UCheckbox v-if="isTzSelectable(item.status)"
+												<UCheckbox v-if="isTzSelectable(item.status) && belongsToPrimaryKp(item)"
 													:model-value="tzSelectedIndices.includes(item._index)"
 													class="shrink-0 mt-0.5"
 													@click.stop
@@ -277,7 +402,7 @@
 		</UModal>
 
 		<UModal v-model:open="showLetterModal" title="Письмо поставщику"
-			description="Снимите галочки у пунктов, которые не нужно включать в письмо. Текст справа обновляется автоматически."
+			description="Письмо формируется по основному КП. Снимите галочки у пунктов, которые не нужно включать."
 			:ui="{ content: 'sm:max-w-4xl' }">
 			<template #body>
 				<div v-if="previewLoading" class="flex justify-center py-12">
@@ -288,6 +413,10 @@
 					<div class="grid grid-cols-1 md:grid-cols-[15rem_minmax(0,1fr)] gap-5 min-h-0">
 						<aside class="flex flex-col gap-4 min-h-0 md:max-h-[62vh]">
 							<div class="space-y-3 shrink-0">
+								<p v-if="primaryKpLabel" class="text-xs text-muted">
+									Основное КП:
+									<span class="text-default font-medium">{{ primaryKpLabel }}</span>
+								</p>
 								<UFormField label="Организация" required>
 									<UInput ref="docxOrganizationInput" v-model="docxOrganization"
 										placeholder="Наименование организации" size="md" />
@@ -321,7 +450,12 @@
 
 							<div class="flex-1 min-h-0 overflow-y-auto space-y-4 pr-0.5">
 								<div v-if="letterModalMismatchItems.length" class="space-y-2">
-									<p class="text-xs font-semibold text-error px-0.5">Не совпадает</p>
+									<p class="text-xs font-semibold text-error px-0.5">
+										Не совпадает
+										<span v-if="primaryKpLabel" class="text-muted font-normal">
+											· {{ primaryKpLabel }}
+										</span>
+									</p>
 									<label v-for="item in letterModalMismatchItems" :key="item._index"
 										class="flex items-start gap-2 rounded-lg border border-default/60
 											bg-elevated/30 px-2 py-2 cursor-pointer hover:bg-elevated/50">
@@ -337,7 +471,12 @@
 								</div>
 
 								<div v-if="letterModalPartialItems.length" class="space-y-2">
-									<p class="text-xs font-semibold text-warning px-0.5">Частично совпадает</p>
+									<p class="text-xs font-semibold text-warning px-0.5">
+										Частично совпадает
+										<span v-if="primaryKpLabel" class="text-muted font-normal">
+											· {{ primaryKpLabel }}
+										</span>
+									</p>
 									<label v-for="item in letterModalPartialItems" :key="item._index"
 										class="flex items-start gap-2 rounded-lg border border-default/60
 											bg-elevated/30 px-2 py-2 cursor-pointer hover:bg-elevated/50">
@@ -397,10 +536,13 @@
 
 <script lang="ts" setup>
 import type {
+	TZAnalysisConfirmRequest,
 	TZAnalysisItem,
+	TZAnalysisKpStats,
 	TZAnalysisPreviewResponse,
 	TZAnalysisSession,
 	TZAnalysisStatus,
+	TZRequirementsUpdateRequest,
 	UserResponse,
 } from '#shared/types'
 import {
@@ -417,7 +559,7 @@ definePageMeta({ layout: 'default' })
 const route = useRoute()
 const id = computed(() => route.params.id as string)
 
-const { get, post } = useApi()
+const { get, post, patch } = useApi()
 const { $axios } = useNuxtApp()
 const toast = useToast()
 const { formatDate } = useFormatDate()
@@ -447,6 +589,10 @@ const showQueueModal = ref(false)
 const showLetterModal = ref(false)
 const letterPreviewTab = ref('mismatch')
 const confirming = ref(false)
+const savingRequirements = ref(false)
+const primaryKpSaving = ref(false)
+const editableRequirementsTz = ref<string[]>([])
+const editableRequirementsKp = ref<Record<string, string[]>>({})
 const docxOrganization = ref('')
 const docxDeadline = ref('')
 const docxGenerating = ref(false)
@@ -469,6 +615,7 @@ const tzFilterOptions = [
 type TZItemView = TZAnalysisItem & { _index: number }
 
 type KpItemGroup = {
+	id: number
 	key: string
 	label: string
 	filename: string | null
@@ -476,11 +623,68 @@ type KpItemGroup = {
 }
 
 const expandedItems = ref<Set<number>>(new Set())
+const reviewKpExpanded = ref<Record<number, boolean>>({})
+const resultsKpExpanded = ref<Record<number, boolean>>({})
+
+let reviewKpKeysSignature = ''
+let resultsKpKeysSignature = ''
+
+const KP_GROUPS_DEFAULT_EXPANDED = 2
+
+function buildKpExpandedState(count: number): Record<number, boolean> {
+	const next: Record<number, boolean> = {}
+	for (let idx = 0; idx < count; idx++) {
+		next[idx] = count <= KP_GROUPS_DEFAULT_EXPANDED || idx < KP_GROUPS_DEFAULT_EXPANDED
+	}
+	return next
+}
+
+function ensureReviewKpExpanded(keys: string[]) {
+	const signature = keys.map((key, idx) => `${idx}:${key}`).join('|')
+	if (signature === reviewKpKeysSignature) return
+	reviewKpKeysSignature = signature
+	reviewKpExpanded.value = buildKpExpandedState(keys.length)
+}
+
+function ensureResultsKpExpanded(keys: string[]) {
+	const signature = keys.map((key, idx) => `${idx}:${key}`).join('|')
+	if (signature === resultsKpKeysSignature) return
+	resultsKpKeysSignature = signature
+	resultsKpExpanded.value = buildKpExpandedState(keys.length)
+}
+
+function isReviewKpExpanded(id: number) {
+	return reviewKpExpanded.value[id] ?? true
+}
+
+function isResultsKpExpanded(id: number) {
+	return resultsKpExpanded.value[id] ?? true
+}
+
+function toggleReviewKpExpand(id: number) {
+	reviewKpExpanded.value = {
+		...reviewKpExpanded.value,
+		[id]: !isReviewKpExpanded(id),
+	}
+}
+
+function toggleResultsKpExpand(id: number) {
+	resultsKpExpanded.value = {
+		...resultsKpExpanded.value,
+		[id]: !isResultsKpExpanded(id),
+	}
+}
 
 const isDraft = computed(() => analysis.value?.status === TZAnalysisRunStatus.DRAFT)
 const hasResults = computed(() =>
 	analysis.value?.status === TZAnalysisRunStatus.ACTIVE
 	|| analysis.value?.status === TZAnalysisRunStatus.COMPLETED,
+)
+const needsRequirementsReview = computed(() =>
+	hasResults.value && !analysis.value?.confirmed,
+)
+const hasConfirmedResults = computed(() =>
+	hasResults.value && Boolean(analysis.value?.confirmed),
 )
 const statusColor = computed(() =>
 	getTzRunStatusColor(analysis.value?.status ?? TZAnalysisRunStatus.DRAFT),
@@ -526,6 +730,7 @@ const kpItemGroups = computed((): KpItemGroup[] => {
 			? `КП ${idx + 1}`
 			: 'КП 1'
 		return {
+			id: idx,
 			key,
 			label,
 			filename,
@@ -566,6 +771,213 @@ const displayKpFilenames = computed(() => {
 	return []
 })
 
+type KpRequirementsGroup = {
+	id: number
+	key: string
+	label: string
+	filename: string | null
+	items: string[]
+}
+
+const kpRequirementsGroups = computed((): KpRequirementsGroup[] => {
+	const filenames = displayKpFilenames.value
+	const keys = filenames.length
+		? filenames
+		: Object.keys(editableRequirementsKp.value)
+
+	return keys.map((key, idx) => ({
+		id: idx,
+		key,
+		label: keys.length > 1 ? `КП ${idx + 1}` : 'КП 1',
+		filename: key,
+		items: editableRequirementsKp.value[key] ?? [],
+	}))
+})
+
+const hasMultipleLetterKps = computed(() => kpItemGroups.value.length > 1)
+
+const primaryKpOptions = computed(() =>
+	displayKpFilenames.value.map((filename, idx) => ({
+		label: displayKpFilenames.value.length > 1
+			? `КП ${idx + 1} · ${filename}`
+			: filename,
+		value: filename,
+	})),
+)
+
+const primaryKpLabel = computed(() => {
+	const primary = analysis.value?.kp_filename
+	if (!primary) return null
+	return primaryKpOptions.value.find((option) => option.value === primary)?.label
+		?? primary
+})
+
+function getKpStats(kpKey: string): TZAnalysisKpStats | null {
+	return analysis.value?.kp_stats?.[kpKey] ?? null
+}
+
+async function setPrimaryKp(kpFilename: string | null) {
+	if (!analysis.value?.id || !kpFilename || primaryKpSaving.value) return
+	if (kpFilename === analysis.value.kp_filename) return
+	primaryKpSaving.value = true
+	try {
+		const updated = await patch<TZAnalysisSession>(
+			`/tz-analysis/${analysis.value.id}/primary-kp`,
+			{ kp_filename: kpFilename },
+		)
+		applyAnalysis(updated)
+	} catch (e: unknown) {
+		const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+		toast.add({
+			title: typeof detail === 'string' ? detail : 'Не удалось сменить основное КП',
+			color: 'error',
+		})
+	} finally {
+		primaryKpSaving.value = false
+	}
+}
+
+function getItemKpKey(item: TZAnalysisItem): string {
+	const filenames = displayKpFilenames.value
+	return item.kp_name || filenames[0] || '_default'
+}
+
+function belongsToPrimaryKp(item: TZAnalysisItem): boolean {
+	const primary = analysis.value?.kp_filename
+	if (!primary || !hasMultipleLetterKps.value) return true
+	return getItemKpKey(item) === primary
+}
+
+function selectPrimaryKpLetterItems(kpFilename: string | null | undefined) {
+	if (!analysis.value || !kpFilename) return
+	tzSelectedIndices.value = analysis.value.items
+		.map((item, index) => ({ item, index }))
+		.filter(({ item }) => getItemKpKey(item) === kpFilename && isTzSelectable(item.status))
+		.map(({ index }) => index)
+}
+
+function collectResultsKpKeys(data: TZAnalysisSession): string[] {
+	const filenames = data.kp_filenames?.length
+		? data.kp_filenames
+		: data.kp_filename
+			? [data.kp_filename]
+			: []
+	const ordered: string[] = []
+	const seen = new Set<string>()
+	for (const name of filenames) {
+		if (!seen.has(name)) {
+			seen.add(name)
+			ordered.push(name)
+		}
+	}
+	for (const item of data.items) {
+		const key = item.kp_name || filenames[0] || '_default'
+		if (!seen.has(key)) {
+			seen.add(key)
+			ordered.push(key)
+		}
+	}
+	return ordered
+}
+
+const canConfirmRequirements = computed(() => {
+	const tz = editableRequirementsTz.value.map((item) => item.trim()).filter(Boolean)
+	if (tz.length === 0) return false
+	return kpRequirementsGroups.value.some((group) =>
+		(editableRequirementsKp.value[group.key] ?? [])
+			.map((item) => item.trim())
+			.some(Boolean),
+	)
+})
+
+function syncEditableRequirements(data: TZAnalysisSession) {
+	editableRequirementsTz.value = [...(data.requirements_tz ?? [])]
+	const kpSource = data.requirements_kp ?? {}
+	const filenames = data.kp_filenames?.length
+		? data.kp_filenames
+		: data.kp_filename
+			? [data.kp_filename]
+			: Object.keys(kpSource)
+	editableRequirementsKp.value = Object.fromEntries(
+		filenames.map((name) => [name, [...(kpSource[name] ?? [])]]),
+	)
+	ensureReviewKpExpanded(filenames.length ? filenames : Object.keys(kpSource))
+}
+
+function normalizedRequirementsPayload(): TZRequirementsUpdateRequest {
+	const requirements_tz = editableRequirementsTz.value
+		.map((item) => item.trim())
+		.filter(Boolean)
+	const requirements_kp = Object.fromEntries(
+		Object.entries(editableRequirementsKp.value).map(([key, items]) => [
+			key,
+			items.map((item) => item.trim()).filter(Boolean),
+		]),
+	)
+	return { requirements_tz, requirements_kp }
+}
+
+function addTzRequirement() {
+	editableRequirementsTz.value = [...editableRequirementsTz.value, '']
+}
+
+function removeTzRequirement(index: number) {
+	editableRequirementsTz.value = editableRequirementsTz.value.filter(
+		(_, idx) => idx !== index,
+	)
+}
+
+function addKpRequirement(kpKey: string) {
+	const current = editableRequirementsKp.value[kpKey] ?? []
+	editableRequirementsKp.value = {
+		...editableRequirementsKp.value,
+		[kpKey]: [...current, ''],
+	}
+}
+
+function removeKpRequirement(kpKey: string, index: number) {
+	const current = editableRequirementsKp.value[kpKey] ?? []
+	editableRequirementsKp.value = {
+		...editableRequirementsKp.value,
+		[kpKey]: current.filter((_, idx) => idx !== index),
+	}
+}
+
+async function saveRequirements() {
+	if (!analysis.value?.id || savingRequirements.value) return
+	const payload = normalizedRequirementsPayload()
+	if (payload.requirements_tz.length === 0) {
+		toast.add({
+			title: 'Добавьте хотя бы одно требование из ТЗ',
+			color: 'warning',
+		})
+		return
+	}
+
+	savingRequirements.value = true
+	try {
+		const updated = await patch<TZAnalysisSession>(
+			`/tz-analysis/${analysis.value.id}/requirements`,
+			payload,
+		)
+		syncEditableRequirements(updated)
+		applyAnalysis(updated)
+		toast.add({
+			title: 'Изменения сохранены',
+			color: 'success',
+			icon: 'i-lucide-check',
+		})
+	} catch (e: unknown) {
+		const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+		toast.add({
+			title: typeof detail === 'string' ? detail : 'Не удалось сохранить',
+			color: 'error',
+		})
+	} finally {
+		savingRequirements.value = false
+	}
+}
+
 const hasAnyKpFile = computed(() =>
 	kpSlots.value.some((slot) => slot.file !== null),
 )
@@ -583,14 +995,17 @@ const letterModalMismatchItems = computed((): TZItemView[] => {
 	if (!analysis.value) return []
 	return analysis.value.items
 		.map((item, index) => ({ ...item, _index: index }))
-		.filter((item) => item.status === 'missing' || item.status === 'not_found')
+		.filter((item) =>
+			belongsToPrimaryKp(item)
+			&& (item.status === 'missing' || item.status === 'not_found'),
+		)
 })
 
 const letterModalPartialItems = computed((): TZItemView[] => {
 	if (!analysis.value) return []
 	return analysis.value.items
 		.map((item, index) => ({ ...item, _index: index }))
-		.filter((item) => item.status === 'partial')
+		.filter((item) => belongsToPrimaryKp(item) && item.status === 'partial')
 })
 
 const letterItemsByTab = computed(() => ({
@@ -761,19 +1176,13 @@ function scrollToLetterSection(section: 'mismatch' | 'partial') {
 
 function applyAnalysis(data: TZAnalysisSession) {
 	analysis.value = data
+	syncEditableRequirements(data)
 	if (data.status === TZAnalysisRunStatus.PROCESSING) {
 		tzPolling.value = true
 	}
-	if (
-		data.status === TZAnalysisRunStatus.ACTIVE
-		&& tzSelectedIndices.value.length === 0
-	) {
-		tzSelectedIndices.value = data.items
-			.map((item, index) => ({ item, index }))
-			.filter(({ item }) =>
-				item.status === 'partial' || item.status === 'missing' || item.status === 'not_found',
-			)
-			.map(({ index }) => index)
+	if (data.status === TZAnalysisRunStatus.ACTIVE && data.confirmed) {
+		ensureResultsKpExpanded(collectResultsKpKeys(data))
+		selectPrimaryKpLetterItems(data.kp_filename)
 	}
 }
 
@@ -945,15 +1354,21 @@ function onKpSlotChange(slotId: number, file: File | null | undefined) {
 }
 
 async function confirmAnalysis() {
-	if (!analysis.value?.id || confirming.value) return
+	if (!analysis.value?.id || confirming.value || !canConfirmRequirements.value) return
+	const payload: TZAnalysisConfirmRequest = normalizedRequirementsPayload()
 	confirming.value = true
 	try {
 		const updated = await post<TZAnalysisSession>(
 			`/tz-analysis/${analysis.value.id}/confirm`,
+			payload,
 		)
 		applyAnalysis(updated)
+		if (updated.status === TZAnalysisRunStatus.PROCESSING) {
+			tzPolling.value = true
+		}
 		toast.add({
-			title: 'Анализ подтверждён',
+			title: 'Сравнение поставлено в очередь',
+			description: 'Результаты появятся автоматически после завершения.',
 			color: 'success',
 			icon: 'i-lucide-check',
 		})

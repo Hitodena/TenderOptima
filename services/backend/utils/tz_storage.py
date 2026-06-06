@@ -9,6 +9,30 @@ def tz_analysis_dir(analysis_id: uuid.UUID) -> Path:
     return Path(get_config().upload_dir) / "tz_analyses" / str(analysis_id)
 
 
+def make_unique_filenames(filenames: list[str]) -> list[str]:
+    """Ensure display names are unique when users upload files with the same name."""
+    used: set[str] = set()
+    unique: list[str] = []
+    for name in filenames:
+        safe = Path(name).name.replace("..", "_") or "file"
+        if safe not in used:
+            used.add(safe)
+            unique.append(safe)
+            continue
+        path = Path(safe)
+        stem = path.stem or "file"
+        suffix = path.suffix
+        n = 2
+        while True:
+            candidate = f"{stem} ({n}){suffix}"
+            if candidate not in used:
+                used.add(candidate)
+                unique.append(candidate)
+                break
+            n += 1
+    return unique
+
+
 def save_tz_analysis_files(
     analysis_id: uuid.UUID,
     tz_path: Path,

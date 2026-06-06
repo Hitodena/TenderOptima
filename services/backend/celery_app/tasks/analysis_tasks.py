@@ -13,7 +13,7 @@ from backend.enums import TZAnalysisRunStatus
 from backend.services.analysis.email import (
     analyze_email,
 )
-from backend.services.analysis.tz import analyze_tz_files
+from backend.services.analysis.tz import analyze_tz_files, compare_only
 from backend.services.extraction.router import UnsupportedFileTypeError
 from backend.utils.ocr import OcrNotAvailableError
 from backend.utils.tz_storage import resolve_tz_analysis_files
@@ -129,6 +129,9 @@ async def run_tz_analysis(self, analysis_id: str) -> dict:
             tz_filename=result.tz_filename or tz_path.name,
             kp_filename=result.kp_filename,
             kp_filenames=result.kp_filenames,
+            requirements_tz=result.requirements_tz,
+            requirements_kp=result.requirements_kp,
+            kp_stats=result.kp_stats,
             items=items_json,
             confirmed=False,
             match_score=result.match_score,
@@ -140,6 +143,106 @@ async def run_tz_analysis(self, analysis_id: str) -> dict:
             status=TZAnalysisRunStatus.ACTIVE.value,
         )
     logger.info("TZ analysis task done", analysis_id=analysis_id)
+    return {"status": "active", "analysis_id": analysis_id}
+
+
+@app.task(
+    name="analysis.tz_compare",
+    bind=True,
+    soft_time_limit=600,
+    time_limit=900,
+    max_retries=0,
+)
+@async_task
+async def run_tz_compare(self, analysis_id: str) -> dict:
+    """Re-run TZ vs KP comparison using user-confirmed requirement lists."""
+    db_manager = get_db_manager()
+    aid = uuid.UUID(analysis_id)
+    async with db_manager.session() as session:
+        row = await TZAnalysisDAO.get_by_id(session, aid)
+        if not row:
+            logger.error("TZ compare: analysis not found", analysis_id=analysis_id)
+            return {"error": "not_found", "analysis_id": analysis_id}
+        requirements_tz = list(row.requirements_tz or [])
+        requirements_kp = dict(row.requirements_kp or {})
+
+    if not requirements_tz:
+        async with db_manager.session() as session:
+            await TZAnalysisDAO.update_fields(
+                session,
+                aid,
+                status=TZAnalysisRunStatus.FAILED.value,
+            )
+        return {"error": "no_requirements_tz", "analysis_id": analysis_id}
+    if not requirements_kp:
+        async with db_manager.session() as session:
+            await TZAnalysisDAO.update_fields(
+                session,
+                aid,
+                status=TZAnalysisRunStatus.FAILED.value,
+            )
+        return {"error": "no_requirements_kp", "analysis_id": analysis_id}
+
+    try:
+        items = await compare_only(requirements_tz, requirements_kp)
+    except ValueError as exc:
+        logger.warning(
+            "TZ compare failed",
+            analysis_id=analysis_id,
+            error=str(exc),
+        )
+        async with db_manager.session() as session:
+            await TZAnalysisDAO.update_fields(
+                session,
+                aid,
+                status=TZAnalysisRunStatus.FAILED.value,
+            )
+        return {"error": type(exc).__name__, "analysis_id": analysis_id}
+    except Exception as exc:
+        logger.exception(
+            "TZ compare unexpected failure",
+            analysis_id=analysis_id,
+            error=str(exc),
+        )
+        async with db_manager.session() as session:
+            await TZAnalysisDAO.update_fields(
+                session,
+                aid,
+                status=TZAnalysisRunStatus.FAILED.value,
+            )
+        return {"error": "failed", "analysis_id": analysis_id}
+
+    from backend.schemas.analysis import build_analysis_stats
+
+    kp_filenames = list(row.kp_filenames or [])
+    if not kp_filenames:
+        kp_filenames = list(requirements_kp.keys())
+    if not kp_filenames and row.kp_filename:
+        kp_filenames = [row.kp_filename]
+    primary_kp = row.kp_filename
+    kp_stats, primary_kp, top_stats = build_analysis_stats(
+        items,
+        kp_filenames,
+        primary_kp,
+    )
+    items_json = [item.model_dump(mode="json") for item in items]
+    async with db_manager.session() as session:
+        await TZAnalysisDAO.update_fields(
+            session,
+            aid,
+            items=items_json,
+            kp_stats=kp_stats,
+            kp_filename=primary_kp,
+            confirmed=True,
+            match_score=top_stats["match_score"],
+            met_count=top_stats["met_count"],
+            partial_count=top_stats["partial_count"],
+            missing_count=top_stats["missing_count"],
+            not_found_count=top_stats["not_found_count"],
+            llm_model=config.openai_model,
+            status=TZAnalysisRunStatus.ACTIVE.value,
+        )
+    logger.info("TZ compare task done", analysis_id=analysis_id)
     return {"status": "active", "analysis_id": analysis_id}
 
 

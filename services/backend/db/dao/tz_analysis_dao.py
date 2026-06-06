@@ -123,18 +123,35 @@ class TZAnalysisDAO(BaseDAO[TZAnalysis]):
             raise
 
     @classmethod
-    async def confirm_analysis(
+    async def set_primary_kp(
         cls,
         session: AsyncSession,
         analysis_id: uuid.UUID,
         user_id: uuid.UUID,
+        kp_filename: str,
     ) -> TZAnalysis | None:
-        """Mark analysis as confirmed by the user after review."""
+        """Set primary KP and sync top-level stats from kp_stats."""
         row = await cls.get_by_id_and_user(session, analysis_id, user_id)
         if not row:
             return None
+
+        kp_filenames = list(row.kp_filenames or [])
+        if not kp_filenames and row.kp_filename:
+            kp_filenames = [row.kp_filename]
+        if kp_filename not in kp_filenames:
+            return None
+
+        from backend.schemas.analysis import primary_stats_fields
+
+        kp_stats = dict(row.kp_stats or {})
+        top = primary_stats_fields(kp_stats, kp_filename)
         return await cls.update_fields(
             session,
             analysis_id,
-            confirmed=True,
+            kp_filename=kp_filename,
+            match_score=top["match_score"],
+            met_count=top["met_count"],
+            partial_count=top["partial_count"],
+            missing_count=top["missing_count"],
+            not_found_count=top["not_found_count"],
         )

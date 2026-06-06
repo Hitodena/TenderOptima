@@ -22,16 +22,22 @@ from backend.api.deps import get_current_user, get_session
 from backend.api.tz_analysis.schemas import (
     STATUS_LABELS,
     TZAnalysisCompleteResponse,
+    TZAnalysisConfirmRequest,
     TZAnalysisCreateRequest,
     TZAnalysisDetailResponse,
     TZAnalysisDocxRequest,
     TZAnalysisHistoryPageResponse,
     TZAnalysisListItem,
     TZAnalysisPreviewResponse,
+    TZPrimaryKpRequest,
+    TZRequirementsUpdateRequest,
     row_to_session,
 )
 from backend.celery_app.tasks.analysis_tasks import (
     run_tz_analysis as queue_tz_analysis,
+)
+from backend.celery_app.tasks.analysis_tasks import (
+    run_tz_compare as queue_tz_compare,
 )
 from backend.db.dao import TZAnalysisDAO
 from backend.db.models import User
@@ -41,18 +47,26 @@ from backend.services.analysis.docx_export import (
     build_clarification_docx,
     build_clarification_preview,
 )
-from backend.utils.tz_storage import save_tz_analysis_files
+from backend.utils.tz_storage import (
+    make_unique_filenames,
+    save_tz_analysis_files,
+)
 
 router = APIRouter(prefix="/tz-analysis", tags=["TZ Analysis"])
 
 
-async def _save_upload(upload: UploadFile, dest_dir: Path) -> Path:
-    if not upload.filename:
+async def _save_upload(
+    upload: UploadFile,
+    dest_dir: Path,
+    *,
+    dest_name: str | None = None,
+) -> Path:
+    if not upload.filename and not dest_name:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="File name is required",
         )
-    safe_name = Path(upload.filename).name.replace("..", "_")
+    safe_name = dest_name or Path(upload.filename or "file").name.replace("..", "_")
     path = dest_dir / safe_name
     path.write_bytes(await upload.read())
     return path
@@ -78,6 +92,9 @@ async def create_tz_analysis(
         kp_filename=None,
         kp_filenames=[],
         confirmed=False,
+        requirements_tz=[],
+        requirements_kp={},
+        kp_stats={},
         items=[],
         match_score=0,
         met_count=0,
@@ -137,14 +154,29 @@ async def run_tz_analysis(
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
         tz_path = await _save_upload(tz_file, tmp_path)
+        raw_kp_names = [
+            Path(kp_upload.filename or "kp").name.replace("..", "_")
+            for kp_upload in kp_files
+        ]
+        kp_names = make_unique_filenames(raw_kp_names)
         kp_paths: list[Path] = []
-        kp_names: list[str] = []
-        for kp_upload in kp_files:
-            kp_path = await _save_upload(kp_upload, tmp_path)
+        for idx, (kp_upload, display_name) in enumerate(
+            zip(kp_files, kp_names, strict=True),
+            start=1,
+        ):
+            suffix = (
+                Path(display_name).suffix.lower()
+                or Path(kp_upload.filename or "").suffix.lower()
+                or ".bin"
+            )
+            kp_path = await _save_upload(
+                kp_upload,
+                tmp_path,
+                dest_name=f"kp{idx}{suffix}",
+            )
             kp_paths.append(kp_path)
-            kp_names.append(kp_upload.filename or kp_path.name)
         tz_name = tz_file.filename or tz_path.name
-        primary_kp = kp_names[0] if len(kp_names) == 1 else None
+        primary_kp = kp_names[0] if kp_names else None
 
         updated = await TZAnalysisDAO.update_fields(
             session,
@@ -153,6 +185,15 @@ async def run_tz_analysis(
             kp_filename=primary_kp,
             kp_filenames=kp_names,
             confirmed=False,
+            requirements_tz=[],
+            requirements_kp={},
+            kp_stats={},
+            items=[],
+            match_score=0,
+            met_count=0,
+            partial_count=0,
+            missing_count=0,
+            not_found_count=0,
             status=TZAnalysisRunStatus.PROCESSING.value,
         )
         if not updated:
@@ -276,20 +317,73 @@ async def complete_tz_analysis(
     )
 
 
-def _is_export_ready(status: str) -> bool:
-    return status in (
-        TZAnalysisRunStatus.ACTIVE.value,
-        TZAnalysisRunStatus.COMPLETED.value,
+def _is_export_ready(status: str, confirmed: bool) -> bool:
+    return (
+        status
+        in (
+            TZAnalysisRunStatus.ACTIVE.value,
+            TZAnalysisRunStatus.COMPLETED.value,
+        )
+        and confirmed
     )
 
 
-@router.post(
-    "/{analysis_id}/confirm",
+@router.patch(
+    "/{analysis_id}/requirements",
     response_model=TZAnalysisDetailResponse,
-    summary="Confirm TZ analysis results after user review",
+    summary="Update extracted TZ/KP requirements before confirmation",
 )
-async def confirm_tz_analysis(
+async def update_tz_requirements(
     analysis_id: uuid.UUID,
+    body: TZRequirementsUpdateRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> TZAnalysisDetailResponse:
+    row = await TZAnalysisDAO.get_by_id_and_user(
+        session, analysis_id, current_user.id
+    )
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found",
+        )
+    if row.status != TZAnalysisRunStatus.ACTIVE.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Analysis is not ready for requirements editing",
+        )
+    if row.confirmed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Analysis already confirmed",
+        )
+    updated = await TZAnalysisDAO.update_fields(
+        session,
+        row.id,
+        requirements_tz=body.requirements_tz,
+        requirements_kp=body.requirements_kp,
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found",
+        )
+    logger.info(
+        "TZ requirements updated",
+        analysis_id=str(analysis_id),
+        user_id=str(current_user.id),
+    )
+    return row_to_session(updated)
+
+
+@router.patch(
+    "/{analysis_id}/primary-kp",
+    response_model=TZAnalysisDetailResponse,
+    summary="Set primary KP and sync displayed match stats",
+)
+async def set_primary_kp(
+    analysis_id: uuid.UUID,
+    body: TZPrimaryKpRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> TZAnalysisDetailResponse:
@@ -307,6 +401,51 @@ async def confirm_tz_analysis(
     ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Analysis is not ready for primary KP selection",
+        )
+    updated = await TZAnalysisDAO.set_primary_kp(
+        session,
+        analysis_id,
+        current_user.id,
+        body.kp_filename.strip(),
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid primary KP",
+        )
+    logger.info(
+        "TZ primary KP updated",
+        analysis_id=str(analysis_id),
+        kp_filename=body.kp_filename,
+        user_id=str(current_user.id),
+    )
+    return row_to_session(updated)
+
+
+@router.post(
+    "/{analysis_id}/confirm",
+    response_model=TZAnalysisDetailResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Confirm requirements and queue TZ vs KP comparison",
+)
+async def confirm_tz_analysis(
+    analysis_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    body: TZAnalysisConfirmRequest | None = None,
+) -> TZAnalysisDetailResponse:
+    row = await TZAnalysisDAO.get_by_id_and_user(
+        session, analysis_id, current_user.id
+    )
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found",
+        )
+    if row.status != TZAnalysisRunStatus.ACTIVE.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="Analysis is not ready for confirmation",
         )
     if row.confirmed:
@@ -314,20 +453,56 @@ async def confirm_tz_analysis(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Analysis already confirmed",
         )
-    updated = await TZAnalysisDAO.confirm_analysis(
-        session, analysis_id, current_user.id
+
+    requirements_tz = (
+        body.requirements_tz
+        if body and body.requirements_tz is not None
+        else list(row.requirements_tz or [])
+    )
+    requirements_kp = (
+        body.requirements_kp
+        if body and body.requirements_kp is not None
+        else dict(row.requirements_kp or {})
+    )
+    if not requirements_tz:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one TZ requirement is required",
+        )
+    if not requirements_kp:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one KP offering list is required",
+        )
+
+    updated = await TZAnalysisDAO.update_fields(
+        session,
+        row.id,
+        requirements_tz=requirements_tz,
+        requirements_kp=requirements_kp,
+        status=TZAnalysisRunStatus.PROCESSING.value,
     )
     if not updated:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Analysis not found",
         )
+
+    queue_tz_compare.delay(str(row.id))  # type: ignore[attr-defined]
     logger.info(
-        "TZ analysis confirmed",
+        "TZ compare queued after confirmation",
         analysis_id=str(analysis_id),
         user_id=str(current_user.id),
     )
-    return row_to_session(updated)
+    refreshed = await TZAnalysisDAO.get_by_id_and_user(
+        session, analysis_id, current_user.id
+    )
+    if not refreshed:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found",
+        )
+    return row_to_session(refreshed)
 
 
 @router.get(
@@ -368,7 +543,7 @@ async def export_tz_analysis_csv(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Analysis not found",
         )
-    if not _is_export_ready(row.status):
+    if not _is_export_ready(row.status, bool(row.confirmed)):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Analysis is not ready for export",
@@ -431,7 +606,7 @@ async def preview_tz_analysis_letter(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Analysis not found",
         )
-    if not _is_export_ready(row.status):
+    if not _is_export_ready(row.status, bool(row.confirmed)):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Analysis is not ready for preview",
@@ -475,7 +650,7 @@ async def export_tz_analysis_docx(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Analysis not found",
         )
-    if not _is_export_ready(row.status):
+    if not _is_export_ready(row.status, bool(row.confirmed)):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Analysis is not ready for export",

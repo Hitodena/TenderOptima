@@ -146,6 +146,10 @@ class CeleryConfig:
             "queue": "analysis",
             "routing_key": "analysis",
         },
+        "analysis.tz_compare": {
+            "queue": "analysis",
+            "routing_key": "analysis",
+        },
         "analysis.email": {
             "queue": "analysis",
             "routing_key": "analysis",

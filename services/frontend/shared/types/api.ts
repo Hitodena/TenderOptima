@@ -171,6 +171,14 @@ export interface ReplyPayload {
 
 export type TZAnalysisStatus = 'met' | 'partial' | 'missing' | 'not_found';
 
+export interface TZAnalysisKpStats {
+	match_score: number;
+	met_count: number;
+	partial_count: number;
+	missing_count: number;
+	not_found_count: number;
+}
+
 export interface RequirementMatch {
 	requirement: string;
 	offer_value: string | null;
@@ -203,6 +211,9 @@ export interface TZAnalysisSession {
 	kp_filename: string | null;
 	kp_filenames?: string[];
 	confirmed?: boolean;
+	requirements_tz?: string[];
+	requirements_kp?: Record<string, string[]>;
+	kp_stats?: Record<string, TZAnalysisKpStats>;
 	items: TZAnalysisItem[];
 	match_score: number;
 	met_count: number;
@@ -249,6 +260,20 @@ export interface TZAnalysisDocxRequest {
 
 export interface TZAnalysisCreateRequest {
 	title: string;
+}
+
+export interface TZRequirementsUpdateRequest {
+	requirements_tz: string[];
+	requirements_kp: Record<string, string[]>;
+}
+
+export interface TZAnalysisConfirmRequest {
+	requirements_tz?: string[];
+	requirements_kp?: Record<string, string[]>;
+}
+
+export interface TZPrimaryKpRequest {
+	kp_filename: string;
 }
 
 export interface TZAnalysisPreviewResponse {

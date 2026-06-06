@@ -77,16 +77,45 @@ class TZAnalysisPreviewResponse(BaseModel):
     has_issues: bool
 
 
+class TZRequirementsUpdateRequest(BaseModel):
+    requirements_tz: Annotated[
+        list[str],
+        Field(description="Extracted TZ requirements list"),
+    ]
+    requirements_kp: Annotated[
+        dict[str, list[str]],
+        Field(description="Extracted KP offerings per KP name"),
+    ]
+
+
+class TZAnalysisConfirmRequest(BaseModel):
+    requirements_tz: Annotated[
+        list[str] | None,
+        Field(default=None, description="Optional TZ requirements override"),
+    ] = None
+    requirements_kp: Annotated[
+        dict[str, list[str]] | None,
+        Field(default=None, description="Optional KP offerings override"),
+    ] = None
+
+
+class TZPrimaryKpRequest(BaseModel):
+    kp_filename: Annotated[
+        str,
+        Field(min_length=1, max_length=512, description="Primary KP display name"),
+    ]
+
+
 class TZAnalysisDetailResponse(TZAnalysisSessionResult):
     pass
 
 
-def row_to_session(row) -> TZAnalysisSessionResult:
+def row_to_session(row) -> TZAnalysisDetailResponse:
     items = [TZAnalysisItem(**item) for item in (row.items or [])]
     kp_filenames = row.kp_filenames or []
     if not kp_filenames and row.kp_filename:
         kp_filenames = [row.kp_filename]
-    return TZAnalysisSessionResult(
+    return TZAnalysisDetailResponse(
         id=str(row.id),
         title=row.title or None,
         status=TZAnalysisRunStatus(row.status),
@@ -94,6 +123,9 @@ def row_to_session(row) -> TZAnalysisSessionResult:
         kp_filename=row.kp_filename,
         kp_filenames=kp_filenames,
         confirmed=bool(getattr(row, "confirmed", False)),
+        requirements_tz=list(getattr(row, "requirements_tz", None) or []),
+        requirements_kp=dict(getattr(row, "requirements_kp", None) or {}),
+        kp_stats=dict(getattr(row, "kp_stats", None) or {}),
         items=items,
         match_score=row.match_score,
         met_count=row.met_count,
