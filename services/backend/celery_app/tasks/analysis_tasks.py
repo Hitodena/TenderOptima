@@ -13,10 +13,19 @@ from backend.enums import TZAnalysisRunStatus
 from backend.services.analysis.email import (
     analyze_email,
 )
-from backend.services.analysis.tz import analyze_tz_files, compare_only
+from backend.services.analysis.tz import (
+    analyze_kp_files,
+    analyze_tz_files,
+    compare_only,
+    extract_tz_from_file,
+)
 from backend.services.extraction.router import UnsupportedFileTypeError
 from backend.utils.ocr import OcrNotAvailableError
-from backend.utils.tz_storage import resolve_tz_analysis_files
+from backend.utils.tz_storage import (
+    resolve_kp_analysis_files,
+    resolve_tz_analysis_files,
+    resolve_tz_only_file,
+)
 
 config = get_config()
 
@@ -57,6 +66,185 @@ async def _load_email_analysis_context(
             if isinstance(att, dict) and att.get("path"):
                 paths.append(Path(att["path"]))
         return requirements, message.raw_body or "", paths or None
+
+
+@app.task(
+    name="analysis.tz_extract",
+    bind=True,
+    soft_time_limit=600,
+    time_limit=900,
+    max_retries=0,
+)
+@async_task
+async def run_tz_extract(self, analysis_id: str) -> dict:
+    """Extract TZ requirements only (phase 1 of two-phase analysis)."""
+    db_manager = get_db_manager()
+    aid = uuid.UUID(analysis_id)
+    tz_path = resolve_tz_only_file(aid)
+    if not tz_path:
+        logger.error("TZ extract: TZ file missing", analysis_id=analysis_id)
+        async with db_manager.session() as session:
+            await TZAnalysisDAO.update_fields(
+                session,
+                aid,
+                status=TZAnalysisRunStatus.FAILED.value,
+            )
+        return {"error": "files_missing", "analysis_id": analysis_id}
+
+    try:
+        requirements_tz = await extract_tz_from_file(tz_path)
+    except (UnsupportedFileTypeError, OcrNotAvailableError, ValueError) as exc:
+        logger.warning(
+            "TZ extract failed",
+            analysis_id=analysis_id,
+            error=str(exc),
+        )
+        async with db_manager.session() as session:
+            await TZAnalysisDAO.update_fields(
+                session,
+                aid,
+                status=TZAnalysisRunStatus.FAILED.value,
+            )
+        return {"error": type(exc).__name__, "analysis_id": analysis_id}
+    except Exception as exc:
+        logger.exception(
+            "TZ extract unexpected failure",
+            analysis_id=analysis_id,
+            error=str(exc),
+        )
+        async with db_manager.session() as session:
+            await TZAnalysisDAO.update_fields(
+                session,
+                aid,
+                status=TZAnalysisRunStatus.FAILED.value,
+            )
+        return {"error": "failed", "analysis_id": analysis_id}
+
+    async with db_manager.session() as session:
+        row = await TZAnalysisDAO.get_by_id(session, aid)
+        tz_filename = row.tz_filename if row else tz_path.name
+        await TZAnalysisDAO.update_fields(
+            session,
+            aid,
+            tz_filename=tz_filename or tz_path.name,
+            kp_filename=None,
+            kp_filenames=[],
+            requirements_tz=requirements_tz,
+            requirements_kp={},
+            kp_stats={},
+            items=[],
+            confirmed=False,
+            match_score=0,
+            met_count=0,
+            partial_count=0,
+            missing_count=0,
+            not_found_count=0,
+            llm_model=config.openai_model,
+            status=TZAnalysisRunStatus.ACTIVE.value,
+        )
+    logger.info("TZ extract task done", analysis_id=analysis_id)
+    return {"status": "active", "analysis_id": analysis_id}
+
+
+@app.task(
+    name="analysis.tz_kp_compare",
+    bind=True,
+    soft_time_limit=600,
+    time_limit=900,
+    max_retries=0,
+)
+@async_task
+async def run_tz_kp_compare(self, analysis_id: str) -> dict:
+    """Extract KP offerings and compare against saved TZ requirements."""
+    db_manager = get_db_manager()
+    aid = uuid.UUID(analysis_id)
+    async with db_manager.session() as session:
+        row = await TZAnalysisDAO.get_by_id(session, aid)
+        if not row:
+            logger.error(
+                "TZ KP compare: analysis not found",
+                analysis_id=analysis_id,
+            )
+            return {"error": "not_found", "analysis_id": analysis_id}
+        requirements_tz = list(row.requirements_tz or [])
+        kp_display_names = list(row.kp_filenames or [])
+
+    if not requirements_tz:
+        async with db_manager.session() as session:
+            await TZAnalysisDAO.update_fields(
+                session,
+                aid,
+                status=TZAnalysisRunStatus.FAILED.value,
+            )
+        return {"error": "no_requirements_tz", "analysis_id": analysis_id}
+
+    kp_paths = resolve_kp_analysis_files(aid)
+    if not kp_paths:
+        logger.error(
+            "TZ KP compare: KP files missing", analysis_id=analysis_id
+        )
+        async with db_manager.session() as session:
+            await TZAnalysisDAO.update_fields(
+                session,
+                aid,
+                status=TZAnalysisRunStatus.FAILED.value,
+            )
+        return {"error": "files_missing", "analysis_id": analysis_id}
+
+    try:
+        result = await analyze_kp_files(
+            requirements_tz,
+            kp_paths,
+            kp_display_names=kp_display_names or None,
+        )
+    except (UnsupportedFileTypeError, OcrNotAvailableError, ValueError) as exc:
+        logger.warning(
+            "TZ KP compare failed",
+            analysis_id=analysis_id,
+            error=str(exc),
+        )
+        async with db_manager.session() as session:
+            await TZAnalysisDAO.update_fields(
+                session,
+                aid,
+                status=TZAnalysisRunStatus.FAILED.value,
+            )
+        return {"error": type(exc).__name__, "analysis_id": analysis_id}
+    except Exception as exc:
+        logger.exception(
+            "TZ KP compare unexpected failure",
+            analysis_id=analysis_id,
+            error=str(exc),
+        )
+        async with db_manager.session() as session:
+            await TZAnalysisDAO.update_fields(
+                session,
+                aid,
+                status=TZAnalysisRunStatus.FAILED.value,
+            )
+        return {"error": "failed", "analysis_id": analysis_id}
+
+    items_json = [item.model_dump(mode="json") for item in result.items]
+    async with db_manager.session() as session:
+        await TZAnalysisDAO.update_fields(
+            session,
+            aid,
+            kp_filename=result.kp_filename,
+            kp_filenames=result.kp_filenames,
+            requirements_kp=result.requirements_kp,
+            kp_stats=result.kp_stats,
+            items=items_json,
+            confirmed=True,
+            match_score=result.match_score,
+            met_count=result.met_count,
+            partial_count=result.partial_count,
+            missing_count=result.missing_count,
+            not_found_count=result.not_found_count,
+            llm_model=config.openai_model,
+            status=TZAnalysisRunStatus.ACTIVE.value,
+        )
+    logger.info("TZ KP compare task done", analysis_id=analysis_id)
+    return {"status": "active", "analysis_id": analysis_id}
 
 
 @app.task(
@@ -161,7 +349,9 @@ async def run_tz_compare(self, analysis_id: str) -> dict:
     async with db_manager.session() as session:
         row = await TZAnalysisDAO.get_by_id(session, aid)
         if not row:
-            logger.error("TZ compare: analysis not found", analysis_id=analysis_id)
+            logger.error(
+                "TZ compare: analysis not found", analysis_id=analysis_id
+            )
             return {"error": "not_found", "analysis_id": analysis_id}
         requirements_tz = list(row.requirements_tz or [])
         requirements_kp = dict(row.requirements_kp or {})

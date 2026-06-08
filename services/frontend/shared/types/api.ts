@@ -264,7 +264,7 @@ export interface TZAnalysisCreateRequest {
 
 export interface TZRequirementsUpdateRequest {
 	requirements_tz: string[];
-	requirements_kp: Record<string, string[]>;
+	requirements_kp?: Record<string, string[]>;
 }
 
 export interface TZAnalysisConfirmRequest {

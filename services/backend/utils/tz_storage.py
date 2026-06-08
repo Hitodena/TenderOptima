@@ -33,24 +33,40 @@ def make_unique_filenames(filenames: list[str]) -> list[str]:
     return unique
 
 
+def save_tz_only_file(analysis_id: uuid.UUID, tz_path: Path) -> Path:
+    """Copy TZ file into upload_dir for TZ-only extraction."""
+    dest = tz_analysis_dir(analysis_id)
+    dest.mkdir(parents=True, exist_ok=True)
+    tz_dest = dest / f"tz{tz_path.suffix.lower()}"
+    shutil.copy2(tz_path, tz_dest)
+    return tz_dest
+
+
+def save_kp_analysis_files(
+    analysis_id: uuid.UUID,
+    kp_paths: list[Path],
+) -> list[Path]:
+    """Copy KP files into an existing analysis upload directory."""
+    dest = tz_analysis_dir(analysis_id)
+    dest.mkdir(parents=True, exist_ok=True)
+    for old in dest.glob("kp*"):
+        old.unlink()
+    kp_dests: list[Path] = []
+    for idx, kp_path in enumerate(kp_paths, start=1):
+        kp_dest = dest / f"kp{idx}{kp_path.suffix.lower()}"
+        shutil.copy2(kp_path, kp_dest)
+        kp_dests.append(kp_dest)
+    return kp_dests
+
+
 def save_tz_analysis_files(
     analysis_id: uuid.UUID,
     tz_path: Path,
     kp_paths: list[Path],
 ) -> tuple[Path, list[Path]]:
     """Copy uploaded files into upload_dir for background processing."""
-    dest = tz_analysis_dir(analysis_id)
-    dest.mkdir(parents=True, exist_ok=True)
-
-    tz_dest = dest / f"tz{tz_path.suffix.lower()}"
-    shutil.copy2(tz_path, tz_dest)
-
-    kp_dests: list[Path] = []
-    for idx, kp_path in enumerate(kp_paths, start=1):
-        kp_dest = dest / f"kp{idx}{kp_path.suffix.lower()}"
-        shutil.copy2(kp_path, kp_dest)
-        kp_dests.append(kp_dest)
-
+    tz_dest = save_tz_only_file(analysis_id, tz_path)
+    kp_dests = save_kp_analysis_files(analysis_id, kp_paths)
     return tz_dest, kp_dests
 
 
@@ -71,19 +87,31 @@ def _sort_kp_paths(paths: list[Path]) -> list[Path]:
     return sorted(paths, key=sort_key)
 
 
+def resolve_tz_only_file(analysis_id: uuid.UUID) -> Path | None:
+    """Return TZ path if it exists on disk."""
+    dest = tz_analysis_dir(analysis_id)
+    if not dest.is_dir():
+        return None
+    tz_files = sorted(dest.glob("tz*"))
+    if not tz_files:
+        return None
+    return tz_files[0]
+
+
+def resolve_kp_analysis_files(analysis_id: uuid.UUID) -> list[Path]:
+    """Return sorted KP paths stored for an analysis."""
+    dest = tz_analysis_dir(analysis_id)
+    if not dest.is_dir():
+        return []
+    return _sort_kp_paths(list(dest.glob("kp*")))
+
+
 def resolve_tz_analysis_files(
     analysis_id: uuid.UUID,
 ) -> tuple[Path, list[Path]] | None:
     """Return TZ path and KP paths if TZ and at least one KP exist."""
-    dest = tz_analysis_dir(analysis_id)
-
-    if not dest.is_dir():
+    tz_path = resolve_tz_only_file(analysis_id)
+    kp_files = resolve_kp_analysis_files(analysis_id)
+    if not tz_path or not kp_files:
         return None
-
-    tz_files = sorted(dest.glob("tz*"))
-    kp_files = _sort_kp_paths(list(dest.glob("kp*")))
-
-    if not tz_files or not kp_files:
-        return None
-
-    return tz_files[0], kp_files
+    return tz_path, kp_files

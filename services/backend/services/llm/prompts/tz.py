@@ -51,8 +51,12 @@ def build_comparison_prompt(
     kp_name: str,
     kp_offerings: list[str],
 ) -> tuple[str, str]:
-    tz_list = "\n".join(f"{i + 1}. {req}" for i, req in enumerate(requirements_tz))
-    kp_list = "\n".join(f"{i + 1}. {off}" for i, off in enumerate(kp_offerings))
+    tz_list = "\n".join(
+        f"{i + 1}. {req}" for i, req in enumerate(requirements_tz)
+    )
+    kp_list = "\n".join(
+        f"{i + 1}. {off}" for i, off in enumerate(kp_offerings)
+    )
 
     system = """\
 Ты — аналитик тендерной документации. Сопоставь каждое требование из ТЗ \

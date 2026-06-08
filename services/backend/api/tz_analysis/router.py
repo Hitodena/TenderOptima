@@ -34,10 +34,13 @@ from backend.api.tz_analysis.schemas import (
     row_to_session,
 )
 from backend.celery_app.tasks.analysis_tasks import (
-    run_tz_analysis as queue_tz_analysis,
+    run_tz_compare as queue_tz_compare,
 )
 from backend.celery_app.tasks.analysis_tasks import (
-    run_tz_compare as queue_tz_compare,
+    run_tz_extract as queue_tz_extract,
+)
+from backend.celery_app.tasks.analysis_tasks import (
+    run_tz_kp_compare as queue_tz_kp_compare,
 )
 from backend.db.dao import TZAnalysisDAO
 from backend.db.models import User
@@ -49,7 +52,8 @@ from backend.services.analysis.docx_export import (
 )
 from backend.utils.tz_storage import (
     make_unique_filenames,
-    save_tz_analysis_files,
+    save_kp_analysis_files,
+    save_tz_only_file,
 )
 
 router = APIRouter(prefix="/tz-analysis", tags=["TZ Analysis"])
@@ -66,7 +70,9 @@ async def _save_upload(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="File name is required",
         )
-    safe_name = dest_name or Path(upload.filename or "file").name.replace("..", "_")
+    safe_name = dest_name or Path(upload.filename or "file").name.replace(
+        "..", "_"
+    )
     path = dest_dir / safe_name
     path.write_bytes(await upload.read())
     return path
@@ -116,21 +122,17 @@ async def create_tz_analysis(
     "/{analysis_id}/run",
     response_model=TZAnalysisDetailResponse,
     status_code=status.HTTP_202_ACCEPTED,
-    summary="Upload files and queue TZ vs KP analysis",
+    summary="Upload TZ and queue requirements extraction",
 )
 async def run_tz_analysis(
     analysis_id: uuid.UUID,
     tz_file: Annotated[
         UploadFile, File(description="Technical specification")
     ],
-    kp_files: Annotated[
-        list[UploadFile],
-        File(description="One or more commercial proposals"),
-    ],
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> TZAnalysisDetailResponse:
-    """Save files for a draft analysis and enqueue background processing."""
+    """Save TZ for a draft analysis and enqueue TZ-only extraction."""
     row = await TZAnalysisDAO.get_by_id_and_user(
         session, analysis_id, current_user.id
     )
@@ -145,6 +147,92 @@ async def run_tz_analysis(
             detail=f"Cannot run analysis in status '{row.status}'",
         )
 
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        tz_path = await _save_upload(tz_file, tmp_path)
+        tz_name = tz_file.filename or tz_path.name
+
+        updated = await TZAnalysisDAO.update_fields(
+            session,
+            row.id,
+            tz_filename=tz_name,
+            kp_filename=None,
+            kp_filenames=[],
+            confirmed=False,
+            requirements_tz=[],
+            requirements_kp={},
+            kp_stats={},
+            items=[],
+            match_score=0,
+            met_count=0,
+            partial_count=0,
+            missing_count=0,
+            not_found_count=0,
+            status=TZAnalysisRunStatus.PROCESSING.value,
+        )
+        if not updated:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Analysis not found",
+            )
+        save_tz_only_file(row.id, tz_path)
+
+    queue_tz_extract.delay(str(row.id))  # type: ignore[attr-defined]
+    logger.info(
+        "TZ extract queued",
+        analysis_id=str(row.id),
+        user_id=str(current_user.id),
+    )
+    refreshed = await TZAnalysisDAO.get_by_id_and_user(
+        session, analysis_id, current_user.id
+    )
+    if not refreshed:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found",
+        )
+    return row_to_session(refreshed)
+
+
+@router.post(
+    "/{analysis_id}/run-kp",
+    response_model=TZAnalysisDetailResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Upload KP files and queue comparison against TZ requirements",
+)
+async def run_tz_kp_analysis(
+    analysis_id: uuid.UUID,
+    kp_files: Annotated[
+        list[UploadFile],
+        File(description="One or more commercial proposals"),
+    ],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> TZAnalysisDetailResponse:
+    """Save KP files and enqueue extraction plus comparison."""
+    row = await TZAnalysisDAO.get_by_id_and_user(
+        session, analysis_id, current_user.id
+    )
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found",
+        )
+    if row.status != TZAnalysisRunStatus.ACTIVE.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Analysis is not ready for KP upload",
+        )
+    if row.confirmed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Analysis already confirmed",
+        )
+    if not list(row.requirements_tz or []):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one TZ requirement is required",
+        )
     if not kp_files:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -153,7 +241,6 @@ async def run_tz_analysis(
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
-        tz_path = await _save_upload(tz_file, tmp_path)
         raw_kp_names = [
             Path(kp_upload.filename or "kp").name.replace("..", "_")
             for kp_upload in kp_files
@@ -175,17 +262,14 @@ async def run_tz_analysis(
                 dest_name=f"kp{idx}{suffix}",
             )
             kp_paths.append(kp_path)
-        tz_name = tz_file.filename or tz_path.name
         primary_kp = kp_names[0] if kp_names else None
 
         updated = await TZAnalysisDAO.update_fields(
             session,
             row.id,
-            tz_filename=tz_name,
             kp_filename=primary_kp,
             kp_filenames=kp_names,
             confirmed=False,
-            requirements_tz=[],
             requirements_kp={},
             kp_stats={},
             items=[],
@@ -201,12 +285,11 @@ async def run_tz_analysis(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Analysis not found",
             )
-        save_tz_analysis_files(row.id, tz_path, kp_paths)
+        save_kp_analysis_files(row.id, kp_paths)
 
-    run_tz_analysis_task = queue_tz_analysis
-    run_tz_analysis_task.delay(str(row.id))  # type: ignore[attr-defined]
+    queue_tz_kp_compare.delay(str(row.id))  # type: ignore[attr-defined]
     logger.info(
-        "TZ analysis queued",
+        "TZ KP compare queued",
         analysis_id=str(row.id),
         user_id=str(current_user.id),
     )
@@ -357,11 +440,13 @@ async def update_tz_requirements(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Analysis already confirmed",
         )
+    update_payload: dict = {"requirements_tz": body.requirements_tz}
+    if body.requirements_kp is not None:
+        update_payload["requirements_kp"] = body.requirements_kp
     updated = await TZAnalysisDAO.update_fields(
         session,
         row.id,
-        requirements_tz=body.requirements_tz,
-        requirements_kp=body.requirements_kp,
+        **update_payload,
     )
     if not updated:
         raise HTTPException(

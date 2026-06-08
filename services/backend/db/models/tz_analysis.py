@@ -26,9 +26,7 @@ class TZAnalysis(IDMixinUUID, TimestampMixin, Base):
     requirements_kp: Mapped[dict] = mapped_column(
         JSON, nullable=False, default=dict
     )
-    kp_stats: Mapped[dict] = mapped_column(
-        JSON, nullable=False, default=dict
-    )
+    kp_stats: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     items: Mapped[list] = mapped_column(JSON, nullable=False)
     match_score: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0

@@ -83,9 +83,12 @@ class TZRequirementsUpdateRequest(BaseModel):
         Field(description="Extracted TZ requirements list"),
     ]
     requirements_kp: Annotated[
-        dict[str, list[str]],
-        Field(description="Extracted KP offerings per KP name"),
-    ]
+        dict[str, list[str]] | None,
+        Field(
+            default=None,
+            description="Extracted KP offerings per KP name",
+        ),
+    ] = None
 
 
 class TZAnalysisConfirmRequest(BaseModel):
@@ -102,7 +105,9 @@ class TZAnalysisConfirmRequest(BaseModel):
 class TZPrimaryKpRequest(BaseModel):
     kp_filename: Annotated[
         str,
-        Field(min_length=1, max_length=512, description="Primary KP display name"),
+        Field(
+            min_length=1, max_length=512, description="Primary KP display name"
+        ),
     ]
 
 

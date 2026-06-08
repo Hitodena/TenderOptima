@@ -48,7 +48,9 @@ async def _compare_single_kp(
     kp_name: str,
     kp_offerings: list[str],
 ) -> list[TZAnalysisItem]:
-    system, user = build_comparison_prompt(requirements_tz, kp_name, kp_offerings)
+    system, user = build_comparison_prompt(
+        requirements_tz, kp_name, kp_offerings
+    )
     raw = await llm_client.complete(system, user)
     result = TZAnalysisResult(**raw)
     items: list[TZAnalysisItem] = []
@@ -74,6 +76,49 @@ async def compare_only(
     requirements_kp: dict[str, list[str]],
 ) -> list[TZAnalysisItem]:
     return await compare_requirements(requirements_tz, requirements_kp)
+
+
+async def extract_tz_from_file(tz_path: Path) -> list[str]:
+    """Extract TZ requirements from a file on disk."""
+    tz_text = _assembler.assemble(_router.get(tz_path).extract(tz_path))
+    return await extract_tz_requirements(tz_text)
+
+
+async def analyze_kp_files(
+    requirements_tz: list[str],
+    kp_paths: list[Path],
+    *,
+    kp_display_names: list[str] | None = None,
+) -> TZAnalysisSessionResult:
+    """Extract KP offerings and compare them against saved TZ requirements."""
+    if not kp_paths:
+        raise ValueError("At least one KP file is required")
+
+    names = kp_display_names or [p.name for p in kp_paths]
+    if len(names) != len(kp_paths):
+        names = [p.name for p in kp_paths]
+
+    requirements_kp: dict[str, list[str]] = {}
+    for kp_path, kp_name in zip(kp_paths, names, strict=True):
+        kp_text = _assembler.assemble(_router.get(kp_path).extract(kp_path))
+        requirements_kp[kp_name] = await extract_kp_requirements(kp_text)
+
+    all_items = await compare_requirements(requirements_tz, requirements_kp)
+    kp_stats, primary_kp, top_stats = build_analysis_stats(all_items, names)
+
+    return TZAnalysisSessionResult(
+        kp_filename=primary_kp,
+        kp_filenames=names,
+        requirements_tz=requirements_tz,
+        requirements_kp=requirements_kp,
+        kp_stats=kp_stats,
+        items=all_items,
+        match_score=top_stats["match_score"],
+        met_count=top_stats["met_count"],
+        partial_count=top_stats["partial_count"],
+        missing_count=top_stats["missing_count"],
+        not_found_count=top_stats["not_found_count"],
+    )
 
 
 async def analyze_tz_files(
