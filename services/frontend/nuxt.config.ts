@@ -13,6 +13,9 @@ export default defineNuxtConfig({
 	css: ['~/assets/css/main.css'],
 
 	runtimeConfig: {
+		backendInternalUrl: String(
+			import.meta.env.NUXT_BACKEND_INTERNAL_URL ?? 'http://127.0.0.1:8000',
+		),
 		public: {
 			apiBase: String(import.meta.env.API_BASE ?? '/api'),
 			maxUploadFiles: Number(import.meta.env.MAX_UPLOAD_FILES ?? '2'),

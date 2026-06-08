@@ -181,6 +181,8 @@ services:
     restart: unless-stopped
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      NUXT_BACKEND_INTERNAL_URL: http://backend:8000
     env_file:
       - ./services/frontend/.env
     depends_on:

@@ -3,8 +3,12 @@ import axios from 'axios';
 export default defineNuxtPlugin(() => {
 	const config = useRuntimeConfig();
 
+	const baseURL = import.meta.server
+		? `${config.backendInternalUrl}/api`
+		: config.public.apiBase;
+
 	const api = axios.create({
-		baseURL: config.public.apiBase,
+		baseURL,
 	});
 	const auth = useAuthStore();
 
