@@ -666,7 +666,7 @@ const toast = useToast()
 const { formatDate } = useFormatDate()
 const { public: publicConfig } = useRuntimeConfig()
 
-const MAX_UPLOAD_SIZE = publicConfig.maxUploadSize as number
+const MAX_UPLOAD_SIZE = publicConfig.maxTzUploadSize as number
 const fileAccept = '.pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp'
 
 const uploadDescription = computed(() => {

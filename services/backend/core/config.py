@@ -81,6 +81,7 @@ class Config(BaseSettings):
     upload_dir: str = "/app/uploads"
     max_upload_files: int = 2
     max_upload_size: int = 10 * 1024 * 1024
+    max_tz_upload_size: int = 100 * 1024 * 1024
 
     # CORS
     cors_origins: list[str] = ["http://localhost:3000"]

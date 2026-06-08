@@ -19,8 +19,12 @@ export default defineNuxtConfig({
 		public: {
 			apiBase: String(import.meta.env.API_BASE ?? '/api'),
 			maxUploadFiles: Number(import.meta.env.MAX_UPLOAD_FILES ?? '2'),
-			maxUploadSize: Number(
+			maxRequestUploadSize: Number(
 				import.meta.env.MAX_UPLOAD_SIZE ?? (10 * 1024 * 1024).toString(),
+			),
+			maxTzUploadSize: Number(
+				import.meta.env.MAX_TZ_UPLOAD_SIZE
+					?? (100 * 1024 * 1024).toString(),
 			),
 			contactEmail: String(
 				import.meta.env.CONTACT_EMAIL ?? 'support@tenderoptima.by',

@@ -7,8 +7,8 @@
             : 'Проверьте и отредактируйте письмо перед отправкой'
             " :ui="{ content: 'max-w-5xl' }">
         <template #body>
-            <div v-if="step === 'params'">
-                <div class="space-y-6">
+            <div v-if="step === 'params'" class="flex flex-col max-h-[min(80vh,42rem)]">
+                <div class="flex-1 min-h-0 overflow-y-auto space-y-6 pr-1">
                     <UFormField label="Тема письма" :required="false">
                         <UInput v-model="form.emailSubject" placeholder="Запрос коммерческого предложения — ..."
                             class="w-full" size="lg" :class="errors.emailSubject ? 'ring-2 ring-error rounded-lg' : ''"
@@ -59,20 +59,6 @@
                     </div>
 
                     <div>
-                        <UFileUpload :model-value="filesToUpload" multiple
-                            accept=".pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp" :interactive="true"
-                            :description="uploadDescription" layout="list" class="w-full min-h-35" position="inside"
-                            @update:model-value="handleFilesUpdate">
-                            <template #actions="{ open }">
-                                <UButton type="button" variant="outline" @click="open()">
-                                    <UIcon name="i-lucide-paperclip" class="w-4 h-4 mr-2" />
-                                    Выбрать файлы
-                                </UButton>
-                            </template>
-                        </UFileUpload>
-                    </div>
-
-                    <div>
                         <p class="text-sm font-semibold mb-1">Визитная карточка</p>
                         <p class="text-xs text-muted mb-3">
                             Добавляется в конце письма. Изменения сохранятся в профиле.
@@ -83,10 +69,25 @@
                     </div>
                 </div>
 
-                <UAlert v-if="error" color="error" variant="soft" icon="i-lucide-circle-alert" :description="error"
-                    class="mt-4" />
+                <div
+                    class="shrink-0 sticky bottom-0 z-10 -mx-4 border-t border-default bg-default/95 px-4 pt-3 pb-2 backdrop-blur-sm sm:-mx-6 sm:px-6">
+                    <UFileUpload :model-value="filesToUpload" multiple
+                        accept=".pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp" :interactive="false"
+                        :description="uploadDescription" layout="list" class="w-full min-h-28" position="inside"
+                        @update:model-value="handleFilesUpdate">
+                        <template #actions="{ open }">
+                            <UButton type="button" variant="outline" @click="open()">
+                                <UIcon name="i-lucide-paperclip" class="w-4 h-4 mr-2" />
+                                Выбрать файлы
+                            </UButton>
+                        </template>
+                    </UFileUpload>
+                </div>
 
-                <div class="flex justify-end gap-2 pt-6">
+                <UAlert v-if="error" color="error" variant="soft" icon="i-lucide-circle-alert" :description="error"
+                    class="mt-4 shrink-0" />
+
+                <div class="flex shrink-0 justify-end gap-2 pt-4">
                     <UButton color="neutral" variant="ghost" @click="close">Отмена</UButton>
                     <UButton leading-icon="i-lucide-arrow-right" :loading="loadingMessage" @click="goToConfirm">
                         Далее
@@ -202,7 +203,7 @@ const error = ref<string | null>(null)
 
 const { public: publicConfig } = useRuntimeConfig()
 const MAX_UPLOAD_FILES = publicConfig.maxUploadFiles as number
-const MAX_UPLOAD_SIZE = publicConfig.maxUploadSize as number
+const MAX_UPLOAD_SIZE = publicConfig.maxRequestUploadSize as number
 
 function getSupplierWord(count: number): string {
     const n = count % 100

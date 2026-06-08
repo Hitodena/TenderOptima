@@ -59,7 +59,6 @@ const schema = z.object({
 const form = reactive({ query: '', delivery_region: '' })
 const loading = ref(false)
 const error = ref<string | null>(null)
-const toast = useToast()
 
 async function handleSearch() {
 	if (loading.value) return
@@ -71,12 +70,6 @@ async function handleSearch() {
 			delivery_region: form.delivery_region.trim(),
 		})
 		await post(`/requests/${created.id}/search`)
-		toast.add({
-			title: 'Поиск в процессе',
-			description: 'Запущен поиск поставщиков. Результаты появятся в запросе через некоторое время.',
-			color: 'warning',
-			icon: 'i-lucide-search',
-		})
 		await navigateTo(`/requests/${created.id}`)
 	} catch (e: any) {
 		const detail = e?.response?.data?.detail

@@ -42,6 +42,7 @@ from backend.celery_app.tasks.analysis_tasks import (
 from backend.celery_app.tasks.analysis_tasks import (
     run_tz_kp_compare as queue_tz_kp_compare,
 )
+from backend.core.config import get_config
 from backend.db.dao import TZAnalysisDAO
 from backend.db.models import User
 from backend.enums import TZAnalysisHistoryGroup, TZAnalysisRunStatus
@@ -57,6 +58,7 @@ from backend.utils.tz_storage import (
 )
 
 router = APIRouter(prefix="/tz-analysis", tags=["TZ Analysis"])
+config = get_config()
 
 
 async def _save_upload(
@@ -70,11 +72,25 @@ async def _save_upload(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="File name is required",
         )
+    limit = config.max_tz_upload_size
+    if upload.size and upload.size > limit:
+        limit_mb = limit // (1024 * 1024)
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File exceeds maximum size of {limit_mb} MB",
+        )
+    data = await upload.read()
+    if len(data) > limit:
+        limit_mb = limit // (1024 * 1024)
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File exceeds maximum size of {limit_mb} MB",
+        )
     safe_name = dest_name or Path(upload.filename or "file").name.replace(
         "..", "_"
     )
     path = dest_dir / safe_name
-    path.write_bytes(await upload.read())
+    path.write_bytes(data)
     return path
 
 

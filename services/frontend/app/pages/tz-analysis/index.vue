@@ -49,7 +49,6 @@ import { z } from 'zod'
 definePageMeta({ layout: 'default' })
 
 const { post } = useApi()
-const toast = useToast()
 
 const schema = z.object({
 	title: z.string().min(3, 'Минимум 3 символа').max(500, 'Максимум 500 символов'),
@@ -66,12 +65,6 @@ async function handleCreate() {
 	try {
 		const created = await post<TZAnalysisSession>('/tz-analysis/', {
 			title: form.title.trim(),
-		})
-		toast.add({
-			title: 'Черновик создан',
-			description: 'Загрузите ТЗ для запуска анализа.',
-			color: 'success',
-			icon: 'i-lucide-check',
 		})
 		await navigateTo(`/tz-analysis/${created.id}`)
 	} catch (e: unknown) {
