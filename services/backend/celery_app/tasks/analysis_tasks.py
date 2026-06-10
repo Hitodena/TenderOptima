@@ -15,19 +15,28 @@ from backend.services.analysis.email import (
 )
 from backend.services.analysis.tz import (
     analyze_kp_files,
-    analyze_tz_files,
     compare_only,
     extract_tz_from_file,
 )
 from backend.services.extraction.router import UnsupportedFileTypeError
 from backend.utils.ocr import OcrNotAvailableError
+from backend.utils.requirements_struct import (
+    count_requirements,
+    normalize_requirements_kp,
+    normalize_tz_requirements,
+    requirements_nonempty,
+)
 from backend.utils.tz_storage import (
     resolve_kp_analysis_files,
-    resolve_tz_analysis_files,
     resolve_tz_only_file,
 )
 
 config = get_config()
+
+_TZ_EXTRACT_SOFT_LIMIT = 600  # 10 min
+_TZ_EXTRACT_TIME_LIMIT = 900  # 15 min
+_KP_COMPARE_SOFT_LIMIT = 6600  # 110 min
+_KP_COMPARE_TIME_LIMIT = 7200  # 2 h
 
 
 async def _load_email_analysis_context(
@@ -71,8 +80,8 @@ async def _load_email_analysis_context(
 @app.task(
     name="analysis.tz_extract",
     bind=True,
-    soft_time_limit=600,
-    time_limit=900,
+    soft_time_limit=_TZ_EXTRACT_SOFT_LIMIT,
+    time_limit=_TZ_EXTRACT_TIME_LIMIT,
     max_retries=0,
 )
 @async_task
@@ -91,6 +100,11 @@ async def run_tz_extract(self, analysis_id: str) -> dict:
             )
         return {"error": "files_missing", "analysis_id": analysis_id}
 
+    logger.info(
+        "TZ extract task started",
+        analysis_id=analysis_id,
+        tz_path=str(tz_path),
+    )
     try:
         requirements_tz = await extract_tz_from_file(tz_path)
     except (UnsupportedFileTypeError, OcrNotAvailableError, ValueError) as exc:
@@ -134,6 +148,7 @@ async def run_tz_extract(self, analysis_id: str) -> dict:
             kp_stats={},
             items=[],
             confirmed=False,
+            tz_requirements_count=count_requirements(requirements_tz),
             match_score=0,
             met_count=0,
             partial_count=0,
@@ -149,8 +164,8 @@ async def run_tz_extract(self, analysis_id: str) -> dict:
 @app.task(
     name="analysis.tz_kp_compare",
     bind=True,
-    soft_time_limit=600,
-    time_limit=900,
+    soft_time_limit=_KP_COMPARE_SOFT_LIMIT,
+    time_limit=_KP_COMPARE_TIME_LIMIT,
     max_retries=0,
 )
 @async_task
@@ -166,10 +181,10 @@ async def run_tz_kp_compare(self, analysis_id: str) -> dict:
                 analysis_id=analysis_id,
             )
             return {"error": "not_found", "analysis_id": analysis_id}
-        requirements_tz = list(row.requirements_tz or [])
+        requirements_tz = normalize_tz_requirements(row.requirements_tz)
         kp_display_names = list(row.kp_filenames or [])
 
-    if not requirements_tz:
+    if not requirements_nonempty(requirements_tz):
         async with db_manager.session() as session:
             await TZAnalysisDAO.update_fields(
                 session,
@@ -191,6 +206,12 @@ async def run_tz_kp_compare(self, analysis_id: str) -> dict:
             )
         return {"error": "files_missing", "analysis_id": analysis_id}
 
+    logger.info(
+        "TZ KP compare task started",
+        analysis_id=analysis_id,
+        kp_count=len(kp_paths),
+        tz_items=count_requirements(requirements_tz),
+    )
     try:
         result = await analyze_kp_files(
             requirements_tz,
@@ -240,6 +261,7 @@ async def run_tz_kp_compare(self, analysis_id: str) -> dict:
             partial_count=result.partial_count,
             missing_count=result.missing_count,
             not_found_count=result.not_found_count,
+            tz_requirements_count=result.tz_requirements_count,
             llm_model=config.openai_model,
             status=TZAnalysisRunStatus.ACTIVE.value,
         )
@@ -248,97 +270,10 @@ async def run_tz_kp_compare(self, analysis_id: str) -> dict:
 
 
 @app.task(
-    name="analysis.tz",
-    bind=True,
-    soft_time_limit=600,
-    time_limit=900,
-    max_retries=0,
-)
-@async_task
-async def run_tz_analysis(self, analysis_id: str) -> dict:
-    """Run TZ vs KP LLM comparison for a queued analysis row."""
-    db_manager = get_db_manager()
-    aid = uuid.UUID(analysis_id)
-    paths = resolve_tz_analysis_files(aid)
-    if not paths:
-        logger.error("TZ analysis files missing", analysis_id=analysis_id)
-        async with db_manager.session() as session:
-            await TZAnalysisDAO.update_fields(
-                session,
-                aid,
-                status=TZAnalysisRunStatus.FAILED.value,
-            )
-        return {"error": "files_missing", "analysis_id": analysis_id}
-
-    tz_path, kp_paths = paths
-    kp_display_names: list[str] | None = None
-    async with db_manager.session() as session:
-        row = await TZAnalysisDAO.get_by_id(session, aid)
-        if row and row.kp_filenames:
-            kp_display_names = list(row.kp_filenames)
-    try:
-        result = await analyze_tz_files(
-            tz_path,
-            kp_paths,
-            kp_display_names=kp_display_names,
-        )
-    except (UnsupportedFileTypeError, OcrNotAvailableError, ValueError) as exc:
-        logger.warning(
-            "TZ analysis failed",
-            analysis_id=analysis_id,
-            error=str(exc),
-        )
-        async with db_manager.session() as session:
-            await TZAnalysisDAO.update_fields(
-                session,
-                aid,
-                status=TZAnalysisRunStatus.FAILED.value,
-            )
-        return {"error": type(exc).__name__, "analysis_id": analysis_id}
-    except Exception as exc:
-        logger.exception(
-            "TZ analysis unexpected failure",
-            analysis_id=analysis_id,
-            error=str(exc),
-        )
-        async with db_manager.session() as session:
-            await TZAnalysisDAO.update_fields(
-                session,
-                aid,
-                status=TZAnalysisRunStatus.FAILED.value,
-            )
-        return {"error": "failed", "analysis_id": analysis_id}
-
-    items_json = [item.model_dump(mode="json") for item in result.items]
-    async with db_manager.session() as session:
-        await TZAnalysisDAO.update_fields(
-            session,
-            aid,
-            tz_filename=result.tz_filename or tz_path.name,
-            kp_filename=result.kp_filename,
-            kp_filenames=result.kp_filenames,
-            requirements_tz=result.requirements_tz,
-            requirements_kp=result.requirements_kp,
-            kp_stats=result.kp_stats,
-            items=items_json,
-            confirmed=False,
-            match_score=result.match_score,
-            met_count=result.met_count,
-            partial_count=result.partial_count,
-            missing_count=result.missing_count,
-            not_found_count=result.not_found_count,
-            llm_model=config.openai_model,
-            status=TZAnalysisRunStatus.ACTIVE.value,
-        )
-    logger.info("TZ analysis task done", analysis_id=analysis_id)
-    return {"status": "active", "analysis_id": analysis_id}
-
-
-@app.task(
     name="analysis.tz_compare",
     bind=True,
-    soft_time_limit=600,
-    time_limit=900,
+    soft_time_limit=_KP_COMPARE_SOFT_LIMIT,
+    time_limit=_KP_COMPARE_TIME_LIMIT,
     max_retries=0,
 )
 @async_task
@@ -353,10 +288,10 @@ async def run_tz_compare(self, analysis_id: str) -> dict:
                 "TZ compare: analysis not found", analysis_id=analysis_id
             )
             return {"error": "not_found", "analysis_id": analysis_id}
-        requirements_tz = list(row.requirements_tz or [])
-        requirements_kp = dict(row.requirements_kp or {})
+        requirements_tz = normalize_tz_requirements(row.requirements_tz)
+        requirements_kp = normalize_requirements_kp(row.requirements_kp)
 
-    if not requirements_tz:
+    if not requirements_nonempty(requirements_tz):
         async with db_manager.session() as session:
             await TZAnalysisDAO.update_fields(
                 session,
@@ -364,7 +299,9 @@ async def run_tz_compare(self, analysis_id: str) -> dict:
                 status=TZAnalysisRunStatus.FAILED.value,
             )
         return {"error": "no_requirements_tz", "analysis_id": analysis_id}
-    if not requirements_kp:
+    if not requirements_kp or not any(
+        requirements_nonempty(items) for items in requirements_kp.values()
+    ):
         async with db_manager.session() as session:
             await TZAnalysisDAO.update_fields(
                 session,
@@ -429,6 +366,7 @@ async def run_tz_compare(self, analysis_id: str) -> dict:
             partial_count=top_stats["partial_count"],
             missing_count=top_stats["missing_count"],
             not_found_count=top_stats["not_found_count"],
+            tz_requirements_count=count_requirements(requirements_tz),
             llm_model=config.openai_model,
             status=TZAnalysisRunStatus.ACTIVE.value,
         )

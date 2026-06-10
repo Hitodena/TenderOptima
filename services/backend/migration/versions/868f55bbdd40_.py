@@ -1,9 +1,11 @@
-"""Clear
+"""Initial schema.
 
-Revision ID: cf208df5ccd1
-Revises: 
-Create Date: 2026-05-25 01:56:17.969869
+Revision ID: 868f55bbdd40
+Revises:
+Create Date: 2026-06-09 22:21:51.378025
 
+Note: ``tz_analyses.requirements_tz`` and ``requirements_kp`` store hierarchical JSON
+``{"1": {"text": "...", "children": {"1.1": {...}}}}``.
 """
 from typing import Sequence, Union
 
@@ -12,7 +14,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = 'cf208df5ccd1'
+revision: str = '868f55bbdd40'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -72,16 +74,19 @@ def upgrade() -> None:
     sa.Column('max_mailings_per_request', sa.Integer(), nullable=False),
     sa.Column('is_active', sa.Boolean(), nullable=False),
     sa.Column('expires_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
-    sa.PrimaryKeyConstraint('plan'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('plan'),
     sa.UniqueConstraint('user_id')
     )
     op.create_table('suppliers',
     sa.Column('domain', sa.String(), nullable=True),
     sa.Column('company_name', sa.String(), nullable=False),
-    sa.Column('email', sa.String(), nullable=False),
+    sa.Column('main_email', sa.String(), nullable=False),
+    sa.Column('extra_emails', postgresql.JSON(astext_type=sa.Text()), nullable=True),
     sa.Column('from_source', sa.String(), nullable=True),
     sa.Column('added_by_user_id', sa.UUID(), nullable=True),
     sa.Column('id', sa.UUID(), nullable=False),
@@ -91,6 +96,30 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('domain')
     )
+    op.create_table('tz_analyses',
+    sa.Column('user_id', sa.UUID(), nullable=False),
+    sa.Column('title', sa.String(length=500), nullable=False),
+    sa.Column('tz_filename', sa.String(length=512), nullable=True),
+    sa.Column('kp_filename', sa.String(length=512), nullable=True),
+    sa.Column('kp_filenames', postgresql.JSON(astext_type=sa.Text()), nullable=False),
+    sa.Column('confirmed', sa.Boolean(), nullable=False),
+    sa.Column('requirements_tz', postgresql.JSON(astext_type=sa.Text()), nullable=False),
+    sa.Column('requirements_kp', postgresql.JSON(astext_type=sa.Text()), nullable=False),
+    sa.Column('kp_stats', postgresql.JSON(astext_type=sa.Text()), nullable=False),
+    sa.Column('items', postgresql.JSON(astext_type=sa.Text()), nullable=False),
+    sa.Column('match_score', sa.Integer(), nullable=False),
+    sa.Column('met_count', sa.Integer(), nullable=False),
+    sa.Column('partial_count', sa.Integer(), nullable=False),
+    sa.Column('missing_count', sa.Integer(), nullable=False),
+    sa.Column('not_found_count', sa.Integer(), nullable=False),
+    sa.Column('llm_model', sa.String(length=128), nullable=False),
+    sa.Column('status', sa.String(length=32), nullable=False),
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
     op.create_table('request_suppliers',
     sa.Column('request_id', sa.UUID(), nullable=False),
     sa.Column('supplier_id', sa.UUID(), nullable=False),
@@ -98,7 +127,7 @@ def upgrade() -> None:
     sa.Column('sent_to_email', sa.String(), nullable=True),
     sa.Column('sent_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('body_text', sa.Text(), nullable=True),
-    sa.Column('status', sa.String(), nullable=False),
+    sa.Column('sent_status', sa.String(), nullable=False),
     sa.Column('is_enabled', sa.Boolean(), nullable=False),
     sa.Column('smtp_message_id', sa.String(), nullable=True),
     sa.Column('id', sa.UUID(), nullable=False),
@@ -143,18 +172,8 @@ def upgrade() -> None:
     op.create_table('response_analyses',
     sa.Column('response_id', sa.UUID(), nullable=False),
     sa.Column('llm_model', sa.String(), nullable=False),
-    sa.Column('offered_price_per_unit', sa.Numeric(precision=12, scale=2), nullable=True),
-    sa.Column('offered_currency', sa.String(), nullable=True),
-    sa.Column('offered_quantity', sa.Integer(), nullable=True),
-    sa.Column('offered_delivery_days', sa.Integer(), nullable=True),
-    sa.Column('quality_description', sa.Text(), nullable=True),
-    sa.Column('meets_price', sa.Boolean(), nullable=True),
-    sa.Column('meets_quantity', sa.Boolean(), nullable=True),
-    sa.Column('meets_deadline', sa.Boolean(), nullable=True),
-    sa.Column('meets_quality', sa.Boolean(), nullable=True),
-    sa.Column('match_score', sa.Integer(), nullable=True),
-    sa.Column('summary', sa.Text(), nullable=True),
     sa.Column('raw_llm_response', postgresql.JSON(astext_type=sa.Text()), nullable=True),
+    sa.Column('status', sa.String(), nullable=False),
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
@@ -172,6 +191,7 @@ def downgrade() -> None:
     op.drop_table('email_messages')
     op.drop_table('search_history')
     op.drop_table('request_suppliers')
+    op.drop_table('tz_analyses')
     op.drop_table('suppliers')
     op.drop_table('subscriptions')
     op.drop_table('requests')

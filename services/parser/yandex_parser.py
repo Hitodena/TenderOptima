@@ -329,7 +329,7 @@ async def yandex_fetch_all(
                         "user_id": user_id,
                         "query": query,
                         "region": str(region_id),
-                        "domain": "https://" + dom,
+                        "domain": dom,
                         "description": item["description"],
                         "engine": "yandex",
                     }

@@ -51,6 +51,12 @@ from backend.services.analysis.docx_export import (
     build_clarification_docx,
     build_clarification_preview,
 )
+from backend.utils.requirements_struct import (
+    count_requirements,
+    normalize_requirements_kp,
+    normalize_tz_requirements,
+    requirements_nonempty,
+)
 from backend.utils.tz_storage import (
     make_unique_filenames,
     save_kp_analysis_files,
@@ -114,7 +120,7 @@ async def create_tz_analysis(
         kp_filename=None,
         kp_filenames=[],
         confirmed=False,
-        requirements_tz=[],
+        requirements_tz={},
         requirements_kp={},
         kp_stats={},
         items=[],
@@ -123,6 +129,7 @@ async def create_tz_analysis(
         partial_count=0,
         missing_count=0,
         not_found_count=0,
+        tz_requirements_count=0,
         llm_model="",
         status=TZAnalysisRunStatus.DRAFT.value,
     )
@@ -175,7 +182,7 @@ async def run_tz_analysis(
             kp_filename=None,
             kp_filenames=[],
             confirmed=False,
-            requirements_tz=[],
+            requirements_tz={},
             requirements_kp={},
             kp_stats={},
             items=[],
@@ -184,6 +191,7 @@ async def run_tz_analysis(
             partial_count=0,
             missing_count=0,
             not_found_count=0,
+            tz_requirements_count=0,
             status=TZAnalysisRunStatus.PROCESSING.value,
         )
         if not updated:
@@ -244,7 +252,7 @@ async def run_tz_kp_analysis(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Analysis already confirmed",
         )
-    if not list(row.requirements_tz or []):
+    if not requirements_nonempty(row.requirements_tz):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="At least one TZ requirement is required",
@@ -294,6 +302,7 @@ async def run_tz_kp_analysis(
             partial_count=0,
             missing_count=0,
             not_found_count=0,
+            tz_requirements_count=count_requirements(row.requirements_tz),
             status=TZAnalysisRunStatus.PROCESSING.value,
         )
         if not updated:
@@ -456,7 +465,10 @@ async def update_tz_requirements(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Analysis already confirmed",
         )
-    update_payload: dict = {"requirements_tz": body.requirements_tz}
+    update_payload: dict = {
+        "requirements_tz": body.requirements_tz,
+        "tz_requirements_count": count_requirements(body.requirements_tz),
+    }
     if body.requirements_kp is not None:
         update_payload["requirements_kp"] = body.requirements_kp
     updated = await TZAnalysisDAO.update_fields(
@@ -558,19 +570,21 @@ async def confirm_tz_analysis(
     requirements_tz = (
         body.requirements_tz
         if body and body.requirements_tz is not None
-        else list(row.requirements_tz or [])
+        else normalize_tz_requirements(row.requirements_tz)
     )
     requirements_kp = (
         body.requirements_kp
         if body and body.requirements_kp is not None
-        else dict(row.requirements_kp or {})
+        else normalize_requirements_kp(row.requirements_kp)
     )
-    if not requirements_tz:
+    if not requirements_nonempty(requirements_tz):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="At least one TZ requirement is required",
         )
-    if not requirements_kp:
+    if not requirements_kp or not any(
+        requirements_nonempty(items) for items in requirements_kp.values()
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="At least one KP offering list is required",
@@ -581,6 +595,7 @@ async def confirm_tz_analysis(
         row.id,
         requirements_tz=requirements_tz,
         requirements_kp=requirements_kp,
+        tz_requirements_count=count_requirements(requirements_tz),
         status=TZAnalysisRunStatus.PROCESSING.value,
     )
     if not updated:

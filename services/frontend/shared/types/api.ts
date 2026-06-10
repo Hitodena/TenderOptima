@@ -193,6 +193,13 @@ export interface EmailAnalysisResponse {
 	matches: RequirementMatch[];
 }
 
+export interface RequirementNode {
+	text: string;
+	children: Record<string, RequirementNode>;
+}
+
+export type RequirementsHierarchy = Record<string, RequirementNode>;
+
 export interface TZAnalysisItem {
 	requirement: string;
 	requirement_ref: string | null;
@@ -211,8 +218,8 @@ export interface TZAnalysisSession {
 	kp_filename: string | null;
 	kp_filenames?: string[];
 	confirmed?: boolean;
-	requirements_tz?: string[];
-	requirements_kp?: Record<string, string[]>;
+	requirements_tz?: RequirementsHierarchy;
+	requirements_kp?: Record<string, RequirementsHierarchy>;
 	kp_stats?: Record<string, TZAnalysisKpStats>;
 	items: TZAnalysisItem[];
 	match_score: number;
@@ -220,6 +227,7 @@ export interface TZAnalysisSession {
 	partial_count: number;
 	missing_count: number;
 	not_found_count: number;
+	tz_requirements_count?: number;
 	created_at: string | null;
 }
 
@@ -263,13 +271,13 @@ export interface TZAnalysisCreateRequest {
 }
 
 export interface TZRequirementsUpdateRequest {
-	requirements_tz: string[];
-	requirements_kp?: Record<string, string[]>;
+	requirements_tz: RequirementsHierarchy;
+	requirements_kp?: Record<string, RequirementsHierarchy>;
 }
 
 export interface TZAnalysisConfirmRequest {
-	requirements_tz?: string[];
-	requirements_kp?: Record<string, string[]>;
+	requirements_tz?: RequirementsHierarchy;
+	requirements_kp?: Record<string, RequirementsHierarchy>;
 }
 
 export interface TZPrimaryKpRequest {

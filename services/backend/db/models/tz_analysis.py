@@ -20,10 +20,10 @@ class TZAnalysis(IDMixinUUID, TimestampMixin, Base):
         JSON, nullable=False, default=list
     )
     confirmed: Mapped[bool] = mapped_column(nullable=False, default=False)
-    requirements_tz: Mapped[list] = mapped_column(
-        JSON, nullable=False, default=list
+    requirements_tz: Mapped[dict | None] = mapped_column(
+        JSON, nullable=False, default=dict
     )
-    requirements_kp: Mapped[dict] = mapped_column(
+    requirements_kp: Mapped[dict | None] = mapped_column(
         JSON, nullable=False, default=dict
     )
     kp_stats: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
@@ -39,6 +39,9 @@ class TZAnalysis(IDMixinUUID, TimestampMixin, Base):
         Integer, nullable=False, default=0
     )
     not_found_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    tz_requirements_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0
     )
     llm_model: Mapped[str] = mapped_column(String(128), nullable=False)

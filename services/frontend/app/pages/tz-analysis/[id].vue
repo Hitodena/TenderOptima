@@ -71,9 +71,9 @@
 				<UCard class="shadow-sm">
 					<div class="flex flex-col items-center justify-center py-20 gap-4 text-muted">
 						<UIcon name="i-lucide-loader" class="w-10 h-10 animate-spin text-warning" />
-						<p class="text-sm font-medium text-center">Анализ поставлен в очередь</p>
+						<p class="text-sm font-medium text-center">{{ processingStatusLabel }}</p>
 						<p class="text-xs text-center max-w-md">
-							Ожидайте результатов до 2 часов. Страница обновится автоматически.
+							{{ processingWaitHint }}
 						</p>
 						<UProgress animation="carousel" size="sm" class="w-full max-w-md" />
 					</div>
@@ -106,20 +106,20 @@
 						<div class="flex items-center justify-between gap-2">
 							<p class="font-semibold text-sm">Требования из ТЗ</p>
 							<UBadge color="neutral" variant="subtle" size="xs">
-								{{ editableRequirementsTz.length }}
-								{{ requirementWord(editableRequirementsTz.length) }}
+								{{ editableTzCount }}
+								{{ requirementWord(editableTzCount) }}
 							</UBadge>
 						</div>
 					</template>
 
 					<div class="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
-						<div v-for="(_req, idx) in editableRequirementsTz" :key="`tz-review-${idx}`"
+						<div v-for="(row, idx) in editableRequirementsTz" :key="`tz-review-${row.key}-${idx}`"
 							class="flex items-start gap-3">
-							<span class="text-sm text-muted font-medium tabular-nums pt-3 w-6 shrink-0 text-right">
-								{{ idx + 1 }}.
+							<span class="text-sm text-muted font-medium tabular-nums pt-3 min-w-10 shrink-0 text-right">
+								{{ row.key || idx + 1 }}.
 							</span>
 							<UTextarea
-								v-model="editableRequirementsTz[idx]"
+								v-model="row.text"
 								class="flex-1 whitespace-pre-wrap"
 								size="md"
 								:rows="3"
@@ -130,7 +130,7 @@
 								class="mt-2 shrink-0"
 								icon="i-lucide-x" @click="removeTzRequirement(idx)" />
 						</div>
-						<p v-if="editableRequirementsTz.length === 0"
+						<p v-if="editableTzCount === 0"
 							class="text-sm text-muted text-center py-4">
 							Нет извлечённых требований
 						</p>
@@ -212,20 +212,20 @@
 							<div class="flex items-center justify-between gap-2">
 								<p class="font-semibold text-sm">Требования из ТЗ</p>
 								<UBadge color="neutral" variant="subtle" size="xs">
-									{{ editableRequirementsTz.length }}
-									{{ requirementWord(editableRequirementsTz.length) }}
+									{{ editableTzCount }}
+									{{ requirementWord(editableTzCount) }}
 								</UBadge>
 							</div>
 						</template>
 
 						<div class="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
-							<div v-for="(req, idx) in editableRequirementsTz" :key="`tz-${idx}`"
+							<div v-for="(row, idx) in editableRequirementsTz" :key="`tz-${row.key}-${idx}`"
 								class="flex items-start gap-3">
-								<span class="text-sm text-muted font-medium tabular-nums pt-3 w-6 shrink-0 text-right">
-									{{ idx + 1 }}.
+								<span class="text-sm text-muted font-medium tabular-nums pt-3 min-w-10 shrink-0 text-right">
+									{{ row.key || idx + 1 }}.
 								</span>
 								<UTextarea
-									v-model="editableRequirementsTz[idx]"
+									v-model="row.text"
 									class="flex-1 whitespace-pre-wrap"
 									size="md"
 									:rows="3"
@@ -236,7 +236,7 @@
 									class="mt-2 shrink-0"
 									icon="i-lucide-x" @click="removeTzRequirement(idx)" />
 							</div>
-							<p v-if="editableRequirementsTz.length === 0"
+							<p v-if="editableTzCount === 0"
 								class="text-sm text-muted text-center py-4">
 								Нет извлечённых требований
 							</p>
@@ -272,8 +272,8 @@
 										</div>
 									</div>
 									<UBadge color="neutral" variant="subtle" size="xs" class="shrink-0">
-										{{ group.items.length }}
-										{{ requirementWord(group.items.length) }}
+										{{ countRequirementRows(group.items) }}
+										{{ requirementWord(countRequirementRows(group.items)) }}
 									</UBadge>
 								</button>
 							</template>
@@ -288,10 +288,13 @@
 
 							<div v-show="isReviewKpExpanded(group.id)"
 								class="space-y-4 max-h-[50vh] overflow-y-auto pr-1">
-								<div v-for="(_item, idx) in group.items" :key="`${group.key}-${idx}`"
+								<div v-for="(row, idx) in group.items" :key="`${group.key}-${row.key}-${idx}`"
 									class="flex items-start gap-3">
+									<span class="text-sm text-muted font-medium tabular-nums pt-3 min-w-10 shrink-0 text-right">
+										{{ row.key || idx + 1 }}.
+									</span>
 									<UTextarea
-										v-model="editableRequirementsKp[group.key][idx]"
+										v-model="row.text"
 										class="flex-1 whitespace-pre-wrap"
 										size="md"
 										:rows="3"
@@ -303,7 +306,7 @@
 										icon="i-lucide-x"
 										@click="removeKpRequirement(group.key, idx)" />
 								</div>
-								<p v-if="group.items.length === 0"
+								<p v-if="countRequirementRows(group.items) === 0"
 									class="text-sm text-muted text-center py-4">
 									Нет извлечённых предложений
 								</p>
@@ -328,7 +331,7 @@
 				<div class="flex flex-wrap items-end justify-between gap-4 mb-8">
 					<UFormField v-if="hasMultipleLetterKps" label="Основное КП" class="mb-0">
 						<USelect
-							:model-value="analysis.kp_filename"
+							:model-value="analysis.kp_filename ?? undefined"
 							:items="primaryKpOptions"
 							:loading="primaryKpSaving"
 							size="sm"
@@ -495,8 +498,8 @@
 			</template>
 		</template>
 
-		<UModal v-model:open="showQueueModal" title="Анализ поставлен в очередь"
-			description="Ожидайте результатов до 2 часов. Вы можете оставаться на этой странице — результаты появятся автоматически.">
+		<UModal v-model:open="showQueueModal" :title="processingQueueTitle"
+			:description="processingModalDescription">
 			<template #footer>
 				<UButton block @click="showQueueModal = false">Понятно</UButton>
 			</template>
@@ -653,6 +656,14 @@ import {
 	getTzRunStatusLabel,
 	TZAnalysisRunStatus,
 } from '#shared/types'
+import {
+	countRequirementRows,
+	flattenRequirementsToRows,
+	requirementsNonempty,
+	requirementsRowsNonempty,
+	rowsToHierarchy,
+	type EditableRequirementRow,
+} from '#shared/utils/requirementsStruct'
 import { useRunStatusPolling } from '~/composables/useRunStatusPolling'
 
 definePageMeta({ layout: 'default' })
@@ -688,13 +699,14 @@ const tzPolling = ref(false)
 const tzSelectedIndices = ref<number[]>([])
 const tzStatusFilter = ref('all')
 const showQueueModal = ref(false)
+const processingPhase = ref<'tz' | 'kp'>('tz')
 const showLetterModal = ref(false)
 const letterPreviewTab = ref('mismatch')
 const confirming = ref(false)
 const savingRequirements = ref(false)
 const primaryKpSaving = ref(false)
-const editableRequirementsTz = ref<string[]>([])
-const editableRequirementsKp = ref<Record<string, string[]>>({})
+const editableRequirementsTz = ref<EditableRequirementRow[]>([])
+const editableRequirementsKp = ref<Record<string, EditableRequirementRow[]>>({})
 const docxOrganization = ref('')
 const docxDeadline = ref('')
 const docxGenerating = ref(false)
@@ -777,7 +789,40 @@ function toggleResultsKpExpand(id: number) {
 	}
 }
 
+function inferProcessingPhase(data: TZAnalysisSession): 'tz' | 'kp' {
+	const hasKpFiles = (data.kp_filenames?.length ?? 0) > 0
+	const hasKpRequirements = Object.values(data.requirements_kp ?? {}).some(
+		(items) => requirementsNonempty(items),
+	)
+	if (hasKpFiles || hasKpRequirements) return 'kp'
+	return 'tz'
+}
+
 const isDraft = computed(() => analysis.value?.status === TZAnalysisRunStatus.DRAFT)
+const isKpCompareProcessing = computed(() =>
+	analysis.value?.status === TZAnalysisRunStatus.PROCESSING
+	&& processingPhase.value === 'kp',
+)
+const processingQueueTitle = computed(() =>
+	isKpCompareProcessing.value
+		? 'Сравнение с КП поставлено в очередь'
+		: 'Извлечение требований поставлено в очередь',
+)
+const processingStatusLabel = computed(() =>
+	isKpCompareProcessing.value
+		? 'Сравнение с коммерческими предложениями'
+		: 'Извлечение требований из ТЗ',
+)
+const processingWaitHint = computed(() =>
+	isKpCompareProcessing.value
+		? 'Ожидайте результатов до 2 часов. Страница обновится автоматически.'
+		: 'Ожидайте результатов до 10 минут. Страница обновится автоматически.',
+)
+const processingModalDescription = computed(() =>
+	isKpCompareProcessing.value
+		? 'Ожидайте результатов до 2 часов. Вы можете оставаться на этой странице — результаты появятся автоматически.'
+		: 'Ожидайте результатов до 10 минут. Вы можете оставаться на этой странице — результаты появятся автоматически.',
+)
 const hasResults = computed(() =>
 	analysis.value?.status === TZAnalysisRunStatus.ACTIVE
 	|| analysis.value?.status === TZAnalysisRunStatus.COMPLETED,
@@ -883,7 +928,7 @@ type KpRequirementsGroup = {
 	key: string
 	label: string
 	filename: string | null
-	items: string[]
+	items: EditableRequirementRow[]
 }
 
 const kpRequirementsGroups = computed((): KpRequirementsGroup[] => {
@@ -987,18 +1032,19 @@ function collectResultsKpKeys(data: TZAnalysisSession): string[] {
 	return ordered
 }
 
+const editableTzCount = computed(() =>
+	countRequirementRows(editableRequirementsTz.value),
+)
+
 const canConfirmRequirements = computed(() => {
-	const tz = editableRequirementsTz.value.map((item) => item.trim()).filter(Boolean)
-	if (tz.length === 0) return false
+	if (!requirementsRowsNonempty(editableRequirementsTz.value)) return false
 	return kpRequirementsGroups.value.some((group) =>
-		(editableRequirementsKp.value[group.key] ?? [])
-			.map((item) => item.trim())
-			.some(Boolean),
+		requirementsRowsNonempty(group.items),
 	)
 })
 
 function syncEditableRequirements(data: TZAnalysisSession) {
-	editableRequirementsTz.value = [...(data.requirements_tz ?? [])]
+	editableRequirementsTz.value = flattenRequirementsToRows(data.requirements_tz)
 	const kpSource = data.requirements_kp ?? {}
 	const filenames = data.kp_filenames?.length
 		? data.kp_filenames
@@ -1006,30 +1052,35 @@ function syncEditableRequirements(data: TZAnalysisSession) {
 			? [data.kp_filename]
 			: Object.keys(kpSource)
 	editableRequirementsKp.value = Object.fromEntries(
-		filenames.map((name) => [name, [...(kpSource[name] ?? [])]]),
+		filenames.map((name) => [name, flattenRequirementsToRows(kpSource[name])]),
 	)
 	ensureReviewKpExpanded(filenames.length ? filenames : Object.keys(kpSource))
 }
 
-function normalizedTzRequirements(): string[] {
-	return editableRequirementsTz.value
-		.map((item) => item.trim())
-		.filter(Boolean)
-}
-
 function normalizedRequirementsPayload(): TZRequirementsUpdateRequest {
-	const requirements_tz = normalizedTzRequirements()
+	const requirements_tz = rowsToHierarchy(editableRequirementsTz.value)
 	const requirements_kp = Object.fromEntries(
-		Object.entries(editableRequirementsKp.value).map(([key, items]) => [
+		Object.entries(editableRequirementsKp.value).map(([key, rows]) => [
 			key,
-			items.map((item) => item.trim()).filter(Boolean),
+			rowsToHierarchy(rows),
 		]),
 	)
 	return { requirements_tz, requirements_kp }
 }
 
+function nextTopLevelKey(rows: EditableRequirementRow[]): string {
+	const maxTop = rows.reduce((max, row) => {
+		const top = Number(row.key.split(/[./]/)[0])
+		return Number.isNaN(top) ? max : Math.max(max, top)
+	}, 0)
+	return String(maxTop + 1)
+}
+
 function addTzRequirement() {
-	editableRequirementsTz.value = [...editableRequirementsTz.value, '']
+	editableRequirementsTz.value = [
+		...editableRequirementsTz.value,
+		{ key: nextTopLevelKey(editableRequirementsTz.value), text: '' },
+	]
 }
 
 function removeTzRequirement(index: number) {
@@ -1042,7 +1093,10 @@ function addKpRequirement(kpKey: string) {
 	const current = editableRequirementsKp.value[kpKey] ?? []
 	editableRequirementsKp.value = {
 		...editableRequirementsKp.value,
-		[kpKey]: [...current, ''],
+		[kpKey]: [
+			...current,
+			{ key: nextTopLevelKey(current), text: '' },
+		],
 	}
 }
 
@@ -1056,8 +1110,7 @@ function removeKpRequirement(kpKey: string, index: number) {
 
 async function saveTzRequirements() {
 	if (!analysis.value?.id || savingRequirements.value) return
-	const requirements_tz = normalizedTzRequirements()
-	if (requirements_tz.length === 0) {
+	if (!requirementsRowsNonempty(editableRequirementsTz.value)) {
 		toast.add({
 			title: 'Добавьте хотя бы одно требование из ТЗ',
 			color: 'warning',
@@ -1069,7 +1122,7 @@ async function saveTzRequirements() {
 	try {
 		const updated = await patch<TZAnalysisSession>(
 			`/tz-analysis/${analysis.value.id}/requirements`,
-			{ requirements_tz },
+			{ requirements_tz: rowsToHierarchy(editableRequirementsTz.value) },
 		)
 		syncEditableRequirements(updated)
 		applyAnalysis(updated)
@@ -1092,7 +1145,7 @@ async function saveTzRequirements() {
 async function saveRequirements() {
 	if (!analysis.value?.id || savingRequirements.value) return
 	const payload = normalizedRequirementsPayload()
-	if (payload.requirements_tz.length === 0) {
+	if (!requirementsRowsNonempty(editableRequirementsTz.value)) {
 		toast.add({
 			title: 'Добавьте хотя бы одно требование из ТЗ',
 			color: 'warning',
@@ -1128,10 +1181,9 @@ const hasAnyKpFile = computed(() =>
 	kpSlots.value.some((slot) => slot.file !== null),
 )
 
-const canRunKpAnalysis = computed(() => {
-	const tz = normalizedTzRequirements()
-	return tz.length > 0 && hasAnyKpFile.value
-})
+const canRunKpAnalysis = computed(() =>
+	requirementsRowsNonempty(editableRequirementsTz.value) && hasAnyKpFile.value,
+)
 
 const selectedLetterItems = computed((): TZItemView[] => {
 	if (!analysis.value) return []
@@ -1329,6 +1381,7 @@ function applyAnalysis(data: TZAnalysisSession) {
 	analysis.value = data
 	syncEditableRequirements(data)
 	if (data.status === TZAnalysisRunStatus.PROCESSING) {
+		processingPhase.value = inferProcessingPhase(data)
 		tzPolling.value = true
 	}
 	if (
@@ -1525,6 +1578,7 @@ async function confirmAnalysis() {
 		)
 		applyAnalysis(updated)
 		if (updated.status === TZAnalysisRunStatus.PROCESSING) {
+			processingPhase.value = 'kp'
 			tzPolling.value = true
 		}
 		toast.add({
@@ -1555,6 +1609,7 @@ async function runTzAnalysis() {
 			fd,
 		)
 		tzSelectedIndices.value = []
+		processingPhase.value = 'tz'
 		applyAnalysis(result)
 		if (result.status === TZAnalysisRunStatus.PROCESSING) {
 			showQueueModal.value = true
@@ -1576,8 +1631,7 @@ async function runKpAnalysis() {
 	if (!analysis.value?.id || kpAnalyzing.value || !canRunKpAnalysis.value) return
 	kpAnalyzing.value = true
 	try {
-		const requirements_tz = normalizedTzRequirements()
-		if (requirements_tz.length === 0) {
+		if (!requirementsRowsNonempty(editableRequirementsTz.value)) {
 			toast.add({
 				title: 'Добавьте хотя бы одно требование из ТЗ',
 				color: 'warning',
@@ -1587,7 +1641,7 @@ async function runKpAnalysis() {
 
 		await patch<TZAnalysisSession>(
 			`/tz-analysis/${analysis.value.id}/requirements`,
-			{ requirements_tz },
+			{ requirements_tz: rowsToHierarchy(editableRequirementsTz.value) },
 		)
 
 		const kpFiles = kpSlots.value
@@ -1602,6 +1656,7 @@ async function runKpAnalysis() {
 			fd,
 		)
 		tzSelectedIndices.value = []
+		processingPhase.value = 'kp'
 		applyAnalysis(result)
 		if (result.status === TZAnalysisRunStatus.PROCESSING) {
 			showQueueModal.value = true

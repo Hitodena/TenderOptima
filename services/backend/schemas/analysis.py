@@ -25,8 +25,8 @@ class TZAnalysisSessionResult(BaseModel):
     kp_filename: str | None = None
     kp_filenames: list[str] = []
     confirmed: bool = False
-    requirements_tz: list[str] = []
-    requirements_kp: dict[str, list[str]] = {}
+    requirements_tz: dict = {}
+    requirements_kp: dict[str, dict] = {}
     kp_stats: dict[str, dict[str, int]] = {}
     items: list[TZAnalysisItem]
     match_score: int
@@ -34,6 +34,7 @@ class TZAnalysisSessionResult(BaseModel):
     partial_count: int
     missing_count: int
     not_found_count: int
+    tz_requirements_count: int = 0
     created_at: str | None = None
 
 

@@ -59,17 +59,6 @@ def save_kp_analysis_files(
     return kp_dests
 
 
-def save_tz_analysis_files(
-    analysis_id: uuid.UUID,
-    tz_path: Path,
-    kp_paths: list[Path],
-) -> tuple[Path, list[Path]]:
-    """Copy uploaded files into upload_dir for background processing."""
-    tz_dest = save_tz_only_file(analysis_id, tz_path)
-    kp_dests = save_kp_analysis_files(analysis_id, kp_paths)
-    return tz_dest, kp_dests
-
-
 def _sort_kp_paths(paths: list[Path]) -> list[Path]:
     def sort_key(p: Path) -> tuple[int, str]:
         name = p.name.lower()
@@ -104,14 +93,3 @@ def resolve_kp_analysis_files(analysis_id: uuid.UUID) -> list[Path]:
     if not dest.is_dir():
         return []
     return _sort_kp_paths(list(dest.glob("kp*")))
-
-
-def resolve_tz_analysis_files(
-    analysis_id: uuid.UUID,
-) -> tuple[Path, list[Path]] | None:
-    """Return TZ path and KP paths if TZ and at least one KP exist."""
-    tz_path = resolve_tz_only_file(analysis_id)
-    kp_files = resolve_kp_analysis_files(analysis_id)
-    if not tz_path or not kp_files:
-        return None
-    return tz_path, kp_files

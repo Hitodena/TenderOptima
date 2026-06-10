@@ -83,7 +83,7 @@ class CeleryConfig:
         "queue_order_strategy": "priority",
         "priority_steps": list(range(10)),
         "sep": ":",
-        "visibility_timeout": 3600,
+        "visibility_timeout": 7500,
     }
     task_default_priority = 0
 
@@ -141,10 +141,6 @@ class CeleryConfig:
         "parser.search": {
             "queue": "parser_search",
             "routing_key": "parser.search",
-        },
-        "analysis.tz": {
-            "queue": "analysis",
-            "routing_key": "analysis",
         },
         "analysis.tz_extract": {
             "queue": "analysis",

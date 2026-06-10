@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from backend.enums import (
     TZAnalysisHistoryGroup,
@@ -10,6 +10,10 @@ from backend.enums import (
     TZAnalysisStatus,
 )
 from backend.schemas.analysis import TZAnalysisItem, TZAnalysisSessionResult
+from backend.utils.requirements_struct import (
+    normalize_requirements_kp,
+    normalize_tz_requirements,
+)
 
 
 class TZAnalysisListItem(BaseModel):
@@ -79,27 +83,59 @@ class TZAnalysisPreviewResponse(BaseModel):
 
 class TZRequirementsUpdateRequest(BaseModel):
     requirements_tz: Annotated[
-        list[str],
-        Field(description="Extracted TZ requirements list"),
+        dict,
+        Field(description="Extracted TZ requirements as hierarchical dict"),
     ]
     requirements_kp: Annotated[
-        dict[str, list[str]] | None,
+        dict[str, dict] | None,
         Field(
             default=None,
             description="Extracted KP offerings per KP name",
         ),
     ] = None
 
+    @field_validator("requirements_tz", mode="before")
+    @classmethod
+    def coerce_requirements_tz(cls, value: object) -> dict:
+        return normalize_tz_requirements(value)
+
+    @field_validator("requirements_kp", mode="before")
+    @classmethod
+    def coerce_requirements_kp(
+        cls,
+        value: object,
+    ) -> dict[str, dict] | None:
+        if value is None:
+            return None
+        return normalize_requirements_kp(value)
+
 
 class TZAnalysisConfirmRequest(BaseModel):
     requirements_tz: Annotated[
-        list[str] | None,
+        dict | None,
         Field(default=None, description="Optional TZ requirements override"),
     ] = None
     requirements_kp: Annotated[
-        dict[str, list[str]] | None,
+        dict[str, dict] | None,
         Field(default=None, description="Optional KP offerings override"),
     ] = None
+
+    @field_validator("requirements_tz", mode="before")
+    @classmethod
+    def coerce_requirements_tz(cls, value: object) -> dict | None:
+        if value is None:
+            return None
+        return normalize_tz_requirements(value)
+
+    @field_validator("requirements_kp", mode="before")
+    @classmethod
+    def coerce_requirements_kp(
+        cls,
+        value: object,
+    ) -> dict[str, dict] | None:
+        if value is None:
+            return None
+        return normalize_requirements_kp(value)
 
 
 class TZPrimaryKpRequest(BaseModel):
@@ -128,8 +164,12 @@ def row_to_session(row) -> TZAnalysisDetailResponse:
         kp_filename=row.kp_filename,
         kp_filenames=kp_filenames,
         confirmed=bool(getattr(row, "confirmed", False)),
-        requirements_tz=list(getattr(row, "requirements_tz", None) or []),
-        requirements_kp=dict(getattr(row, "requirements_kp", None) or {}),
+        requirements_tz=normalize_tz_requirements(
+            getattr(row, "requirements_tz", None)
+        ),
+        requirements_kp=normalize_requirements_kp(
+            getattr(row, "requirements_kp", None)
+        ),
         kp_stats=dict(getattr(row, "kp_stats", None) or {}),
         items=items,
         match_score=row.match_score,
@@ -137,6 +177,9 @@ def row_to_session(row) -> TZAnalysisDetailResponse:
         partial_count=row.partial_count,
         missing_count=row.missing_count,
         not_found_count=row.not_found_count,
+        tz_requirements_count=int(
+            getattr(row, "tz_requirements_count", 0) or 0
+        ),
         created_at=row.created_at.isoformat() if row.created_at else None,
     )
 

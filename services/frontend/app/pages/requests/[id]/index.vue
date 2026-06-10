@@ -153,9 +153,9 @@
 
 							<template #domain-cell="{ row }">
 								<a v-if="row.original.supplier?.domain"
-									:href="`https://${row.original.supplier.domain}`" target="_blank"
+									:href="toExternalUrl(row.original.supplier.domain)" target="_blank"
 									class="text-primary hover:underline text-sm" @click.stop>
-									{{ row.original.supplier.domain }}
+									{{ formatDomainLabel(row.original.supplier.domain) }}
 								</a>
 								<span v-else class="text-sm text-muted">—</span>
 							</template>
@@ -249,6 +249,7 @@ import {
 	RequestStatus,
 	RequestSupplierStatus,
 } from '#shared/types'
+import { formatDomainLabel, toExternalUrl } from '#shared/utils/url'
 import type { TableColumn, TableRow } from '@nuxt/ui'
 
 const route = useRoute()
