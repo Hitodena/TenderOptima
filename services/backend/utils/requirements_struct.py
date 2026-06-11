@@ -45,11 +45,80 @@ def _normalize_for_dedupe(text: str) -> str:
     return " ".join(text.strip().lower().split())
 
 
+def _merge_node(
+    existing: RequirementNode,
+    incoming: RequirementNode,
+) -> RequirementNode:
+    merged_children: dict[str, RequirementNode] = dict(
+        _node_children(existing)
+    )
+    for key, child in _node_children(incoming).items():
+        key_str = str(key)
+        if key_str in merged_children:
+            merged_children[key_str] = _merge_node(
+                merged_children[key_str],
+                child,
+            )
+        else:
+            merged_children[key_str] = child
+
+    text = str(incoming["text"] or existing["text"] or "").strip()
+    return {"text": text, "children": merged_children}
+
+
+def _canonicalize_hierarchy(
+    hierarchy: dict[str, RequirementNode],
+) -> dict[str, RequirementNode]:
+    """Nest top-level dotted keys under their parent heading nodes."""
+    result: dict[str, RequirementNode] = {}
+
+    def ensure_parent_chain(full_key: str) -> dict[str, RequirementNode]:
+        segments = full_key.replace("/", ".").split(".")
+        top_key = segments[0]
+        if top_key not in result:
+            result[top_key] = _empty_node()
+
+        current = result[top_key]
+        for index in range(1, len(segments) - 1):
+            path = ".".join(segments[: index + 1])
+            children = _node_children(current)
+            if path not in children:
+                children[path] = _empty_node()
+            current = children[path]
+        return _node_children(current)
+
+    for key in sorted(hierarchy.keys(), key=_version_sort_key):
+        node = _normalize_node(hierarchy[key])
+        key_str = str(key).replace("/", ".")
+        segments = key_str.split(".")
+
+        if len(segments) == 1:
+            if key_str in result:
+                result[key_str] = _merge_node(result[key_str], node)
+            else:
+                result[key_str] = node
+            continue
+
+        parent_children = ensure_parent_chain(key_str)
+        if key_str in parent_children:
+            parent_children[key_str] = _merge_node(
+                parent_children[key_str],
+                node,
+            )
+        else:
+            parent_children[key_str] = node
+
+    return result
+
+
 def normalize_tz_requirements(data: object) -> dict[str, RequirementNode]:
     """Coerce stored TZ requirements to a hierarchical dict."""
     if not isinstance(data, dict):
         return {}
-    return {str(key): _normalize_node(value) for key, value in data.items()}
+    normalized = {
+        str(key): _normalize_node(value) for key, value in data.items()
+    }
+    return _canonicalize_hierarchy(normalized)
 
 
 def normalize_requirements_kp(
@@ -126,27 +195,6 @@ def count_requirements(data: object) -> int:
 def requirements_nonempty(data: object) -> bool:
     """Return True when *data* contains at least one leaf requirement."""
     return count_requirements(data) > 0
-
-
-def _merge_node(
-    existing: RequirementNode,
-    incoming: RequirementNode,
-) -> RequirementNode:
-    merged_children: dict[str, RequirementNode] = dict(
-        _node_children(existing)
-    )
-    for key, child in _node_children(incoming).items():
-        key_str = str(key)
-        if key_str in merged_children:
-            merged_children[key_str] = _merge_node(
-                merged_children[key_str],
-                child,
-            )
-        else:
-            merged_children[key_str] = child
-
-    text = str(incoming["text"] or existing["text"] or "").strip()
-    return {"text": text, "children": merged_children}
 
 
 def merge_requirement_chunks(

@@ -114,18 +114,28 @@
 
 					<div class="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
 						<div v-for="(row, idx) in editableRequirementsTz" :key="`tz-review-${row.key}-${idx}`"
-							class="flex items-start gap-3">
+							:class="[
+								'flex items-start gap-3',
+								row.isHeading && 'rounded-lg border border-default/60 bg-elevated/40 p-3',
+							]">
 							<span class="text-sm text-muted font-medium tabular-nums pt-3 min-w-10 shrink-0 text-right">
 								{{ row.key || idx + 1 }}.
 							</span>
-							<UTextarea
-								v-model="row.text"
-								class="flex-1 whitespace-pre-wrap"
-								size="md"
-								:rows="3"
-								:maxrows="12"
-								autoresize
-							/>
+							<div class="flex-1 min-w-0 space-y-1">
+								<p v-if="row.isHeading"
+									class="text-xs font-medium text-muted uppercase tracking-wide">
+									Заголовок раздела · не анализируется в КП
+								</p>
+								<UTextarea
+									v-model="row.text"
+									class="w-full whitespace-pre-wrap"
+									size="md"
+									:rows="row.isHeading ? 1 : 3"
+									:maxrows="row.isHeading ? 4 : 12"
+									:placeholder="row.isHeading ? 'Название раздела (необязательно)' : undefined"
+									autoresize
+								/>
+							</div>
 							<UButton type="button" variant="ghost" color="neutral" size="sm"
 								class="mt-2 shrink-0"
 								icon="i-lucide-x" @click="removeTzRequirement(idx)" />
@@ -220,18 +230,28 @@
 
 						<div class="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
 							<div v-for="(row, idx) in editableRequirementsTz" :key="`tz-${row.key}-${idx}`"
-								class="flex items-start gap-3">
+								:class="[
+									'flex items-start gap-3',
+									row.isHeading && 'rounded-lg border border-default/60 bg-elevated/40 p-3',
+								]">
 								<span class="text-sm text-muted font-medium tabular-nums pt-3 min-w-10 shrink-0 text-right">
 									{{ row.key || idx + 1 }}.
 								</span>
-								<UTextarea
-									v-model="row.text"
-									class="flex-1 whitespace-pre-wrap"
-									size="md"
-									:rows="3"
-									:maxrows="12"
-									autoresize
-								/>
+								<div class="flex-1 min-w-0 space-y-1">
+									<p v-if="row.isHeading"
+										class="text-xs font-medium text-muted uppercase tracking-wide">
+										Заголовок раздела · не анализируется в КП
+									</p>
+									<UTextarea
+										v-model="row.text"
+										class="w-full whitespace-pre-wrap"
+										size="md"
+										:rows="row.isHeading ? 1 : 3"
+										:maxrows="row.isHeading ? 4 : 12"
+										:placeholder="row.isHeading ? 'Название раздела (необязательно)' : undefined"
+										autoresize
+									/>
+								</div>
 								<UButton type="button" variant="ghost" color="neutral" size="sm"
 									class="mt-2 shrink-0"
 									icon="i-lucide-x" @click="removeTzRequirement(idx)" />
@@ -293,14 +313,16 @@
 									<span class="text-sm text-muted font-medium tabular-nums pt-3 min-w-10 shrink-0 text-right">
 										{{ row.key || idx + 1 }}.
 									</span>
-									<UTextarea
-										v-model="row.text"
-										class="flex-1 whitespace-pre-wrap"
-										size="md"
-										:rows="3"
-										:maxrows="12"
-										autoresize
-									/>
+									<div class="flex-1 min-w-0">
+										<UTextarea
+											v-model="row.text"
+											class="w-full whitespace-pre-wrap"
+											size="md"
+											:rows="3"
+											:maxrows="12"
+											autoresize
+										/>
+									</div>
 									<UButton type="button" variant="ghost" color="neutral" size="sm"
 										class="mt-2 shrink-0"
 										icon="i-lucide-x"

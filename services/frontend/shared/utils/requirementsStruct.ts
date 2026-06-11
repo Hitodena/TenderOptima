@@ -8,6 +8,7 @@ export type RequirementsHierarchy = Record<string, RequirementNode>
 export interface EditableRequirementRow {
 	key: string
 	text: string
+	isHeading?: boolean
 }
 
 export function compareVersionKeys(a: string, b: string): number {
@@ -51,13 +52,74 @@ function normalizeNode(node: unknown): RequirementNode {
 	}
 }
 
+function mergeNode(existing: RequirementNode, incoming: RequirementNode): RequirementNode {
+	const mergedChildren: Record<string, RequirementNode> = { ...existing.children }
+	for (const [key, child] of Object.entries(incoming.children)) {
+		if (key in mergedChildren) {
+			mergedChildren[key] = mergeNode(mergedChildren[key], child)
+		} else {
+			mergedChildren[key] = child
+		}
+	}
+	return {
+		text: (incoming.text || existing.text || '').trim(),
+		children: mergedChildren,
+	}
+}
+
+function canonicalizeHierarchy(hierarchy: RequirementsHierarchy): RequirementsHierarchy {
+	const result: RequirementsHierarchy = {}
+
+	function ensureParentChain(fullKey: string): Record<string, RequirementNode> {
+		const segments = fullKey.replace(/\//g, '.').split('.')
+		const topKey = segments[0]
+		if (!result[topKey]) {
+			result[topKey] = { text: '', children: {} }
+		}
+
+		let current = result[topKey]
+		for (let index = 1; index < segments.length - 1; index++) {
+			const path = segments.slice(0, index + 1).join('.')
+			if (!current.children[path]) {
+				current.children[path] = { text: '', children: {} }
+			}
+			current = current.children[path]
+		}
+		return current.children
+	}
+
+	for (const key of Object.keys(hierarchy).sort(compareVersionKeys)) {
+		const node = normalizeNode(hierarchy[key])
+		const keyStr = key.replace(/\//g, '.')
+		const segments = keyStr.split('.')
+
+		if (segments.length === 1) {
+			if (result[keyStr]) {
+				result[keyStr] = mergeNode(result[keyStr], node)
+			} else {
+				result[keyStr] = node
+			}
+			continue
+		}
+
+		const parentChildren = ensureParentChain(keyStr)
+		if (parentChildren[keyStr]) {
+			parentChildren[keyStr] = mergeNode(parentChildren[keyStr], node)
+		} else {
+			parentChildren[keyStr] = node
+		}
+	}
+
+	return result
+}
+
 export function normalizeTzRequirements(data: RequirementsHierarchy | null | undefined): RequirementsHierarchy {
 	if (!data || typeof data !== 'object' || Array.isArray(data)) return {}
-	const result: RequirementsHierarchy = {}
+	const normalized: RequirementsHierarchy = {}
 	for (const [key, value] of Object.entries(data)) {
-		result[key] = normalizeNode(value)
+		normalized[key] = normalizeNode(value)
 	}
-	return result
+	return canonicalizeHierarchy(normalized)
 }
 
 export function normalizeRequirementsKp(
@@ -103,10 +165,33 @@ function parseFlattenedLine(line: string): EditableRequirementRow {
 	return { key: '', text: line }
 }
 
+export function flattenRequirementsToEditableRows(
+	data: RequirementsHierarchy | null | undefined,
+): EditableRequirementRow[] {
+	const rows: EditableRequirementRow[] = []
+	const hierarchy = normalizeTzRequirements(data)
+
+	function walk(nodes: RequirementsHierarchy) {
+		for (const key of Object.keys(nodes).sort(compareVersionKeys)) {
+			const node = normalizeNode(nodes[key])
+			const hasChildren = Object.keys(node.children).length > 0
+			if (hasChildren) {
+				rows.push({ key, text: node.text, isHeading: true })
+				walk(node.children)
+			} else if (node.text) {
+				rows.push({ key, text: node.text, isHeading: false })
+			}
+		}
+	}
+
+	walk(hierarchy)
+	return rows
+}
+
 export function flattenRequirementsToRows(
 	data: RequirementsHierarchy | null | undefined,
 ): EditableRequirementRow[] {
-	return flattenHierarchy(normalizeTzRequirements(data)).map(parseFlattenedLine)
+	return flattenRequirementsToEditableRows(data)
 }
 
 function insertNode(
@@ -158,13 +243,14 @@ function insertNode(
 export function rowsToHierarchy(rows: EditableRequirementRow[]): RequirementsHierarchy {
 	const result: RequirementsHierarchy = {}
 	const sorted = [...rows]
-		.filter((row) => row.text.trim())
+		.filter((row) => row.isHeading || row.text.trim())
 		.sort((a, b) => compareVersionKeys(a.key || 'z', b.key || 'z'))
 
 	let nextTop = 1
 	for (const row of sorted) {
 		let key = row.key.trim()
 		if (!key) {
+			if (row.isHeading) continue
 			key = String(nextTop)
 			nextTop += 1
 		} else if (!key.includes('.') && !key.includes('/')) {
@@ -173,11 +259,11 @@ export function rowsToHierarchy(rows: EditableRequirementRow[]): RequirementsHie
 		}
 		insertNode(result, key, row.text.trim())
 	}
-	return result
+	return normalizeTzRequirements(result)
 }
 
 export function requirementsRowsNonempty(rows: EditableRequirementRow[]): boolean {
-	return rows.some((row) => row.text.trim())
+	return rows.some((row) => !row.isHeading && row.text.trim())
 }
 
 export function requirementsNonempty(data: RequirementsHierarchy | null | undefined): boolean {
@@ -185,5 +271,5 @@ export function requirementsNonempty(data: RequirementsHierarchy | null | undefi
 }
 
 export function countRequirementRows(rows: EditableRequirementRow[]): number {
-	return rows.filter((row) => row.text.trim()).length
+	return rows.filter((row) => !row.isHeading && row.text.trim()).length
 }

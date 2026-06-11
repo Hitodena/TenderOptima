@@ -229,6 +229,7 @@ async def _extract_hierarchical(
         )
 
     hierarchy = dedupe_hierarchy(hierarchy)
+    hierarchy = normalize_tz_requirements(hierarchy)
     logger.info(
         "Requirements extraction finished",
         analysis_id=analysis_id,
