@@ -1,5 +1,3 @@
-"""Background LLM analysis: TZ/KP comparison and supplier email requirements."""
-
 import uuid
 from pathlib import Path
 
@@ -89,9 +87,22 @@ async def run_tz_extract(self, analysis_id: str) -> dict:
     """Extract TZ requirements only (phase 1 of two-phase analysis)."""
     db_manager = get_db_manager()
     aid = uuid.UUID(analysis_id)
+    async with db_manager.session() as session:
+        row = await TZAnalysisDAO.get_by_id(session, aid)
+        if not row:
+            logger.error(
+                "TZ extract: analysis not found",
+                analysis_id=analysis_id,
+            )
+            return {"error": "not_found", "analysis_id": analysis_id}
+    user_id = str(row.user_id)
     tz_path = resolve_tz_only_file(aid)
     if not tz_path:
-        logger.error("TZ extract: TZ file missing", analysis_id=analysis_id)
+        logger.error(
+            "TZ extract: TZ file missing",
+            analysis_id=analysis_id,
+            user_id=user_id,
+        )
         async with db_manager.session() as session:
             await TZAnalysisDAO.update_fields(
                 session,
@@ -103,14 +114,19 @@ async def run_tz_extract(self, analysis_id: str) -> dict:
     logger.info(
         "TZ extract task started",
         analysis_id=analysis_id,
-        tz_path=str(tz_path),
+        user_id=user_id,
     )
     try:
-        requirements_tz = await extract_tz_from_file(tz_path)
+        requirements_tz = await extract_tz_from_file(
+            tz_path,
+            analysis_id=analysis_id,
+            user_id=user_id,
+        )
     except (UnsupportedFileTypeError, OcrNotAvailableError, ValueError) as exc:
         logger.warning(
             "TZ extract failed",
             analysis_id=analysis_id,
+            user_id=user_id,
             error=str(exc),
         )
         async with db_manager.session() as session:
@@ -124,6 +140,7 @@ async def run_tz_extract(self, analysis_id: str) -> dict:
         logger.exception(
             "TZ extract unexpected failure",
             analysis_id=analysis_id,
+            user_id=user_id,
             error=str(exc),
         )
         async with db_manager.session() as session:
@@ -136,7 +153,14 @@ async def run_tz_extract(self, analysis_id: str) -> dict:
 
     async with db_manager.session() as session:
         row = await TZAnalysisDAO.get_by_id(session, aid)
-        tz_filename = row.tz_filename if row else tz_path.name
+        if not row:
+            logger.error(
+                "TZ extract: analysis not found",
+                analysis_id=analysis_id,
+            )
+            return {"error": "not_found", "analysis_id": analysis_id}
+        user_id = str(row.user_id)
+        tz_filename = row.tz_filename
         await TZAnalysisDAO.update_fields(
             session,
             aid,
@@ -157,7 +181,11 @@ async def run_tz_extract(self, analysis_id: str) -> dict:
             llm_model=config.openai_model,
             status=TZAnalysisRunStatus.ACTIVE.value,
         )
-    logger.info("TZ extract task done", analysis_id=analysis_id)
+    logger.info(
+        "TZ extract task done",
+        analysis_id=analysis_id,
+        user_id=user_id,
+    )
     return {"status": "active", "analysis_id": analysis_id}
 
 
@@ -181,6 +209,7 @@ async def run_tz_kp_compare(self, analysis_id: str) -> dict:
                 analysis_id=analysis_id,
             )
             return {"error": "not_found", "analysis_id": analysis_id}
+        user_id = str(row.user_id)
         requirements_tz = normalize_tz_requirements(row.requirements_tz)
         kp_display_names = list(row.kp_filenames or [])
 
@@ -196,7 +225,9 @@ async def run_tz_kp_compare(self, analysis_id: str) -> dict:
     kp_paths = resolve_kp_analysis_files(aid)
     if not kp_paths:
         logger.error(
-            "TZ KP compare: KP files missing", analysis_id=analysis_id
+            "TZ KP compare: KP files missing",
+            analysis_id=analysis_id,
+            user_id=user_id,
         )
         async with db_manager.session() as session:
             await TZAnalysisDAO.update_fields(
@@ -209,19 +240,21 @@ async def run_tz_kp_compare(self, analysis_id: str) -> dict:
     logger.info(
         "TZ KP compare task started",
         analysis_id=analysis_id,
-        kp_count=len(kp_paths),
-        tz_items=count_requirements(requirements_tz),
+        user_id=user_id,
     )
     try:
         result = await analyze_kp_files(
             requirements_tz,
             kp_paths,
             kp_display_names=kp_display_names or None,
+            analysis_id=analysis_id,
+            user_id=user_id,
         )
     except (UnsupportedFileTypeError, OcrNotAvailableError, ValueError) as exc:
         logger.warning(
             "TZ KP compare failed",
             analysis_id=analysis_id,
+            user_id=user_id,
             error=str(exc),
         )
         async with db_manager.session() as session:
@@ -235,6 +268,7 @@ async def run_tz_kp_compare(self, analysis_id: str) -> dict:
         logger.exception(
             "TZ KP compare unexpected failure",
             analysis_id=analysis_id,
+            user_id=user_id,
             error=str(exc),
         )
         async with db_manager.session() as session:
@@ -265,7 +299,11 @@ async def run_tz_kp_compare(self, analysis_id: str) -> dict:
             llm_model=config.openai_model,
             status=TZAnalysisRunStatus.ACTIVE.value,
         )
-    logger.info("TZ KP compare task done", analysis_id=analysis_id)
+    logger.info(
+        "TZ KP compare task done",
+        analysis_id=analysis_id,
+        user_id=user_id,
+    )
     return {"status": "active", "analysis_id": analysis_id}
 
 
@@ -285,9 +323,11 @@ async def run_tz_compare(self, analysis_id: str) -> dict:
         row = await TZAnalysisDAO.get_by_id(session, aid)
         if not row:
             logger.error(
-                "TZ compare: analysis not found", analysis_id=analysis_id
+                "TZ compare: analysis not found",
+                analysis_id=analysis_id,
             )
             return {"error": "not_found", "analysis_id": analysis_id}
+        user_id = str(row.user_id)
         requirements_tz = normalize_tz_requirements(row.requirements_tz)
         requirements_kp = normalize_requirements_kp(row.requirements_kp)
 
@@ -311,11 +351,17 @@ async def run_tz_compare(self, analysis_id: str) -> dict:
         return {"error": "no_requirements_kp", "analysis_id": analysis_id}
 
     try:
-        items = await compare_only(requirements_tz, requirements_kp)
+        items = await compare_only(
+            requirements_tz,
+            requirements_kp,
+            analysis_id=analysis_id,
+            user_id=user_id,
+        )
     except ValueError as exc:
         logger.warning(
             "TZ compare failed",
             analysis_id=analysis_id,
+            user_id=user_id,
             error=str(exc),
         )
         async with db_manager.session() as session:
@@ -329,6 +375,7 @@ async def run_tz_compare(self, analysis_id: str) -> dict:
         logger.exception(
             "TZ compare unexpected failure",
             analysis_id=analysis_id,
+            user_id=user_id,
             error=str(exc),
         )
         async with db_manager.session() as session:
@@ -370,7 +417,11 @@ async def run_tz_compare(self, analysis_id: str) -> dict:
             llm_model=config.openai_model,
             status=TZAnalysisRunStatus.ACTIVE.value,
         )
-    logger.info("TZ compare task done", analysis_id=analysis_id)
+    logger.info(
+        "TZ compare task done",
+        analysis_id=analysis_id,
+        user_id=user_id,
+    )
     return {"status": "active", "analysis_id": analysis_id}
 
 

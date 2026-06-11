@@ -107,6 +107,8 @@ async def _llm_extract_chunk(
     total_chunks: int,
     *,
     mode: Literal["tz", "kp"],
+    analysis_id: str,
+    user_id: str,
 ) -> dict:
     if mode == "tz":
         system, user = build_tz_chunk_prompt(
@@ -137,6 +139,8 @@ async def _llm_extract_chunk(
             if not partial:
                 logger.info(
                     "Requirements chunk empty",
+                    analysis_id=analysis_id,
+                    user_id=user_id,
                     mode=mode,
                     chunk=chunk_idx + 1,
                     total=total_chunks,
@@ -146,6 +150,8 @@ async def _llm_extract_chunk(
             last_exc = exc
             logger.warning(
                 "Requirements chunk LLM attempt failed",
+                analysis_id=analysis_id,
+                user_id=user_id,
                 mode=mode,
                 chunk=chunk_idx + 1,
                 total=total_chunks,
@@ -162,18 +168,28 @@ async def _llm_extract_chunk(
 
 
 async def _extract_hierarchical(
-    text: str, *, mode: Literal["tz", "kp"]
+    text: str,
+    *,
+    mode: Literal["tz", "kp"],
+    analysis_id: str,
+    user_id: str,
 ) -> dict:
     cleaned = clean_text(text)
     chunks = chunk_text(cleaned)
     if not chunks:
         logger.warning(
-            "Requirements extraction skipped", mode=mode, reason="empty_text"
+            "Requirements extraction skipped",
+            analysis_id=analysis_id,
+            user_id=user_id,
+            mode=mode,
+            reason="empty_text",
         )
         return {}
 
     logger.info(
         "Requirements extraction started",
+        analysis_id=analysis_id,
+        user_id=user_id,
         mode=mode,
         text_chars=len(cleaned),
         chunks=len(chunks),
@@ -184,6 +200,8 @@ async def _extract_hierarchical(
     for index, chunk in enumerate(chunks):
         logger.info(
             "Requirements chunk processing",
+            analysis_id=analysis_id,
+            user_id=user_id,
             mode=mode,
             chunk=index + 1,
             total=len(chunks),
@@ -195,11 +213,15 @@ async def _extract_hierarchical(
             index,
             len(chunks),
             mode=mode,
+            analysis_id=analysis_id,
+            user_id=user_id,
         )
         hierarchy = merge_requirement_chunks([hierarchy, partial])
         rolling_ctx = _build_rolling_summary(hierarchy)
         logger.info(
             "Requirements chunk done",
+            analysis_id=analysis_id,
+            user_id=user_id,
             mode=mode,
             chunk=index + 1,
             total=len(chunks),
@@ -209,18 +231,40 @@ async def _extract_hierarchical(
     hierarchy = dedupe_hierarchy(hierarchy)
     logger.info(
         "Requirements extraction finished",
+        analysis_id=analysis_id,
+        user_id=user_id,
         mode=mode,
         items=count_requirements(hierarchy),
     )
     return hierarchy
 
 
-async def extract_tz_requirements(tz_text: str) -> dict:
-    return await _extract_hierarchical(tz_text, mode="tz")
+async def extract_tz_requirements(
+    tz_text: str,
+    *,
+    analysis_id: str,
+    user_id: str,
+) -> dict:
+    return await _extract_hierarchical(
+        tz_text,
+        mode="tz",
+        analysis_id=analysis_id,
+        user_id=user_id,
+    )
 
 
-async def extract_kp_requirements(kp_text: str) -> dict:
-    return await _extract_hierarchical(kp_text, mode="kp")
+async def extract_kp_requirements(
+    kp_text: str,
+    *,
+    analysis_id: str,
+    user_id: str,
+) -> dict:
+    return await _extract_hierarchical(
+        kp_text,
+        mode="kp",
+        analysis_id=analysis_id,
+        user_id=user_id,
+    )
 
 
 def _chunk_list(items: list[str], size: int) -> list[list[str]]:
@@ -234,6 +278,8 @@ async def _llm_compare_chunk(
     *,
     chunk_idx: int,
     total_chunks: int,
+    analysis_id: str,
+    user_id: str,
 ) -> list[TZAnalysisItem]:
     system, user = build_comparison_chunk_prompt(
         tz_chunk,
@@ -255,6 +301,8 @@ async def _llm_compare_chunk(
             last_exc = exc
             logger.warning(
                 "Comparison chunk LLM attempt failed",
+                analysis_id=analysis_id,
+                user_id=user_id,
                 kp_name=kp_name,
                 chunk=chunk_idx + 1,
                 total=total_chunks,
@@ -274,6 +322,9 @@ async def _compare_single_kp(
     requirements_tz: list[str],
     kp_name: str,
     kp_offerings: list[str],
+    *,
+    analysis_id: str,
+    user_id: str,
 ) -> list[TZAnalysisItem]:
     tz_chunks = _chunk_list(requirements_tz, _COMPARISON_CHUNK_SIZE)
     if not tz_chunks:
@@ -281,6 +332,8 @@ async def _compare_single_kp(
 
     logger.info(
         "TZ vs KP comparison started for supplier",
+        analysis_id=analysis_id,
+        user_id=user_id,
         kp_name=kp_name,
         tz_items=len(requirements_tz),
         kp_items=len(kp_offerings),
@@ -291,6 +344,8 @@ async def _compare_single_kp(
     for index, tz_chunk in enumerate(tz_chunks):
         logger.info(
             "Comparison chunk processing",
+            analysis_id=analysis_id,
+            user_id=user_id,
             kp_name=kp_name,
             chunk=index + 1,
             total=len(tz_chunks),
@@ -302,10 +357,14 @@ async def _compare_single_kp(
             kp_offerings,
             chunk_idx=index,
             total_chunks=len(tz_chunks),
+            analysis_id=analysis_id,
+            user_id=user_id,
         )
         all_items.extend(items)
         logger.info(
             "Comparison chunk done",
+            analysis_id=analysis_id,
+            user_id=user_id,
             kp_name=kp_name,
             chunk=index + 1,
             total=len(tz_chunks),
@@ -314,6 +373,8 @@ async def _compare_single_kp(
 
     logger.info(
         "TZ vs KP comparison finished for supplier",
+        analysis_id=analysis_id,
+        user_id=user_id,
         kp_name=kp_name,
         items=len(all_items),
     )
@@ -323,12 +384,21 @@ async def _compare_single_kp(
 async def compare_requirements(
     requirements_tz: list[str],
     requirements_kp: dict[str, list[str]],
+    *,
+    analysis_id: str,
+    user_id: str,
 ) -> list[TZAnalysisItem]:
     if not requirements_kp:
         return []
 
     tasks = [
-        _compare_single_kp(requirements_tz, kp_name, kp_offerings)
+        _compare_single_kp(
+            requirements_tz,
+            kp_name,
+            kp_offerings,
+            analysis_id=analysis_id,
+            user_id=user_id,
+        )
         for kp_name, kp_offerings in requirements_kp.items()
     ]
     results = await asyncio.gather(*tasks)
@@ -341,19 +411,43 @@ async def compare_requirements(
 async def compare_only(
     requirements_tz: dict,
     requirements_kp: dict[str, dict],
+    *,
+    analysis_id: str,
+    user_id: str,
 ) -> list[TZAnalysisItem]:
     tz_flat = flatten_hierarchy(normalize_tz_requirements(requirements_tz))
     kp_flat = normalize_requirements_kp_flat(requirements_kp)
-    return await compare_requirements(tz_flat, kp_flat)
+    return await compare_requirements(
+        tz_flat,
+        kp_flat,
+        analysis_id=analysis_id,
+        user_id=user_id,
+    )
 
 
-async def extract_tz_from_file(tz_path: Path) -> dict:
+async def extract_tz_from_file(
+    tz_path: Path,
+    *,
+    analysis_id: str,
+    user_id: str,
+) -> dict:
     """Extract TZ requirements from a file on disk."""
-    logger.info("TZ file extraction started", path=str(tz_path))
+    logger.info(
+        "TZ file extraction started",
+        analysis_id=analysis_id,
+        user_id=user_id,
+        path=str(tz_path),
+    )
     raw_text = _assembler.assemble(_router.get(tz_path).extract(tz_path))
-    result = await extract_tz_requirements(raw_text)
+    result = await extract_tz_requirements(
+        raw_text,
+        analysis_id=analysis_id,
+        user_id=user_id,
+    )
     logger.info(
         "TZ file extraction finished",
+        analysis_id=analysis_id,
+        user_id=user_id,
         path=str(tz_path),
         items=count_requirements(result),
     )
@@ -365,6 +459,8 @@ async def analyze_kp_files(
     kp_paths: list[Path],
     *,
     kp_display_names: list[str] | None = None,
+    analysis_id: str,
+    user_id: str,
 ) -> TZAnalysisSessionResult:
     """Extract KP offerings and compare them against saved TZ requirements."""
     if not kp_paths:
@@ -381,21 +477,43 @@ async def analyze_kp_files(
     requirements_kp: dict[str, dict] = {}
     for kp_path, kp_name in zip(kp_paths, names, strict=True):
         logger.info(
-            "KP file extraction started", kp_name=kp_name, path=str(kp_path)
+            "KP file extraction started",
+            analysis_id=analysis_id,
+            user_id=user_id,
+            kp_name=kp_name,
+            path=str(kp_path),
         )
         raw_text = _assembler.assemble(_router.get(kp_path).extract(kp_path))
-        requirements_kp[kp_name] = await extract_kp_requirements(raw_text)
+        requirements_kp[kp_name] = await extract_kp_requirements(
+            raw_text,
+            analysis_id=analysis_id,
+            user_id=user_id,
+        )
         logger.info(
             "KP file extraction finished",
+            analysis_id=analysis_id,
+            user_id=user_id,
             kp_name=kp_name,
             items=count_requirements(requirements_kp[kp_name]),
         )
 
-    logger.info("TZ vs KP comparison started", kp_count=len(names))
+    logger.info(
+        "TZ vs KP comparison started",
+        analysis_id=analysis_id,
+        user_id=user_id,
+        kp_count=len(names),
+    )
     kp_flat = normalize_requirements_kp_flat(requirements_kp)
-    all_items = await compare_requirements(tz_flat, kp_flat)
+    all_items = await compare_requirements(
+        tz_flat,
+        kp_flat,
+        analysis_id=analysis_id,
+        user_id=user_id,
+    )
     logger.info(
         "TZ vs KP comparison finished",
+        analysis_id=analysis_id,
+        user_id=user_id,
         kp_count=len(names),
         items=len(all_items),
     )

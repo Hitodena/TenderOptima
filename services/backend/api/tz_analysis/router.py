@@ -530,7 +530,6 @@ async def set_primary_kp(
     logger.info(
         "TZ primary KP updated",
         analysis_id=str(analysis_id),
-        kp_filename=body.kp_filename,
         user_id=str(current_user.id),
     )
     return row_to_session(updated)
