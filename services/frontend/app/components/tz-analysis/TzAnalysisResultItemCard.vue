@@ -1,0 +1,135 @@
+<template>
+	<UCard variant="subtle" :class="matchBorderClass(item.status)" :ui="{ body: 'p-0 sm:p-0' }">
+		<div class="p-3 sm:p-4">
+			<div class="flex items-start gap-2">
+				<UButton
+					type="button"
+					variant="ghost"
+					color="neutral"
+					size="xs"
+					class="shrink-0 -ml-1 mt-0.5"
+					:leading-icon="isExpanded ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+					:aria-expanded="isExpanded"
+					@click="emit('toggle-expand')"
+				/>
+				<button type="button" class="flex-1 min-w-0 text-left" @click="emit('toggle-expand')">
+					<p class="text-sm font-medium whitespace-pre-wrap leading-relaxed">
+						{{ item.requirement }}
+					</p>
+				</button>
+				<UBadge
+					:color="getTzItemStatusColor(item.status)"
+					variant="subtle"
+					size="sm"
+					class="shrink-0 max-w-28 sm:max-w-none text-center
+						text-[11px] sm:text-xs leading-snug whitespace-normal"
+				>
+					{{ getTzItemStatusLabel(item.status) }}
+				</UBadge>
+				<UCheckbox
+					v-if="showCheckbox"
+					:model-value="isSelected"
+					:color="getTzItemStatusColor(item.status)"
+					class="shrink-0 mt-0.5"
+					@click.stop
+					@update:model-value="(v) => emit('toggle-select', v === true)"
+				/>
+			</div>
+
+			<div
+				v-show="isExpanded"
+				class="mt-4 pt-4 border-t border-default/60 space-y-4 pl-7"
+			>
+				<div class="space-y-1.5">
+					<p class="text-xs font-semibold uppercase tracking-wide text-muted">
+						Полное требование
+					</p>
+					<p class="text-sm whitespace-pre-wrap leading-relaxed">
+						{{ item.requirement }}
+					</p>
+					<p v-if="item.requirement_ref" class="text-xs text-muted">
+						<span class="font-medium text-default/70">Ссылка:</span>
+						<button
+							v-if="analysisFiles"
+							type="button"
+							class="ml-1 text-primary hover:underline text-left"
+							@click.stop="analysisFiles.openTzFile()"
+						>
+							{{ item.requirement_ref }}
+						</button>
+						<span v-else class="ml-1">{{ item.requirement_ref }}</span>
+					</p>
+				</div>
+
+				<div class="space-y-1.5">
+					<p class="text-xs font-semibold uppercase tracking-wide text-muted">
+						Значение из предложения
+					</p>
+					<p v-if="item.offer_value" class="text-sm whitespace-pre-wrap leading-relaxed">
+						{{ item.offer_value }}
+					</p>
+					<p v-else class="text-sm text-muted italic">
+						Не указано в КП
+					</p>
+					<p v-if="item.offer_ref" class="text-xs text-muted">
+						<span class="font-medium text-default/70">Ссылка:</span>
+						<button
+							v-if="analysisFiles && itemKpFilename"
+							type="button"
+							class="ml-1 text-primary hover:underline text-left"
+							@click.stop="analysisFiles.openKpFile(itemKpFilename)"
+						>
+							{{ item.offer_ref }}
+						</button>
+						<span v-else class="ml-1">{{ item.offer_ref }}</span>
+					</p>
+				</div>
+
+				<div class="space-y-1.5">
+					<p class="text-xs font-semibold uppercase tracking-wide text-muted">
+						Объяснение
+					</p>
+					<p class="text-sm text-default/80 whitespace-pre-wrap leading-relaxed">
+						{{ item.explanation }}
+					</p>
+				</div>
+			</div>
+		</div>
+	</UCard>
+</template>
+
+<script lang="ts" setup>
+import type { TZAnalysisItem, TZAnalysisStatus } from '#shared/types'
+import { getTzItemStatusColor, getTzItemStatusLabel } from '#shared/types'
+
+type TZItemView = TZAnalysisItem & { _index: number }
+
+const props = defineProps<{
+	item: TZItemView
+	isExpanded: boolean
+	isSelected: boolean
+	showCheckbox: boolean
+	defaultKpFilename?: string | null
+}>()
+
+const emit = defineEmits<{
+	'toggle-expand': []
+	'toggle-select': [checked: boolean]
+}>()
+
+const analysisFiles = inject<{
+	openTzFile: () => Promise<void>
+	openKpFile: (displayName: string) => Promise<void>
+} | null>('tzAnalysisFiles', null)
+
+const itemKpFilename = computed(() =>
+	props.item.kp_name || props.defaultKpFilename || null,
+)
+
+function matchBorderClass(status: TZAnalysisStatus) {
+	if (status === 'met') return 'border-l-4 border-success'
+	if (status === 'partial') return 'border-l-4 border-warning'
+	if (status === 'missing') return 'border-l-4 border-error'
+	return 'border-l-4 border-neutral-300 dark:border-neutral-600'
+}
+</script>

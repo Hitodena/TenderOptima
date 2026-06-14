@@ -9,6 +9,25 @@ def tz_analysis_dir(analysis_id: uuid.UUID) -> Path:
     return Path(get_config().upload_dir) / "tz_analyses" / str(analysis_id)
 
 
+_MIME_BY_EXT = {
+    ".pdf": "application/pdf",
+    ".doc": "application/msword",
+    ".docx": (
+        "application/vnd.openxmlformats-officedocument"
+        ".wordprocessingml.document"
+    ),
+    ".xls": "application/vnd.ms-excel",
+    ".xlsx": (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    ),
+}
+
+
+def mime_type_for_filename(filename: str) -> str:
+    ext = Path(filename).suffix.lower()
+    return _MIME_BY_EXT.get(ext, "application/octet-stream")
+
+
 def make_unique_filenames(filenames: list[str]) -> list[str]:
     """Ensure display names are unique when users upload files with the same name."""
     used: set[str] = set()
@@ -93,3 +112,32 @@ def resolve_kp_analysis_files(analysis_id: uuid.UUID) -> list[Path]:
     if not dest.is_dir():
         return []
     return _sort_kp_paths(list(dest.glob("kp*")))
+
+
+def resolve_kp_file_by_display_name(
+    analysis_id: uuid.UUID,
+    display_name: str,
+    kp_filenames: list[str] | None,
+    kp_filename: str | None = None,
+) -> Path | None:
+    """Map a stored KP display name to its on-disk path (kp1, kp2, …)."""
+    names = list(kp_filenames or [])
+    if not names and kp_filename:
+        names = [kp_filename]
+    if not names:
+        return None
+
+    kp_paths = resolve_kp_analysis_files(analysis_id)
+    if not kp_paths:
+        return None
+
+    try:
+        index = names.index(display_name)
+    except ValueError:
+        return None
+
+    if index >= len(kp_paths):
+        return None
+
+    path = kp_paths[index]
+    return path if path.is_file() else None

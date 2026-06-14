@@ -56,7 +56,7 @@ function mergeNode(existing: RequirementNode, incoming: RequirementNode): Requir
 	const mergedChildren: Record<string, RequirementNode> = { ...existing.children }
 	for (const [key, child] of Object.entries(incoming.children)) {
 		if (key in mergedChildren) {
-			mergedChildren[key] = mergeNode(mergedChildren[key], child)
+			mergedChildren[key] = mergeNode(mergedChildren[key]!, child)
 		} else {
 			mergedChildren[key] = child
 		}
@@ -73,17 +73,19 @@ function canonicalizeHierarchy(hierarchy: RequirementsHierarchy): RequirementsHi
 	function ensureParentChain(fullKey: string): Record<string, RequirementNode> {
 		const segments = fullKey.replace(/\//g, '.').split('.')
 		const topKey = segments[0]
+		if (!topKey) return {}
+
 		if (!result[topKey]) {
 			result[topKey] = { text: '', children: {} }
 		}
 
-		let current = result[topKey]
+		let current = result[topKey]!
 		for (let index = 1; index < segments.length - 1; index++) {
 			const path = segments.slice(0, index + 1).join('.')
 			if (!current.children[path]) {
 				current.children[path] = { text: '', children: {} }
 			}
-			current = current.children[path]
+			current = current.children[path]!
 		}
 		return current.children
 	}
@@ -161,7 +163,7 @@ export function countLeafRequirements(
 
 function parseFlattenedLine(line: string): EditableRequirementRow {
 	const match = line.match(/^([\d./]+)\.\s+([\s\S]*)$/)
-	if (match) return { key: match[1], text: match[2] }
+	if (match?.[1] && match[2] !== undefined) return { key: match[1], text: match[2] }
 	return { key: '', text: line }
 }
 
@@ -204,6 +206,7 @@ function insertNode(
 
 	const segments = normalizedKey.split('.')
 	const topKey = segments[0]
+	if (!topKey) return
 
 	if (segments.length === 1) {
 		root[normalizedKey] = {
@@ -217,7 +220,7 @@ function insertNode(
 		root[topKey] = { text: '', children: {} }
 	}
 
-	let current = root[topKey]
+	let current = root[topKey]!
 	let path = topKey
 
 	for (let i = 1; i < segments.length; i++) {
@@ -236,7 +239,7 @@ function insertNode(
 		if (!children[path]) {
 			children[path] = { text: '', children: {} }
 		}
-		current = children[path]
+		current = children[path]!
 	}
 }
 
@@ -272,4 +275,187 @@ export function requirementsNonempty(data: RequirementsHierarchy | null | undefi
 
 export function countRequirementRows(rows: EditableRequirementRow[]): number {
 	return rows.filter((row) => !row.isHeading && row.text.trim()).length
+}
+
+export interface RequirementTreeNode {
+	key: string
+	text: string
+	isHeading: boolean
+	rowIndex?: number
+	children: RequirementTreeNode[]
+}
+
+export interface MatchableAnalysisItem {
+	requirement: string
+	requirement_ref: string | null
+	offer_value: string | null
+	offer_ref: string | null
+	explanation: string
+	status: 'met' | 'partial' | 'missing' | 'not_found'
+	kp_name?: string | null
+	_index: number
+}
+
+export interface ResultTreeNode {
+	key: string
+	text: string
+	isHeading: boolean
+	children: ResultTreeNode[]
+	items: MatchableAnalysisItem[]
+}
+
+function normalizeRequirementKey(key: string): string {
+	return key.trim().replace(/\//g, '.')
+}
+
+function parentRequirementKey(key: string): string | null {
+	const normalized = normalizeRequirementKey(key)
+	const segments = normalized.split('.')
+	if (segments.length <= 1) return null
+	return segments.slice(0, -1).join('.')
+}
+
+export function isTopLevelSectionKey(key: string): boolean {
+	return !normalizeRequirementKey(key).includes('.')
+}
+
+function sortTreeNodes<T extends { key: string; children: T[] }>(nodes: T[]) {
+	nodes.sort((a, b) => compareVersionKeys(a.key, b.key))
+	for (const node of nodes) sortTreeNodes(node.children)
+}
+
+export function buildTreeFromRows(rows: EditableRequirementRow[]): RequirementTreeNode[] {
+	const nodeByKey = new Map<string, RequirementTreeNode>()
+	const roots: RequirementTreeNode[] = []
+
+	function attachToParent(node: RequirementTreeNode) {
+		if (node.key.startsWith('__row_')) {
+			if (!roots.some((root) => root.key === node.key)) roots.push(node)
+			return
+		}
+
+		const parentKey = parentRequirementKey(node.key)
+		if (!parentKey) {
+			if (!roots.some((root) => root.key === node.key)) roots.push(node)
+			return
+		}
+
+		let parent = nodeByKey.get(parentKey)
+		if (!parent) {
+			parent = {
+				key: parentKey,
+				text: '',
+				isHeading: true,
+				children: [],
+			}
+			nodeByKey.set(parentKey, parent)
+			attachToParent(parent)
+		}
+
+		if (!parent.children.some((child) => child.key === node.key)) {
+			parent.children.push(node)
+		}
+		if (!parent.isHeading) parent.isHeading = true
+	}
+
+	for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+		const row = rows[rowIndex]
+		if (!row) continue
+		if (!row.isHeading && !row.text.trim() && !row.key.trim()) continue
+
+		const key = normalizeRequirementKey(row.key) || `__row_${rowIndex}`
+
+		const node: RequirementTreeNode = {
+			key,
+			text: row.text,
+			isHeading: Boolean(row.isHeading),
+			rowIndex,
+			children: [],
+		}
+		nodeByKey.set(key, node)
+		attachToParent(node)
+	}
+
+	sortTreeNodes(roots)
+	return roots
+}
+
+function collectHierarchyKeys(hierarchy: RequirementsHierarchy): Set<string> {
+	const keys = new Set<string>()
+
+	function walk(nodes: RequirementsHierarchy) {
+		for (const key of Object.keys(nodes)) {
+			keys.add(normalizeRequirementKey(key))
+			walk(normalizeNode(nodes[key]).children)
+		}
+	}
+
+	walk(hierarchy)
+	return keys
+}
+
+export function extractRequirementKey(item: {
+	requirement_ref: string | null
+	requirement: string
+}): string | null {
+	if (item.requirement_ref) {
+		const refMatch = item.requirement_ref.match(/п\.\s*([\d./]+)/i)
+		if (refMatch?.[1]) return normalizeRequirementKey(refMatch[1])
+	}
+
+	const reqMatch = item.requirement.match(/^([\d./]+)\.\s/)
+	if (reqMatch?.[1]) return normalizeRequirementKey(reqMatch[1])
+
+	return null
+}
+
+export function buildResultTree(
+	hierarchy: RequirementsHierarchy | null | undefined,
+	items: MatchableAnalysisItem[],
+): { sections: ResultTreeNode[]; unmapped: MatchableAnalysisItem[] } {
+	const normalized = normalizeTzRequirements(hierarchy)
+	const hierarchyKeys = collectHierarchyKeys(normalized)
+	const itemsByKey = new Map<string, MatchableAnalysisItem[]>()
+	const unmapped: MatchableAnalysisItem[] = []
+
+	for (const item of items) {
+		const key = extractRequirementKey(item)
+		if (!key || !hierarchyKeys.has(key)) {
+			unmapped.push(item)
+			continue
+		}
+		const bucket = itemsByKey.get(key) ?? []
+		bucket.push(item)
+		itemsByKey.set(key, bucket)
+	}
+
+	function walk(nodes: RequirementsHierarchy): ResultTreeNode[] {
+		const sections: ResultTreeNode[] = []
+
+		for (const key of Object.keys(nodes).sort(compareVersionKeys)) {
+			const node = normalizeNode(nodes[key])
+			const normalizedKey = normalizeRequirementKey(key)
+			const children = walk(node.children)
+			const nodeItems = itemsByKey.get(normalizedKey) ?? []
+			const hasChildren = Object.keys(node.children).length > 0
+			const isHeading = hasChildren || (!node.text && children.length > 0)
+
+			if (!hasChildren && nodeItems.length === 0 && !node.text) continue
+
+			sections.push({
+				key: normalizedKey,
+				text: node.text,
+				isHeading: hasChildren || isHeading,
+				children,
+				items: nodeItems,
+			})
+		}
+
+		return sections
+	}
+
+	return {
+		sections: walk(normalized),
+		unmapped,
+	}
 }

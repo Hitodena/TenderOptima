@@ -14,7 +14,7 @@ from fastapi import (
     UploadFile,
     status,
 )
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -59,6 +59,9 @@ from backend.utils.requirements_struct import (
 )
 from backend.utils.tz_storage import (
     make_unique_filenames,
+    mime_type_for_filename,
+    resolve_kp_file_by_display_name,
+    resolve_tz_only_file,
     save_kp_analysis_files,
     save_tz_only_file,
 )
@@ -639,6 +642,85 @@ async def get_tz_analysis(
             detail="Analysis not found",
         )
     return row_to_session(row)
+
+
+@router.get(
+    "/{analysis_id}/files/tz",
+    summary="Download uploaded TZ file",
+)
+async def download_tz_analysis_file(
+    analysis_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> FileResponse:
+    row = await TZAnalysisDAO.get_by_id_and_user(
+        session, analysis_id, current_user.id
+    )
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found",
+        )
+    if not row.tz_filename:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="TZ file not found",
+        )
+
+    tz_path = resolve_tz_only_file(analysis_id)
+    if not tz_path or not tz_path.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="TZ file not found",
+        )
+
+    return FileResponse(
+        path=str(tz_path),
+        filename=row.tz_filename,
+        media_type=mime_type_for_filename(row.tz_filename),
+    )
+
+
+@router.get(
+    "/{analysis_id}/files/kp",
+    summary="Download uploaded KP file by display name",
+)
+async def download_kp_analysis_file(
+    analysis_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    filename: Annotated[
+        str,
+        Query(min_length=1, max_length=512, description="KP display filename"),
+    ],
+) -> FileResponse:
+    row = await TZAnalysisDAO.get_by_id_and_user(
+        session, analysis_id, current_user.id
+    )
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found",
+        )
+
+    kp_path = resolve_kp_file_by_display_name(
+        analysis_id,
+        filename.strip(),
+        row.kp_filenames,
+        row.kp_filename,
+    )
+    if not kp_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="KP file not found",
+        )
+
+    safe_filename = filename.strip()
+    return FileResponse(
+        path=str(kp_path),
+        filename=safe_filename,
+        media_type=mime_type_for_filename(safe_filename),
+    )
 
 
 @router.get(

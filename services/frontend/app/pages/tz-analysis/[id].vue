@@ -26,16 +26,31 @@
 							<UIcon name="i-lucide-calendar" class="w-3.5 h-3.5" />
 							{{ formatDate(analysis.created_at) }}
 						</span>
-					<span v-if="analysis.tz_filename"
-						class="flex items-center gap-1 min-w-0">
-						<UIcon name="i-lucide-files" class="w-3.5 h-3.5 shrink-0" />
-						<span class="truncate">
-							{{ analysis.tz_filename }}
-							<template v-if="displayKpFilenames.length">
-								· {{ displayKpFilenames.join(' · ') }}
+						<span
+							v-if="analysis.tz_filename || displayKpFilenames.length"
+							class="flex items-center gap-1 min-w-0 flex-wrap"
+						>
+							<UIcon name="i-lucide-files" class="w-3.5 h-3.5 shrink-0" />
+							<template v-if="analysis.tz_filename">
+								<button
+									type="button"
+									class="truncate max-w-full text-primary hover:underline text-left"
+									@click="openTzFile()"
+								>
+									{{ analysis.tz_filename }}
+								</button>
+							</template>
+							<template v-for="kpName in displayKpFilenames" :key="`doc-kp-${kpName}`">
+								<span class="text-muted shrink-0">·</span>
+								<button
+									type="button"
+									class="truncate max-w-full text-primary hover:underline text-left"
+									@click="openKpFile(kpName)"
+								>
+									{{ kpName }}
+								</button>
 							</template>
 						</span>
-					</span>
 					</div>
 				</div>
 
@@ -112,36 +127,15 @@
 						</div>
 					</template>
 
-					<div class="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
-						<div v-for="(row, idx) in editableRequirementsTz" :key="`tz-review-${row.key}-${idx}`"
-							:class="[
-								'flex items-start gap-3',
-								row.isHeading && 'rounded-lg border border-default/60 bg-elevated/40 p-3',
-							]">
-							<span class="text-sm text-muted font-medium tabular-nums pt-3 min-w-10 shrink-0 text-right">
-								{{ row.key || idx + 1 }}.
-							</span>
-							<div class="flex-1 min-w-0 space-y-1">
-								<p v-if="row.isHeading"
-									class="text-xs font-medium text-muted uppercase tracking-wide">
-									Заголовок раздела · не анализируется в КП
-								</p>
-								<UTextarea
-									v-model="row.text"
-									class="w-full whitespace-pre-wrap"
-									size="md"
-									:rows="row.isHeading ? 1 : 3"
-									:maxrows="row.isHeading ? 4 : 12"
-									:placeholder="row.isHeading ? 'Название раздела (необязательно)' : undefined"
-									autoresize
-								/>
-							</div>
-							<UButton type="button" variant="ghost" color="neutral" size="sm"
-								class="mt-2 shrink-0"
-								icon="i-lucide-x" @click="removeTzRequirement(idx)" />
-						</div>
-						<p v-if="editableTzCount === 0"
-							class="text-sm text-muted text-center py-4">
+					<div class="max-h-[65vh] overflow-y-auto pr-1">
+						<RequirementTreeEditor
+							v-if="editableTzCount > 0"
+							:rows="editableRequirementsTz"
+							scope-id="tz-review"
+							show-heading-hint
+							@remove="removeTzRequirement"
+						/>
+						<p v-else class="text-sm text-muted text-center py-4">
 							Нет извлечённых требований
 						</p>
 					</div>
@@ -228,36 +222,15 @@
 							</div>
 						</template>
 
-						<div class="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
-							<div v-for="(row, idx) in editableRequirementsTz" :key="`tz-${row.key}-${idx}`"
-								:class="[
-									'flex items-start gap-3',
-									row.isHeading && 'rounded-lg border border-default/60 bg-elevated/40 p-3',
-								]">
-								<span class="text-sm text-muted font-medium tabular-nums pt-3 min-w-10 shrink-0 text-right">
-									{{ row.key || idx + 1 }}.
-								</span>
-								<div class="flex-1 min-w-0 space-y-1">
-									<p v-if="row.isHeading"
-										class="text-xs font-medium text-muted uppercase tracking-wide">
-										Заголовок раздела · не анализируется в КП
-									</p>
-									<UTextarea
-										v-model="row.text"
-										class="w-full whitespace-pre-wrap"
-										size="md"
-										:rows="row.isHeading ? 1 : 3"
-										:maxrows="row.isHeading ? 4 : 12"
-										:placeholder="row.isHeading ? 'Название раздела (необязательно)' : undefined"
-										autoresize
-									/>
-								</div>
-								<UButton type="button" variant="ghost" color="neutral" size="sm"
-									class="mt-2 shrink-0"
-									icon="i-lucide-x" @click="removeTzRequirement(idx)" />
-							</div>
-							<p v-if="editableTzCount === 0"
-								class="text-sm text-muted text-center py-4">
+						<div class="max-h-[65vh] overflow-y-auto pr-1">
+							<RequirementTreeEditor
+								v-if="editableTzCount > 0"
+								:rows="editableRequirementsTz"
+								scope-id="tz-confirm"
+								show-heading-hint
+								@remove="removeTzRequirement"
+							/>
+							<p v-else class="text-sm text-muted text-center py-4">
 								Нет извлечённых требований
 							</p>
 						</div>
@@ -286,9 +259,14 @@
 											class="w-4 h-4 shrink-0 text-muted" />
 										<div class="min-w-0">
 											<p class="font-semibold text-sm">{{ group.label }}</p>
-											<p v-if="group.filename" class="text-xs text-muted truncate mt-0.5">
+											<button
+												v-if="group.filename"
+												type="button"
+												class="text-xs text-primary hover:underline truncate mt-0.5 text-left max-w-full"
+												@click.stop="openKpFile(group.filename)"
+											>
 												{{ group.filename }}
-											</p>
+											</button>
 										</div>
 									</div>
 									<UBadge color="neutral" variant="subtle" size="xs" class="shrink-0">
@@ -307,29 +285,14 @@
 							</template>
 
 							<div v-show="isReviewKpExpanded(group.id)"
-								class="space-y-4 max-h-[50vh] overflow-y-auto pr-1">
-								<div v-for="(row, idx) in group.items" :key="`${group.key}-${row.key}-${idx}`"
-									class="flex items-start gap-3">
-									<span class="text-sm text-muted font-medium tabular-nums pt-3 min-w-10 shrink-0 text-right">
-										{{ row.key || idx + 1 }}.
-									</span>
-									<div class="flex-1 min-w-0">
-										<UTextarea
-											v-model="row.text"
-											class="w-full whitespace-pre-wrap"
-											size="md"
-											:rows="3"
-											:maxrows="12"
-											autoresize
-										/>
-									</div>
-									<UButton type="button" variant="ghost" color="neutral" size="sm"
-										class="mt-2 shrink-0"
-										icon="i-lucide-x"
-										@click="removeKpRequirement(group.key, idx)" />
-								</div>
-								<p v-if="countRequirementRows(group.items) === 0"
-									class="text-sm text-muted text-center py-4">
+								class="max-h-[50vh] overflow-y-auto pr-1">
+								<RequirementTreeEditor
+									v-if="countRequirementRows(group.items) > 0"
+									:rows="group.items"
+									:scope-id="`review-kp-${group.id}`"
+									@remove="(idx: number) => removeKpRequirement(group.key, idx)"
+								/>
+								<p v-else class="text-sm text-muted text-center py-4">
 									Нет извлечённых предложений
 								</p>
 							</div>
@@ -411,86 +374,28 @@
 											{{ getKpStats(group.key)?.match_score }}%
 										</UBadge>
 									</div>
-									<p v-if="group.filename" class="text-xs text-muted truncate mt-0.5 pl-6">
+									<button
+										v-if="group.filename"
+										type="button"
+										class="text-xs text-primary hover:underline truncate mt-0.5 pl-6 text-left max-w-full"
+										@click.stop="openKpFile(group.filename)"
+									>
 										{{ group.filename }}
-									</p>
+									</button>
 								</button>
 
-								<div v-show="isResultsKpExpanded(group.id)" class="space-y-3">
-									<UCard v-for="item in group.items" :key="item._index" variant="subtle"
-										:class="matchBorderClass(item.status)"
-										:ui="{ body: 'p-0 sm:p-0' }">
-										<div class="p-3 sm:p-4">
-											<div class="flex items-start gap-2">
-												<UButton type="button" variant="ghost" color="neutral" size="xs"
-													class="shrink-0 -ml-1 mt-0.5"
-													:leading-icon="isItemExpanded(item._index)
-														? 'i-lucide-chevron-down'
-														: 'i-lucide-chevron-right'"
-													:aria-expanded="isItemExpanded(item._index)"
-													@click="toggleItemExpand(item._index)" />
-												<button type="button"
-													class="flex-1 min-w-0 text-left"
-													@click="toggleItemExpand(item._index)">
-													<p class="text-sm font-medium whitespace-pre-wrap leading-relaxed">
-														{{ item.requirement }}
-													</p>
-												</button>
-												<UBadge :color="getTzItemStatusColor(item.status)" variant="subtle"
-													size="sm" class="shrink-0 max-w-28 sm:max-w-none text-center
-														text-[11px] sm:text-xs leading-snug whitespace-normal">
-													{{ getTzItemStatusLabel(item.status) }}
-												</UBadge>
-												<UCheckbox v-if="isTzSelectable(item.status) && belongsToPrimaryKp(item)"
-													:model-value="tzSelectedIndices.includes(item._index)"
-													class="shrink-0 mt-0.5"
-													@click.stop
-													@update:model-value="(v) => toggleTzSelect(item._index, v === true)" />
-											</div>
-
-											<div v-show="isItemExpanded(item._index)"
-												class="mt-4 pt-4 border-t border-default/60 space-y-4 pl-7">
-												<div class="space-y-1.5">
-													<p class="text-xs font-semibold uppercase tracking-wide text-muted">
-														Полное требование
-													</p>
-													<p class="text-sm whitespace-pre-wrap leading-relaxed">
-														{{ item.requirement }}
-													</p>
-													<p v-if="item.requirement_ref" class="text-xs text-muted">
-														<span class="font-medium text-default/70">Ссылка:</span>
-														{{ item.requirement_ref }}
-													</p>
-												</div>
-
-												<div class="space-y-1.5">
-													<p class="text-xs font-semibold uppercase tracking-wide text-muted">
-														Значение из предложения
-													</p>
-													<p v-if="item.offer_value"
-														class="text-sm whitespace-pre-wrap leading-relaxed">
-														{{ item.offer_value }}
-													</p>
-													<p v-else class="text-sm text-muted italic">
-														Не указано в КП
-													</p>
-													<p v-if="item.offer_ref" class="text-xs text-muted">
-														<span class="font-medium text-default/70">Ссылка:</span>
-														{{ item.offer_ref }}
-													</p>
-												</div>
-
-												<div class="space-y-1.5">
-													<p class="text-xs font-semibold uppercase tracking-wide text-muted">
-														Объяснение
-													</p>
-													<p class="text-sm text-default/80 whitespace-pre-wrap leading-relaxed">
-														{{ item.explanation }}
-													</p>
-												</div>
-											</div>
-										</div>
-									</UCard>
+								<div v-show="isResultsKpExpanded(group.id)">
+									<RequirementResultsTree
+										:sections="getResultTreeForGroup(group).sections"
+										:unmapped="getResultTreeForGroup(group).unmapped"
+										:scope-id="`results-kp-${group.id}`"
+										:default-kp-filename="group.filename"
+										:is-item-expanded="isItemExpanded"
+										:toggle-item-expand="toggleItemExpand"
+										:tz-selected-indices="tzSelectedIndices"
+										:belongs-to-primary-kp="belongsToPrimaryKp"
+										@toggle-select="toggleTzSelect"
+									/>
 								</div>
 							</section>
 
@@ -541,7 +446,15 @@
 							<div class="space-y-3 shrink-0">
 								<p v-if="primaryKpLabel" class="text-xs text-muted">
 									Основное КП:
-									<span class="text-default font-medium">{{ primaryKpLabel }}</span>
+									<button
+										v-if="analysis?.kp_filename"
+										type="button"
+										class="text-primary hover:underline font-medium"
+										@click="openKpFile(analysis.kp_filename)"
+									>
+										{{ primaryKpLabel }}
+									</button>
+									<span v-else class="text-default font-medium">{{ primaryKpLabel }}</span>
 								</p>
 								<UFormField label="Организация" required>
 									<UInput ref="docxOrganizationInput" v-model="docxOrganization"
@@ -587,6 +500,7 @@
 											bg-elevated/30 px-2 py-2 cursor-pointer hover:bg-elevated/50">
 										<UCheckbox
 											:model-value="tzSelectedIndices.includes(item._index)"
+											:color="getTzItemStatusColor(item.status)"
 											class="shrink-0 mt-0.5"
 											@update:model-value="(v) => toggleTzSelect(item._index, v === true)"
 											@click.stop />
@@ -608,6 +522,7 @@
 											bg-elevated/30 px-2 py-2 cursor-pointer hover:bg-elevated/50">
 										<UCheckbox
 											:model-value="tzSelectedIndices.includes(item._index)"
+											:color="getTzItemStatusColor(item.status)"
 											class="shrink-0 mt-0.5"
 											@update:model-value="(v) => toggleTzSelect(item._index, v === true)"
 											@click.stop />
@@ -679,6 +594,7 @@ import {
 	TZAnalysisRunStatus,
 } from '#shared/types'
 import {
+	buildResultTree,
 	countRequirementRows,
 	flattenRequirementsToRows,
 	requirementsNonempty,
@@ -686,7 +602,10 @@ import {
 	rowsToHierarchy,
 	type EditableRequirementRow,
 } from '#shared/utils/requirementsStruct'
+import RequirementResultsTree from '~/components/tz-analysis/RequirementResultsTree.vue'
+import RequirementTreeEditor from '~/components/tz-analysis/RequirementTreeEditor.vue'
 import { useRunStatusPolling } from '~/composables/useRunStatusPolling'
+import { useTzAnalysisFiles } from '~/composables/useTzAnalysisFiles'
 
 definePageMeta({ layout: 'default' })
 
@@ -713,6 +632,11 @@ let kpSlotCounter = 0
 
 const loading = ref(true)
 const analysis = ref<TZAnalysisSession | null>(null)
+const { openTzFile, openKpFile } = useTzAnalysisFiles(
+	computed(() => analysis.value?.id),
+	computed(() => analysis.value?.tz_filename),
+)
+provide('tzAnalysisFiles', { openTzFile, openKpFile })
 const tzFile = ref<File | null>(null)
 const kpSlots = ref<KpSlot[]>([{ id: ++kpSlotCounter, file: null }])
 const tzAnalyzing = ref(false)
@@ -875,6 +799,22 @@ const filteredTzItems = computed((): TZItemView[] => {
 			tzStatusFilter.value === 'all' || item.status === tzStatusFilter.value,
 		)
 })
+
+const resultTreesByGroupId = computed(() => {
+	const map = new Map<number, ReturnType<typeof buildResultTree>>()
+	for (const group of kpItemGroups.value) {
+		map.set(
+			group.id,
+			buildResultTree(analysis.value?.requirements_tz, group.items),
+		)
+	}
+	return map
+})
+
+function getResultTreeForGroup(group: KpItemGroup) {
+	return resultTreesByGroupId.value.get(group.id)
+		?? buildResultTree(analysis.value?.requirements_tz, group.items)
+}
 
 const kpItemGroups = computed((): KpItemGroup[] => {
 	const items = filteredTzItems.value
@@ -1694,13 +1634,6 @@ async function runKpAnalysis() {
 	} finally {
 		kpAnalyzing.value = false
 	}
-}
-
-function matchBorderClass(status: TZAnalysisStatus) {
-	if (status === 'met') return 'border-l-4 border-success'
-	if (status === 'partial') return 'border-l-4 border-warning'
-	if (status === 'missing') return 'border-l-4 border-error'
-	return 'border-l-4 border-neutral-300 dark:border-neutral-600'
 }
 
 function openLetterModal() {
