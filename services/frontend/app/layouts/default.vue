@@ -75,7 +75,7 @@ const navItems = computed<NavigationMenuItem[]>(() => [
 		],
 	},
 	{
-		label: 'Анализ ТЗ',
+		label: 'Анализ Предложений',
 		icon: 'i-lucide-file-search',
 		active: isTzAnalysisActive.value,
 		to: '/tz-analysis',

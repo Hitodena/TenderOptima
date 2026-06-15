@@ -3,21 +3,32 @@
 		<div class="max-w-3xl mx-auto">
 
 			<div class="mb-12">
-				<div class="text-center mb-8">
+				<div class="text-center mb-6">
 					<h1 class="text-3xl font-bold text-highlighted mb-2">Поиск поставщиков</h1>
 					<p class="text-muted text-sm">Найдите подходящих поставщиков. Поиск может занять до нескольких минут.</p>
 				</div>
 
+				<div class="flex justify-end mb-4">
+					<UButton to="/requests/history" size="lg" variant="outline" color="neutral"
+						leading-icon="i-lucide-history">
+						История запросов
+					</UButton>
+				</div>
+
 				<UCard class="shadow-sm mb-4">
 					<UForm :schema="schema" :state="form" @submit="handleSearch" class="space-y-5">
-						<UFormField label="Что ищете?" name="query" required hint="Минимум 3 символа">
+						<UFormField label="Что ищете?" name="query" required>
 							<UInput v-model="form.query" placeholder="Промышленные насосы, картонные коробки..."
-								icon="i-lucide-search" size="lg" class="w-full" />
+								icon="i-lucide-search" size="lg" class="w-full">
+								<template #trailing>
+									<SearchQueryRulesHint />
+								</template>
+							</UInput>
 						</UFormField>
 
-						<UFormField label="Регион доставки" name="delivery_region" required>
-							<UInput v-model="form.delivery_region" placeholder="Минск" icon="i-lucide-map-pin" size="lg"
-								class="w-full" />
+						<UFormField label="Регион поиска" name="delivery_region" required>
+							<UInput v-model="form.delivery_region" placeholder="Республика Беларусь"
+								icon="i-lucide-map-pin" size="lg" class="w-full" />
 						</UFormField>
 
 						<UButton type="submit" block size="lg" leading-icon="i-lucide-search" :disabled="loading">
@@ -28,17 +39,6 @@
 							:description="error" />
 					</UForm>
 				</UCard>
-
-				<p class="text-xs text-muted text-center">
-					Результаты сохранятся в истории. Вы сможете выбрать каким поставщикам отправить запрос.
-				</p>
-			</div>
-
-			<div class="text-center">
-				<UButton to="/requests/history" size="lg" variant="outline" color="neutral" leading-icon="i-lucide-history">
-					История запросов
-				</UButton>
-				<p class="text-xs text-muted mt-2">Активные, в обработке и завершённые</p>
 			</div>
 
 		</div>
@@ -48,6 +48,7 @@
 <script lang="ts" setup>
 import type { RequestResponse } from '#shared/types'
 import { z } from 'zod'
+import SearchQueryRulesHint from '~/components/requests/SearchQueryRulesHint.vue'
 
 const { post } = useApi()
 

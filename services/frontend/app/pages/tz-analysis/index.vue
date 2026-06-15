@@ -2,16 +2,23 @@
 	<UContainer class="py-8 lg:py-12">
 		<div class="max-w-3xl mx-auto">
 			<div class="mb-12">
-				<div class="text-center mb-8">
-					<h1 class="text-3xl font-bold text-highlighted mb-2">Анализ ТЗ</h1>
+				<div class="text-center mb-6">
+					<h1 class="text-3xl font-bold text-highlighted mb-2">Анализ технических предложений</h1>
 					<p class="text-muted text-sm">
 						Сравните техническое задание с коммерческим предложением поставщика
 					</p>
 				</div>
 
+				<div class="flex justify-end mb-4">
+					<UButton to="/tz-analysis/history" size="lg" variant="outline" color="neutral"
+						leading-icon="i-lucide-history">
+						История анализов
+					</UButton>
+				</div>
+
 				<UCard class="shadow-sm mb-4">
 					<UForm :schema="schema" :state="form" @submit="handleCreate" class="space-y-5">
-						<UFormField label="Название анализа" name="title" required hint="Минимум 3 символа">
+						<UFormField label="Название" name="title" required>
 							<UInput v-model="form.title" placeholder="Сравнение КП ООО «Поставщик» с ТЗ №12..."
 								icon="i-lucide-file-search" size="lg" class="w-full" />
 						</UFormField>
@@ -24,19 +31,6 @@
 							:description="error" />
 					</UForm>
 				</UCard>
-
-				<p class="text-xs text-muted text-center">
-					Сначала создаётся черновик. Затем загрузите ТЗ на странице анализа,
-					проверьте извлечённые требования и загрузите КП.
-				</p>
-			</div>
-
-			<div class="text-center">
-				<UButton to="/tz-analysis/history" size="lg" variant="outline" color="neutral"
-					leading-icon="i-lucide-history">
-					История анализов
-				</UButton>
-				<p class="text-xs text-muted mt-2">Черновики, активные и завершённые</p>
 			</div>
 		</div>
 	</UContainer>
