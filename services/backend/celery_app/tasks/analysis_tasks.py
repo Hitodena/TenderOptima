@@ -7,6 +7,7 @@ from backend.celery_app.celery_config import app
 from backend.celery_app.utils import async_task, get_db_manager
 from backend.core import get_config
 from backend.db.dao import (
+    EmailMessageDAO,
     ResponseAnalysisDAO,
     TZAnalysisDAO,
     TZAnalysisSupplierDAO,
@@ -44,9 +45,41 @@ _KP_COMPARE_SOFT_LIMIT = 6600  # 110 min
 _KP_COMPARE_TIME_LIMIT = 7200  # 2 h
 
 
+async def _merge_prior_matches(
+    session,
+    request_supplier_id: uuid.UUID,
+    before_dt,
+    exclude_id: uuid.UUID,
+) -> dict[str, str]:
+    """Merge offer_value per requirement from earlier analyzed messages."""
+    prior = await EmailMessageDAO.get_incoming_before(
+        session,
+        request_supplier_id,
+        before_dt,
+        exclude_id=exclude_id,
+    )
+    merged: dict[str, str] = {}
+    for msg in prior:
+        analysis = msg.analysis
+        if not analysis or analysis.status != TZAnalysisRunStatus.ACTIVE.value:
+            continue
+        raw = analysis.raw_llm_response or {}
+        matches = raw.get("matches") or []
+        if not isinstance(matches, list):
+            continue
+        for item in matches:
+            if not isinstance(item, dict):
+                continue
+            req = str(item.get("requirement") or "").strip()
+            value = item.get("offer_value")
+            if req and value is not None and str(value).strip():
+                merged[req] = str(value)
+    return merged
+
+
 async def _load_email_analysis_context(
     message_id: uuid.UUID,
-) -> tuple[str, str, list[Path] | None] | None:
+) -> tuple[str, str, list[Path] | None, dict[str, str]] | None:
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
 
@@ -79,7 +112,18 @@ async def _load_email_analysis_context(
         for att in message.attachments or []:
             if isinstance(att, dict) and att.get("path"):
                 paths.append(Path(att["path"]))
-        return requirements, message.raw_body or "", paths or None
+        current_matches = await _merge_prior_matches(
+            session,
+            message.request_supplier_id,
+            message.received_at,
+            exclude_id=message.id,
+        )
+        return (
+            requirements,
+            message.raw_body or "",
+            paths or None,
+            current_matches,
+        )
 
 
 @app.task(
@@ -499,7 +543,7 @@ async def run_email_analysis(self, message_id: str) -> dict:
         )
         return {"error": "not_found", "message_id": message_id}
 
-    requirements, email_body, attachment_paths = ctx
+    requirements, email_body, attachment_paths, current_matches = ctx
     if not requirements:
         async with db_manager.session() as session:
             row = await ResponseAnalysisDAO.get_by_response_id(session, mid)
@@ -516,6 +560,7 @@ async def run_email_analysis(self, message_id: str) -> dict:
             user_requirements=requirements,
             email_body=email_body,
             attachment_paths=attachment_paths,
+            existing_matches=current_matches or None,
         )
     except (UnsupportedFileTypeError, OcrNotAvailableError, ValueError) as exc:
         logger.warning(
@@ -549,6 +594,7 @@ async def run_email_analysis(self, message_id: str) -> dict:
         return {"error": "failed", "message_id": message_id}
 
     raw = result.model_dump(mode="json")
+    prev_params = current_matches or None
     async with db_manager.session() as session:
         existing = await ResponseAnalysisDAO.get_by_response_id(session, mid)
         if existing:
@@ -556,6 +602,7 @@ async def run_email_analysis(self, message_id: str) -> dict:
                 session,
                 existing.id,
                 raw_llm_response=raw,
+                previous_parameters=prev_params,
                 llm_model=config.openai_model,
                 status=TZAnalysisRunStatus.ACTIVE.value,
             )
@@ -565,6 +612,7 @@ async def run_email_analysis(self, message_id: str) -> dict:
                 response_id=mid,
                 llm_model=config.openai_model,
                 raw_llm_response=raw,
+                previous_parameters=prev_params,
                 status=TZAnalysisRunStatus.ACTIVE.value,
             )
     logger.info("Email analysis task done", message_id=message_id)

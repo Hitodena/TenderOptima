@@ -1,21 +1,130 @@
+import csv
+import io
 import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_current_user, get_request_or_404, get_session
 from backend.api.responses.schemas import (
+    ComparisonResponse,
+    ComparisonSupplier,
     EmailMessageResponse,
     Message,
+    RefreshAllResponse,
     ReplyPayload,
     ThreadSummary,
 )
+from backend.celery_app.tasks.analysis_tasks import run_email_analysis
 from backend.celery_app.tasks.email_tasks import send_reply
-from backend.db.dao import EmailMessageDAO, RequestSupplierDAO
-from backend.db.models import User
+from backend.db.dao import (
+    EmailMessageDAO,
+    RequestSupplierDAO,
+    ResponseAnalysisDAO,
+)
+from backend.db.models import Request, User
+from backend.enums import TZAnalysisRunStatus
+from backend.schemas.analysis import EmailAnalysisResult
 
 router = APIRouter(prefix="/requests", tags=["Responses"])
+
+STATUS_LABELS = {
+    "met": "Выполнено",
+    "partial": "Частично",
+    "missing": "Не закрыто",
+    "not_found": "Не упомянуто",
+}
+
+
+def _requirements_list(request: Request) -> list[str]:
+    params = request.additional_params
+    if not params or not isinstance(params, list):
+        return []
+    return [str(p).strip() for p in params if str(p).strip()]
+
+
+def _match_maps_from_analysis(
+    raw: dict | None,
+) -> tuple[dict[str, str | None], dict[str, str | None]]:
+    if not raw:
+        return {}, {}
+    try:
+        result = EmailAnalysisResult(**raw)
+    except Exception:
+        return {}, {}
+    values: dict[str, str | None] = {}
+    statuses: dict[str, str | None] = {}
+    for match in result.matches:
+        req = match.requirement.strip()
+        values[req] = match.offer_value
+        statuses[req] = match.status.value
+    return values, statuses
+
+
+async def _latest_analyzed_incoming(session, rs_id: uuid.UUID):
+    messages = await EmailMessageDAO.get_incoming_with_analysis_by_request_supplier_id(
+        session, rs_id
+    )
+    for message in messages:
+        analysis = message.analysis
+        if (
+            analysis
+            and analysis.status == TZAnalysisRunStatus.ACTIVE.value
+            and analysis.raw_llm_response
+        ):
+            return message
+    return None
+
+
+async def _build_comparison(
+    session: AsyncSession,
+    request: Request,
+) -> ComparisonResponse:
+    requirements = _requirements_list(request)
+    suppliers_rows: list[ComparisonSupplier] = []
+    enabled = await RequestSupplierDAO.get_enabled_by_request(
+        session, request.id
+    )
+    for rs in enabled:
+        if not rs.supplier:
+            continue
+        analyzed = await _latest_analyzed_incoming(session, rs.id)
+        values: dict[str, str | None] = {req: None for req in requirements}
+        previous_values: dict[str, str | None] = {
+            req: None for req in requirements
+        }
+        statuses: dict[str, str | None] = {req: None for req in requirements}
+        if analyzed and analyzed.analysis:
+            analysis = analyzed.analysis
+            match_values, match_statuses = _match_maps_from_analysis(
+                analysis.raw_llm_response
+            )
+            prev = analysis.previous_parameters
+            prev_map = prev if isinstance(prev, dict) else {}
+            for req in requirements:
+                if req in match_values:
+                    values[req] = match_values[req]
+                if req in match_statuses:
+                    statuses[req] = match_statuses[req]
+                if req in prev_map and prev_map[req] is not None:
+                    previous_values[req] = str(prev_map[req])
+        suppliers_rows.append(
+            ComparisonSupplier(
+                rs_id=str(rs.id),
+                company_name=rs.supplier.company_name,
+                main_email=rs.supplier.main_email,
+                values=values,
+                previous_values=previous_values,
+                statuses=statuses,
+            )
+        )
+    return ComparisonResponse(
+        requirements=requirements,
+        suppliers=suppliers_rows,
+    )
 
 
 @router.get(
@@ -103,3 +212,129 @@ async def post_reply(
 
     send_reply.delay(str(rs_id), payload.body, None)  # type: ignore
     return {"status": "queued", "rs_id": str(rs_id)}
+
+
+@router.get(
+    "/{request_id}/analysis/comparison",
+    response_model=ComparisonResponse,
+    summary="Compare supplier responses by request requirements",
+)
+async def get_analysis_comparison(
+    request_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> ComparisonResponse:
+    request = await get_request_or_404(request_id, session, current_user)
+    return await _build_comparison(session, request)
+
+
+@router.get(
+    "/{request_id}/analysis/comparison.csv",
+    summary="Export supplier comparison as CSV",
+)
+async def export_analysis_comparison_csv(
+    request_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> StreamingResponse:
+    request = await get_request_or_404(request_id, session, current_user)
+    comparison = await _build_comparison(session, request)
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    header = ["Требование"] + [
+        f"{s.company_name} ({s.main_email})" for s in comparison.suppliers
+    ]
+    writer.writerow(header)
+
+    for req in comparison.requirements:
+        row = [req]
+        for supplier in comparison.suppliers:
+            value = supplier.values.get(req)
+            status_key = supplier.statuses.get(req)
+            status_label = (
+                STATUS_LABELS.get(status_key, status_key) if status_key else ""
+            )
+            cell = value or ""
+            if status_label:
+                cell = f"{cell} [{status_label}]" if cell else status_label
+            row.append(cell)
+        writer.writerow(row)
+
+    buffer.seek(0)
+    filename = f"request_{request_id}_comparison.csv"
+    return StreamingResponse(
+        iter([buffer.getvalue()]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post(
+    "/{request_id}/analysis/refresh-all",
+    response_model=RefreshAllResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Queue analysis for all unanalyzed incoming messages",
+)
+async def refresh_all_analysis(
+    request_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> RefreshAllResponse:
+    request = await get_request_or_404(request_id, session, current_user)
+    if not _requirements_list(request):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Request has no additional_params requirements",
+        )
+
+    enabled = await RequestSupplierDAO.get_enabled_by_request(
+        session, request_id
+    )
+    queued = 0
+    for rs in enabled:
+        latest = (
+            await EmailMessageDAO.get_latest_incoming_by_request_supplier_id(
+                session, rs.id
+            )
+        )
+        if not latest:
+            continue
+
+        existing = await ResponseAnalysisDAO.get_by_response_id(
+            session, latest.id
+        )
+        if existing and existing.status in (
+            TZAnalysisRunStatus.ACTIVE.value,
+            TZAnalysisRunStatus.PROCESSING.value,
+        ):
+            continue
+
+        if existing:
+            await ResponseAnalysisDAO.update_fields(
+                session,
+                existing.id,
+                raw_llm_response=None,
+                previous_parameters=None,
+                llm_model="",
+                status=TZAnalysisRunStatus.PROCESSING.value,
+            )
+        else:
+            await ResponseAnalysisDAO.create(
+                session,
+                response_id=latest.id,
+                llm_model="",
+                raw_llm_response=None,
+                previous_parameters=None,
+                status=TZAnalysisRunStatus.PROCESSING.value,
+            )
+
+        run_email_analysis.delay(str(latest.id))  # type: ignore[attr-defined]
+        queued += 1
+
+    logger.info(
+        "Bulk email analysis queued",
+        request_id=str(request_id),
+        queued=queued,
+    )
+    return RefreshAllResponse(queued=queued)

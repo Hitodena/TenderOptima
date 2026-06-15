@@ -57,6 +57,7 @@ class ResponseAnalysis(IDMixinUUID, TimestampMixin, Base):
     )
     llm_model: Mapped[str] = mapped_column(nullable=False, default="")
     raw_llm_response: Mapped[dict | None] = mapped_column(JSON)
+    previous_parameters: Mapped[dict | None] = mapped_column(JSON)
     status: Mapped[str] = mapped_column(nullable=False, default="active")
 
     response: Mapped["EmailMessage"] = relationship(

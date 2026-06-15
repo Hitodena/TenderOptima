@@ -201,7 +201,26 @@ export interface EmailAnalysisResponse {
 	message_id: string;
 	status?: TZAnalysisRunStatus;
 	parameters: Record<string, string>;
+	previous_parameters?: Record<string, string> | null;
 	matches: RequirementMatch[];
+}
+
+export interface ComparisonSupplier {
+	rs_id: string;
+	company_name: string;
+	main_email: string;
+	values: Record<string, string | null>;
+	previous_values: Record<string, string | null>;
+	statuses: Record<string, string | null>;
+}
+
+export interface ComparisonResponse {
+	requirements: string[];
+	suppliers: ComparisonSupplier[];
+}
+
+export interface RefreshAllResponse {
+	queued: number;
 }
 
 export interface RequirementNode {

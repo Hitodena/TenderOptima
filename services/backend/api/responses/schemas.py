@@ -162,3 +162,25 @@ class ReplyPayload(BaseModel):
     """Payload for POST reply in a supplier thread."""
 
     body: Annotated[str, Field(min_length=1, max_length=50000)]
+
+
+class ComparisonSupplier(BaseModel):
+    """One supplier column in the comparison table."""
+
+    rs_id: str
+    company_name: str
+    main_email: str
+    values: dict[str, str | None]
+    previous_values: dict[str, str | None]
+    statuses: dict[str, str | None]
+
+
+class ComparisonResponse(BaseModel):
+    """Horizontal comparison of requirements across suppliers."""
+
+    requirements: list[str]
+    suppliers: list[ComparisonSupplier]
+
+
+class RefreshAllResponse(BaseModel):
+    queued: int

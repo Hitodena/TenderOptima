@@ -73,12 +73,21 @@ def _analysis_to_response(
     message_id: uuid.UUID,
     row,
 ) -> EmailAnalysisResponse:
+    prev = row.previous_parameters if row else None
+    if isinstance(prev, dict):
+        previous_parameters = {
+            str(k): str(v) for k, v in prev.items() if v is not None
+        }
+    else:
+        previous_parameters = None
+
     if row.status == TZAnalysisRunStatus.PROCESSING.value:
         return EmailAnalysisResponse(
             message_id=str(message_id),
             status=TZAnalysisRunStatus.PROCESSING,
             parameters={},
             matches=[],
+            previous_parameters=previous_parameters,
         )
     if row.status == TZAnalysisRunStatus.FAILED.value:
         return EmailAnalysisResponse(
@@ -86,6 +95,7 @@ def _analysis_to_response(
             status=TZAnalysisRunStatus.FAILED,
             parameters={},
             matches=[],
+            previous_parameters=previous_parameters,
         )
     if not row.raw_llm_response:
         return EmailAnalysisResponse(
@@ -93,11 +103,13 @@ def _analysis_to_response(
             status=TZAnalysisRunStatus(row.status),
             parameters={},
             matches=[],
+            previous_parameters=previous_parameters,
         )
     result = EmailAnalysisResult(**row.raw_llm_response)
     return EmailAnalysisResponse(
         message_id=str(message_id),
         status=TZAnalysisRunStatus(row.status),
+        previous_parameters=previous_parameters,
         **result.model_dump(),
     )
 
@@ -132,6 +144,7 @@ async def analyze_response(
             session,
             existing.id,
             raw_llm_response=None,
+            previous_parameters=None,
             llm_model="",
             status=TZAnalysisRunStatus.PROCESSING.value,
         )
@@ -204,14 +217,31 @@ async def patch_response_analysis(
         )
 
     data = dict(row.raw_llm_response)
-    params = {k: (v or "") for k, v in body.parameters.items()}
-    data["parameters"] = params
+    if body.matches:
+        by_req = {
+            str(m.get("requirement", "")).strip(): dict(m)
+            for m in data.get("matches") or []
+            if isinstance(m, dict) and str(m.get("requirement", "")).strip()
+        }
+        for patch_match in body.matches:
+            req = patch_match.requirement.strip()
+            if req not in by_req:
+                continue
+            by_req[req]["offer_value"] = patch_match.offer_value
+        data["matches"] = list(by_req.values())
     await ResponseAnalysisDAO.update_fields(
         session, row.id, raw_llm_response=data
     )
     result = EmailAnalysisResult(**data)
+    prev = row.previous_parameters
+    previous_parameters = (
+        {str(k): str(v) for k, v in prev.items() if v is not None}
+        if isinstance(prev, dict)
+        else None
+    )
     return EmailAnalysisResponse(
         message_id=str(message_id),
         status=TZAnalysisRunStatus.ACTIVE,
+        previous_parameters=previous_parameters,
         **result.model_dump(),
     )

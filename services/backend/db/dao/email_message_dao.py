@@ -108,6 +108,50 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
         return result.scalar_one_or_none()
 
     @classmethod
+    async def get_incoming_before(
+        cls,
+        session: AsyncSession,
+        request_supplier_id: uuid.UUID,
+        before_dt,
+        exclude_id: uuid.UUID | None = None,
+    ) -> list[EmailMessage]:
+        """Incoming messages before *before_dt*, oldest first, with analysis."""
+        stmt = (
+            select(cls.model)
+            .where(
+                cls.model.request_supplier_id == request_supplier_id,
+                cls.model.direction == EmailMessageDirection.INCOMING.value,
+            )
+            .options(selectinload(cls.model.analysis))
+            .order_by(cls.model.received_at.asc().nulls_last())
+        )
+        if before_dt is not None:
+            stmt = stmt.where(cls.model.received_at < before_dt)
+        if exclude_id is not None:
+            stmt = stmt.where(cls.model.id != exclude_id)
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
+
+    @classmethod
+    async def get_incoming_with_analysis_by_request_supplier_id(
+        cls,
+        session: AsyncSession,
+        request_supplier_id: uuid.UUID,
+    ) -> list[EmailMessage]:
+        """All incoming messages for a supplier, newest first, with analysis."""
+        stmt = (
+            select(cls.model)
+            .where(
+                cls.model.request_supplier_id == request_supplier_id,
+                cls.model.direction == EmailMessageDirection.INCOMING.value,
+            )
+            .options(selectinload(cls.model.analysis))
+            .order_by(cls.model.received_at.desc().nulls_last())
+        )
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
+
+    @classmethod
     async def get_by_imap_id(
         cls, session: AsyncSession, imap_id: str
     ) -> EmailMessage | None:
