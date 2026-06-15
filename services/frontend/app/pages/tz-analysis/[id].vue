@@ -87,9 +87,28 @@
 			</template>
 
 			<template v-else-if="isTzReviewPhase || needsRequirementsReview || hasConfirmedResults">
-				<UTabs v-model="activeContentTab" :items="contentTabItems" :ui="{ list: 'mb-6' }">
+				<UAlert
+					v-if="isCompleted && hasKpContent"
+					color="neutral"
+					variant="soft"
+					icon="i-lucide-archive"
+					class="mb-6"
+					title="Анализ завершён"
+					description="Просмотр результатов доступен. Редактирование и загрузка новых КП недоступны."
+				/>
+				<UAlert
+					v-else-if="isAnalysisClosed"
+					color="neutral"
+					variant="soft"
+					icon="i-lucide-lock"
+					class="mb-6"
+					title="Анализ завершён"
+					description="Сравнение с КП не выполнялось. Добавление поставщиков и запуск анализа КП недоступны."
+				/>
+
+				<UTabs v-model="activeContentTab" :items="visibleContentTabItems" :ui="{ list: 'mb-6' }">
 					<template #tz>
-						<div v-if="isTzReviewPhase || needsRequirementsReview"
+						<div v-if="(isTzReviewPhase || needsRequirementsReview) && !isAnalysisClosed"
 							class="mb-6 rounded-xl border border-warning/25 bg-warning/10 p-4 sm:p-5">
 							<div class="flex gap-3 min-w-0">
 								<UIcon name="i-lucide-info" class="w-5 h-5 shrink-0 text-warning mt-0.5" />
@@ -127,13 +146,13 @@
 							<div class="max-h-[65vh] overflow-y-auto pr-1">
 								<RequirementTreeEditor v-if="editableTzCount > 0" :rows="editableRequirementsTz"
 									:scope-id="hasConfirmedResults ? 'tz-results' : 'tz-review'"
-									:readonly="hasConfirmedResults" show-heading-hint @remove="removeTzRequirement" />
+									:readonly="hasConfirmedResults || isCompleted" show-heading-hint @remove="removeTzRequirement" />
 								<p v-else class="text-sm text-muted text-center py-4">
 									Нет извлечённых требований
 								</p>
 							</div>
 
-							<template v-if="!hasConfirmedResults" #footer>
+							<template v-if="!hasConfirmedResults && !isCompleted" #footer>
 								<UButton type="button" variant="outline" size="sm" leading-icon="i-lucide-plus"
 									@click="addTzRequirement">
 									Добавить требование
@@ -148,14 +167,19 @@
 							: ''">
 							<TzAnalysisSuppliersPanel v-if="showSuppliersSidebar && analysis?.id"
 								:analysis-id="analysis.id" :suppliers="suppliers" :file-accept="fileAccept"
-								:readonly="hasConfirmedResults || needsRequirementsReview"
+								:readonly="hasConfirmedResults || needsRequirementsReview || isCompleted"
 								:selected-supplier-id="selectedSupplierId" :compact="!isTzReviewPhase"
 								@select="selectedSupplierId = $event"
 								@open-kp="({ supplierId, filename }) => openKpFile(filename, supplierId)"
 								@updated="refreshAnalysis" />
 
 							<div class="min-w-0 space-y-6">
-								<template v-if="isTzReviewPhase">
+								<template v-if="isAnalysisClosed">
+									<UAlert color="neutral" variant="soft" icon="i-lucide-lock"
+										description="Анализ завершён без сравнения с КП. Этот раздел недоступен." />
+								</template>
+
+								<template v-else-if="isTzReviewPhase && !isCompleted">
 									<div class="flex flex-wrap items-center gap-2">
 										<UButton variant="outline" :loading="savingRequirements"
 											@click="saveTzRequirements">
@@ -197,7 +221,7 @@
 												</button>
 											</template>
 
-											<template v-if="isReviewKpExpanded(group.id)" #footer>
+											<template v-if="isReviewKpExpanded(group.id) && !isCompleted" #footer>
 												<UButton type="button" variant="outline" size="sm"
 													leading-icon="i-lucide-plus" @click="addKpRequirement(group.key)">
 													Добавить предложение
@@ -208,6 +232,7 @@
 												class="max-h-[50vh] overflow-y-auto pr-1">
 												<RequirementTreeEditor v-if="countRequirementRows(group.items) > 0"
 													:rows="group.items" :scope-id="`review-kp-${group.id}`"
+													:readonly="isCompleted"
 													@remove="(idx: number) => removeKpRequirement(group.key, idx)" />
 												<p v-else class="text-sm text-muted text-center py-4">
 													Нет извлечённых предложений
@@ -216,7 +241,7 @@
 										</UCard>
 									</div>
 
-									<div class="flex flex-wrap items-center gap-2">
+									<div v-if="!isCompleted" class="flex flex-wrap items-center gap-2">
 										<UButton variant="outline" :loading="savingRequirements"
 											@click="saveRequirements">
 											Сохранить изменения
@@ -226,6 +251,11 @@
 											Подтвердить и запустить сравнение
 										</UButton>
 									</div>
+								</template>
+
+								<template v-else-if="isCompleted && isTzReviewPhase">
+									<UAlert color="neutral" variant="soft" icon="i-lucide-archive"
+										description="Сравнение с КП не выполнялось. Анализ завершён — запуск сравнения недоступен." />
 								</template>
 
 								<template v-else-if="hasConfirmedResults">
@@ -545,11 +575,11 @@ const { openTzFile, openKpFile } = useTzAnalysisFiles(
 provide('tzAnalysisFiles', { openTzFile, openKpFile })
 
 const activeContentTab = ref('tz')
+const selectedSupplierId = ref<string | null>(null)
 const contentTabItems = [
 	{ label: 'ТЗ', value: 'tz', slot: 'tz', icon: 'i-lucide-file-text' },
 	{ label: 'КП / Результаты', value: 'kp', slot: 'kp', icon: 'i-lucide-file-spreadsheet' },
 ]
-const selectedSupplierId = ref<string | null>(null)
 const tzFile = ref<File | null>(null)
 const kpSlots = ref<KpSlot[]>([{ id: ++kpSlotCounter, file: null }])
 const tzAnalyzing = ref(false)
@@ -697,14 +727,39 @@ const needsRequirementsReview = computed(() =>
 const hasConfirmedResults = computed(() =>
 	hasResults.value && Boolean(analysis.value?.confirmed),
 )
-const suppliers = computed(() => analysis.value?.suppliers ?? [])
-const showSuppliersSidebar = computed(() =>
-	isTzReviewPhase.value
-	|| needsRequirementsReview.value
-	|| hasConfirmedResults.value,
+const isCompleted = computed(() =>
+	analysis.value?.status === TZAnalysisRunStatus.COMPLETED,
 )
+const suppliers = computed(() => analysis.value?.suppliers ?? [])
 const hasSuppliersWithFiles = computed(() =>
 	suppliers.value.some((supplier) => supplier.kp_filenames.length > 0),
+)
+const hasKpContent = computed(() => {
+	if (!analysis.value) return false
+	if (analysis.value.confirmed && (analysis.value.items?.length ?? 0) > 0) {
+		return true
+	}
+	if (analysis.value.kp_filenames?.length || analysis.value.kp_filename) {
+		return true
+	}
+	if (hasSuppliersWithFiles.value) return true
+	return Object.values(analysis.value.requirements_kp ?? {}).some(
+		(items) => requirementsNonempty(items),
+	)
+})
+const isAnalysisClosed = computed(() =>
+	isCompleted.value && !hasKpContent.value,
+)
+const visibleContentTabItems = computed(() =>
+	isAnalysisClosed.value
+		? contentTabItems.filter((item) => item.value === 'tz')
+		: contentTabItems,
+)
+const showSuppliersSidebar = computed(() =>
+	(isTzReviewPhase.value
+		|| needsRequirementsReview.value
+		|| hasConfirmedResults.value)
+	&& !isAnalysisClosed.value,
 )
 const primaryStatsSummary = computed(() => {
 	const primary = analysis.value?.kp_filename
@@ -1109,7 +1164,8 @@ const hasAnyKpFile = computed(() =>
 )
 
 const canRunKpAnalysis = computed(() =>
-	requirementsRowsNonempty(editableRequirementsTz.value)
+	!isCompleted.value
+	&& requirementsRowsNonempty(editableRequirementsTz.value)
 	&& hasSuppliersWithFiles.value,
 )
 
@@ -1411,6 +1467,10 @@ async function fetchLetterPreview() {
 		previewLoading.value = false
 	}
 }
+
+watch(isAnalysisClosed, (closed) => {
+	if (closed) activeContentTab.value = 'tz'
+})
 
 watch(
 	[showLetterModal, docxOrganization, docxDeadline, tzSelectedIndices],

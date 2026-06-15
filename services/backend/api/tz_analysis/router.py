@@ -78,6 +78,14 @@ router = APIRouter(prefix="/tz-analysis", tags=["TZ Analysis"])
 config = get_config()
 
 
+def _ensure_supplier_mutations_allowed(row) -> None:
+    if row.status != TZAnalysisRunStatus.ACTIVE.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Analysis is closed for supplier changes",
+        )
+
+
 async def _session_response(
     session: AsyncSession,
     row,
@@ -816,6 +824,7 @@ async def rename_tz_analysis_supplier(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> TZAnalysisSupplierItem:
     row = await _get_owned_analysis(session, analysis_id, current_user.id)
+    _ensure_supplier_mutations_allowed(row)
     if row.confirmed:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -865,6 +874,7 @@ async def delete_tz_analysis_supplier(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> Response:
     row = await _get_owned_analysis(session, analysis_id, current_user.id)
+    _ensure_supplier_mutations_allowed(row)
     if row.confirmed:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
