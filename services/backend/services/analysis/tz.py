@@ -251,49 +251,57 @@ async def _extract_hierarchical(
     return hierarchy
 
 
+def _heading_node_key(key: object) -> str:
+    """Return canonical dotted key as stored in normalized hierarchy."""
+    return str(key).replace("/", ".")
+
+
 def _collect_empty_headings(
     hierarchy: dict,
 ) -> list[tuple[str, list[str]]]:
     """Return heading keys with empty text and sample child texts."""
     result: list[tuple[str, list[str]]] = []
 
-    def walk(nodes: dict, prefix: str = "") -> None:
+    def walk(nodes: dict) -> None:
         for key in sorted(nodes.keys(), key=lambda item: str(item)):
             node = nodes[key]
-            key_str = str(key)
-            full_key = f"{prefix}.{key_str}" if prefix else key_str
+            key_str = _heading_node_key(key)
             text = str(node.get("text") or "").strip()
             children = node.get("children") or {}
             if not text and children:
                 child_texts = [
                     entry[1] for entry in collect_leaf_entries(children)
                 ][:5]
-                if not child_texts:
-                    child_texts = [
-                        entry[1]
-                        for entry in collect_leaf_entries({key_str: node})
-                    ][:5]
-                result.append((full_key, child_texts))
+                result.append((key_str, child_texts))
             if children:
-                walk(children, full_key)
+                walk(children)
 
     walk(hierarchy)
     return result
+
+
+def _fallback_heading_name(key: str, child_texts: list[str]) -> str:
+    if child_texts:
+        sample = child_texts[0].strip()
+        if len(sample) > 80:
+            return f"{sample[:77].rstrip()}..."
+        return sample
+    return f"Раздел {key}"
 
 
 def _apply_heading_names(hierarchy: dict, names: dict[str, str]) -> dict:
     if not names:
         return hierarchy
 
-    def walk(nodes: dict[str, dict], path_prefix: str = "") -> None:
+    def walk(nodes: dict) -> None:
         for key, node in list(nodes.items()):
-            full_key = key if not path_prefix else f"{path_prefix}.{key}"
+            key_str = _heading_node_key(key)
             text = str(node.get("text") or "").strip()
             children = node.get("children") or {}
-            if not text and full_key in names:
-                node["text"] = names[full_key].strip()
+            if not text and key_str in names:
+                node["text"] = names[key_str].strip()
             if children:
-                walk(children, full_key)
+                walk(children)
 
     walk(hierarchy)
     return hierarchy
@@ -310,23 +318,23 @@ async def fill_empty_headings(
     if not empty:
         return hierarchy
 
+    logger.info(
+        "Empty headings detected",
+        analysis_id=analysis_id,
+        user_id=user_id,
+        count=len(empty),
+    )
+
+    names: dict[str, str] = {}
     system, user = build_heading_names_prompt(empty)
     try:
         raw = await llm_client.complete(system, user)
         parsed = HeadingNamesResult(**raw)
         names = {
-            str(key): str(value).strip()
+            _heading_node_key(key): str(value).strip()
             for key, value in parsed.headings.items()
             if str(value).strip()
         }
-        if names:
-            hierarchy = _apply_heading_names(hierarchy, names)
-            logger.info(
-                "Empty headings filled",
-                analysis_id=analysis_id,
-                user_id=user_id,
-                count=len(names),
-            )
     except (ValidationError, ValueError, TypeError) as exc:
         logger.warning(
             "Empty heading fill failed",
@@ -334,6 +342,29 @@ async def fill_empty_headings(
             user_id=user_id,
             error=str(exc),
         )
+
+    if not names:
+        names = {
+            key: _fallback_heading_name(key, child_texts)
+            for key, child_texts in empty
+        }
+        logger.info(
+            "Empty headings filled from child samples",
+            analysis_id=analysis_id,
+            user_id=user_id,
+            count=len(names),
+        )
+    else:
+        hierarchy = _apply_heading_names(hierarchy, names)
+        logger.info(
+            "Empty headings filled",
+            analysis_id=analysis_id,
+            user_id=user_id,
+            count=len(names),
+        )
+        return hierarchy
+
+    hierarchy = _apply_heading_names(hierarchy, names)
     return hierarchy
 
 

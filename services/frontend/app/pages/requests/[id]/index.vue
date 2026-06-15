@@ -104,7 +104,17 @@
 				</div>
 			</div>
 
-			<UCard class="mb-4 mt-4">
+			<UCard v-if="request.status === RequestStatus.SEARCHING" class="mb-4 mt-4 shadow-sm">
+				<div class="flex flex-col items-center justify-center py-20 gap-4 text-muted">
+					<UIcon name="i-lucide-loader" class="w-10 h-10 animate-spin text-warning" />
+					<p class="text-sm font-medium text-center">Поиск поставщиков</p>
+					<p class="text-xs text-center max-w-md">
+						Ожидайте результатов до 2 минут. Страница обновится автоматически.
+					</p>
+				</div>
+			</UCard>
+
+			<UCard v-else class="mb-4 mt-4">
 				<UInput v-model="supplierSearch" placeholder="Поиск поставщиков..." icon="i-lucide-search"
 					class="w-full sm:w-64 mb-3" size="lg" />
 
@@ -113,24 +123,13 @@
 						<UTable :data="filteredSuppliers" :columns="supplierColumns" :loading="loadingSuppliers"
 							:meta="{ class: { tr: getRowClass } }" @select="onRowSelect">
 							<template #empty>
-								<div v-if="request?.status !== RequestStatus.SEARCHING"
-									class="flex flex-col items-center justify-center py-12 gap-3">
+								<div class="flex flex-col items-center justify-center py-12 gap-3">
 									<UIcon name="i-lucide-users" class="w-10 h-10 text-muted" />
 									<p class="text-muted">Поставщики не найдены</p>
 									<UButton size="sm" variant="outline" color="primary"
 										leading-icon="i-lucide-user-plus" @click="showAddSupplier = true">
 										Добавить поставщика
 									</UButton>
-								</div>
-								<div v-else
-									class="flex flex-col items-center justify-center py-12 gap-4 w-full max-w-sm mx-auto px-4">
-									<UIcon name="i-lucide-search" class="w-10 h-10 text-warning" />
-									<div class="w-full text-center space-y-1">
-										<p class="text-sm font-medium">Поиск поставщиков в процессе</p>
-										<p class="text-xs text-muted">{{ searchRemainingLabel }}</p>
-									</div>
-									<UProgress v-model="searchProgress" :max="100" status color="warning" size="md"
-										class="w-full" />
 								</div>
 							</template>
 
@@ -271,11 +270,7 @@ const {
 	removeSupplier,
 } = useRequestDetail(id)
 
-const { searchProgress, searchRemainingLabel } = useSearchPolling(
-	id,
-	request,
-	() => fetchSuppliers(true),
-)
+useSearchPolling(id, request, () => fetchSuppliers(true))
 
 const showParamsModal = ref(false)
 const showAddSupplier = ref(false)

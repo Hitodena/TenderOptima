@@ -4,7 +4,6 @@ import { RequestStatus } from '#shared/types';
 import { useIntervalFn } from '@vueuse/core';
 
 const SEARCH_POLL_INTERVAL_MS = 5_000;
-const SEARCH_EXPECTED_DURATION_MS = 2 * 60 * 1000;
 
 export function useSearchPolling(
 	requestId: string,
@@ -14,33 +13,9 @@ export function useSearchPolling(
 	const { get } = useApi();
 	const toast = useToast();
 
-	const searchProgress = ref(0);
-	const searchStartedAt = ref<number | null>(null);
-
 	const isSearching = computed(
 		() => request.value?.status === RequestStatus.SEARCHING,
 	);
-
-	const searchRemainingLabel = computed(() => {
-		if (!searchStartedAt.value) return '';
-		if (searchProgress.value >= 99) return 'Завершение...';
-		const remainingMinutes = Math.ceil(
-			((100 - searchProgress.value) / 100) *
-				(SEARCH_EXPECTED_DURATION_MS / 60_000),
-		);
-		return remainingMinutes > 0
-			? `Осталось ~${remainingMinutes} мин`
-			: 'Завершение...';
-	});
-
-	function updateSearchProgress() {
-		if (!searchStartedAt.value) return;
-		const elapsed = Date.now() - searchStartedAt.value;
-		searchProgress.value = Math.min(
-			99,
-			Math.round((elapsed / SEARCH_EXPECTED_DURATION_MS) * 100),
-		);
-	}
 
 	async function pollSearchStatus() {
 		if (!request.value) return;
@@ -51,7 +26,7 @@ export function useSearchPolling(
 			request.value = updated;
 
 			if (updated.status !== RequestStatus.SEARCHING) {
-				stopSearchTimers();
+				stopSearchPolling();
 				await onSearchComplete();
 
 				if (updated.status === RequestStatus.ACTIVE) {
@@ -75,29 +50,18 @@ export function useSearchPolling(
 		}
 	}
 
-	function stopSearchTimers() {
-		pauseSearchProgress();
+	function stopSearchPolling() {
 		pauseSearchPolling();
 	}
 
 	function resetSearchTracking() {
-		stopSearchTimers();
-		searchProgress.value = 0;
-		searchStartedAt.value = null;
+		stopSearchPolling();
 	}
 
 	function startSearchTracking() {
-		if (searchStartedAt.value == null) {
-			searchStartedAt.value = Date.now();
-		}
-		updateSearchProgress();
-		resumeSearchProgress();
 		resumeSearchPolling();
 		void pollSearchStatus();
 	}
-
-	const { pause: pauseSearchProgress, resume: resumeSearchProgress } =
-		useIntervalFn(updateSearchProgress, 1_000, { immediate: false });
 
 	const { pause: pauseSearchPolling, resume: resumeSearchPolling } =
 		useIntervalFn(pollSearchStatus, SEARCH_POLL_INTERVAL_MS, {
@@ -116,9 +80,7 @@ export function useSearchPolling(
 	onUnmounted(resetSearchTracking);
 
 	return {
-		searchProgress,
 		isSearching,
-		searchRemainingLabel,
 		resetSearchTracking,
 	};
 }
