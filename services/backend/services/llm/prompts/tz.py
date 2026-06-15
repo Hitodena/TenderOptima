@@ -448,6 +448,19 @@ def build_comparison_chunk_prompt(
 4. Технические эквиваленты RU/EN:
 {_TECH_EQUIVALENTS}
 5. Числовые диапазоны: значение в диапазоне → met; «≥600» при «≥400» → met
+6. requirement_ref ОБЯЗАТЕЛЕН и должен содержать номер пункта ТЗ из списка \
+(формат: «ТЗ, п. 33.1: «цитата»»). Не оставляй requirement_ref пустым или null.
+7. Номер пункта бери из начала строки требования (до первой точки с пробелом).
+
+Пример корректного item:
+{{
+  "requirement": "33.1.1. Производительность: не менее 1200 кг/час",
+  "requirement_ref": "ТЗ, п. 33.1.1: «Производительность: не менее 1200 кг/час»",
+  "offer_value": "1200 кг/ч",
+  "offer_ref": "КП, п. 5: «1200 кг/ч»",
+  "explanation": "Производительность совпадает",
+  "status": "met"
+}}
 
 Верни ТОЛЬКО JSON:
 {{
@@ -471,4 +484,31 @@ def build_comparison_chunk_prompt(
         f"{tz_list}\n\n"
         f"### Предложения из КП ({kp_name}):\n{kp_list}"
     )
+    return system, user
+
+
+def build_heading_names_prompt(
+    empty_headings: list[tuple[str, list[str]]],
+) -> tuple[str, str]:
+    lines = []
+    for key, child_texts in empty_headings:
+        samples = "; ".join(child_texts[:3]) if child_texts else "нет примеров"
+        lines.append(f"- ключ «{key}»: подпункты — {samples}")
+
+    system = """\
+Ты — эксперт по тендерной документации. Для каждого heading-узла ТЗ \
+с пустым text сгенерируй краткое название раздела (3–8 слов) на основе \
+содержания дочерних требований.
+
+Верни ТОЛЬКО JSON:
+{
+  "headings": {
+    "3": "Оборудование для производства сыра",
+    "33.1": "Линия формования блоков"
+  }
+}
+
+Ключи должны точно совпадать с переданными. Не добавляй лишних ключей."""
+
+    user = "Heading-узлы с пустым text:\n" + "\n".join(lines)
     return system, user

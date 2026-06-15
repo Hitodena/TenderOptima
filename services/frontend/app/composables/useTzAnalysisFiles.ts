@@ -71,9 +71,28 @@ export function useTzAnalysisFiles(
 		return openAnalysisFile('tz', name)
 	}
 
-	function openKpFile(displayName: string) {
+	function openKpFile(displayName: string, supplierId?: string) {
+		if (supplierId) {
+			return openSupplierKpFile(supplierId, displayName)
+		}
 		return openAnalysisFile('kp', displayName)
 	}
 
-	return { openTzFile, openKpFile }
+	async function openSupplierKpFile(supplierId: string, filename: string) {
+		if (!analysisId.value) return
+		const safeName = filename.trim()
+		if (!safeName) return
+		const url = `/tz-analysis/${analysisId.value}/suppliers/${supplierId}/files/kp?filename=${encodeURIComponent(safeName)}`
+		try {
+			const res = await $axios.get(url, { responseType: 'blob' })
+			saveBlobAsFile(res.data as Blob, safeName)
+		} catch {
+			toast.add({
+				title: 'Файл КП недоступен',
+				color: 'error',
+			})
+		}
+	}
+
+	return { openTzFile, openKpFile, openSupplierKpFile }
 }

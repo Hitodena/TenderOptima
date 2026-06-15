@@ -48,3 +48,8 @@ class TZAnalysis(IDMixinUUID, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False)
 
     user: Mapped["User"] = relationship()  # pyright: ignore[reportUndefinedVariable]  # noqa: F821
+    suppliers: Mapped[list["TZAnalysisSupplier"]] = relationship(  # noqa: F821
+        back_populates="analysis",
+        cascade="all, delete-orphan",
+        order_by="TZAnalysisSupplier.order_index",
+    )

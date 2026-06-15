@@ -44,6 +44,7 @@
 							:rows="node.isHeading ? 1 : 3"
 							:maxrows="node.isHeading ? 4 : 12"
 							:placeholder="node.isHeading ? 'Название раздела (необязательно)' : undefined"
+							:readonly="readonly"
 							autoresize
 						/>
 					</div>
@@ -54,7 +55,7 @@
 						</p>
 					</div>
 					<UButton
-						v-if="node.rowIndex !== undefined"
+						v-if="node.rowIndex !== undefined && !readonly"
 						type="button"
 						variant="ghost"
 						color="neutral"
@@ -73,6 +74,7 @@
 						:nodes="node.children"
 						:scope-id="scopeId"
 						:show-heading-hint="showHeadingHint"
+						:readonly="readonly"
 						@remove="(index) => emit('remove', index)"
 						@toggle-section="(key) => emit('toggle-section', key)"
 					/>
@@ -95,10 +97,12 @@
 							size="md"
 							:rows="3"
 							:maxrows="12"
+							:readonly="readonly"
 							autoresize
 						/>
 					</div>
 					<UButton
+						v-if="!readonly"
 						type="button"
 						variant="ghost"
 						color="neutral"
@@ -121,6 +125,7 @@ defineProps<{
 	nodes: RequirementTreeNode[]
 	scopeId: string
 	showHeadingHint?: boolean
+	readonly?: boolean
 }>()
 
 const emit = defineEmits<{

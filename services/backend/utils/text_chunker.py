@@ -86,7 +86,7 @@ def _paragraph_segments(text: str, max_chars: int) -> list[str]:
     return segments
 
 
-def chunk_text(text: str, max_chars: int = 3200) -> list[str]:
+def chunk_text(text: str, max_chars: int = 8000) -> list[str]:
     """Split *text* into chunks of at most *max_chars* characters.
 
     Prefer paragraph boundaries, then lines, and finally hard splits

@@ -9,6 +9,7 @@ from fastapi import (
     APIRouter,
     Depends,
     File,
+    Form,
     HTTPException,
     Query,
     UploadFile,
@@ -29,6 +30,8 @@ from backend.api.tz_analysis.schemas import (
     TZAnalysisHistoryPageResponse,
     TZAnalysisListItem,
     TZAnalysisPreviewResponse,
+    TZAnalysisSupplierItem,
+    TZAnalysisSupplierRenameRequest,
     TZPrimaryKpRequest,
     TZRequirementsUpdateRequest,
     row_to_session,
@@ -43,7 +46,7 @@ from backend.celery_app.tasks.analysis_tasks import (
     run_tz_kp_compare as queue_tz_kp_compare,
 )
 from backend.core.config import get_config
-from backend.db.dao import TZAnalysisDAO
+from backend.db.dao import TZAnalysisDAO, TZAnalysisSupplierDAO
 from backend.db.models import User
 from backend.enums import TZAnalysisHistoryGroup, TZAnalysisRunStatus
 from backend.schemas.analysis import TZAnalysisItem
@@ -58,16 +61,43 @@ from backend.utils.requirements_struct import (
     requirements_nonempty,
 )
 from backend.utils.tz_storage import (
+    flatten_supplier_kp_entries,
     make_unique_filenames,
     mime_type_for_filename,
+    remove_supplier_dir,
     resolve_kp_file_by_display_name,
+    resolve_supplier_kp_file_by_display_name,
+    resolve_supplier_kp_files,
     resolve_tz_only_file,
     save_kp_analysis_files,
+    save_supplier_kp_files,
     save_tz_only_file,
 )
 
 router = APIRouter(prefix="/tz-analysis", tags=["TZ Analysis"])
 config = get_config()
+
+
+async def _session_response(
+    session: AsyncSession,
+    row,
+) -> TZAnalysisDetailResponse:
+    suppliers = await TZAnalysisSupplierDAO.list_by_analysis(session, row.id)
+    return row_to_session(row, suppliers=suppliers)
+
+
+async def _get_owned_analysis(
+    session: AsyncSession,
+    analysis_id: uuid.UUID,
+    user_id: uuid.UUID,
+):
+    row = await TZAnalysisDAO.get_by_id_and_user(session, analysis_id, user_id)
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found",
+        )
+    return row
 
 
 async def _save_upload(
@@ -141,7 +171,7 @@ async def create_tz_analysis(
         analysis_id=str(row.id),
         user_id=str(current_user.id),
     )
-    return row_to_session(row)
+    return await _session_response(session, row)
 
 
 @router.post(
@@ -218,7 +248,7 @@ async def run_tz_analysis(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Analysis not found",
         )
-    return row_to_session(refreshed)
+    return await _session_response(session, refreshed)
 
 
 @router.post(
@@ -229,22 +259,15 @@ async def run_tz_analysis(
 )
 async def run_tz_kp_analysis(
     analysis_id: uuid.UUID,
-    kp_files: Annotated[
-        list[UploadFile],
-        File(description="One or more commercial proposals"),
-    ],
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
+    kp_files: Annotated[
+        list[UploadFile] | None,
+        File(description="One or more commercial proposals"),
+    ] = None,
 ) -> TZAnalysisDetailResponse:
     """Save KP files and enqueue extraction plus comparison."""
-    row = await TZAnalysisDAO.get_by_id_and_user(
-        session, analysis_id, current_user.id
-    )
-    if not row:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Analysis not found",
-        )
+    row = await _get_owned_analysis(session, analysis_id, current_user.id)
     if row.status != TZAnalysisRunStatus.ACTIVE.value:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -260,37 +283,26 @@ async def run_tz_kp_analysis(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="At least one TZ requirement is required",
         )
-    if not kp_files:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="At least one KP file is required",
-        )
 
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp_path = Path(tmp)
-        raw_kp_names = [
-            Path(kp_upload.filename or "kp").name.replace("..", "_")
-            for kp_upload in kp_files
-        ]
-        kp_names = make_unique_filenames(raw_kp_names)
-        kp_paths: list[Path] = []
-        for idx, (kp_upload, display_name) in enumerate(
-            zip(kp_files, kp_names, strict=True),
-            start=1,
-        ):
-            suffix = (
-                Path(display_name).suffix.lower()
-                or Path(kp_upload.filename or "").suffix.lower()
-                or ".bin"
+    suppliers = await TZAnalysisSupplierDAO.list_by_analysis(session, row.id)
+    if suppliers:
+        if not all(supplier.kp_filenames for supplier in suppliers):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Each supplier must have at least one KP file",
             )
-            kp_path = await _save_upload(
-                kp_upload,
-                tmp_path,
-                dest_name=f"kp{idx}{suffix}",
-            )
-            kp_paths.append(kp_path)
+        supplier_entries: list[tuple[list[str], list[Path]]] = []
+        for supplier in suppliers:
+            paths = resolve_supplier_kp_files(row.id, supplier.id)
+            if not paths or len(supplier.kp_filenames) != len(paths):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Each supplier must have at least one KP file",
+                )
+            supplier_entries.append((list(supplier.kp_filenames), paths))
+        kp_payload = flatten_supplier_kp_entries(supplier_entries)
+        kp_names = [name for name, _ in kp_payload]
         primary_kp = kp_names[0] if kp_names else None
-
         updated = await TZAnalysisDAO.update_fields(
             session,
             row.id,
@@ -313,7 +325,61 @@ async def run_tz_kp_analysis(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Analysis not found",
             )
-        save_kp_analysis_files(row.id, kp_paths)
+    else:
+        uploads = kp_files or []
+        if not uploads:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="At least one KP file or supplier is required",
+            )
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            raw_kp_names = [
+                Path(kp_upload.filename or "kp").name.replace("..", "_")
+                for kp_upload in uploads
+            ]
+            kp_names = make_unique_filenames(raw_kp_names)
+            kp_paths: list[Path] = []
+            for idx, (kp_upload, display_name) in enumerate(
+                zip(uploads, kp_names, strict=True),
+                start=1,
+            ):
+                suffix = (
+                    Path(display_name).suffix.lower()
+                    or Path(kp_upload.filename or "").suffix.lower()
+                    or ".bin"
+                )
+                kp_path = await _save_upload(
+                    kp_upload,
+                    tmp_path,
+                    dest_name=f"kp{idx}{suffix}",
+                )
+                kp_paths.append(kp_path)
+            primary_kp = kp_names[0] if kp_names else None
+
+            updated = await TZAnalysisDAO.update_fields(
+                session,
+                row.id,
+                kp_filename=primary_kp,
+                kp_filenames=kp_names,
+                confirmed=False,
+                requirements_kp={},
+                kp_stats={},
+                items=[],
+                match_score=0,
+                met_count=0,
+                partial_count=0,
+                missing_count=0,
+                not_found_count=0,
+                tz_requirements_count=count_requirements(row.requirements_tz),
+                status=TZAnalysisRunStatus.PROCESSING.value,
+            )
+            if not updated:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Analysis not found",
+                )
+            save_kp_analysis_files(row.id, kp_paths)
 
     queue_tz_kp_compare.delay(str(row.id))  # type: ignore[attr-defined]
     logger.info(
@@ -329,7 +395,7 @@ async def run_tz_kp_analysis(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Analysis not found",
         )
-    return row_to_session(refreshed)
+    return await _session_response(session, refreshed)
 
 
 @router.get(
@@ -489,7 +555,7 @@ async def update_tz_requirements(
         analysis_id=str(analysis_id),
         user_id=str(current_user.id),
     )
-    return row_to_session(updated)
+    return await _session_response(session, updated)
 
 
 @router.patch(
@@ -535,7 +601,7 @@ async def set_primary_kp(
         analysis_id=str(analysis_id),
         user_id=str(current_user.id),
     )
-    return row_to_session(updated)
+    return await _session_response(session, updated)
 
 
 @router.post(
@@ -620,7 +686,243 @@ async def confirm_tz_analysis(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Analysis not found",
         )
-    return row_to_session(refreshed)
+    return await _session_response(session, refreshed)
+
+
+@router.get(
+    "/{analysis_id}/suppliers",
+    response_model=list[TZAnalysisSupplierItem],
+    summary="List suppliers for a TZ analysis",
+)
+async def list_tz_analysis_suppliers(
+    analysis_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> list[TZAnalysisSupplierItem]:
+    await _get_owned_analysis(session, analysis_id, current_user.id)
+    suppliers = await TZAnalysisSupplierDAO.list_by_analysis(
+        session, analysis_id
+    )
+    return [TZAnalysisSupplierItem.model_validate(s) for s in suppliers]
+
+
+@router.post(
+    "/{analysis_id}/suppliers",
+    response_model=TZAnalysisSupplierItem,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create supplier with KP files",
+)
+async def create_tz_analysis_supplier(
+    analysis_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    name: Annotated[str, Form(min_length=1, max_length=255)],
+    kp_files: Annotated[
+        list[UploadFile],
+        File(description="One or more KP files for this supplier"),
+    ],
+) -> TZAnalysisSupplierItem:
+    row = await _get_owned_analysis(session, analysis_id, current_user.id)
+    if row.status != TZAnalysisRunStatus.ACTIVE.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Analysis is not ready for supplier upload",
+        )
+    if row.confirmed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Analysis already confirmed",
+        )
+    if not kp_files:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one KP file is required",
+        )
+    clean_name = name.strip()
+    if await TZAnalysisSupplierDAO.name_exists(
+        session, analysis_id, clean_name
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Supplier name already exists",
+        )
+
+    order_index = await TZAnalysisSupplierDAO.next_order_index(
+        session, analysis_id
+    )
+    supplier = await TZAnalysisSupplierDAO.create(
+        session,
+        analysis_id=analysis_id,
+        name=clean_name,
+        kp_filenames=[],
+        order_index=order_index,
+    )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        raw_names = [
+            Path(upload.filename or "kp").name.replace("..", "_")
+            for upload in kp_files
+        ]
+        display_names = make_unique_filenames(raw_names)
+        kp_paths: list[Path] = []
+        for idx, (upload, display_name) in enumerate(
+            zip(kp_files, display_names, strict=True),
+            start=1,
+        ):
+            suffix = (
+                Path(display_name).suffix.lower()
+                or Path(upload.filename or "").suffix.lower()
+                or ".bin"
+            )
+            kp_paths.append(
+                await _save_upload(
+                    upload,
+                    tmp_path,
+                    dest_name=f"kp{idx}{suffix}",
+                )
+            )
+        save_supplier_kp_files(analysis_id, supplier.id, kp_paths)
+
+    updated = await TZAnalysisSupplierDAO.update_fields(
+        session,
+        supplier.id,
+        kp_filenames=display_names,
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Supplier not found",
+        )
+    logger.info(
+        "TZ analysis supplier created",
+        analysis_id=str(analysis_id),
+        supplier_id=str(supplier.id),
+        user_id=str(current_user.id),
+    )
+    return TZAnalysisSupplierItem.model_validate(updated)
+
+
+@router.patch(
+    "/{analysis_id}/suppliers/{supplier_id}/name",
+    response_model=TZAnalysisSupplierItem,
+    summary="Rename supplier",
+)
+async def rename_tz_analysis_supplier(
+    analysis_id: uuid.UUID,
+    supplier_id: uuid.UUID,
+    body: TZAnalysisSupplierRenameRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> TZAnalysisSupplierItem:
+    row = await _get_owned_analysis(session, analysis_id, current_user.id)
+    if row.confirmed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Analysis already confirmed",
+        )
+    supplier = await TZAnalysisSupplierDAO.get_by_id_and_analysis(
+        session, supplier_id, analysis_id
+    )
+    if not supplier:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Supplier not found",
+        )
+    clean_name = body.name.strip()
+    if clean_name != supplier.name and await TZAnalysisSupplierDAO.name_exists(
+        session,
+        analysis_id,
+        clean_name,
+        exclude_id=supplier_id,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Supplier name already exists",
+        )
+    updated = await TZAnalysisSupplierDAO.update_fields(
+        session,
+        supplier_id,
+        name=clean_name,
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Supplier not found",
+        )
+    return TZAnalysisSupplierItem.model_validate(updated)
+
+
+@router.delete(
+    "/{analysis_id}/suppliers/{supplier_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete supplier",
+)
+async def delete_tz_analysis_supplier(
+    analysis_id: uuid.UUID,
+    supplier_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> Response:
+    row = await _get_owned_analysis(session, analysis_id, current_user.id)
+    if row.confirmed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Analysis already confirmed",
+        )
+    supplier = await TZAnalysisSupplierDAO.get_by_id_and_analysis(
+        session, supplier_id, analysis_id
+    )
+    if not supplier:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Supplier not found",
+        )
+    remove_supplier_dir(analysis_id, supplier_id)
+    await TZAnalysisSupplierDAO.delete(session, supplier_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/{analysis_id}/suppliers/{supplier_id}/files/kp",
+    summary="Download supplier KP file by display name",
+)
+async def download_supplier_kp_file(
+    analysis_id: uuid.UUID,
+    supplier_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    filename: Annotated[
+        str,
+        Query(min_length=1, max_length=512, description="KP display filename"),
+    ],
+) -> FileResponse:
+    await _get_owned_analysis(session, analysis_id, current_user.id)
+    supplier = await TZAnalysisSupplierDAO.get_by_id_and_analysis(
+        session, supplier_id, analysis_id
+    )
+    if not supplier:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Supplier not found",
+        )
+    kp_path = resolve_supplier_kp_file_by_display_name(
+        analysis_id,
+        supplier_id,
+        filename.strip(),
+        supplier.kp_filenames,
+    )
+    if not kp_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="KP file not found",
+        )
+    safe_filename = filename.strip()
+    return FileResponse(
+        path=str(kp_path),
+        filename=safe_filename,
+        media_type=mime_type_for_filename(safe_filename),
+    )
 
 
 @router.get(
@@ -633,15 +935,8 @@ async def get_tz_analysis(
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> TZAnalysisDetailResponse:
-    row = await TZAnalysisDAO.get_by_id_and_user(
-        session, analysis_id, current_user.id
-    )
-    if not row:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Analysis not found",
-        )
-    return row_to_session(row)
+    row = await _get_owned_analysis(session, analysis_id, current_user.id)
+    return await _session_response(session, row)
 
 
 @router.get(

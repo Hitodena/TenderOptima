@@ -6,6 +6,7 @@ from .response_analysis_dao import ResponseAnalysisDAO
 from .search_dao import SearchHistoryDAO
 from .supplier_dao import RequestSupplier, RequestSupplierDAO, SupplierDAO
 from .tz_analysis_dao import TZAnalysisDAO
+from .tz_analysis_supplier_dao import TZAnalysisSupplierDAO
 from .user_dao import UserDAO
 
 __all__ = [
@@ -19,5 +20,6 @@ __all__ = [
     "BlacklistedDomainDAO",
     "SupplierDAO",
     "TZAnalysisDAO",
+    "TZAnalysisSupplierDAO",
     "ResponseAnalysisDAO",
 ]

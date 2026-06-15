@@ -9,6 +9,10 @@ def tz_analysis_dir(analysis_id: uuid.UUID) -> Path:
     return Path(get_config().upload_dir) / "tz_analyses" / str(analysis_id)
 
 
+def supplier_dir(analysis_id: uuid.UUID, supplier_id: uuid.UUID) -> Path:
+    return tz_analysis_dir(analysis_id) / "s" / str(supplier_id)
+
+
 _MIME_BY_EXT = {
     ".pdf": "application/pdf",
     ".doc": "application/msword",
@@ -141,3 +145,81 @@ def resolve_kp_file_by_display_name(
 
     path = kp_paths[index]
     return path if path.is_file() else None
+
+
+def save_supplier_kp_files(
+    analysis_id: uuid.UUID,
+    supplier_id: uuid.UUID,
+    kp_paths: list[Path],
+) -> list[Path]:
+    """Copy KP files into a supplier-specific upload directory."""
+    dest = supplier_dir(analysis_id, supplier_id)
+    dest.mkdir(parents=True, exist_ok=True)
+    for old in dest.glob("kp*"):
+        old.unlink()
+    kp_dests: list[Path] = []
+    for idx, kp_path in enumerate(kp_paths, start=1):
+        kp_dest = dest / f"kp{idx}{kp_path.suffix.lower()}"
+        shutil.copy2(kp_path, kp_dest)
+        kp_dests.append(kp_dest)
+    return kp_dests
+
+
+def resolve_supplier_kp_files(
+    analysis_id: uuid.UUID,
+    supplier_id: uuid.UUID,
+) -> list[Path]:
+    """Return sorted KP paths stored for a supplier."""
+    dest = supplier_dir(analysis_id, supplier_id)
+    if not dest.is_dir():
+        return []
+    return _sort_kp_paths(list(dest.glob("kp*")))
+
+
+def resolve_supplier_kp_file_by_display_name(
+    analysis_id: uuid.UUID,
+    supplier_id: uuid.UUID,
+    display_name: str,
+    kp_filenames: list[str] | None,
+) -> Path | None:
+    """Map a supplier KP display name to its on-disk path."""
+    names = list(kp_filenames or [])
+    if not names:
+        return None
+    kp_paths = resolve_supplier_kp_files(analysis_id, supplier_id)
+    if not kp_paths:
+        return None
+    try:
+        index = names.index(display_name)
+    except ValueError:
+        return None
+    if index >= len(kp_paths):
+        return None
+    path = kp_paths[index]
+    return path if path.is_file() else None
+
+
+def flatten_supplier_kp_entries(
+    suppliers: list[tuple[list[str], list[Path]]],
+) -> list[tuple[str, list[Path]]]:
+    """Pair each supplier KP display name with its path; dedupe names globally."""
+    raw_pairs: list[tuple[str, Path]] = []
+    for display_names, paths in suppliers:
+        for name, path in zip(display_names, paths, strict=True):
+            raw_pairs.append((name, path))
+    if not raw_pairs:
+        return []
+    unique_names = make_unique_filenames([name for name, _ in raw_pairs])
+    return [
+        (unique_names[index], [path])
+        for index, (_, path) in enumerate(raw_pairs)
+    ]
+
+
+def remove_supplier_dir(
+    analysis_id: uuid.UUID, supplier_id: uuid.UUID
+) -> None:
+    """Remove all files stored for a supplier."""
+    dest = supplier_dir(analysis_id, supplier_id)
+    if dest.is_dir():
+        shutil.rmtree(dest, ignore_errors=True)

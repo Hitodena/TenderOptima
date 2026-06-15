@@ -9,7 +9,10 @@ from backend.enums import (
     TZAnalysisRunStatus,
     TZAnalysisStatus,
 )
-from backend.schemas.analysis import TZAnalysisItem, TZAnalysisSessionResult
+from backend.schemas.analysis import (
+    TZAnalysisItem,
+    TZAnalysisSessionResult,
+)
 from backend.utils.requirements_struct import (
     normalize_requirements_kp,
     normalize_tz_requirements,
@@ -147,15 +150,42 @@ class TZPrimaryKpRequest(BaseModel):
     ]
 
 
+class TZAnalysisSupplierItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    kp_filenames: list[str] = []
+    order_index: int = 0
+
+
+class TZAnalysisSupplierCreateRequest(BaseModel):
+    name: Annotated[
+        str,
+        Field(min_length=1, max_length=255, description="Supplier name"),
+    ]
+
+
+class TZAnalysisSupplierRenameRequest(BaseModel):
+    name: Annotated[
+        str,
+        Field(min_length=1, max_length=255, description="Supplier name"),
+    ]
+
+
 class TZAnalysisDetailResponse(TZAnalysisSessionResult):
-    pass
+    suppliers: list[TZAnalysisSupplierItem] = []
 
 
-def row_to_session(row) -> TZAnalysisDetailResponse:
+def row_to_session(row, *, suppliers=None) -> TZAnalysisDetailResponse:
     items = [TZAnalysisItem(**item) for item in (row.items or [])]
     kp_filenames = row.kp_filenames or []
     if not kp_filenames and row.kp_filename:
         kp_filenames = [row.kp_filename]
+    supplier_items = [
+        TZAnalysisSupplierItem.model_validate(s)
+        for s in (suppliers if suppliers is not None else [])
+    ]
     return TZAnalysisDetailResponse(
         id=str(row.id),
         title=row.title or None,
@@ -181,6 +211,7 @@ def row_to_session(row) -> TZAnalysisDetailResponse:
             getattr(row, "tz_requirements_count", 0) or 0
         ),
         created_at=row.created_at.isoformat() if row.created_at else None,
+        suppliers=supplier_items,
     )
 
 

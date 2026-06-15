@@ -179,6 +179,17 @@ export interface TZAnalysisKpStats {
 	not_found_count: number;
 }
 
+export interface TZAnalysisSupplierItem {
+	id: string;
+	name: string;
+	kp_filenames: string[];
+	order_index: number;
+}
+
+export interface TZAnalysisSupplierCreateRequest {
+	name: string;
+}
+
 export interface RequirementMatch {
 	requirement: string;
 	offer_value: string | null;
@@ -221,6 +232,7 @@ export interface TZAnalysisSession {
 	requirements_tz?: RequirementsHierarchy;
 	requirements_kp?: Record<string, RequirementsHierarchy>;
 	kp_stats?: Record<string, TZAnalysisKpStats>;
+	suppliers?: TZAnalysisSupplierItem[];
 	items: TZAnalysisItem[];
 	match_score: number;
 	met_count: number;
@@ -282,6 +294,10 @@ export interface TZAnalysisConfirmRequest {
 
 export interface TZPrimaryKpRequest {
 	kp_filename: string;
+}
+
+export interface TZAnalysisSupplierRenameRequest {
+	name: string;
 }
 
 export interface TZAnalysisPreviewResponse {

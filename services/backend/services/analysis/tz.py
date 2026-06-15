@@ -16,6 +16,7 @@ from backend.services.extraction.router import ExtractorRouter
 from backend.services.llm.client import llm_client
 from backend.services.llm.prompts.tz import (
     build_comparison_chunk_prompt,
+    build_heading_names_prompt,
     build_kp_chunk_prompt,
     build_tz_chunk_prompt,
 )
@@ -55,6 +56,10 @@ class KPExtractResult(BaseModel):
     @classmethod
     def coerce_offerings(cls, value: object) -> dict:
         return normalize_tz_requirements(value)
+
+
+class HeadingNamesResult(BaseModel):
+    headings: dict[str, str] = Field(default_factory=dict)
 
 
 def _build_rolling_summary(
@@ -230,6 +235,12 @@ async def _extract_hierarchical(
 
     hierarchy = dedupe_hierarchy(hierarchy)
     hierarchy = normalize_tz_requirements(hierarchy)
+    if mode == "tz":
+        hierarchy = await fill_empty_headings(
+            hierarchy,
+            analysis_id=analysis_id,
+            user_id=user_id,
+        )
     logger.info(
         "Requirements extraction finished",
         analysis_id=analysis_id,
@@ -237,6 +248,92 @@ async def _extract_hierarchical(
         mode=mode,
         items=count_requirements(hierarchy),
     )
+    return hierarchy
+
+
+def _collect_empty_headings(
+    hierarchy: dict,
+) -> list[tuple[str, list[str]]]:
+    """Return heading keys with empty text and sample child texts."""
+    result: list[tuple[str, list[str]]] = []
+
+    def walk(nodes: dict, prefix: str = "") -> None:
+        for key in sorted(nodes.keys(), key=lambda item: str(item)):
+            node = nodes[key]
+            key_str = str(key)
+            full_key = f"{prefix}.{key_str}" if prefix else key_str
+            text = str(node.get("text") or "").strip()
+            children = node.get("children") or {}
+            if not text and children:
+                child_texts = [
+                    entry[1] for entry in collect_leaf_entries(children)
+                ][:5]
+                if not child_texts:
+                    child_texts = [
+                        entry[1]
+                        for entry in collect_leaf_entries({key_str: node})
+                    ][:5]
+                result.append((full_key, child_texts))
+            if children:
+                walk(children, full_key)
+
+    walk(hierarchy)
+    return result
+
+
+def _apply_heading_names(hierarchy: dict, names: dict[str, str]) -> dict:
+    if not names:
+        return hierarchy
+
+    def walk(nodes: dict[str, dict], path_prefix: str = "") -> None:
+        for key, node in list(nodes.items()):
+            full_key = key if not path_prefix else f"{path_prefix}.{key}"
+            text = str(node.get("text") or "").strip()
+            children = node.get("children") or {}
+            if not text and full_key in names:
+                node["text"] = names[full_key].strip()
+            if children:
+                walk(children, full_key)
+
+    walk(hierarchy)
+    return hierarchy
+
+
+async def fill_empty_headings(
+    hierarchy: dict,
+    *,
+    analysis_id: str,
+    user_id: str,
+) -> dict:
+    """Generate meaningful names for heading nodes with empty text."""
+    empty = _collect_empty_headings(hierarchy)
+    if not empty:
+        return hierarchy
+
+    system, user = build_heading_names_prompt(empty)
+    try:
+        raw = await llm_client.complete(system, user)
+        parsed = HeadingNamesResult(**raw)
+        names = {
+            str(key): str(value).strip()
+            for key, value in parsed.headings.items()
+            if str(value).strip()
+        }
+        if names:
+            hierarchy = _apply_heading_names(hierarchy, names)
+            logger.info(
+                "Empty headings filled",
+                analysis_id=analysis_id,
+                user_id=user_id,
+                count=len(names),
+            )
+    except (ValidationError, ValueError, TypeError) as exc:
+        logger.warning(
+            "Empty heading fill failed",
+            analysis_id=analysis_id,
+            user_id=user_id,
+            error=str(exc),
+        )
     return hierarchy
 
 
@@ -523,6 +620,95 @@ async def analyze_kp_files(
     return TZAnalysisSessionResult(
         kp_filename=primary_kp,
         kp_filenames=names,
+        requirements_tz=tz_hierarchy,
+        requirements_kp=requirements_kp,
+        kp_stats=kp_stats,
+        items=all_items,
+        match_score=top_stats["match_score"],
+        met_count=top_stats["met_count"],
+        partial_count=top_stats["partial_count"],
+        missing_count=top_stats["missing_count"],
+        not_found_count=top_stats["not_found_count"],
+        tz_requirements_count=tz_count,
+    )
+
+
+async def _extract_kp_hierarchy_from_paths(
+    kp_paths: list[Path],
+    *,
+    analysis_id: str,
+    user_id: str,
+    supplier_name: str,
+) -> dict:
+    merged: dict = {}
+    for kp_path in kp_paths:
+        logger.info(
+            "KP file extraction started",
+            analysis_id=analysis_id,
+            user_id=user_id,
+            kp_name=supplier_name,
+            path=str(kp_path),
+        )
+        raw_text = _assembler.assemble(_router.get(kp_path).extract(kp_path))
+        partial = await extract_kp_requirements(
+            raw_text,
+            analysis_id=analysis_id,
+            user_id=user_id,
+        )
+        merged = merge_requirement_chunks([merged, partial])
+    return merged
+
+
+async def analyze_supplier_kps(
+    requirements_tz: dict,
+    kp_files: list[tuple[str, list[Path]]],
+    *,
+    analysis_id: str,
+    user_id: str,
+) -> TZAnalysisSessionResult:
+    """Extract KP offerings per file and compare against TZ."""
+    if not kp_files:
+        raise ValueError("At least one KP file is required")
+
+    tz_hierarchy = normalize_tz_requirements(requirements_tz)
+    tz_flat = flatten_hierarchy(tz_hierarchy)
+    tz_count = len(tz_flat)
+    kp_display_names = [name for name, _ in kp_files]
+
+    requirements_kp: dict[str, dict] = {}
+    for display_name, kp_paths in kp_files:
+        if not kp_paths:
+            raise ValueError(f"KP file {display_name!r} has no paths")
+        requirements_kp[display_name] = await _extract_kp_hierarchy_from_paths(
+            kp_paths,
+            analysis_id=analysis_id,
+            user_id=user_id,
+            supplier_name=display_name,
+        )
+        logger.info(
+            "Supplier KP extraction finished",
+            analysis_id=analysis_id,
+            user_id=user_id,
+            kp_name=display_name,
+            files=len(kp_paths),
+            items=count_requirements(requirements_kp[display_name]),
+        )
+
+    kp_flat = normalize_requirements_kp_flat(requirements_kp)
+    all_items = await compare_requirements(
+        tz_flat,
+        kp_flat,
+        analysis_id=analysis_id,
+        user_id=user_id,
+    )
+    kp_stats, primary_kp, top_stats = build_analysis_stats(
+        all_items,
+        kp_display_names,
+    )
+
+    return TZAnalysisSessionResult(
+        kp_filename=primary_kp,
+        kp_filenames=kp_display_names,
         requirements_tz=tz_hierarchy,
         requirements_kp=requirements_kp,
         kp_stats=kp_stats,

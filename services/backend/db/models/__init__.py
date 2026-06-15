@@ -6,6 +6,7 @@ from .search import SearchHistory
 from .subscription import Subscription
 from .supplier import RequestSupplier, Supplier
 from .tz_analysis import TZAnalysis
+from .tz_analysis_supplier import TZAnalysisSupplier
 from .user import User
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "RequestSupplier",
     "User",
     "TZAnalysis",
+    "TZAnalysisSupplier",
 ]

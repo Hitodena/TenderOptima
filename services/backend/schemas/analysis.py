@@ -29,11 +29,11 @@ class TZAnalysisSessionResult(BaseModel):
     requirements_kp: dict[str, dict] = {}
     kp_stats: dict[str, dict[str, int]] = {}
     items: list[TZAnalysisItem]
-    match_score: int
-    met_count: int
-    partial_count: int
-    missing_count: int
-    not_found_count: int
+    match_score: int = 0
+    met_count: int = 0
+    partial_count: int = 0
+    missing_count: int = 0
+    not_found_count: int = 0
     tz_requirements_count: int = 0
     created_at: str | None = None
 

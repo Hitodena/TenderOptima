@@ -1,18 +1,18 @@
 <template>
 	<UContainer class="py-8 lg:py-12">
-		<div class="max-w-3xl mx-auto">
+		<div class="max-w-4xl mx-auto">
 			<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
 				<div>
-					<h1 class="text-3xl font-bold text-highlighted">История анализа ТЗ</h1>
+					<h1 class="text-3xl font-bold text-highlighted">История анализа технических предложений</h1>
 					<p class="text-muted text-sm mt-1">
-						Активные, в обработке и завершённые сравнения ТЗ с КП
+						Активные, в обработке и завершённые сравнения коммерческих предложений с техническими заданиями
 					</p>
 				</div>
 				<div class="flex items-center gap-3 shrink-0">
 					<UInput v-model="search" placeholder="Поиск по анализам..." icon="i-lucide-search"
 						class="w-full sm:w-56" size="lg" />
-					<UButton to="/tz-analysis" variant="outline" color="neutral"
-						leading-icon="i-lucide-scan-search" size="lg" class="shrink-0">
+					<UButton to="/tz-analysis" variant="outline" color="neutral" leading-icon="i-lucide-scan-search"
+						size="lg" class="shrink-0">
 						Новый анализ
 					</UButton>
 				</div>
@@ -30,15 +30,15 @@
 						class="group cursor-pointer hover:shadow-md transition-all hover:-translate-y-px"
 						@click="openAnalysis(item)">
 						<div class="flex items-center gap-4">
-							<div
-								class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+							<div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
 								<UIcon name="i-lucide-file-search" class="w-5 h-5 text-primary" />
 							</div>
 							<div class="flex-1 min-w-0">
 								<div class="flex items-center gap-2 mb-0.5">
-									<p class="font-semibold truncate">{{ item.title || item.tz_filename || 'Анализ ТЗ' }}</p>
-									<UBadge :color="getTzRunStatusColor(item.status)" variant="subtle"
-										size="sm" class="shrink-0">
+									<p class="font-semibold truncate">{{ item.title || item.tz_filename || 'Анализ ТЗ'
+										}}</p>
+									<UBadge :color="getTzRunStatusColor(item.status)" variant="subtle" size="sm"
+										class="shrink-0">
 										{{ getTzRunStatusLabel(item.status) }}
 									</UBadge>
 								</div>
@@ -49,8 +49,8 @@
 									<span v-else-if="item.status === TZAnalysisRunStatus.DRAFT" class="truncate">
 										Файлы не загружены
 									</span>
-									<UBadge v-if="item.status === TZAnalysisRunStatus.ACTIVE"
-										color="primary" variant="subtle" size="sm">
+									<UBadge v-if="item.status === TZAnalysisRunStatus.ACTIVE" color="primary"
+										variant="subtle" size="sm">
 										{{ item.match_score }}%
 									</UBadge>
 									<span class="flex items-center gap-1 shrink-0">
@@ -65,15 +65,13 @@
 										variant="ghost" size="md"
 										:leading-icon="confirmCompleteId === item.id ? 'i-lucide-check' : 'i-lucide-archive'"
 										:label="confirmCompleteId === item.id ? 'Подтвердить' : 'Завершить'"
-										:loading="completingId === item.id"
-										class="opacity-0 group-hover:opacity-100"
+										:loading="completingId === item.id" class="opacity-0 group-hover:opacity-100"
 										:class="confirmCompleteId === item.id ? 'opacity-100' : ''"
 										@click.stop="handleCompleteClick(item.id)" />
 									<UIcon v-if="confirmCompleteId !== item.id" name="i-lucide-chevron-right"
 										class="w-4 h-4 text-muted" />
-									<UButton v-if="confirmCompleteId === item.id" color="neutral"
-										variant="ghost" size="xs" icon="i-lucide-x"
-										@click.stop="confirmCompleteId = null" />
+									<UButton v-if="confirmCompleteId === item.id" color="neutral" variant="ghost"
+										size="xs" icon="i-lucide-x" @click.stop="confirmCompleteId = null" />
 								</template>
 								<UIcon v-else name="i-lucide-chevron-right" class="w-4 h-4 text-muted" />
 							</div>
@@ -253,9 +251,10 @@ async function handleCompleteClick(id: string) {
 	try {
 		await post(`/tz-analysis/${id}/complete`)
 		const idx = allAnalyses.value.findIndex((r) => r.id === id)
-		if (idx >= 0) {
+		const existing = idx >= 0 ? allAnalyses.value[idx] : undefined
+		if (existing) {
 			allAnalyses.value[idx] = {
-				...allAnalyses.value[idx],
+				...existing,
 				status: TZAnalysisRunStatus.COMPLETED,
 			}
 		}

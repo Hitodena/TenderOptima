@@ -6,13 +6,18 @@ from loguru import logger
 from backend.celery_app.celery_config import app
 from backend.celery_app.utils import async_task, get_db_manager
 from backend.core import get_config
-from backend.db.dao import ResponseAnalysisDAO, TZAnalysisDAO
+from backend.db.dao import (
+    ResponseAnalysisDAO,
+    TZAnalysisDAO,
+    TZAnalysisSupplierDAO,
+)
 from backend.enums import TZAnalysisRunStatus
 from backend.services.analysis.email import (
     analyze_email,
 )
 from backend.services.analysis.tz import (
     analyze_kp_files,
+    analyze_supplier_kps,
     compare_only,
     extract_tz_from_file,
 )
@@ -25,14 +30,16 @@ from backend.utils.requirements_struct import (
     requirements_nonempty,
 )
 from backend.utils.tz_storage import (
+    flatten_supplier_kp_entries,
     resolve_kp_analysis_files,
+    resolve_supplier_kp_files,
     resolve_tz_only_file,
 )
 
 config = get_config()
 
-_TZ_EXTRACT_SOFT_LIMIT = 600  # 10 min
-_TZ_EXTRACT_TIME_LIMIT = 900  # 15 min
+_TZ_EXTRACT_SOFT_LIMIT = 6600  # 10 min
+_TZ_EXTRACT_TIME_LIMIT = 7200  # 15 min
 _KP_COMPARE_SOFT_LIMIT = 6600  # 110 min
 _KP_COMPARE_TIME_LIMIT = 7200  # 2 h
 
@@ -212,6 +219,7 @@ async def run_tz_kp_compare(self, analysis_id: str) -> dict:
         user_id = str(row.user_id)
         requirements_tz = normalize_tz_requirements(row.requirements_tz)
         kp_display_names = list(row.kp_filenames or [])
+        suppliers = await TZAnalysisSupplierDAO.list_by_analysis(session, aid)
 
     if not requirements_nonempty(requirements_tz):
         async with db_manager.session() as session:
@@ -222,34 +230,81 @@ async def run_tz_kp_compare(self, analysis_id: str) -> dict:
             )
         return {"error": "no_requirements_tz", "analysis_id": analysis_id}
 
-    kp_paths = resolve_kp_analysis_files(aid)
-    if not kp_paths:
-        logger.error(
-            "TZ KP compare: KP files missing",
-            analysis_id=analysis_id,
-            user_id=user_id,
-        )
-        async with db_manager.session() as session:
-            await TZAnalysisDAO.update_fields(
-                session,
-                aid,
-                status=TZAnalysisRunStatus.FAILED.value,
-            )
-        return {"error": "files_missing", "analysis_id": analysis_id}
-
-    logger.info(
-        "TZ KP compare task started",
-        analysis_id=analysis_id,
-        user_id=user_id,
-    )
     try:
-        result = await analyze_kp_files(
-            requirements_tz,
-            kp_paths,
-            kp_display_names=kp_display_names or None,
-            analysis_id=analysis_id,
-            user_id=user_id,
-        )
+        if suppliers:
+            supplier_entries: list[tuple[list[str], list[Path]]] = []
+            for supplier in suppliers:
+                paths = resolve_supplier_kp_files(aid, supplier.id)
+                display_names = list(supplier.kp_filenames or [])
+                if not paths:
+                    logger.error(
+                        "TZ KP compare: supplier KP files missing",
+                        analysis_id=analysis_id,
+                        supplier_id=str(supplier.id),
+                    )
+                    async with db_manager.session() as session:
+                        await TZAnalysisDAO.update_fields(
+                            session,
+                            aid,
+                            status=TZAnalysisRunStatus.FAILED.value,
+                        )
+                    return {
+                        "error": "files_missing",
+                        "analysis_id": analysis_id,
+                    }
+                if len(display_names) != len(paths):
+                    logger.error(
+                        "TZ KP compare: supplier KP metadata mismatch",
+                        analysis_id=analysis_id,
+                        supplier_id=str(supplier.id),
+                        filenames=len(display_names),
+                        paths=len(paths),
+                    )
+                    async with db_manager.session() as session:
+                        await TZAnalysisDAO.update_fields(
+                            session,
+                            aid,
+                            status=TZAnalysisRunStatus.FAILED.value,
+                        )
+                    return {
+                        "error": "files_missing",
+                        "analysis_id": analysis_id,
+                    }
+                supplier_entries.append((display_names, paths))
+            kp_payload = flatten_supplier_kp_entries(supplier_entries)
+            result = await analyze_supplier_kps(
+                requirements_tz,
+                kp_payload,
+                analysis_id=analysis_id,
+                user_id=user_id,
+            )
+        else:
+            kp_paths = resolve_kp_analysis_files(aid)
+            if not kp_paths:
+                logger.error(
+                    "TZ KP compare: KP files missing",
+                    analysis_id=analysis_id,
+                    user_id=user_id,
+                )
+                async with db_manager.session() as session:
+                    await TZAnalysisDAO.update_fields(
+                        session,
+                        aid,
+                        status=TZAnalysisRunStatus.FAILED.value,
+                    )
+                return {"error": "files_missing", "analysis_id": analysis_id}
+            logger.info(
+                "TZ KP compare task started",
+                analysis_id=analysis_id,
+                user_id=user_id,
+            )
+            result = await analyze_kp_files(
+                requirements_tz,
+                kp_paths,
+                kp_display_names=kp_display_names or None,
+                analysis_id=analysis_id,
+                user_id=user_id,
+            )
     except (UnsupportedFileTypeError, OcrNotAvailableError, ValueError) as exc:
         logger.warning(
             "TZ KP compare failed",
@@ -428,8 +483,8 @@ async def run_tz_compare(self, analysis_id: str) -> dict:
 @app.task(
     name="analysis.email",
     bind=True,
-    soft_time_limit=600,
-    time_limit=900,
+    soft_time_limit=1800,
+    time_limit=2100,
     max_retries=0,
 )
 @async_task

@@ -3,6 +3,7 @@
 		:nodes="tree"
 		:scope-id="scopeId"
 		:show-heading-hint="showHeadingHint"
+		:readonly="readonly"
 		@remove="(index) => emit('remove', index)"
 		@toggle-section="toggleSection"
 	/>
@@ -20,8 +21,9 @@ const props = withDefaults(
 		rows: EditableRequirementRow[]
 		scopeId: string
 		showHeadingHint?: boolean
+		readonly?: boolean
 	}>(),
-	{ showHeadingHint: false },
+	{ showHeadingHint: false, readonly: false },
 )
 
 const emit = defineEmits<{
