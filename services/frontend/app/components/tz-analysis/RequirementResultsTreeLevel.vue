@@ -41,8 +41,11 @@
 						:toggle-item-expand="toggleItemExpand"
 						:tz-selected-indices="tzSelectedIndices"
 						:belongs-to-primary-kp="belongsToPrimaryKp"
+						:editable="editable"
+						:is-item-overridden="isItemOverridden"
 						@toggle-section="(key) => emit('toggle-section', key)"
 						@toggle-select="(index, checked) => emit('toggle-select', index, checked)"
+						@status-change="(index, status) => emit('status-change', index, status)"
 					/>
 
 					<div v-if="node.items.length > 0" class="space-y-3">
@@ -54,8 +57,11 @@
 							:is-expanded="isItemExpanded(item._index)"
 							:is-selected="tzSelectedIndices.includes(item._index)"
 							:show-checkbox="isTzSelectable(item.status) && belongsToPrimaryKp(item)"
+							:editable="editable"
+							:is-overridden="isItemOverridden(item._index)"
 							@toggle-expand="toggleItemExpand(item._index)"
 							@toggle-select="(checked) => emit('toggle-select', item._index, checked)"
+							@status-change="(status) => emit('status-change', item._index, status)"
 						/>
 					</div>
 				</div>
@@ -71,8 +77,11 @@
 						:is-expanded="isItemExpanded(item._index)"
 						:is-selected="tzSelectedIndices.includes(item._index)"
 						:show-checkbox="isTzSelectable(item.status) && belongsToPrimaryKp(item)"
+						:editable="editable"
+						:is-overridden="isItemOverridden(item._index)"
 						@toggle-expand="toggleItemExpand(item._index)"
 						@toggle-select="(checked) => emit('toggle-select', item._index, checked)"
+						@status-change="(status) => emit('status-change', item._index, status)"
 					/>
 				</div>
 			</template>
@@ -93,11 +102,14 @@ defineProps<{
 	toggleItemExpand: (index: number) => void
 	tzSelectedIndices: number[]
 	belongsToPrimaryKp: (item: TZAnalysisItem) => boolean
+	editable?: boolean
+	isItemOverridden: (index: number) => boolean
 }>()
 
 const emit = defineEmits<{
 	'toggle-section': [key: string]
 	'toggle-select': [index: number, checked: boolean]
+	'status-change': [index: number, status: TZAnalysisStatus]
 }>()
 
 const resultsTree = inject<{

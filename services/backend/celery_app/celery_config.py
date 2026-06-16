@@ -158,6 +158,10 @@ class CeleryConfig:
             "queue": "analysis",
             "routing_key": "analysis",
         },
+        "analysis.supplier_kp_process": {
+            "queue": "analysis",
+            "routing_key": "analysis",
+        },
     }
 
     include = [

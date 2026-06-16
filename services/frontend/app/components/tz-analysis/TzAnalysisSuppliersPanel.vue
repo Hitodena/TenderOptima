@@ -12,56 +12,10 @@
 				size="sm"
 				leading-icon="i-lucide-plus"
 				:disabled="adding"
-				@click="showAddForm = !showAddForm"
+				@click="showAddForm = true"
 			>
 				Добавить
 			</UButton>
-		</div>
-
-		<div
-			v-if="showAddForm && !readonly"
-			class="space-y-4 rounded-lg border border-default/60 p-4 w-full"
-		>
-			<div
-				class="grid grid-cols-1 gap-4"
-				:class="compact ? '' : 'md:grid-cols-2'"
-			>
-				<UFormField label="Название поставщика" required class="w-full">
-					<UInput
-						v-model="newSupplierName"
-						placeholder="ООО «Поставщик»"
-						size="md"
-						class="w-full"
-					/>
-				</UFormField>
-				<UFormField label="Файлы КП" required class="w-full">
-					<UFileUpload
-						:model-value="newSupplierFiles"
-						:accept="fileAccept"
-						:interactive="true"
-						multiple
-						layout="list"
-						position="inside"
-						class="w-full min-h-32"
-						@update:model-value="onNewSupplierFilesChange"
-					>
-						<template #actions="{ open }">
-							<UButton type="button" variant="outline" size="sm" @click="open()">
-								<UIcon name="i-lucide-file-spreadsheet" class="w-4 h-4" />
-								Выбрать КП
-							</UButton>
-						</template>
-					</UFileUpload>
-				</UFormField>
-			</div>
-			<div class="flex flex-wrap gap-2">
-				<UButton :loading="adding" :disabled="!canAddSupplier" @click="createSupplier">
-					Сохранить
-				</UButton>
-				<UButton variant="ghost" color="neutral" @click="resetAddForm">
-					Отмена
-				</UButton>
-			</div>
 		</div>
 
 		<div v-if="suppliers.length === 0" class="text-sm text-muted py-2">
@@ -76,8 +30,8 @@
 			<div
 				v-for="supplier in suppliers"
 				:key="supplier.id"
-				class="rounded-lg border border-default/60 p-3 space-y-2"
-				:class="selectedSupplierId === supplier.id ? 'border-primary/40 bg-primary/5' : ''"
+				class="rounded-lg border p-3 space-y-2 transition-colors"
+				:class="supplierCardClass(supplier)"
 			>
 				<div class="flex items-start justify-between gap-2">
 					<button
@@ -85,22 +39,46 @@
 						class="text-left min-w-0 flex-1"
 						@click="emit('select', supplier.id)"
 					>
-						<p class="text-sm font-medium text-highlighted truncate">{{ supplier.name }}</p>
+						<p class="text-sm font-medium text-highlighted truncate">
+							{{ supplier.name }}
+						</p>
 						<p class="text-xs text-muted mt-0.5">
 							{{ supplier.kp_filenames.length }}
 							{{ kpFileWord(supplier.kp_filenames.length) }}
 						</p>
 					</button>
-					<UButton
-						v-if="!readonly"
-						type="button"
-						variant="ghost"
-						color="neutral"
-						size="xs"
-						icon="i-lucide-trash-2"
-						:loading="deletingId === supplier.id"
-						@click="removeSupplier(supplier.id)"
+					<div class="flex items-center gap-1 shrink-0">
+						<UBadge
+							v-if="supplier.status === TZAnalysisSupplierStatus.FAILED"
+							color="error"
+							variant="subtle"
+							size="xs"
+						>
+							Ошибка
+						</UBadge>
+						<UButton
+							v-if="!readonly"
+							type="button"
+							variant="ghost"
+							color="neutral"
+							size="xs"
+							icon="i-lucide-trash-2"
+							:disabled="supplier.status === TZAnalysisSupplierStatus.PROCESSING"
+							:loading="deletingId === supplier.id"
+							@click="removeSupplier(supplier.id)"
+						/>
+					</div>
+				</div>
+
+				<div
+					v-if="supplier.status === TZAnalysisSupplierStatus.PROCESSING"
+					class="flex items-center gap-2 rounded-md border border-warning/30 bg-warning/10 px-2.5 py-2"
+				>
+					<UIcon
+						name="i-lucide-loader"
+						class="w-4 h-4 shrink-0 animate-spin text-warning"
 					/>
+					<span class="text-xs font-medium text-warning">Обрабатывается КП…</span>
 				</div>
 
 				<div v-if="supplier.kp_filenames.length" class="space-y-1">
@@ -116,11 +94,60 @@
 				</div>
 			</div>
 		</div>
+
+		<UModal
+			v-model:open="showAddForm"
+			title="Добавить поставщика"
+			description="Укажите название поставщика и загрузите файлы КП."
+		>
+			<template #body>
+				<div class="space-y-4">
+					<UFormField label="Название поставщика" required>
+						<UInput
+							v-model="newSupplierName"
+							placeholder="ООО «Поставщик»"
+							size="md"
+							class="w-full"
+						/>
+					</UFormField>
+					<UFormField label="Файлы КП" required>
+						<UFileUpload
+							:model-value="newSupplierFiles"
+							:accept="fileAccept"
+							:interactive="true"
+							multiple
+							layout="list"
+							position="inside"
+							class="w-full min-h-32"
+							@update:model-value="onNewSupplierFilesChange"
+						>
+							<template #actions="{ open }">
+								<UButton type="button" variant="outline" size="sm" @click="open()">
+									<UIcon name="i-lucide-file-spreadsheet" class="w-4 h-4" />
+									Выбрать КП
+								</UButton>
+							</template>
+						</UFileUpload>
+					</UFormField>
+				</div>
+			</template>
+			<template #footer>
+				<div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 w-full">
+					<UButton variant="ghost" color="neutral" @click="resetAddForm">
+						Отмена
+					</UButton>
+					<UButton :loading="adding" :disabled="!canAddSupplier" @click="createSupplier">
+						Сохранить
+					</UButton>
+				</div>
+			</template>
+		</UModal>
 	</component>
 </template>
 
 <script lang="ts" setup>
 import type { TZAnalysisSupplierItem } from '#shared/types'
+import { TZAnalysisSupplierStatus } from '#shared/types'
 
 const props = withDefaults(defineProps<{
 	analysisId: string
@@ -155,6 +182,16 @@ const deletingId = ref<string | null>(null)
 const canAddSupplier = computed(() =>
 	newSupplierName.value.trim().length > 0 && newSupplierFiles.value.length > 0,
 )
+
+function supplierCardClass(supplier: TZAnalysisSupplierItem) {
+	if (supplier.status === TZAnalysisSupplierStatus.PROCESSING) {
+		return 'border-warning/40 bg-warning/5'
+	}
+	if (props.selectedSupplierId === supplier.id) {
+		return 'border-primary/40 bg-primary/5'
+	}
+	return 'border-default/60'
+}
 
 function kpFileWord(count: number) {
 	if (count === 1) return 'файл КП'

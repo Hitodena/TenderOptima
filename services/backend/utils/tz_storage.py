@@ -199,21 +199,73 @@ def resolve_supplier_kp_file_by_display_name(
     return path if path.is_file() else None
 
 
-def flatten_supplier_kp_entries(
-    suppliers: list[tuple[list[str], list[Path]]],
-) -> list[tuple[str, list[Path]]]:
-    """Pair each supplier KP display name with its path; dedupe names globally."""
-    raw_pairs: list[tuple[str, Path]] = []
-    for display_names, paths in suppliers:
-        for name, path in zip(display_names, paths, strict=True):
-            raw_pairs.append((name, path))
-    if not raw_pairs:
-        return []
-    unique_names = make_unique_filenames([name for name, _ in raw_pairs])
-    return [
-        (unique_names[index], [path])
-        for index, (_, path) in enumerate(raw_pairs)
+_SCOPED_KP_SEP = ": "
+
+
+def scoped_kp_display_name(supplier_name: str, filename: str) -> str:
+    """Build a unique analysis-level key for a supplier KP file."""
+    return f"{supplier_name}{_SCOPED_KP_SEP}{filename}"
+
+
+def supplier_kp_scoped_prefix(supplier_name: str) -> str:
+    """Prefix for all scoped KP keys belonging to one supplier."""
+    return scoped_kp_display_name(supplier_name, "")
+
+
+def purge_supplier_kp_from_analysis(
+    *,
+    supplier_name: str,
+    kp_filenames: list[str],
+    requirements_kp: dict,
+    kp_stats: dict,
+    items: list,
+    kp_filename: str | None,
+) -> dict:
+    """Remove one supplier's KP artifacts from merged analysis fields."""
+    prefix = supplier_kp_scoped_prefix(supplier_name)
+    next_filenames = [
+        name for name in kp_filenames if not name.startswith(prefix)
     ]
+    next_requirements_kp = {
+        key: value
+        for key, value in requirements_kp.items()
+        if not key.startswith(prefix)
+    }
+    next_kp_stats = {
+        key: value
+        for key, value in kp_stats.items()
+        if not key.startswith(prefix)
+    }
+    next_items = [
+        item
+        for item in items
+        if not (
+            isinstance(item, dict)
+            and str(item.get("kp_name") or "").startswith(prefix)
+        )
+    ]
+    next_kp_filename = kp_filename
+    if kp_filename and kp_filename.startswith(prefix):
+        next_kp_filename = next_filenames[0] if next_filenames else None
+    return {
+        "kp_filenames": next_filenames,
+        "requirements_kp": next_requirements_kp,
+        "kp_stats": next_kp_stats,
+        "items": next_items,
+        "kp_filename": next_kp_filename,
+    }
+
+
+def flatten_supplier_kp_entries(
+    suppliers: list[tuple[str, list[str], list[Path]]],
+) -> list[tuple[str, list[Path]]]:
+    """Pair each supplier KP with a supplier-scoped display name and path."""
+    result: list[tuple[str, list[Path]]] = []
+    for supplier_name, display_names, paths in suppliers:
+        for name, path in zip(display_names, paths, strict=True):
+            scoped = scoped_kp_display_name(supplier_name, name)
+            result.append((scoped, [path]))
+    return result
 
 
 def remove_supplier_dir(

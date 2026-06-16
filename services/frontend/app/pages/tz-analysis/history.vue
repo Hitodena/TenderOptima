@@ -5,7 +5,7 @@
 				<div>
 					<h1 class="text-3xl font-bold text-highlighted">История анализа технических предложений</h1>
 					<p class="text-muted text-sm mt-1">
-						Активные, в обработке и завершённые сравнения коммерческих предложений с техническими заданиями
+						Активные и завершённые сравнения коммерческих предложений с техническими заданиями
 					</p>
 				</div>
 				<div class="flex items-center gap-3 shrink-0">
@@ -124,28 +124,23 @@ const page = ref(1)
 const search = ref('')
 const confirmCompleteId = ref<string | null>(null)
 const completingId = ref<string | null>(null)
-const activeTab = ref<TZAnalysisHistoryGroup>(TZAnalysisHistoryGroup.DRAFT)
+const activeTab = ref<TZAnalysisHistoryGroup>(TZAnalysisHistoryGroup.ACTIVE)
 
 const tabs = [
-	{ label: 'Черновики', icon: 'i-lucide-file-pen', value: TZAnalysisHistoryGroup.DRAFT },
 	{ label: 'Активный', icon: 'i-lucide-activity', value: TZAnalysisHistoryGroup.ACTIVE },
-	{
-		label: 'В очереди на обработку',
-		icon: 'i-lucide-loader',
-		value: TZAnalysisHistoryGroup.PROCESSING,
-	},
 	{ label: 'Завершен', icon: 'i-lucide-archive', value: TZAnalysisHistoryGroup.COMPLETED },
 ]
 
+const ACTIVE_STATUSES = new Set<string>([
+	TZAnalysisRunStatus.DRAFT,
+	TZAnalysisRunStatus.ACTIVE,
+	TZAnalysisRunStatus.PROCESSING,
+	TZAnalysisRunStatus.FAILED,
+])
+
 function matchesTab(item: TZAnalysisListItem): boolean {
-	if (activeTab.value === TZAnalysisHistoryGroup.DRAFT) {
-		return item.status === TZAnalysisRunStatus.DRAFT
-	}
 	if (activeTab.value === TZAnalysisHistoryGroup.ACTIVE) {
-		return item.status === TZAnalysisRunStatus.ACTIVE
-	}
-	if (activeTab.value === TZAnalysisHistoryGroup.PROCESSING) {
-		return item.status === TZAnalysisRunStatus.PROCESSING
+		return ACTIVE_STATUSES.has(item.status)
 	}
 	return item.status === TZAnalysisRunStatus.COMPLETED
 }
@@ -180,14 +175,8 @@ const hasMore = computed(() =>
 
 const emptyMessage = computed(() => {
 	if (search.value.trim()) return 'Ничего не найдено'
-	if (activeTab.value === TZAnalysisHistoryGroup.DRAFT) {
-		return 'Черновиков пока нет'
-	}
 	if (activeTab.value === TZAnalysisHistoryGroup.ACTIVE) {
 		return 'Активных анализов пока нет'
-	}
-	if (activeTab.value === TZAnalysisHistoryGroup.PROCESSING) {
-		return 'Анализов в обработке пока нет'
 	}
 	return 'Завершённых анализов пока нет'
 })

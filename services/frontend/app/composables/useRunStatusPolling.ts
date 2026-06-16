@@ -9,6 +9,7 @@ export function useRunStatusPolling<T extends { status?: string }>(
 	onUpdate: (data: T) => void,
 	onSuccess?: () => void | Promise<void>,
 	onFailure?: () => void | Promise<void>,
+	keepPolling?: (data: T) => boolean,
 ) {
 	const { pause, resume } = useIntervalFn(
 		async () => {
@@ -17,7 +18,7 @@ export function useRunStatusPolling<T extends { status?: string }>(
 				const data = await fetchLatest()
 				if (!data) return
 				onUpdate(data)
-				if (data.status === 'processing') return
+				if (data.status === 'processing' || keepPolling?.(data)) return
 				polling.value = false
 				pause()
 				if (data.status === 'active') await onSuccess?.()

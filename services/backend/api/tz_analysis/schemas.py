@@ -8,6 +8,7 @@ from backend.enums import (
     TZAnalysisHistoryGroup,
     TZAnalysisRunStatus,
     TZAnalysisStatus,
+    TZAnalysisSupplierStatus,
 )
 from backend.schemas.analysis import (
     TZAnalysisItem,
@@ -150,13 +151,39 @@ class TZPrimaryKpRequest(BaseModel):
     ]
 
 
+class TZItemsOverridesRequest(BaseModel):
+    overrides: Annotated[
+        dict[str, dict],
+        Field(
+            description="Manual status overrides keyed by item index",
+        ),
+    ]
+
+    @field_validator("overrides", mode="before")
+    @classmethod
+    def validate_overrides(cls, value: object) -> dict[str, dict]:
+        if not isinstance(value, dict):
+            return {}
+        result: dict[str, dict] = {}
+        allowed = {s.value for s in TZAnalysisStatus}
+        for key, override in value.items():
+            if not isinstance(override, dict):
+                continue
+            status = override.get("status")
+            if status in allowed:
+                result[str(key)] = {"status": status}
+        return result
+
+
 class TZAnalysisSupplierItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     name: str
     kp_filenames: list[str] = []
+    primary_kp_filename: str | None = None
     order_index: int = 0
+    status: TZAnalysisSupplierStatus = TZAnalysisSupplierStatus.PENDING
 
 
 class TZAnalysisSupplierCreateRequest(BaseModel):
@@ -170,6 +197,17 @@ class TZAnalysisSupplierRenameRequest(BaseModel):
     name: Annotated[
         str,
         Field(min_length=1, max_length=255, description="Supplier name"),
+    ]
+
+
+class TZSupplierPrimaryKpRequest(BaseModel):
+    kp_filename: Annotated[
+        str,
+        Field(
+            min_length=1,
+            max_length=512,
+            description="Primary KP filename for this supplier",
+        ),
     ]
 
 
@@ -202,6 +240,7 @@ def row_to_session(row, *, suppliers=None) -> TZAnalysisDetailResponse:
         ),
         kp_stats=dict(getattr(row, "kp_stats", None) or {}),
         items=items,
+        items_overrides=dict(getattr(row, "items_overrides", None) or {}),
         match_score=row.match_score,
         met_count=row.met_count,
         partial_count=row.partial_count,

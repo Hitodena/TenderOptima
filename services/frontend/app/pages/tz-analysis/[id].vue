@@ -68,7 +68,7 @@
 				</UCard>
 			</template>
 
-			<template v-else-if="analysis.status === TZAnalysisRunStatus.PROCESSING">
+			<template v-else-if="analysis.status === TZAnalysisRunStatus.PROCESSING && processingPhase === 'tz'">
 				<UCard class="shadow-sm">
 					<div class="flex flex-col items-center justify-center py-20 gap-4 text-muted">
 						<UIcon name="i-lucide-loader" class="w-10 h-10 animate-spin text-warning" />
@@ -86,15 +86,15 @@
 					description="Не удалось выполнить анализ. Создайте новый анализ и попробуйте снова." />
 			</template>
 
-			<template v-else-if="isTzReviewPhase || needsRequirementsReview || hasConfirmedResults">
+			<template v-else-if="isTzReviewPhase || hasConfirmedResults || kpAnalysisStarted">
 				<UAlert
-					v-if="isCompleted && hasKpContent"
+					v-if="isCompleted && hasKpContent && !hasSuppliersProcessing"
 					color="neutral"
 					variant="soft"
 					icon="i-lucide-archive"
 					class="mb-6"
 					title="Анализ завершён"
-					description="Просмотр результатов доступен. Редактирование и загрузка новых КП недоступны."
+					description="Просмотр результатов доступен. Добавление и удаление поставщиков недоступны."
 				/>
 				<UAlert
 					v-else-if="isAnalysisClosed"
@@ -108,7 +108,7 @@
 
 				<UTabs v-model="activeContentTab" :items="visibleContentTabItems" :ui="{ list: 'mb-6' }">
 					<template #tz>
-						<div v-if="(isTzReviewPhase || needsRequirementsReview) && !isAnalysisClosed"
+						<div v-if="isTzReviewPhase && !isAnalysisClosed"
 							class="mb-6 rounded-xl border border-warning/25 bg-warning/10 p-4 sm:p-5">
 							<div class="flex gap-3 min-w-0">
 								<UIcon name="i-lucide-info" class="w-5 h-5 shrink-0 text-warning mt-0.5" />
@@ -117,16 +117,9 @@
 										Проверьте извлечённые требования
 									</p>
 									<p class="text-sm text-muted">
-										<template v-if="isTzReviewPhase">
-											Система извлекла требования из ТЗ. Удалите лишние пункты,
-											добавьте недостающие, затем добавьте поставщиков с КП
-											для сравнения.
-										</template>
-										<template v-else>
-											Система извлекла требования из ТЗ и предложения из КП.
-											Удалите лишние пункты, добавьте недостающие, затем подтвердите
-											для запуска сравнения.
-										</template>
+										Система извлекла требования из ТЗ. Удалите лишние пункты,
+										добавьте недостающие, затем добавьте поставщиков с КП
+										для сравнения.
 									</p>
 								</div>
 							</div>
@@ -143,10 +136,12 @@
 								</div>
 							</template>
 
-							<div class="max-h-[65vh] overflow-y-auto pr-1">
+							<div class="overflow-y-auto pr-1">
 								<RequirementTreeEditor v-if="editableTzCount > 0" :rows="editableRequirementsTz"
 									:scope-id="hasConfirmedResults ? 'tz-results' : 'tz-review'"
-									:readonly="hasConfirmedResults || isCompleted" show-heading-hint @remove="removeTzRequirement" />
+									:readonly="hasConfirmedResults || isCompleted" show-heading-hint
+									@remove="removeTzRequirement"
+									@add-child="addTzChildRequirement" />
 								<p v-else class="text-sm text-muted text-center py-4">
 									Нет извлечённых требований
 								</p>
@@ -167,13 +162,64 @@
 							: ''">
 							<TzAnalysisSuppliersPanel v-if="showSuppliersSidebar && analysis?.id"
 								:analysis-id="analysis.id" :suppliers="suppliers" :file-accept="fileAccept"
-								:readonly="hasConfirmedResults || needsRequirementsReview || isCompleted"
+								:readonly="isCompleted || isAnalysisClosed"
 								:selected-supplier-id="selectedSupplierId" :compact="!isTzReviewPhase"
 								@select="selectedSupplierId = $event"
 								@open-kp="({ supplierId, filename }) => openKpFile(filename, supplierId)"
 								@updated="refreshAnalysis" />
 
 							<div class="min-w-0 space-y-6">
+								<UCard
+									v-if="hasSuppliersProcessing && !isTzReviewPhase"
+									class="shadow-sm"
+								>
+									<div class="flex items-center gap-3 py-4 text-muted">
+										<UIcon name="i-lucide-loader" class="w-5 h-5 animate-spin text-warning shrink-0" />
+										<p class="text-sm">
+											Анализ коммерческих предложений выполняется. Раздел ТЗ доступен для просмотра.
+										</p>
+									</div>
+								</UCard>
+
+								<UCard
+									v-if="selectedSupplier && !hasConfirmedResults && !isAnalysisClosed"
+									class="shadow-sm"
+								>
+									<template #header>
+										<div class="flex items-center justify-between gap-2">
+											<p class="font-semibold text-sm">
+												КП — {{ selectedSupplier.name }}
+											</p>
+											<UBadge
+												v-if="selectedSupplier.status === TZAnalysisSupplierStatus.PROCESSING"
+												color="warning"
+												variant="subtle"
+												size="xs"
+											>
+												Обрабатывается
+											</UBadge>
+										</div>
+									</template>
+									<div
+										v-if="selectedSupplier.kp_filenames.length"
+										class="space-y-2"
+									>
+										<button
+											v-for="filename in selectedSupplier.kp_filenames"
+											:key="`${selectedSupplier.id}-${filename}`"
+											type="button"
+											class="flex items-center gap-2 text-sm text-primary hover:underline text-left"
+											@click="openKpFile(filename, selectedSupplier.id)"
+										>
+											<UIcon name="i-lucide-file-spreadsheet" class="w-4 h-4 shrink-0" />
+											<span class="truncate">{{ filename }}</span>
+										</button>
+									</div>
+									<p v-else class="text-sm text-muted">
+										Нет загруженных файлов КП
+									</p>
+								</UCard>
+
 								<template v-if="isAnalysisClosed">
 									<UAlert color="neutral" variant="soft" icon="i-lucide-lock"
 										description="Анализ завершён без сравнения с КП. Этот раздел недоступен." />
@@ -181,75 +227,13 @@
 
 								<template v-else-if="isTzReviewPhase && !isCompleted">
 									<div class="flex flex-wrap items-center gap-2">
-										<UButton variant="outline" :loading="savingRequirements"
-											@click="saveTzRequirements">
-											Сохранить требования
-										</UButton>
 										<UButton color="warning" variant="solid" :loading="kpAnalyzing"
 											:disabled="!canRunKpAnalysis" @click="runKpAnalysis">
 											Запустить анализ КП
 										</UButton>
-									</div>
-								</template>
-
-								<template v-else-if="needsRequirementsReview">
-									<div class="space-y-4">
-										<UCard v-for="group in kpRequirementsGroups" :key="`review-kp-${group.id}`"
-											class="shadow-sm">
-											<template #header>
-												<button type="button"
-													class="flex w-full items-center justify-between gap-2 text-left"
-													:aria-expanded="isReviewKpExpanded(group.id)"
-													@click.stop="toggleReviewKpExpand(group.id)">
-													<div class="flex items-center gap-2 min-w-0">
-														<UIcon :name="isReviewKpExpanded(group.id)
-															? 'i-lucide-chevron-down'
-															: 'i-lucide-chevron-right'" class="w-4 h-4 shrink-0 text-muted" />
-														<div class="min-w-0">
-															<p class="font-semibold text-sm">{{ group.label }}</p>
-															<button v-if="group.filename" type="button"
-																class="text-xs text-primary hover:underline truncate mt-0.5 text-left max-w-full"
-																@click.stop="openKpFileForGroup(group)">
-																{{ group.filename }}
-															</button>
-														</div>
-													</div>
-													<UBadge color="neutral" variant="subtle" size="xs" class="shrink-0">
-														{{ countRequirementRows(group.items) }}
-														{{ requirementWord(countRequirementRows(group.items)) }}
-													</UBadge>
-												</button>
-											</template>
-
-											<template v-if="isReviewKpExpanded(group.id) && !isCompleted" #footer>
-												<UButton type="button" variant="outline" size="sm"
-													leading-icon="i-lucide-plus" @click="addKpRequirement(group.key)">
-													Добавить предложение
-												</UButton>
-											</template>
-
-											<div v-show="isReviewKpExpanded(group.id)"
-												class="max-h-[50vh] overflow-y-auto pr-1">
-												<RequirementTreeEditor v-if="countRequirementRows(group.items) > 0"
-													:rows="group.items" :scope-id="`review-kp-${group.id}`"
-													:readonly="isCompleted"
-													@remove="(idx: number) => removeKpRequirement(group.key, idx)" />
-												<p v-else class="text-sm text-muted text-center py-4">
-													Нет извлечённых предложений
-												</p>
-											</div>
-										</UCard>
-									</div>
-
-									<div v-if="!isCompleted" class="flex flex-wrap items-center gap-2">
-										<UButton variant="outline" :loading="savingRequirements"
-											@click="saveRequirements">
-											Сохранить изменения
-										</UButton>
-										<UButton color="warning" variant="solid" :loading="confirming"
-											:disabled="!canConfirmRequirements" @click="confirmAnalysis">
-											Подтвердить и запустить сравнение
-										</UButton>
+										<p v-if="!canRunKpAnalysis" class="text-xs text-muted">
+											Добавьте хотя бы одного поставщика с файлами КП
+										</p>
 									</div>
 								</template>
 
@@ -259,41 +243,102 @@
 								</template>
 
 								<template v-else-if="hasConfirmedResults">
+									<div
+										v-if="hasPendingSuppliers && !isCompleted"
+										class="flex flex-wrap items-center gap-2"
+									>
+										<UButton
+											color="warning"
+											variant="solid"
+											:loading="kpAnalyzing"
+											:disabled="!canRunKpAnalysis"
+											@click="runKpAnalysis"
+										>
+											Запустить анализ КП для новых поставщиков
+										</UButton>
+									</div>
+
 									<div class="flex flex-wrap items-end justify-between gap-4">
-										<UFormField v-if="hasMultipleLetterKps" label="Основное КП" class="mb-0">
-											<USelect
-												:model-value="analysis.kp_filename ?? undefined"
-												:items="primaryKpOptions"
-												:loading="primaryKpSaving"
-												size="sm"
-												class="min-w-56"
-												@update:model-value="setPrimaryKp"
-											/>
-										</UFormField>
+										<div class="space-y-2">
+											<p
+												v-if="selectedSupplier"
+												class="text-sm text-muted"
+											>
+												Поставщик:
+												<span class="font-medium text-default">
+													{{ selectedSupplier.name }}
+												</span>
+											</p>
+											<UFormField
+												v-if="selectedSupplier?.kp_filenames.length"
+												label="Основное КП"
+												class="mb-0"
+											>
+												<USelect
+													v-if="hasMultipleSelectedSupplierKps"
+													:model-value="selectedSupplierPrimaryKp ?? undefined"
+													:items="selectedSupplierKpOptions"
+													:loading="primaryKpSaving"
+													size="sm"
+													class="min-w-56"
+													@update:model-value="setPrimaryKp"
+												/>
+												<button
+													v-else-if="selectedSupplierPrimaryKpLabel && selectedSupplier"
+													type="button"
+													class="text-sm text-primary hover:underline text-left"
+													@click="openKpFile(
+														selectedSupplierPrimaryKpLabel,
+														selectedSupplier.id,
+													)"
+												>
+													{{ selectedSupplierPrimaryKpLabel }}
+												</button>
+											</UFormField>
+										</div>
 										<div class="flex flex-wrap items-center gap-2">
 											<UBadge color="primary" variant="subtle" size="lg">
-												{{ primaryStatsSummary.match_score }}% соответствия
-												<span v-if="hasMultipleLetterKps" class="opacity-80">· основное КП</span>
+												{{ selectedSupplierStats.match_score }}% соответствия
+												<span
+													v-if="hasMultipleSelectedSupplierKps"
+													class="opacity-80"
+												>· основное КП</span>
 											</UBadge>
 											<UBadge color="success" variant="subtle">
-												{{ primaryStatsSummary.met_count }} ок
+												{{ selectedSupplierStats.met_count }} ок
 											</UBadge>
 											<UBadge color="warning" variant="subtle">
-												{{ primaryStatsSummary.partial_count }} частично
+												{{ selectedSupplierStats.partial_count }} частично
 											</UBadge>
 											<UBadge color="error" variant="subtle">
-												{{ primaryStatsSummary.missing_count }} нет
+												{{ selectedSupplierStats.missing_count }} нет
 											</UBadge>
 											<UBadge color="neutral" variant="subtle">
-												{{ primaryStatsSummary.not_found_count }} не найдено
+												{{ selectedSupplierStats.not_found_count }} не найдено
 											</UBadge>
 										</div>
 									</div>
 
 									<UCard class="shadow-sm w-full">
 										<template #header>
-											<div class="flex items-center justify-between gap-2 w-full flex-wrap">
-												<p class="font-semibold text-sm">Соответствия и несоответствия</p>
+											<div class="flex flex-col gap-3 w-full">
+												<div class="flex flex-wrap items-center justify-between gap-3 w-full">
+													<p class="font-semibold text-sm">Соответствия и несоответствия</p>
+													<div class="flex flex-wrap items-center gap-2">
+														<UButton size="sm" variant="outline" leading-icon="i-lucide-download"
+															@click="exportTzCsv">
+															Экспорт CSV
+														</UButton>
+														<UButton size="sm" leading-icon="i-lucide-file-text"
+															:disabled="tzSelectedIndices.length === 0" @click="openLetterModal">
+															Письмо поставщику
+														</UButton>
+														<UBadge v-if="tzSelectedIndices.length > 0" color="neutral"
+															variant="subtle">
+															{{ tzSelectedIndices.length }} в письме
+														</UBadge>
+													</div>
+												</div>
 												<UFormField label="Фильтр" class="mb-0">
 													<USelect v-model="tzStatusFilter" :items="tzFilterOptions" size="sm"
 														class="min-w-40" />
@@ -301,7 +346,7 @@
 											</div>
 										</template>
 
-										<div class="max-h-[70vh] overflow-y-auto pr-1 space-y-8">
+										<div class="min-h-[55vh] max-h-[85vh] overflow-y-auto pr-1 space-y-8">
 											<section v-for="group in visibleKpItemGroups"
 												:key="`results-kp-${group.id}`" class="space-y-4">
 												<button type="button" class="sticky top-0 z-10 -mx-1 px-1 py-2 w-full text-left
@@ -342,32 +387,23 @@
 														:toggle-item-expand="toggleItemExpand"
 														:tz-selected-indices="tzSelectedIndices"
 														:belongs-to-primary-kp="belongsToPrimaryKp"
-														@toggle-select="toggleTzSelect" />
+														:editable="canEditItemStatuses"
+														:is-item-overridden="isItemOverridden"
+														@toggle-select="toggleTzSelect"
+														@status-change="updateItemStatus" />
 												</div>
 											</section>
 
 											<p v-if="visibleKpItemGroups.length === 0"
 												class="text-sm text-muted text-center py-8">
-												Нет пунктов по выбранному фильтру
+												<template v-if="selectedSupplier">
+													Нет результатов для поставщика «{{ selectedSupplier.name }}»
+												</template>
+												<template v-else>
+													Выберите поставщика в списке слева
+												</template>
 											</p>
 										</div>
-
-										<template #footer>
-											<div class="flex flex-wrap items-center gap-2">
-												<UButton size="sm" variant="outline" leading-icon="i-lucide-download"
-													@click="exportTzCsv">
-													Экспорт CSV
-												</UButton>
-												<UButton size="sm" leading-icon="i-lucide-file-text"
-													:disabled="tzSelectedIndices.length === 0" @click="openLetterModal">
-													Письмо поставщику
-												</UButton>
-												<UBadge v-if="tzSelectedIndices.length > 0" color="neutral"
-													variant="subtle">
-													{{ tzSelectedIndices.length }} в письме
-												</UBadge>
-											</div>
-										</template>
 									</UCard>
 								</template>
 							</div>
@@ -376,12 +412,6 @@
 				</UTabs>
 			</template>
 		</template>
-
-		<UModal v-model:open="showQueueModal" :title="processingQueueTitle" :description="processingModalDescription">
-			<template #footer>
-				<UButton block @click="showQueueModal = false">Понятно</UButton>
-			</template>
-		</UModal>
 
 		<UModal v-model:open="showLetterModal" title="Письмо поставщику"
 			description="Письмо формируется по основному КП. Снимите галочки у пунктов, которые не нужно включать."
@@ -395,7 +425,23 @@
 					<div class="grid grid-cols-1 md:grid-cols-[15rem_minmax(0,1fr)] gap-5 min-h-0">
 						<aside class="flex flex-col gap-4 min-h-0 md:max-h-[62vh]">
 							<div class="space-y-3 shrink-0">
-								<p v-if="primaryKpLabel" class="text-xs text-muted">
+								<p v-if="selectedSupplier" class="text-xs text-muted">
+									Поставщик:
+									<span class="text-default font-medium">{{ selectedSupplier.name }}</span>
+									<span v-if="primaryKpLabel"> · КП: </span>
+									<button
+										v-if="selectedSupplierPrimaryKp"
+										type="button"
+										class="text-primary hover:underline font-medium"
+										@click="openKpFile(
+											kpDisplayLabel(selectedSupplierPrimaryKp),
+											selectedSupplier.id,
+										)"
+									>
+										{{ primaryKpLabel }}
+									</button>
+								</p>
+								<p v-else-if="primaryKpLabel" class="text-xs text-muted">
 									Основное КП:
 									<button v-if="analysis?.kp_filename" type="button"
 										class="text-primary hover:underline font-medium"
@@ -513,25 +559,33 @@
 
 <script lang="ts" setup>
 import type {
-	TZAnalysisConfirmRequest,
 	TZAnalysisItem,
 	TZAnalysisKpStats,
 	TZAnalysisPreviewResponse,
 	TZAnalysisSession,
 	TZAnalysisStatus,
-	TZRequirementsUpdateRequest,
+	TZAnalysisSupplierItem,
 	UserResponse,
 } from '#shared/types'
 import {
 	getTzItemStatusColor,
 	getTzRunStatusColor,
 	getTzRunStatusLabel,
-	TZAnalysisRunStatus
+	TZAnalysisRunStatus,
+	TZAnalysisSupplierStatus,
 } from '#shared/types'
+import {
+	isKpScopedToSupplier,
+	kpDisplayLabel,
+	parseScopedKpName,
+	scopedKpDisplayName,
+	supplierKpScopedPrefix,
+} from '#shared/utils/kpDisplay'
 import {
 	buildResultTree,
 	countRequirementRows,
 	flattenRequirementsToRows,
+	nextChildKey,
 	requirementsNonempty,
 	requirementsRowsNonempty,
 	rowsToHierarchy,
@@ -587,12 +641,10 @@ const kpAnalyzing = ref(false)
 const tzPolling = ref(false)
 const tzSelectedIndices = ref<number[]>([])
 const tzStatusFilter = ref('all')
-const showQueueModal = ref(false)
-const processingPhase = ref<'tz' | 'kp'>('tz')
 const showLetterModal = ref(false)
 const letterPreviewTab = ref('mismatch')
-const confirming = ref(false)
-const savingRequirements = ref(false)
+const processingPhase = ref<'tz' | 'kp'>('tz')
+const itemsOverrides = ref<Record<string, { status: TZAnalysisStatus }>>({})
 const primaryKpSaving = ref(false)
 const editableRequirementsTz = ref<EditableRequirementRow[]>([])
 const editableRequirementsKp = ref<Record<string, EditableRequirementRow[]>>({})
@@ -626,10 +678,8 @@ type KpItemGroup = {
 }
 
 const expandedItems = ref<Set<number>>(new Set())
-const reviewKpExpanded = ref<Record<number, boolean>>({})
 const resultsKpExpanded = ref<Record<number, boolean>>({})
 
-let reviewKpKeysSignature = ''
 let resultsKpKeysSignature = ''
 
 const KP_GROUPS_DEFAULT_EXPANDED = 2
@@ -642,13 +692,6 @@ function buildKpExpandedState(count: number): Record<number, boolean> {
 	return next
 }
 
-function ensureReviewKpExpanded(keys: string[]) {
-	const signature = keys.map((key, idx) => `${idx}:${key}`).join('|')
-	if (signature === reviewKpKeysSignature) return
-	reviewKpKeysSignature = signature
-	reviewKpExpanded.value = buildKpExpandedState(keys.length)
-}
-
 function ensureResultsKpExpanded(keys: string[]) {
 	const signature = keys.map((key, idx) => `${idx}:${key}`).join('|')
 	if (signature === resultsKpKeysSignature) return
@@ -656,19 +699,8 @@ function ensureResultsKpExpanded(keys: string[]) {
 	resultsKpExpanded.value = buildKpExpandedState(keys.length)
 }
 
-function isReviewKpExpanded(id: number) {
-	return reviewKpExpanded.value[id] ?? true
-}
-
 function isResultsKpExpanded(id: number) {
 	return resultsKpExpanded.value[id] ?? true
-}
-
-function toggleReviewKpExpand(id: number) {
-	reviewKpExpanded.value = {
-		...reviewKpExpanded.value,
-		[id]: !isReviewKpExpanded(id),
-	}
 }
 
 function toggleResultsKpExpand(id: number) {
@@ -688,41 +720,34 @@ function inferProcessingPhase(data: TZAnalysisSession): 'tz' | 'kp' {
 }
 
 const isDraft = computed(() => analysis.value?.status === TZAnalysisRunStatus.DRAFT)
-const isKpCompareProcessing = computed(() =>
-	analysis.value?.status === TZAnalysisRunStatus.PROCESSING
-	&& processingPhase.value === 'kp',
-)
-const processingQueueTitle = computed(() =>
-	isKpCompareProcessing.value
-		? 'Сравнение с КП поставлено в очередь'
-		: 'Извлечение требований поставлено в очередь',
-)
-const processingStatusLabel = computed(() =>
-	isKpCompareProcessing.value
-		? 'Сравнение с коммерческими предложениями'
-		: 'Извлечение требований из ТЗ',
-)
+const processingStatusLabel = computed(() => 'Извлечение требований из ТЗ')
 const processingWaitHint = computed(() =>
-	isKpCompareProcessing.value
-		? 'Ожидайте результатов до 2 часов. Страница обновится автоматически.'
-		: 'Ожидайте результатов до 15 минут. Страница обновится автоматически.',
-)
-const processingModalDescription = computed(() =>
-	isKpCompareProcessing.value
-		? 'Ожидайте результатов до 2 часов. Вы можете оставаться на этой странице — результаты появятся автоматически.'
-		: 'Ожидайте результатов до 15 минут. Вы можете оставаться на этой странице — результаты появятся автоматически.',
+	'Ожидайте результатов до 15 минут. Страница обновится автоматически.',
 )
 const hasResults = computed(() =>
 	analysis.value?.status === TZAnalysisRunStatus.ACTIVE
 	|| analysis.value?.status === TZAnalysisRunStatus.COMPLETED,
 )
+const suppliers = computed(() => analysis.value?.suppliers ?? [])
+const hasSuppliersProcessing = computed(() =>
+	suppliers.value.some(
+		(supplier) => supplier.status === TZAnalysisSupplierStatus.PROCESSING,
+	),
+)
+const kpAnalysisStarted = computed(() =>
+	hasSuppliersProcessing.value
+	|| suppliers.value.some(
+		(supplier) =>
+			supplier.status === TZAnalysisSupplierStatus.COMPLETED
+			|| supplier.status === TZAnalysisSupplierStatus.FAILED,
+	)
+	|| (analysis.value?.items?.length ?? 0) > 0,
+)
 const isTzReviewPhase = computed(() =>
 	hasResults.value
 	&& !analysis.value?.confirmed
-	&& Object.keys(analysis.value?.requirements_kp ?? {}).length === 0,
-)
-const needsRequirementsReview = computed(() =>
-	hasResults.value && !analysis.value?.confirmed && !isTzReviewPhase.value,
+	&& Object.keys(analysis.value?.requirements_kp ?? {}).length === 0
+	&& !kpAnalysisStarted.value,
 )
 const hasConfirmedResults = computed(() =>
 	hasResults.value && Boolean(analysis.value?.confirmed),
@@ -730,10 +755,79 @@ const hasConfirmedResults = computed(() =>
 const isCompleted = computed(() =>
 	analysis.value?.status === TZAnalysisRunStatus.COMPLETED,
 )
-const suppliers = computed(() => analysis.value?.suppliers ?? [])
 const hasSuppliersWithFiles = computed(() =>
 	suppliers.value.some((supplier) => supplier.kp_filenames.length > 0),
 )
+
+const hasPendingSuppliers = computed(() =>
+	suppliers.value.some(
+		(supplier) =>
+			(supplier.status === TZAnalysisSupplierStatus.PENDING
+				|| supplier.status === TZAnalysisSupplierStatus.FAILED)
+			&& supplier.kp_filenames.length > 0,
+	),
+)
+
+const selectedSupplier = computed(() =>
+	suppliers.value.find((entry) => entry.id === selectedSupplierId.value) ?? null,
+)
+
+const selectedSupplierKpKeys = computed(() => {
+	const supplier = selectedSupplier.value
+	if (!supplier) return [] as string[]
+	const prefix = supplierKpScopedPrefix(supplier.name)
+	return displayKpFilenames.value.filter((name) => name.startsWith(prefix))
+})
+
+const selectedSupplierKpOptions = computed(() => {
+	const supplier = selectedSupplier.value
+	if (!supplier) return []
+	return supplier.kp_filenames.map((filename) => ({
+		label: filename,
+		value: scopedKpDisplayName(supplier.name, filename),
+	}))
+})
+
+function selectedSupplierRawPrimaryFilename(supplier: TZAnalysisSupplierItem) {
+	if (supplier.primary_kp_filename
+		&& supplier.kp_filenames.includes(supplier.primary_kp_filename)) {
+		return supplier.primary_kp_filename
+	}
+	return supplier.kp_filenames[0] ?? null
+}
+
+const selectedSupplierPrimaryKp = computed(() => {
+	const supplier = selectedSupplier.value
+	if (!supplier) return null
+	const filename = selectedSupplierRawPrimaryFilename(supplier)
+	if (!filename) return null
+	return scopedKpDisplayName(supplier.name, filename)
+})
+
+const selectedSupplierPrimaryKpLabel = computed(() => {
+	const supplier = selectedSupplier.value
+	if (!supplier) return null
+	return selectedSupplierRawPrimaryFilename(supplier)
+})
+
+const hasMultipleSelectedSupplierKps = computed(() =>
+	(selectedSupplier.value?.kp_filenames.length ?? 0) > 1,
+)
+
+function ensureSelectedSupplier() {
+	const list = suppliers.value
+	if (list.length === 0) {
+		selectedSupplierId.value = null
+		return
+	}
+	if (
+		!selectedSupplierId.value
+		|| !list.some((entry) => entry.id === selectedSupplierId.value)
+	) {
+		selectedSupplierId.value = list[0]!.id
+	}
+}
+
 const hasKpContent = computed(() => {
 	if (!analysis.value) return false
 	if (analysis.value.confirmed && (analysis.value.items?.length ?? 0) > 0) {
@@ -757,22 +851,24 @@ const visibleContentTabItems = computed(() =>
 )
 const showSuppliersSidebar = computed(() =>
 	(isTzReviewPhase.value
-		|| needsRequirementsReview.value
-		|| hasConfirmedResults.value)
+		|| hasConfirmedResults.value
+		|| kpAnalysisStarted.value)
 	&& !isAnalysisClosed.value,
 )
-const primaryStatsSummary = computed(() => {
-	const primary = analysis.value?.kp_filename
-	const stats = primary && analysis.value?.kp_stats?.[primary]
+const selectedSupplierStats = computed(() => {
+	const primary = selectedSupplierPrimaryKp.value
+	const stats = primary ? analysis.value?.kp_stats?.[primary] : null
 	if (stats) return stats
+	const items = visibleKpItemGroups.value.flatMap((group) => group.items)
 	return {
-		match_score: analysis.value?.match_score ?? 0,
-		met_count: analysis.value?.met_count ?? 0,
-		partial_count: analysis.value?.partial_count ?? 0,
-		missing_count: analysis.value?.missing_count ?? 0,
-		not_found_count: analysis.value?.not_found_count ?? 0,
+		match_score: 0,
+		met_count: items.filter((item) => item.status === 'met').length,
+		partial_count: items.filter((item) => item.status === 'partial').length,
+		missing_count: items.filter((item) => item.status === 'missing').length,
+		not_found_count: items.filter((item) => item.status === 'not_found').length,
 	}
 })
+
 function findSupplierKpFileByFlatIndex(flatIndex: number) {
 	let cursor = 0
 	for (const supplier of suppliers.value) {
@@ -787,26 +883,28 @@ function findSupplierKpFileByFlatIndex(flatIndex: number) {
 }
 
 function findSupplierKpFile(displayName: string) {
+	const parsed = parseScopedKpName(displayName)
+	if (parsed) {
+		const supplier = suppliers.value.find(
+			(entry) => entry.name === parsed.supplierName,
+		)
+		if (supplier) {
+			return { supplier, filename: parsed.filename }
+		}
+	}
 	const flatIndex = displayKpFilenames.value.indexOf(displayName)
 	if (flatIndex < 0) return null
 	return findSupplierKpFileByFlatIndex(flatIndex)
 }
 
 const visibleKpItemGroups = computed(() => {
-	if (!selectedSupplierId.value || !hasConfirmedResults.value) {
+	if (suppliers.value.length === 0) {
 		return kpItemGroups.value
 	}
-	let cursor = 0
-	const allowedIndices = new Set<number>()
-	for (const supplier of suppliers.value) {
-		for (const _filename of supplier.kp_filenames) {
-			if (supplier.id === selectedSupplierId.value) {
-				allowedIndices.add(cursor)
-			}
-			cursor++
-		}
-	}
-	return kpItemGroups.value.filter((group) => allowedIndices.has(group.id))
+	const supplier = selectedSupplier.value
+	if (!supplier) return []
+	const prefix = supplierKpScopedPrefix(supplier.name)
+	return kpItemGroups.value.filter((group) => group.key.startsWith(prefix))
 })
 const statusColor = computed(() =>
 	getTzRunStatusColor(analysis.value?.status ?? TZAnalysisRunStatus.DRAFT),
@@ -815,9 +913,24 @@ const statusLabel = computed(() =>
 	getTzRunStatusLabel(analysis.value?.status ?? TZAnalysisRunStatus.DRAFT),
 )
 
+const overrideSaving = ref(false)
+const canEditItemStatuses = computed(() => hasConfirmedResults.value)
+
+function applyItemOverrides(items: TZAnalysisItem[]): TZAnalysisItem[] {
+	return items.map((item, index) => {
+		const override = itemsOverrides.value[String(index)]
+		if (!override?.status) return item
+		return { ...item, status: override.status }
+	})
+}
+
+function isItemOverridden(index: number) {
+	return Boolean(itemsOverrides.value[String(index)]?.status)
+}
+
 const filteredTzItems = computed((): TZItemView[] => {
 	if (!analysis.value) return []
-	return analysis.value.items
+	return applyItemOverrides(analysis.value.items)
 		.map((item, index) => ({ ...item, _index: index }))
 		.filter((item) =>
 			tzStatusFilter.value === 'all' || item.status === tzStatusFilter.value,
@@ -867,8 +980,8 @@ const kpItemGroups = computed((): KpItemGroup[] => {
 		key,
 		label: key === '_default'
 			? (filenames.length > 1 || orderedKeys.length > 1 ? `КП ${idx + 1}` : 'КП 1')
-			: key,
-		filename: key === '_default' ? null : key,
+			: kpDisplayLabel(key),
+		filename: key === '_default' ? null : kpDisplayLabel(key),
 		items: bucket.get(key) ?? [],
 	}))
 })
@@ -905,54 +1018,23 @@ const displayKpFilenames = computed(() => {
 	return []
 })
 
-type KpRequirementsGroup = {
-	id: number
-	key: string
-	label: string
-	filename: string | null
-	items: EditableRequirementRow[]
-}
+const hasMultipleLetterKps = computed(() => hasMultipleSelectedSupplierKps.value)
 
-const kpRequirementsGroups = computed((): KpRequirementsGroup[] => {
-	const filenames = displayKpFilenames.value
-	const keys = filenames.length
-		? filenames
-		: Object.keys(editableRequirementsKp.value)
+const primaryKpOptions = computed(() => selectedSupplierKpOptions.value)
 
-	return keys.map((key, idx) => ({
-		id: idx,
-		key,
-		label: key === '_default'
-			? (keys.length > 1 ? `КП ${idx + 1}` : 'КП 1')
-			: key,
-		filename: key === '_default' ? null : key,
-		items: editableRequirementsKp.value[key] ?? [],
-	}))
-})
+const primaryKpLabel = computed(() => selectedSupplierPrimaryKpLabel.value)
 
-const hasMultipleLetterKps = computed(() => kpItemGroups.value.length > 1)
-
-const primaryKpOptions = computed(() =>
-	displayKpFilenames.value.map((filename) => ({
-		label: filename,
-		value: filename,
-	})),
-)
-
-const primaryKpLabel = computed(() => {
-	const primary = analysis.value?.kp_filename
-	if (!primary) return null
-	return primaryKpOptions.value.find((option) => option.value === primary)?.label
-		?? primary
-})
-
-async function setPrimaryKp(kpFilename: string | null) {
-	if (!analysis.value?.id || !kpFilename || primaryKpSaving.value) return
-	if (kpFilename === analysis.value.kp_filename) return
+async function setPrimaryKp(scopedKpFilename: string | null) {
+	if (!analysis.value?.id || !scopedKpFilename || primaryKpSaving.value) return
+	const supplier = selectedSupplier.value
+	if (!supplier) return
+	const parsed = parseScopedKpName(scopedKpFilename)
+	const kpFilename = parsed?.filename ?? scopedKpFilename
+	if (kpFilename === supplier.primary_kp_filename) return
 	primaryKpSaving.value = true
 	try {
 		const updated = await patch<TZAnalysisSession>(
-			`/tz-analysis/${analysis.value.id}/primary-kp`,
+			`/tz-analysis/${analysis.value.id}/suppliers/${supplier.id}/primary-kp`,
 			{ kp_filename: kpFilename },
 		)
 		applyAnalysis(updated)
@@ -972,9 +1054,16 @@ function getItemKpKey(item: TZAnalysisItem): string {
 	return item.kp_name || filenames[0] || '_default'
 }
 
+function belongsToSelectedSupplier(item: TZAnalysisItem): boolean {
+	const supplier = selectedSupplier.value
+	if (!supplier) return true
+	return isKpScopedToSupplier(getItemKpKey(item), supplier.name)
+}
+
 function belongsToPrimaryKp(item: TZAnalysisItem): boolean {
-	const primary = analysis.value?.kp_filename
-	if (!primary || !hasMultipleLetterKps.value) return true
+	if (!belongsToSelectedSupplier(item)) return false
+	const primary = selectedSupplierPrimaryKp.value
+	if (!primary || !hasMultipleSelectedSupplierKps.value) return true
 	return getItemKpKey(item) === primary
 }
 
@@ -1018,13 +1107,6 @@ const editableTzCount = computed(() =>
 	countRequirementRows(editableRequirementsTz.value),
 )
 
-const canConfirmRequirements = computed(() => {
-	if (!requirementsRowsNonempty(editableRequirementsTz.value)) return false
-	return kpRequirementsGroups.value.some((group) =>
-		requirementsRowsNonempty(group.items),
-	)
-})
-
 function syncEditableRequirements(data: TZAnalysisSession) {
 	editableRequirementsTz.value = flattenRequirementsToRows(data.requirements_tz)
 	const kpSource = data.requirements_kp ?? {}
@@ -1036,18 +1118,6 @@ function syncEditableRequirements(data: TZAnalysisSession) {
 	editableRequirementsKp.value = Object.fromEntries(
 		filenames.map((name) => [name, flattenRequirementsToRows(kpSource[name])]),
 	)
-	ensureReviewKpExpanded(filenames.length ? filenames : Object.keys(kpSource))
-}
-
-function normalizedRequirementsPayload(): TZRequirementsUpdateRequest {
-	const requirements_tz = rowsToHierarchy(editableRequirementsTz.value)
-	const requirements_kp = Object.fromEntries(
-		Object.entries(editableRequirementsKp.value).map(([key, rows]) => [
-			key,
-			rowsToHierarchy(rows),
-		]),
-	)
-	return { requirements_tz, requirements_kp }
 }
 
 function nextTopLevelKey(rows: EditableRequirementRow[]): string {
@@ -1065,98 +1135,20 @@ function addTzRequirement() {
 	]
 }
 
+function addTzChildRequirement(parentKey: string) {
+	editableRequirementsTz.value = [
+		...editableRequirementsTz.value,
+		{
+			key: nextChildKey(parentKey, editableRequirementsTz.value),
+			text: '',
+		},
+	]
+}
+
 function removeTzRequirement(index: number) {
 	editableRequirementsTz.value = editableRequirementsTz.value.filter(
 		(_, idx) => idx !== index,
 	)
-}
-
-function addKpRequirement(kpKey: string) {
-	const current = editableRequirementsKp.value[kpKey] ?? []
-	editableRequirementsKp.value = {
-		...editableRequirementsKp.value,
-		[kpKey]: [
-			...current,
-			{ key: nextTopLevelKey(current), text: '' },
-		],
-	}
-}
-
-function removeKpRequirement(kpKey: string, index: number) {
-	const current = editableRequirementsKp.value[kpKey] ?? []
-	editableRequirementsKp.value = {
-		...editableRequirementsKp.value,
-		[kpKey]: current.filter((_, idx) => idx !== index),
-	}
-}
-
-async function saveTzRequirements() {
-	if (!analysis.value?.id || savingRequirements.value) return
-	if (!requirementsRowsNonempty(editableRequirementsTz.value)) {
-		toast.add({
-			title: 'Добавьте хотя бы одно требование из ТЗ',
-			color: 'warning',
-		})
-		return
-	}
-
-	savingRequirements.value = true
-	try {
-		const updated = await patch<TZAnalysisSession>(
-			`/tz-analysis/${analysis.value.id}/requirements`,
-			{ requirements_tz: rowsToHierarchy(editableRequirementsTz.value) },
-		)
-		syncEditableRequirements(updated)
-		applyAnalysis(updated)
-		toast.add({
-			title: 'Требования сохранены',
-			color: 'success',
-			icon: 'i-lucide-check',
-		})
-	} catch (e: unknown) {
-		const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-		toast.add({
-			title: typeof detail === 'string' ? detail : 'Не удалось сохранить',
-			color: 'error',
-		})
-	} finally {
-		savingRequirements.value = false
-	}
-}
-
-async function saveRequirements() {
-	if (!analysis.value?.id || savingRequirements.value) return
-	const payload = normalizedRequirementsPayload()
-	if (!requirementsRowsNonempty(editableRequirementsTz.value)) {
-		toast.add({
-			title: 'Добавьте хотя бы одно требование из ТЗ',
-			color: 'warning',
-		})
-		return
-	}
-
-	savingRequirements.value = true
-	try {
-		const updated = await patch<TZAnalysisSession>(
-			`/tz-analysis/${analysis.value.id}/requirements`,
-			payload,
-		)
-		syncEditableRequirements(updated)
-		applyAnalysis(updated)
-		toast.add({
-			title: 'Изменения сохранены',
-			color: 'success',
-			icon: 'i-lucide-check',
-		})
-	} catch (e: unknown) {
-		const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-		toast.add({
-			title: typeof detail === 'string' ? detail : 'Не удалось сохранить',
-			color: 'error',
-		})
-	} finally {
-		savingRequirements.value = false
-	}
 }
 
 const hasAnyKpFile = computed(() =>
@@ -1166,18 +1158,11 @@ const hasAnyKpFile = computed(() =>
 const canRunKpAnalysis = computed(() =>
 	!isCompleted.value
 	&& requirementsRowsNonempty(editableRequirementsTz.value)
-	&& hasSuppliersWithFiles.value,
+	&& (
+		(isTzReviewPhase.value && hasSuppliersWithFiles.value)
+		|| (hasConfirmedResults.value && hasPendingSuppliers.value)
+	),
 )
-
-function openKpFileForGroup(group: KpRequirementsGroup) {
-	if (!group.filename) return
-	const match = findSupplierKpFile(group.filename)
-	if (match) {
-		openKpFile(match.filename, match.supplier.id)
-		return
-	}
-	openKpFile(group.filename)
-}
 
 async function refreshAnalysis() {
 	if (!analysis.value?.id) return
@@ -1383,9 +1368,17 @@ function scrollToLetterSection(section: 'mismatch' | 'partial') {
 
 function applyAnalysis(data: TZAnalysisSession) {
 	analysis.value = data
+	itemsOverrides.value = { ...(data.items_overrides ?? {}) }
 	syncEditableRequirements(data)
+	ensureSelectedSupplier()
 	if (data.status === TZAnalysisRunStatus.PROCESSING) {
 		processingPhase.value = inferProcessingPhase(data)
+		tzPolling.value = true
+	} else if (
+		data.suppliers?.some(
+			(supplier) => supplier.status === TZAnalysisSupplierStatus.PROCESSING,
+		)
+	) {
 		tzPolling.value = true
 	}
 	if (
@@ -1396,8 +1389,14 @@ function applyAnalysis(data: TZAnalysisSession) {
 		kpSlots.value = [{ id: ++kpSlotCounter, file: null }]
 	}
 	if (data.status === TZAnalysisRunStatus.ACTIVE && data.confirmed) {
-		ensureResultsKpExpanded(collectResultsKpKeys(data))
-		selectPrimaryKpLetterItems(data.kp_filename)
+		ensureResultsKpExpanded(
+			collectResultsKpKeys(data).filter((key) => {
+				const supplier = selectedSupplier.value
+				if (!supplier) return true
+				return isKpScopedToSupplier(key, supplier.name)
+			}),
+		)
+		selectPrimaryKpLetterItems(selectedSupplierPrimaryKp.value)
 	}
 }
 
@@ -1423,7 +1422,9 @@ useRunStatusPolling(
 	() => {
 		const title = analysis.value?.confirmed
 			? 'Сравнение ТЗ и КП завершено'
-			: 'Извлечение требований завершено'
+			: hasSuppliersProcessing.value
+				? 'Анализ КП завершён'
+				: 'Извлечение требований завершено'
 		toast.add({
 			title,
 			color: 'success',
@@ -1437,6 +1438,10 @@ useRunStatusPolling(
 			icon: 'i-lucide-circle-alert',
 		})
 	},
+	(data) =>
+		data.suppliers?.some(
+			(supplier) => supplier.status === TZAnalysisSupplierStatus.PROCESSING,
+		) ?? false,
 )
 
 let previewDebounce: ReturnType<typeof setTimeout> | null = null
@@ -1467,6 +1472,10 @@ async function fetchLetterPreview() {
 		previewLoading.value = false
 	}
 }
+
+watch(selectedSupplierId, () => {
+	tzSelectedIndices.value = []
+})
 
 watch(isAnalysisClosed, (closed) => {
 	if (closed) activeContentTab.value = 'tz'
@@ -1575,37 +1584,6 @@ function onKpSlotChange(slotId: number, file: File | null | undefined) {
 	slot.file = file
 }
 
-async function confirmAnalysis() {
-	if (!analysis.value?.id || confirming.value || !canConfirmRequirements.value) return
-	const payload: TZAnalysisConfirmRequest = normalizedRequirementsPayload()
-	confirming.value = true
-	try {
-		const updated = await post<TZAnalysisSession>(
-			`/tz-analysis/${analysis.value.id}/confirm`,
-			payload,
-		)
-		applyAnalysis(updated)
-		if (updated.status === TZAnalysisRunStatus.PROCESSING) {
-			processingPhase.value = 'kp'
-			tzPolling.value = true
-		}
-		toast.add({
-			title: 'Сравнение поставлено в очередь',
-			description: 'Результаты появятся автоматически после завершения.',
-			color: 'success',
-			icon: 'i-lucide-check',
-		})
-	} catch (e: unknown) {
-		const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-		toast.add({
-			title: typeof detail === 'string' ? detail : 'Не удалось подтвердить',
-			color: 'error',
-		})
-	} finally {
-		confirming.value = false
-	}
-}
-
 async function runTzAnalysis() {
 	if (!tzFile.value || !analysis.value?.id) return
 	tzAnalyzing.value = true
@@ -1620,7 +1598,6 @@ async function runTzAnalysis() {
 		processingPhase.value = 'tz'
 		applyAnalysis(result)
 		if (result.status === TZAnalysisRunStatus.PROCESSING) {
-			showQueueModal.value = true
 			tzPolling.value = true
 		}
 	} catch (e: unknown) {
@@ -1647,10 +1624,12 @@ async function runKpAnalysis() {
 			return
 		}
 
-		await patch<TZAnalysisSession>(
-			`/tz-analysis/${analysis.value.id}/requirements`,
-			{ requirements_tz: rowsToHierarchy(editableRequirementsTz.value) },
-		)
+		if (!analysis.value.confirmed) {
+			await patch<TZAnalysisSession>(
+				`/tz-analysis/${analysis.value.id}/requirements`,
+				{ requirements_tz: rowsToHierarchy(editableRequirementsTz.value) },
+			)
+		}
 
 		let result: TZAnalysisSession
 		result = await post<TZAnalysisSession>(
@@ -1660,10 +1639,20 @@ async function runKpAnalysis() {
 		tzSelectedIndices.value = []
 		processingPhase.value = 'kp'
 		applyAnalysis(result)
-		if (result.status === TZAnalysisRunStatus.PROCESSING) {
-			showQueueModal.value = true
+		if (
+			result.status === TZAnalysisRunStatus.PROCESSING
+			|| result.suppliers?.some(
+				(s) => s.status === TZAnalysisSupplierStatus.PROCESSING,
+			)
+		) {
 			tzPolling.value = true
 		}
+		toast.add({
+			title: 'Анализ КП запущен',
+			description: 'Обработка выполняется по каждому поставщику отдельно.',
+			color: 'success',
+			icon: 'i-lucide-check',
+		})
 	} catch (e: unknown) {
 		const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
 		toast.add({
@@ -1702,6 +1691,30 @@ function openLetterModal() {
 
 function isTzSelectable(status: TZAnalysisStatus) {
 	return status === 'partial' || status === 'missing' || status === 'not_found'
+}
+
+async function updateItemStatus(index: number, status: TZAnalysisStatus) {
+	if (!analysis.value?.id || overrideSaving.value) return
+	overrideSaving.value = true
+	const nextOverrides = {
+		...itemsOverrides.value,
+		[String(index)]: { status },
+	}
+	try {
+		const updated = await patch<TZAnalysisSession>(
+			`/tz-analysis/${analysis.value.id}/items-overrides`,
+			{ overrides: nextOverrides },
+		)
+		applyAnalysis(updated)
+	} catch (e: unknown) {
+		const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+		toast.add({
+			title: typeof detail === 'string' ? detail : 'Не удалось сохранить статус',
+			color: 'error',
+		})
+	} finally {
+		overrideSaving.value = false
+	}
 }
 
 function toggleTzSelect(index: number, checked: boolean) {

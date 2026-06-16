@@ -66,7 +66,7 @@ export const TZ_RUN_STATUS_COLOR: Record<TZAnalysisRunStatus, BadgeColor> = {
 export const TZ_RUN_STATUS_LABEL: Record<TZAnalysisRunStatus, string> = {
 	[TZAnalysisRunStatus.DRAFT]: 'Черновик',
 	[TZAnalysisRunStatus.ACTIVE]: 'Активный',
-	[TZAnalysisRunStatus.PROCESSING]: 'В очереди на обработку',
+	[TZAnalysisRunStatus.PROCESSING]: 'В обработке',
 	[TZAnalysisRunStatus.COMPLETED]: 'Завершен',
 	[TZAnalysisRunStatus.FAILED]: 'Ошибка',
 };

@@ -32,9 +32,14 @@ from backend.api.tz_analysis.schemas import (
     TZAnalysisPreviewResponse,
     TZAnalysisSupplierItem,
     TZAnalysisSupplierRenameRequest,
+    TZItemsOverridesRequest,
     TZPrimaryKpRequest,
     TZRequirementsUpdateRequest,
+    TZSupplierPrimaryKpRequest,
     row_to_session,
+)
+from backend.celery_app.tasks.analysis_tasks import (
+    run_supplier_kp_process as queue_supplier_kp_process,
 )
 from backend.celery_app.tasks.analysis_tasks import (
     run_tz_compare as queue_tz_compare,
@@ -48,8 +53,16 @@ from backend.celery_app.tasks.analysis_tasks import (
 from backend.core.config import get_config
 from backend.db.dao import TZAnalysisDAO, TZAnalysisSupplierDAO
 from backend.db.models import User
-from backend.enums import TZAnalysisHistoryGroup, TZAnalysisRunStatus
-from backend.schemas.analysis import TZAnalysisItem
+from backend.enums import (
+    TZAnalysisHistoryGroup,
+    TZAnalysisRunStatus,
+    TZAnalysisSupplierStatus,
+)
+from backend.schemas.analysis import (
+    TZAnalysisItem,
+    apply_items_overrides,
+    build_analysis_stats,
+)
 from backend.services.analysis.docx_export import (
     build_clarification_docx,
     build_clarification_preview,
@@ -64,6 +77,7 @@ from backend.utils.tz_storage import (
     flatten_supplier_kp_entries,
     make_unique_filenames,
     mime_type_for_filename,
+    purge_supplier_kp_from_analysis,
     remove_supplier_dir,
     resolve_kp_file_by_display_name,
     resolve_supplier_kp_file_by_display_name,
@@ -83,6 +97,54 @@ def _ensure_supplier_mutations_allowed(row) -> None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Analysis is closed for supplier changes",
+        )
+
+
+def _suppliers_awaiting_kp_run(suppliers: list) -> list:
+    """Suppliers that still need KP extraction and comparison."""
+    runnable = {
+        TZAnalysisSupplierStatus.PENDING.value,
+        TZAnalysisSupplierStatus.FAILED.value,
+    }
+    return [
+        supplier
+        for supplier in suppliers
+        if supplier.kp_filenames and supplier.status in runnable
+    ]
+
+
+def _validate_supplier_kp_files(
+    analysis_id: uuid.UUID,
+    suppliers: list,
+) -> None:
+    for supplier in suppliers:
+        paths = resolve_supplier_kp_files(analysis_id, supplier.id)
+        if not paths or len(supplier.kp_filenames) != len(paths):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Each supplier must have at least one KP file",
+            )
+
+
+async def _queue_supplier_kp_tasks(
+    session: AsyncSession,
+    analysis_id: uuid.UUID,
+    suppliers: list,
+) -> None:
+    for supplier in suppliers:
+        await TZAnalysisSupplierDAO.update_fields(
+            session,
+            supplier.id,
+            status=TZAnalysisSupplierStatus.PROCESSING.value,
+        )
+        queue_supplier_kp_process.delay(
+            str(analysis_id),
+            str(supplier.id),
+        )
+        logger.info(
+            "Supplier KP process queued",
+            analysis_id=str(analysis_id),
+            supplier_id=str(supplier.id),
         )
 
 
@@ -165,6 +227,7 @@ async def create_tz_analysis(
         requirements_kp={},
         kp_stats={},
         items=[],
+        items_overrides={},
         match_score=0,
         met_count=0,
         partial_count=0,
@@ -281,11 +344,6 @@ async def run_tz_kp_analysis(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Analysis is not ready for KP upload",
         )
-    if row.confirmed:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Analysis already confirmed",
-        )
     if not requirements_nonempty(row.requirements_tz):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -293,46 +351,81 @@ async def run_tz_kp_analysis(
         )
 
     suppliers = await TZAnalysisSupplierDAO.list_by_analysis(session, row.id)
+    use_supplier_tasks = bool(suppliers)
     if suppliers:
-        if not all(supplier.kp_filenames for supplier in suppliers):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Each supplier must have at least one KP file",
+        if row.confirmed:
+            suppliers_to_run = _suppliers_awaiting_kp_run(suppliers)
+            if not suppliers_to_run:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="No new suppliers to analyze",
+                )
+            _validate_supplier_kp_files(row.id, suppliers_to_run)
+            supplier_entries: list[tuple[str, list[str], list[Path]]] = []
+            for supplier in suppliers_to_run:
+                paths = resolve_supplier_kp_files(row.id, supplier.id)
+                supplier_entries.append(
+                    (supplier.name, list(supplier.kp_filenames), paths)
+                )
+            kp_payload = flatten_supplier_kp_entries(supplier_entries)
+            new_kp_names = [name for name, _ in kp_payload]
+            merged_filenames = list(row.kp_filenames or [])
+            for name in new_kp_names:
+                if name not in merged_filenames:
+                    merged_filenames.append(name)
+            updated = await TZAnalysisDAO.update_fields(
+                session,
+                row.id,
+                kp_filenames=merged_filenames,
+                kp_filename=row.kp_filename
+                or (new_kp_names[0] if new_kp_names else None),
+                status=TZAnalysisRunStatus.ACTIVE.value,
             )
-        supplier_entries: list[tuple[list[str], list[Path]]] = []
-        for supplier in suppliers:
-            paths = resolve_supplier_kp_files(row.id, supplier.id)
-            if not paths or len(supplier.kp_filenames) != len(paths):
+            if not updated:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Analysis not found",
+                )
+            await _queue_supplier_kp_tasks(session, row.id, suppliers_to_run)
+        else:
+            if not all(supplier.kp_filenames for supplier in suppliers):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Each supplier must have at least one KP file",
                 )
-            supplier_entries.append((list(supplier.kp_filenames), paths))
-        kp_payload = flatten_supplier_kp_entries(supplier_entries)
-        kp_names = [name for name, _ in kp_payload]
-        primary_kp = kp_names[0] if kp_names else None
-        updated = await TZAnalysisDAO.update_fields(
-            session,
-            row.id,
-            kp_filename=primary_kp,
-            kp_filenames=kp_names,
-            confirmed=False,
-            requirements_kp={},
-            kp_stats={},
-            items=[],
-            match_score=0,
-            met_count=0,
-            partial_count=0,
-            missing_count=0,
-            not_found_count=0,
-            tz_requirements_count=count_requirements(row.requirements_tz),
-            status=TZAnalysisRunStatus.PROCESSING.value,
-        )
-        if not updated:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Analysis not found",
+            _validate_supplier_kp_files(row.id, suppliers)
+            supplier_entries = []
+            for supplier in suppliers:
+                paths = resolve_supplier_kp_files(row.id, supplier.id)
+                supplier_entries.append(
+                    (supplier.name, list(supplier.kp_filenames), paths)
+                )
+            kp_payload = flatten_supplier_kp_entries(supplier_entries)
+            kp_names = [name for name, _ in kp_payload]
+            primary_kp = kp_names[0] if kp_names else None
+            updated = await TZAnalysisDAO.update_fields(
+                session,
+                row.id,
+                kp_filename=primary_kp,
+                kp_filenames=kp_names,
+                confirmed=False,
+                requirements_kp={},
+                kp_stats={},
+                items=[],
+                match_score=0,
+                met_count=0,
+                partial_count=0,
+                missing_count=0,
+                not_found_count=0,
+                tz_requirements_count=count_requirements(row.requirements_tz),
+                status=TZAnalysisRunStatus.ACTIVE.value,
             )
+            if not updated:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Analysis not found",
+                )
+            await _queue_supplier_kp_tasks(session, row.id, suppliers)
     else:
         uploads = kp_files or []
         if not uploads:
@@ -388,12 +481,13 @@ async def run_tz_kp_analysis(
                     detail="Analysis not found",
                 )
             save_kp_analysis_files(row.id, kp_paths)
+        queue_tz_kp_compare.delay(str(row.id))  # type: ignore[attr-defined]
 
-    queue_tz_kp_compare.delay(str(row.id))  # type: ignore[attr-defined]
     logger.info(
         "TZ KP compare queued",
         analysis_id=str(row.id),
         user_id=str(current_user.id),
+        supplier_tasks=use_supplier_tasks,
     )
     refreshed = await TZAnalysisDAO.get_by_id_and_user(
         session, analysis_id, current_user.id
@@ -612,6 +706,47 @@ async def set_primary_kp(
     return await _session_response(session, updated)
 
 
+@router.patch(
+    "/{analysis_id}/items-overrides",
+    response_model=TZAnalysisDetailResponse,
+    summary="Update manual status overrides for comparison items",
+)
+async def update_items_overrides(
+    analysis_id: uuid.UUID,
+    body: TZItemsOverridesRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> TZAnalysisDetailResponse:
+    row = await _get_owned_analysis(session, analysis_id, current_user.id)
+    if row.status not in (
+        TZAnalysisRunStatus.ACTIVE.value,
+        TZAnalysisRunStatus.COMPLETED.value,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Analysis is not ready for item overrides",
+        )
+    merged = dict(getattr(row, "items_overrides", None) or {})
+    merged.update(body.overrides)
+    updated = await TZAnalysisDAO.update_fields(
+        session,
+        analysis_id,
+        items_overrides=merged,
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found",
+        )
+    logger.info(
+        "TZ items overrides updated",
+        analysis_id=str(analysis_id),
+        user_id=str(current_user.id),
+        count=len(body.overrides),
+    )
+    return await _session_response(session, updated)
+
+
 @router.post(
     "/{analysis_id}/confirm",
     response_model=TZAnalysisDetailResponse,
@@ -731,16 +866,7 @@ async def create_tz_analysis_supplier(
     ],
 ) -> TZAnalysisSupplierItem:
     row = await _get_owned_analysis(session, analysis_id, current_user.id)
-    if row.status != TZAnalysisRunStatus.ACTIVE.value:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Analysis is not ready for supplier upload",
-        )
-    if row.confirmed:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Analysis already confirmed",
-        )
+    _ensure_supplier_mutations_allowed(row)
     if not kp_files:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -764,6 +890,7 @@ async def create_tz_analysis_supplier(
         name=clean_name,
         kp_filenames=[],
         order_index=order_index,
+        status=TZAnalysisSupplierStatus.PENDING.value,
     )
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -862,6 +989,68 @@ async def rename_tz_analysis_supplier(
     return TZAnalysisSupplierItem.model_validate(updated)
 
 
+@router.patch(
+    "/{analysis_id}/suppliers/{supplier_id}/primary-kp",
+    response_model=TZAnalysisDetailResponse,
+    summary="Set primary KP for a supplier",
+)
+async def set_supplier_primary_kp(
+    analysis_id: uuid.UUID,
+    supplier_id: uuid.UUID,
+    body: TZSupplierPrimaryKpRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> TZAnalysisDetailResponse:
+    row = await _get_owned_analysis(session, analysis_id, current_user.id)
+    if row.status not in (
+        TZAnalysisRunStatus.ACTIVE.value,
+        TZAnalysisRunStatus.COMPLETED.value,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Analysis is not ready for primary KP selection",
+        )
+    supplier = await TZAnalysisSupplierDAO.get_by_id_and_analysis(
+        session, supplier_id, analysis_id
+    )
+    if not supplier:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Supplier not found",
+        )
+    kp_filename = body.kp_filename.strip()
+    if kp_filename not in (supplier.kp_filenames or []):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid primary KP",
+        )
+    updated = await TZAnalysisSupplierDAO.update_fields(
+        session,
+        supplier_id,
+        primary_kp_filename=kp_filename,
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Supplier not found",
+        )
+    logger.info(
+        "Supplier primary KP updated",
+        analysis_id=str(analysis_id),
+        supplier_id=str(supplier_id),
+        kp_filename=kp_filename,
+    )
+    refreshed = await TZAnalysisDAO.get_by_id_and_user(
+        session, analysis_id, current_user.id
+    )
+    if not refreshed:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found",
+        )
+    return await _session_response(session, refreshed)
+
+
 @router.delete(
     "/{analysis_id}/suppliers/{supplier_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -875,11 +1064,6 @@ async def delete_tz_analysis_supplier(
 ) -> Response:
     row = await _get_owned_analysis(session, analysis_id, current_user.id)
     _ensure_supplier_mutations_allowed(row)
-    if row.confirmed:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Analysis already confirmed",
-        )
     supplier = await TZAnalysisSupplierDAO.get_by_id_and_analysis(
         session, supplier_id, analysis_id
     )
@@ -888,8 +1072,51 @@ async def delete_tz_analysis_supplier(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Supplier not found",
         )
+    if supplier.status == TZAnalysisSupplierStatus.PROCESSING.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Supplier KP is processing",
+        )
+
+    purged = purge_supplier_kp_from_analysis(
+        supplier_name=supplier.name,
+        kp_filenames=list(row.kp_filenames or []),
+        requirements_kp=dict(row.requirements_kp or {}),
+        kp_stats=dict(row.kp_stats or {}),
+        items=list(row.items or []),
+        kp_filename=row.kp_filename,
+    )
+    items_models = [TZAnalysisItem(**item) for item in purged["items"]]
+    kp_stats, primary_kp, top_stats = build_analysis_stats(
+        items_models,
+        purged["kp_filenames"],
+        purged["kp_filename"],
+    )
+    remaining_suppliers = await TZAnalysisSupplierDAO.list_by_analysis(
+        session, analysis_id
+    )
+    remaining_suppliers = [
+        item for item in remaining_suppliers if item.id != supplier_id
+    ]
+    confirmed = bool(purged["items"]) and bool(remaining_suppliers)
+
     remove_supplier_dir(analysis_id, supplier_id)
     await TZAnalysisSupplierDAO.delete(session, supplier_id)
+    await TZAnalysisDAO.update_fields(
+        session,
+        analysis_id,
+        kp_filename=primary_kp or purged["kp_filename"],
+        kp_filenames=purged["kp_filenames"],
+        requirements_kp=purged["requirements_kp"],
+        kp_stats=kp_stats,
+        items=purged["items"],
+        confirmed=confirmed,
+        match_score=top_stats["match_score"],
+        met_count=top_stats["met_count"],
+        partial_count=top_stats["partial_count"],
+        missing_count=top_stats["missing_count"],
+        not_found_count=top_stats["not_found_count"],
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -1051,7 +1278,10 @@ async def export_tz_analysis_csv(
             detail="Analysis is not ready for export",
         )
 
-    items = [TZAnalysisItem(**item) for item in (row.items or [])]
+    items = apply_items_overrides(
+        [TZAnalysisItem(**item) for item in (row.items or [])],
+        getattr(row, "items_overrides", None),
+    )
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow(
@@ -1114,7 +1344,10 @@ async def preview_tz_analysis_letter(
             detail="Analysis is not ready for preview",
         )
 
-    items = [TZAnalysisItem(**item) for item in (row.items or [])]
+    items = apply_items_overrides(
+        [TZAnalysisItem(**item) for item in (row.items or [])],
+        getattr(row, "items_overrides", None),
+    )
     if not body.selected_indices:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -1158,7 +1391,10 @@ async def export_tz_analysis_docx(
             detail="Analysis is not ready for export",
         )
 
-    items = [TZAnalysisItem(**item) for item in (row.items or [])]
+    items = apply_items_overrides(
+        [TZAnalysisItem(**item) for item in (row.items or [])],
+        getattr(row, "items_overrides", None),
+    )
     if not body.selected_indices:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

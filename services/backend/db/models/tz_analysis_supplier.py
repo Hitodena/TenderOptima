@@ -19,8 +19,14 @@ class TZAnalysisSupplier(IDMixinUUID, TimestampMixin, Base):
     kp_filenames: Mapped[list] = mapped_column(
         JSON, nullable=False, default=list
     )
+    primary_kp_filename: Mapped[str | None] = mapped_column(
+        String(512), nullable=True
+    )
     order_index: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0
+    )
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="pending"
     )
 
     analysis: Mapped["TZAnalysis"] = relationship(  # noqa: F821

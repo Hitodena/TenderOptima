@@ -3,6 +3,7 @@ import type {
 	RequestSupplierStatus,
 	TZAnalysisHistoryGroup,
 	TZAnalysisRunStatus,
+	TZAnalysisSupplierStatus,
 } from './enums';
 
 export interface TokenResponse {
@@ -183,7 +184,9 @@ export interface TZAnalysisSupplierItem {
 	id: string;
 	name: string;
 	kp_filenames: string[];
+	primary_kp_filename?: string | null;
 	order_index: number;
+	status?: TZAnalysisSupplierStatus;
 }
 
 export interface TZAnalysisSupplierCreateRequest {
@@ -253,6 +256,7 @@ export interface TZAnalysisSession {
 	kp_stats?: Record<string, TZAnalysisKpStats>;
 	suppliers?: TZAnalysisSupplierItem[];
 	items: TZAnalysisItem[];
+	items_overrides?: Record<string, { status: TZAnalysisStatus }>;
 	match_score: number;
 	met_count: number;
 	partial_count: number;
@@ -295,6 +299,10 @@ export interface TZAnalysisDocxRequest {
 	selected_indices: number[];
 	organization: string;
 	deadline_date?: string | null;
+}
+
+export interface TZItemsOverridesRequest {
+	overrides: Record<string, { status: TZAnalysisStatus }>;
 }
 
 export interface TZAnalysisCreateRequest {

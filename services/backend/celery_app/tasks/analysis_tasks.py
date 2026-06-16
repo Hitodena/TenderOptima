@@ -12,7 +12,8 @@ from backend.db.dao import (
     TZAnalysisDAO,
     TZAnalysisSupplierDAO,
 )
-from backend.enums import TZAnalysisRunStatus
+from backend.enums import TZAnalysisRunStatus, TZAnalysisSupplierStatus
+from backend.schemas.analysis import TZAnalysisItem, build_analysis_stats
 from backend.services.analysis.email import (
     analyze_email,
 )
@@ -43,6 +44,46 @@ _TZ_EXTRACT_SOFT_LIMIT = 6600  # 10 min
 _TZ_EXTRACT_TIME_LIMIT = 7200  # 15 min
 _KP_COMPARE_SOFT_LIMIT = 6600  # 110 min
 _KP_COMPARE_TIME_LIMIT = 7200  # 2 h
+
+
+def _merge_supplier_kp_result(
+    *,
+    existing_items: list,
+    existing_requirements_kp: dict,
+    existing_kp_filenames: list[str],
+    new_items: list[TZAnalysisItem],
+    new_requirements_kp: dict,
+    new_kp_filenames: list[str],
+) -> tuple[list, dict, list[str]]:
+    """Merge a single supplier's KP analysis into the parent session."""
+    new_names = set(new_kp_filenames)
+    merged_items = [
+        item
+        for item in existing_items
+        if not isinstance(item, dict) or item.get("kp_name") not in new_names
+    ]
+    merged_items.extend([item.model_dump(mode="json") for item in new_items])
+    merged_requirements_kp = {
+        **existing_requirements_kp,
+        **new_requirements_kp,
+    }
+    merged_filenames = list(existing_kp_filenames)
+    for name in new_kp_filenames:
+        if name not in merged_filenames:
+            merged_filenames.append(name)
+    return merged_items, merged_requirements_kp, merged_filenames
+
+
+def _all_supplier_kp_tasks_done(suppliers) -> bool:
+    """True when every supplier with KP files finished processing."""
+    active = [supplier for supplier in suppliers if supplier.kp_filenames]
+    if not active:
+        return False
+    terminal = {
+        TZAnalysisSupplierStatus.COMPLETED.value,
+        TZAnalysisSupplierStatus.FAILED.value,
+    }
+    return all(supplier.status in terminal for supplier in active)
 
 
 async def _merge_prior_matches(
@@ -276,7 +317,7 @@ async def run_tz_kp_compare(self, analysis_id: str) -> dict:
 
     try:
         if suppliers:
-            supplier_entries: list[tuple[list[str], list[Path]]] = []
+            supplier_entries: list[tuple[str, list[str], list[Path]]] = []
             for supplier in suppliers:
                 paths = resolve_supplier_kp_files(aid, supplier.id)
                 display_names = list(supplier.kp_filenames or [])
@@ -314,7 +355,7 @@ async def run_tz_kp_compare(self, analysis_id: str) -> dict:
                         "error": "files_missing",
                         "analysis_id": analysis_id,
                     }
-                supplier_entries.append((display_names, paths))
+                supplier_entries.append((supplier.name, display_names, paths))
             kp_payload = flatten_supplier_kp_entries(supplier_entries)
             result = await analyze_supplier_kps(
                 requirements_tz,
@@ -485,8 +526,6 @@ async def run_tz_compare(self, analysis_id: str) -> dict:
             )
         return {"error": "failed", "analysis_id": analysis_id}
 
-    from backend.schemas.analysis import build_analysis_stats
-
     kp_filenames = list(row.kp_filenames or [])
     if not kp_filenames:
         kp_filenames = list(requirements_kp.keys())
@@ -522,6 +561,184 @@ async def run_tz_compare(self, analysis_id: str) -> dict:
         user_id=user_id,
     )
     return {"status": "active", "analysis_id": analysis_id}
+
+
+@app.task(
+    name="analysis.supplier_kp_process",
+    bind=True,
+    soft_time_limit=_KP_COMPARE_SOFT_LIMIT,
+    time_limit=_KP_COMPARE_TIME_LIMIT,
+    max_retries=0,
+)
+@async_task
+async def run_supplier_kp_process(
+    self,
+    analysis_id: str,
+    supplier_id: str,
+) -> dict:
+    """Extract and compare KP files for a single supplier."""
+    logger.info(
+        "Supplier KP process task received",
+        analysis_id=analysis_id,
+        supplier_id=supplier_id,
+        task_id=self.request.id,
+    )
+    db_manager = get_db_manager()
+    aid = uuid.UUID(analysis_id)
+    sid = uuid.UUID(supplier_id)
+
+    async with db_manager.session() as session:
+        row = await TZAnalysisDAO.get_by_id(session, aid)
+        if not row:
+            logger.error(
+                "Supplier KP process: analysis not found",
+                analysis_id=analysis_id,
+            )
+            return {"error": "not_found", "analysis_id": analysis_id}
+        supplier = await TZAnalysisSupplierDAO.get_by_id_and_analysis(
+            session, sid, aid
+        )
+        if not supplier:
+            logger.error(
+                "Supplier KP process: supplier not found",
+                analysis_id=analysis_id,
+                supplier_id=supplier_id,
+            )
+            return {"error": "supplier_not_found", "analysis_id": analysis_id}
+        user_id = str(row.user_id)
+        requirements_tz = normalize_tz_requirements(row.requirements_tz)
+        await TZAnalysisSupplierDAO.update_fields(
+            session,
+            sid,
+            status=TZAnalysisSupplierStatus.PROCESSING.value,
+        )
+
+    if not requirements_nonempty(requirements_tz):
+        async with db_manager.session() as session:
+            await TZAnalysisSupplierDAO.update_fields(
+                session,
+                sid,
+                status=TZAnalysisSupplierStatus.FAILED.value,
+            )
+        return {"error": "no_requirements_tz", "analysis_id": analysis_id}
+
+    paths = resolve_supplier_kp_files(aid, sid)
+    display_names = list(supplier.kp_filenames or [])
+    if not paths or len(display_names) != len(paths):
+        async with db_manager.session() as session:
+            await TZAnalysisSupplierDAO.update_fields(
+                session,
+                sid,
+                status=TZAnalysisSupplierStatus.FAILED.value,
+            )
+        return {"error": "files_missing", "analysis_id": analysis_id}
+
+    kp_payload = flatten_supplier_kp_entries(
+        [(supplier.name, display_names, paths)]
+    )
+
+    try:
+        result = await analyze_supplier_kps(
+            requirements_tz,
+            kp_payload,
+            analysis_id=analysis_id,
+            user_id=user_id,
+        )
+    except (UnsupportedFileTypeError, OcrNotAvailableError, ValueError) as exc:
+        logger.warning(
+            "Supplier KP process failed",
+            analysis_id=analysis_id,
+            supplier_id=supplier_id,
+            error=str(exc),
+        )
+        async with db_manager.session() as session:
+            await TZAnalysisSupplierDAO.update_fields(
+                session,
+                sid,
+                status=TZAnalysisSupplierStatus.FAILED.value,
+            )
+        return {"error": type(exc).__name__, "analysis_id": analysis_id}
+    except Exception as exc:
+        logger.exception(
+            "Supplier KP process unexpected failure",
+            analysis_id=analysis_id,
+            supplier_id=supplier_id,
+            error=str(exc),
+        )
+        async with db_manager.session() as session:
+            await TZAnalysisSupplierDAO.update_fields(
+                session,
+                sid,
+                status=TZAnalysisSupplierStatus.FAILED.value,
+            )
+        return {"error": "failed", "analysis_id": analysis_id}
+
+    async with db_manager.session() as session:
+        row = await TZAnalysisDAO.get_by_id(session, aid)
+        if not row:
+            return {"error": "not_found", "analysis_id": analysis_id}
+
+        merged_items, merged_req_kp, merged_filenames = (
+            _merge_supplier_kp_result(
+                existing_items=list(row.items or []),
+                existing_requirements_kp=dict(row.requirements_kp or {}),
+                existing_kp_filenames=list(row.kp_filenames or []),
+                new_items=result.items,
+                new_requirements_kp=result.requirements_kp,
+                new_kp_filenames=result.kp_filenames,
+            )
+        )
+        items_models = [TZAnalysisItem(**item) for item in merged_items]
+        kp_stats, primary_kp, top_stats = build_analysis_stats(
+            items_models,
+            merged_filenames,
+            row.kp_filename,
+        )
+        if not row.kp_filename and primary_kp:
+            row_kp_filename = primary_kp
+        else:
+            row_kp_filename = row.kp_filename
+
+        await TZAnalysisSupplierDAO.update_fields(
+            session,
+            sid,
+            status=TZAnalysisSupplierStatus.COMPLETED.value,
+            primary_kp_filename=(
+                supplier.primary_kp_filename
+                or (
+                    supplier.kp_filenames[0] if supplier.kp_filenames else None
+                )
+            ),
+        )
+        suppliers = await TZAnalysisSupplierDAO.list_by_analysis(session, aid)
+        all_done = _all_supplier_kp_tasks_done(suppliers)
+
+        await TZAnalysisDAO.update_fields(
+            session,
+            aid,
+            kp_filename=row_kp_filename,
+            kp_filenames=merged_filenames,
+            requirements_kp=merged_req_kp,
+            kp_stats=kp_stats,
+            items=merged_items,
+            confirmed=all_done and bool(merged_items),
+            match_score=top_stats["match_score"],
+            met_count=top_stats["met_count"],
+            partial_count=top_stats["partial_count"],
+            missing_count=top_stats["missing_count"],
+            not_found_count=top_stats["not_found_count"],
+            tz_requirements_count=result.tz_requirements_count,
+            llm_model=config.openai_model,
+            status=TZAnalysisRunStatus.ACTIVE.value,
+        )
+
+    logger.info(
+        "Supplier KP process done",
+        analysis_id=analysis_id,
+        supplier_id=supplier_id,
+        user_id=user_id,
+    )
+    return {"status": "completed", "analysis_id": analysis_id}
 
 
 @app.task(

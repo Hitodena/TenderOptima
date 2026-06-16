@@ -17,7 +17,17 @@
 						{{ item.requirement }}
 					</p>
 				</button>
+				<USelect
+					v-if="editable"
+					:model-value="item.status"
+					:items="statusOptions"
+					size="xs"
+					class="min-w-36 shrink-0"
+					@update:model-value="(value) => emit('status-change', value as TZAnalysisStatus)"
+					@click.stop
+				/>
 				<UBadge
+					v-else
 					:color="getTzItemStatusColor(item.status)"
 					variant="subtle"
 					size="sm"
@@ -26,6 +36,12 @@
 				>
 					{{ getTzItemStatusLabel(item.status) }}
 				</UBadge>
+				<UIcon
+					v-if="isOverridden"
+					name="i-lucide-pencil"
+					class="w-3.5 h-3.5 shrink-0 text-muted"
+					title="Изменено вручную"
+				/>
 				<UCheckbox
 					v-if="showCheckbox"
 					:model-value="isSelected"
@@ -104,18 +120,31 @@ import { getTzItemStatusColor, getTzItemStatusLabel } from '#shared/types'
 
 type TZItemView = TZAnalysisItem & { _index: number }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
 	item: TZItemView
 	isExpanded: boolean
 	isSelected: boolean
 	showCheckbox: boolean
 	defaultKpFilename?: string | null
-}>()
+	editable?: boolean
+	isOverridden?: boolean
+}>(), {
+	editable: false,
+	isOverridden: false,
+})
 
 const emit = defineEmits<{
 	'toggle-expand': []
 	'toggle-select': [checked: boolean]
+	'status-change': [status: TZAnalysisStatus]
 }>()
+
+const statusOptions = [
+	{ label: 'Соответствует', value: 'met' },
+	{ label: 'Частично', value: 'partial' },
+	{ label: 'Не соответствует', value: 'missing' },
+	{ label: 'Не найдено', value: 'not_found' },
+]
 
 const analysisFiles = inject<{
 	openTzFile: () => Promise<void>

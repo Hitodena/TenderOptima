@@ -26,7 +26,10 @@ class PdfExtractor(BaseExtractor):
                 if not text or not text.strip():
                     text = cls._ocr_page(fitz_doc[i])
                 if text:
-                    text_parts.append(text.strip())
+                    page_num = i + 1
+                    text_parts.append(
+                        f"--- Страница {page_num} ---\n{text.strip()}"
+                    )
 
                 for raw_table in page.extract_tables():
                     md = cls._table_to_markdown(raw_table)

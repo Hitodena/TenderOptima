@@ -61,3 +61,12 @@ class TZAnalysisStatus(StrEnum):
     PARTIAL = "partial"
     MISSING = "missing"
     NOT_FOUND = "not_found"
+
+
+class TZAnalysisSupplierStatus(StrEnum):
+    """Per-supplier KP extraction and comparison lifecycle."""
+
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"

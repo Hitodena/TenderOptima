@@ -13,6 +13,27 @@ class TZAnalysisItem(BaseModel):
     kp_name: str | None = None
 
 
+def apply_items_overrides(
+    items: list[TZAnalysisItem],
+    overrides: dict | None,
+) -> list[TZAnalysisItem]:
+    """Apply manual status overrides keyed by item index."""
+    if not overrides:
+        return items
+    result: list[TZAnalysisItem] = []
+    for index, item in enumerate(items):
+        override = overrides.get(str(index))
+        if override and isinstance(override, dict) and override.get("status"):
+            try:
+                status = TZAnalysisStatus(str(override["status"]))
+                result.append(item.model_copy(update={"status": status}))
+                continue
+            except ValueError:
+                pass
+        result.append(item)
+    return result
+
+
 class TZAnalysisResult(BaseModel):
     items: list[TZAnalysisItem]
 
@@ -29,6 +50,7 @@ class TZAnalysisSessionResult(BaseModel):
     requirements_kp: dict[str, dict] = {}
     kp_stats: dict[str, dict[str, int]] = {}
     items: list[TZAnalysisItem]
+    items_overrides: dict[str, dict] = {}
     match_score: int = 0
     met_count: int = 0
     partial_count: int = 0

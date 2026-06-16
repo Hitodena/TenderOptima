@@ -265,6 +265,32 @@ export function rowsToHierarchy(rows: EditableRequirementRow[]): RequirementsHie
 	return normalizeTzRequirements(result)
 }
 
+export function nextTopLevelKey(rows: EditableRequirementRow[]): string {
+	const maxTop = rows.reduce((max, row) => {
+		const top = Number(row.key.split(/[./]/)[0])
+		return Number.isNaN(top) ? max : Math.max(max, top)
+	}, 0)
+	return String(maxTop + 1)
+}
+
+export function nextChildKey(
+	parentKey: string,
+	rows: EditableRequirementRow[],
+): string {
+	const prefix = `${parentKey}.`
+	const directChildren = rows.filter((row) => {
+		if (!row.key.startsWith(prefix)) return false
+		const rest = row.key.slice(prefix.length)
+		return rest.length > 0 && !rest.includes('.') && !rest.includes('/')
+	})
+	const maxChild = directChildren.reduce((max, row) => {
+		const suffix = row.key.slice(prefix.length)
+		const num = Number(suffix)
+		return !Number.isNaN(num) ? Math.max(max, num) : max
+	}, 0)
+	return `${parentKey}.${maxChild + 1}`
+}
+
 export function requirementsRowsNonempty(rows: EditableRequirementRow[]): boolean {
 	return rows.some((row) => !row.isHeading && row.text.trim())
 }

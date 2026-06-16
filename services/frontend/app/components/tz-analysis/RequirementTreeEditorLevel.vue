@@ -76,8 +76,20 @@
 						:show-heading-hint="showHeadingHint"
 						:readonly="readonly"
 						@remove="(index) => emit('remove', index)"
+						@add-child="(parentKey) => emit('add-child', parentKey)"
 						@toggle-section="(key) => emit('toggle-section', key)"
 					/>
+					<UButton
+						v-if="!readonly"
+						type="button"
+						variant="ghost"
+						color="neutral"
+						size="xs"
+						leading-icon="i-lucide-plus"
+						@click="emit('add-child', node.key)"
+					>
+						Добавить подпункт
+					</UButton>
 				</div>
 			</template>
 
@@ -130,6 +142,7 @@ defineProps<{
 
 const emit = defineEmits<{
 	remove: [index: number]
+	'add-child': [parentKey: string]
 	'toggle-section': [key: string]
 }>()
 
