@@ -14,7 +14,7 @@ async def analyze_email(
     user_requirements: str,
     email_body: str,
     attachment_paths: list[Path] | None = None,
-    existing_matches: dict[str, str] | None = None,
+    baseline_matches: dict[str, str] | None = None,
 ) -> EmailAnalysisResult:
     parts: list[str] = []
     parts.append(email_body)
@@ -29,7 +29,7 @@ async def analyze_email(
     system, user = build_email_prompt(
         user_requirements,
         full_text,
-        existing_matches=existing_matches,
+        baseline_matches=baseline_matches,
     )
     raw = await llm_client.complete(system, user)
 

@@ -86,20 +86,18 @@ def _all_supplier_kp_tasks_done(suppliers) -> bool:
     return all(supplier.status in terminal for supplier in active)
 
 
-async def _merge_prior_matches(
+async def _matches_from_first_analyzed_incoming(
     session,
     request_supplier_id: uuid.UUID,
-    before_dt,
-    exclude_id: uuid.UUID,
+    exclude_id: uuid.UUID | None = None,
 ) -> dict[str, str]:
-    """Merge offer_value per requirement from earlier analyzed messages."""
+    """Offer values from the first analyzed incoming message (initial supplier response)."""
     prior = await EmailMessageDAO.get_incoming_before(
         session,
         request_supplier_id,
-        before_dt,
+        before_dt=None,
         exclude_id=exclude_id,
     )
-    merged: dict[str, str] = {}
     for msg in prior:
         analysis = msg.analysis
         if not analysis or analysis.status != TZAnalysisRunStatus.ACTIVE.value:
@@ -108,14 +106,16 @@ async def _merge_prior_matches(
         matches = raw.get("matches") or []
         if not isinstance(matches, list):
             continue
+        initial: dict[str, str] = {}
         for item in matches:
             if not isinstance(item, dict):
                 continue
             req = str(item.get("requirement") or "").strip()
             value = item.get("offer_value")
             if req and value is not None and str(value).strip():
-                merged[req] = str(value)
-    return merged
+                initial[req] = str(value)
+        return initial
+    return {}
 
 
 async def _load_email_analysis_context(
@@ -153,17 +153,16 @@ async def _load_email_analysis_context(
         for att in message.attachments or []:
             if isinstance(att, dict) and att.get("path"):
                 paths.append(Path(att["path"]))
-        current_matches = await _merge_prior_matches(
+        baseline_matches = await _matches_from_first_analyzed_incoming(
             session,
             message.request_supplier_id,
-            message.received_at,
             exclude_id=message.id,
         )
         return (
             requirements,
             message.raw_body or "",
             paths or None,
-            current_matches,
+            baseline_matches,
         )
 
 
@@ -760,7 +759,7 @@ async def run_email_analysis(self, message_id: str) -> dict:
         )
         return {"error": "not_found", "message_id": message_id}
 
-    requirements, email_body, attachment_paths, current_matches = ctx
+    requirements, email_body, attachment_paths, baseline_matches = ctx
     if not requirements:
         async with db_manager.session() as session:
             row = await ResponseAnalysisDAO.get_by_response_id(session, mid)
@@ -777,7 +776,7 @@ async def run_email_analysis(self, message_id: str) -> dict:
             user_requirements=requirements,
             email_body=email_body,
             attachment_paths=attachment_paths,
-            existing_matches=current_matches or None,
+            baseline_matches=baseline_matches or None,
         )
     except (UnsupportedFileTypeError, OcrNotAvailableError, ValueError) as exc:
         logger.warning(
@@ -811,7 +810,7 @@ async def run_email_analysis(self, message_id: str) -> dict:
         return {"error": "failed", "message_id": message_id}
 
     raw = result.model_dump(mode="json")
-    prev_params = current_matches or None
+    prev_params = baseline_matches or None
     async with db_manager.session() as session:
         existing = await ResponseAnalysisDAO.get_by_response_id(session, mid)
         if existing:
