@@ -41,7 +41,7 @@
 							v-model="rowsRef[node.rowIndex]!.text"
 							class="w-full whitespace-pre-wrap"
 							size="md"
-							:rows="node.isHeading ? 1 : 3"
+							:rows="rowsForText(rowsRef[node.rowIndex]!.text, node.isHeading)"
 							:maxrows="node.isHeading ? 4 : 12"
 							:placeholder="node.isHeading ? 'Название раздела (необязательно)' : undefined"
 							:readonly="readonly"
@@ -107,7 +107,7 @@
 							v-model="rowsRef[node.rowIndex]!.text"
 							class="w-full whitespace-pre-wrap"
 							size="md"
-							:rows="3"
+							:rows="textareaRowsFromText(rowsRef[node.rowIndex]!.text)"
 							:maxrows="12"
 							:readonly="readonly"
 							autoresize
@@ -130,8 +130,16 @@
 </template>
 
 <script lang="ts" setup>
-import type { EditableRequirementRow, RequirementTreeNode } from '#shared/utils/requirementsStruct'
+import {
+	textareaRowsFromText,
+	type EditableRequirementRow,
+	type RequirementTreeNode,
+} from '#shared/utils/requirementsStruct'
 import RequirementTreeEditorLevel from '~/components/tz-analysis/RequirementTreeEditorLevel.vue'
+
+function rowsForText(text: string, isHeading?: boolean) {
+	return isHeading ? 1 : textareaRowsFromText(text)
+}
 
 defineProps<{
 	nodes: RequirementTreeNode[]

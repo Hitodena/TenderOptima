@@ -30,5 +30,13 @@ export function useFormatDate() {
 		});
 	}
 
-	return { formatDate, formatDateTime, formatDateShort };
+	function formatLetterDate(value: Date = new Date()) {
+		return value.toLocaleDateString('ru-RU', {
+			day: 'numeric',
+			month: 'long',
+			year: 'numeric',
+		}) + ' г.';
+	}
+
+	return { formatDate, formatDateTime, formatDateShort, formatLetterDate };
 }

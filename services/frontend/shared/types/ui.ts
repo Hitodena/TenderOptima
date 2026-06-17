@@ -3,6 +3,7 @@ import {
 	RequestStatus,
 	RequestSupplierStatus,
 	TZAnalysisRunStatus,
+	TZAnalysisSupplierStatus,
 } from './enums';
 
 type BadgeColor =
@@ -77,6 +78,34 @@ export function getTzRunStatusColor(s: string): BadgeColor {
 
 export function getTzRunStatusLabel(s: string): string {
 	return TZ_RUN_STATUS_LABEL[s as TZAnalysisRunStatus] ?? s;
+}
+
+export const TZ_SUPPLIER_STATUS_COLOR: Record<
+	TZAnalysisSupplierStatus,
+	BadgeColor
+> = {
+	[TZAnalysisSupplierStatus.PENDING]: 'neutral',
+	[TZAnalysisSupplierStatus.PROCESSING]: 'warning',
+	[TZAnalysisSupplierStatus.COMPLETED]: 'success',
+	[TZAnalysisSupplierStatus.FAILED]: 'error',
+};
+
+export const TZ_SUPPLIER_STATUS_LABEL: Record<
+	TZAnalysisSupplierStatus,
+	string
+> = {
+	[TZAnalysisSupplierStatus.PENDING]: 'Ожидает анализа',
+	[TZAnalysisSupplierStatus.PROCESSING]: 'В обработке',
+	[TZAnalysisSupplierStatus.COMPLETED]: 'Анализ завершён',
+	[TZAnalysisSupplierStatus.FAILED]: 'Ошибка',
+};
+
+export function getTzSupplierStatusColor(s: string): BadgeColor {
+	return TZ_SUPPLIER_STATUS_COLOR[s as TZAnalysisSupplierStatus] ?? 'neutral';
+}
+
+export function getTzSupplierStatusLabel(s: string): string {
+	return TZ_SUPPLIER_STATUS_LABEL[s as TZAnalysisSupplierStatus] ?? s;
 }
 
 export const TZ_ITEM_STATUS_COLOR: Record<TZAnalysisStatus, BadgeColor> = {

@@ -8,11 +8,72 @@ from docx.styles.style import ParagraphStyle
 from backend.enums import TZAnalysisStatus
 from backend.schemas.analysis import TZAnalysisItem
 
+_RU_MONTHS_GENITIVE = (
+    "",
+    "января",
+    "февраля",
+    "марта",
+    "апреля",
+    "мая",
+    "июня",
+    "июля",
+    "августа",
+    "сентября",
+    "октября",
+    "ноября",
+    "декабря",
+)
+
+
+def format_ru_date(value: date | None = None) -> str:
+    """Format date as '17 июня 2026 г.' for letter footers."""
+    current = value or date.today()
+    month = _RU_MONTHS_GENITIVE[current.month]
+    return f"{current.day} {month} {current.year} г."
+
+
+def _mismatch_reason(item: TZAnalysisItem) -> str:
+    if item.status == TZAnalysisStatus.NOT_FOUND:
+        return f"Параметр не найден: {item.explanation}"
+    return f"Причина отклонения: {item.explanation}"
+
+
+def build_clarification_docx_from_paragraphs(paragraphs: list[str]) -> bytes:
+    """Build DOCX from user-edited letter paragraphs."""
+    doc = Document()
+    normal = doc.styles["Normal"]
+    if isinstance(normal, ParagraphStyle):
+        normal.font.name = "Times New Roman"
+        normal.font.size = Pt(12)
+
+    title = "О несоответствии предложения техническим требованиям"
+    bold_headers = {
+        "Несоответствующие параметры:",
+        "Требуют уточнения/дополнения:",
+    }
+
+    for index, text in enumerate(paragraphs):
+        if text == "":
+            doc.add_paragraph()
+            continue
+        if index == 0 and text == title:
+            paragraph = doc.add_paragraph()
+            paragraph.add_run(text).bold = True
+            continue
+        if text in bold_headers:
+            paragraph = doc.add_paragraph()
+            paragraph.add_run(text).bold = True
+            continue
+        doc.add_paragraph(text)
+
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    return buffer.getvalue()
+
 
 def build_clarification_docx(
     items: list[TZAnalysisItem],
     selected_indices: list[int],
-    organization: str,
     deadline_date: str | None = None,
 ) -> bytes:
     """Build a DOCX letter requesting clarifications from the supplier."""
@@ -46,12 +107,12 @@ def build_clarification_docx(
     ]
 
     mismatches = [
-        it for it in selected if it.status == TZAnalysisStatus.MISSING
-    ]
-    clarifications = [
         it
         for it in selected
-        if it.status in (TZAnalysisStatus.PARTIAL, TZAnalysisStatus.NOT_FOUND)
+        if it.status in (TZAnalysisStatus.MISSING, TZAnalysisStatus.NOT_FOUND)
+    ]
+    clarifications = [
+        it for it in selected if it.status == TZAnalysisStatus.PARTIAL
     ]
 
     if mismatches:
@@ -73,7 +134,7 @@ def build_clarification_docx(
                     f'Предложено: "{item.offer_value}"'
                     + (f" ({item.offer_ref})" if item.offer_ref else "")
                 )
-            doc.add_paragraph(f"Причина отклонения: {item.explanation}")
+            doc.add_paragraph(_mismatch_reason(item))
 
     if clarifications:
         doc.add_paragraph()
@@ -107,8 +168,7 @@ def build_clarification_docx(
     doc.add_paragraph()
     doc.add_paragraph("С уважением,")
     doc.add_paragraph()
-    doc.add_paragraph(organization or "[Наименование организации]")
-    doc.add_paragraph(date.today().strftime("%d %B %Y г."))
+    doc.add_paragraph(format_ru_date())
 
     buffer = io.BytesIO()
     doc.save(buffer)
@@ -118,7 +178,6 @@ def build_clarification_docx(
 def build_clarification_preview(
     items: list[TZAnalysisItem],
     selected_indices: list[int],
-    organization: str,
     deadline_date: str | None = None,
 ) -> tuple[str, list[str], bool]:
     """Build plain-text preview paragraphs for the clarification letter."""
@@ -135,12 +194,12 @@ def build_clarification_preview(
     ]
 
     mismatches = [
-        it for it in selected if it.status == TZAnalysisStatus.MISSING
-    ]
-    clarifications = [
         it
         for it in selected
-        if it.status in (TZAnalysisStatus.PARTIAL, TZAnalysisStatus.NOT_FOUND)
+        if it.status in (TZAnalysisStatus.MISSING, TZAnalysisStatus.NOT_FOUND)
+    ]
+    clarifications = [
+        it for it in selected if it.status == TZAnalysisStatus.PARTIAL
     ]
     has_issues = bool(mismatches or clarifications)
 
@@ -165,7 +224,7 @@ def build_clarification_preview(
                 if item.offer_ref:
                     offer += f" ({item.offer_ref})"
                 paragraphs.append(offer)
-            paragraphs.append(f"Причина отклонения: {item.explanation}")
+            paragraphs.append(_mismatch_reason(item))
 
     if clarifications:
         paragraphs.extend(["", "Требуют уточнения/дополнения:"])
@@ -193,8 +252,7 @@ def build_clarification_preview(
             "",
             "С уважением,",
             "",
-            organization or "[Наименование организации]",
-            date.today().strftime("%d %B %Y г."),
+            format_ru_date(),
         ]
     )
 

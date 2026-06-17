@@ -58,16 +58,19 @@ class TZAnalysisDocxRequest(BaseModel):
         list[int],
         Field(description="Indices of items to include in the letter"),
     ]
-    organization: Annotated[
-        str,
-        Field(min_length=1, max_length=500),
-    ]
     deadline_date: Annotated[
         str | None,
         Field(
             default=None,
             description="Deadline text, e.g. '7 июня 2026 г.'",
             max_length=100,
+        ),
+    ] = None
+    paragraphs: Annotated[
+        list[str] | None,
+        Field(
+            default=None,
+            description="Optional edited letter body; each entry is a paragraph",
         ),
     ] = None
 

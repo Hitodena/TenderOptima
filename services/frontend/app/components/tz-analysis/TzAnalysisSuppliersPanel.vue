@@ -47,39 +47,28 @@
 							{{ kpFileWord(supplier.kp_filenames.length) }}
 						</p>
 					</button>
-					<div class="flex items-center gap-1 shrink-0">
-						<UBadge
-							v-if="supplier.status === TZAnalysisSupplierStatus.FAILED"
-							color="error"
-							variant="subtle"
-							size="xs"
-						>
-							Ошибка
-						</UBadge>
-						<UButton
-							v-if="!readonly"
-							type="button"
-							variant="ghost"
-							color="neutral"
-							size="xs"
-							icon="i-lucide-trash-2"
-							:disabled="supplier.status === TZAnalysisSupplierStatus.PROCESSING"
-							:loading="deletingId === supplier.id"
-							@click="removeSupplier(supplier.id)"
-						/>
-					</div>
+					<UButton
+						v-if="!readonly"
+						type="button"
+						variant="ghost"
+						color="neutral"
+						size="xs"
+						icon="i-lucide-trash-2"
+						class="shrink-0"
+						:disabled="supplier.status === TZAnalysisSupplierStatus.PROCESSING"
+						:loading="deletingId === supplier.id"
+						@click="removeSupplier(supplier.id)"
+					/>
 				</div>
 
-				<div
-					v-if="supplier.status === TZAnalysisSupplierStatus.PROCESSING"
-					class="flex items-center gap-2 rounded-md border border-warning/30 bg-warning/10 px-2.5 py-2"
+				<UBadge
+					:color="getTzSupplierStatusColor(supplier.status ?? TZAnalysisSupplierStatus.PENDING)"
+					variant="subtle"
+					size="sm"
+					class="w-full justify-center py-1"
 				>
-					<UIcon
-						name="i-lucide-loader"
-						class="w-4 h-4 shrink-0 animate-spin text-warning"
-					/>
-					<span class="text-xs font-medium text-warning">Обрабатывается КП…</span>
-				</div>
+					{{ getTzSupplierStatusLabel(supplier.status ?? TZAnalysisSupplierStatus.PENDING) }}
+				</UBadge>
 
 				<div v-if="supplier.kp_filenames.length" class="space-y-1">
 					<button
@@ -114,7 +103,7 @@
 						<UFileUpload
 							:model-value="newSupplierFiles"
 							:accept="fileAccept"
-							:interactive="true"
+							:interactive="false"
 							multiple
 							layout="list"
 							position="inside"
@@ -147,7 +136,11 @@
 
 <script lang="ts" setup>
 import type { TZAnalysisSupplierItem } from '#shared/types'
-import { TZAnalysisSupplierStatus } from '#shared/types'
+import {
+	getTzSupplierStatusColor,
+	getTzSupplierStatusLabel,
+	TZAnalysisSupplierStatus,
+} from '#shared/types'
 
 const props = withDefaults(defineProps<{
 	analysisId: string

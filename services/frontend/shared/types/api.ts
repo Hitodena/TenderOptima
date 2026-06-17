@@ -297,8 +297,8 @@ export interface TZAnalysisCompleteResponse {
 
 export interface TZAnalysisDocxRequest {
 	selected_indices: number[];
-	organization: string;
 	deadline_date?: string | null;
+	paragraphs?: string[] | null;
 }
 
 export interface TZItemsOverridesRequest {

@@ -11,6 +11,13 @@ export interface EditableRequirementRow {
 	isHeading?: boolean
 }
 
+/** Textarea row count from text; trailing empty lines are ignored; minimum 1. */
+export function textareaRowsFromText(text: string): number {
+	const trimmed = text.replace(/\n+$/, '')
+	if (!trimmed) return 1
+	return trimmed.split('\n').length
+}
+
 export function compareVersionKeys(a: string, b: string): number {
 	const partsA = a.replace(/\//g, '.').split('.')
 	const partsB = b.replace(/\//g, '.').split('.')

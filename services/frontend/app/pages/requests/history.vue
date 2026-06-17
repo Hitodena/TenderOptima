@@ -107,29 +107,17 @@ const page = ref(1)
 const search = ref('')
 const confirmCloseId = ref<string | null>(null)
 const closingId = ref<string | null>(null)
-type HistoryTab = 'active' | 'processing' | 'closed'
-
-const PROCESSING_STATUSES: RequestStatus[] = [
-	RequestStatus.SEARCHING,
-	RequestStatus.QUEUED,
-]
+type HistoryTab = 'active' | 'closed'
 
 const activeTab = ref<HistoryTab>('active')
 const tabs = [
-	{ label: 'Активные', icon: 'i-lucide-activity', value: 'active' },
-	{
-		label: 'В обработке',
-		icon: 'i-lucide-loader',
-		value: 'processing',
-	},
-	{ label: 'Завершенные', icon: 'i-lucide-archive', value: 'closed' },
+	{ label: 'Активные', icon: 'i-lucide-activity', value: 'active' as const },
+	{ label: 'Завершённые', icon: 'i-lucide-archive', value: 'closed' as const },
 ]
 
 function matchesTab(status: RequestStatus, tab: HistoryTab): boolean {
 	if (tab === 'closed') return status === RequestStatus.CLOSED
-	if (tab === 'processing') return PROCESSING_STATUSES.includes(status)
 	return status !== RequestStatus.CLOSED
-		&& !PROCESSING_STATUSES.includes(status)
 }
 
 const filteredHistory = computed(() => {
@@ -156,11 +144,8 @@ const hasMore = computed(() =>
 
 const emptyMessage = computed(() => {
 	if (search.value.trim()) return 'Ничего не найдено'
-	if (activeTab.value === 'processing') {
-		return 'Запросов в обработке пока нет'
-	}
 	if (activeTab.value === 'closed') {
-		return 'Завершенных запросов пока нет'
+		return 'Завершённых запросов пока нет'
 	}
 	return 'Активных запросов пока нет'
 })

@@ -65,6 +65,7 @@ from backend.schemas.analysis import (
 )
 from backend.services.analysis.docx_export import (
     build_clarification_docx,
+    build_clarification_docx_from_paragraphs,
     build_clarification_preview,
 )
 from backend.utils.requirements_struct import (
@@ -1357,7 +1358,6 @@ async def preview_tz_analysis_letter(
     title, paragraphs, has_issues = build_clarification_preview(
         items=items,
         selected_indices=body.selected_indices,
-        organization=body.organization,
         deadline_date=body.deadline_date,
     )
     return TZAnalysisPreviewResponse(
@@ -1401,12 +1401,14 @@ async def export_tz_analysis_docx(
             detail="Select at least one item",
         )
 
-    docx_bytes = build_clarification_docx(
-        items=items,
-        selected_indices=body.selected_indices,
-        organization=body.organization,
-        deadline_date=body.deadline_date,
-    )
+    if body.paragraphs:
+        docx_bytes = build_clarification_docx_from_paragraphs(body.paragraphs)
+    else:
+        docx_bytes = build_clarification_docx(
+            items=items,
+            selected_indices=body.selected_indices,
+            deadline_date=body.deadline_date,
+        )
     filename = f"clarification_{analysis_id}.docx"
     return Response(
         content=docx_bytes,

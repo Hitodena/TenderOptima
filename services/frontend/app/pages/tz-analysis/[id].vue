@@ -106,8 +106,18 @@
 					description="Сравнение с КП не выполнялось. Добавление поставщиков и запуск анализа КП недоступны."
 				/>
 
-				<UTabs v-model="activeContentTab" :items="visibleContentTabItems" :ui="{ list: 'mb-6' }">
+				<UTabs
+					:model-value="activeContentTab"
+					:items="visibleContentTabItems"
+					:ui="{ list: 'mb-6' }"
+					@update:model-value="onContentTabChange"
+				>
 					<template #tz>
+						<div v-if="contentTabLoading" class="space-y-4 min-h-[40vh]">
+							<USkeleton class="h-24 w-full" />
+							<USkeleton class="h-64 w-full" />
+						</div>
+						<div v-else>
 						<div v-if="isTzReviewPhase && !isAnalysisClosed"
 							class="mb-6 rounded-xl border border-warning/25 bg-warning/10 p-4 sm:p-5">
 							<div class="flex gap-3 min-w-0">
@@ -154,10 +164,16 @@
 								</UButton>
 							</template>
 						</UCard>
+						</div>
 					</template>
 
 					<template #kp>
-						<div class="grid grid-cols-1 gap-6" :class="showSuppliersSidebar && !isTzReviewPhase
+						<div v-if="contentTabLoading" class="space-y-4 min-h-[40vh]">
+							<USkeleton class="h-24 w-full" />
+							<USkeleton class="h-64 w-full" />
+							<USkeleton class="h-48 w-full" />
+						</div>
+						<div v-else class="grid grid-cols-1 gap-6" :class="showSuppliersSidebar && !isTzReviewPhase
 							? 'xl:grid-cols-[16rem_minmax(0,1fr)]'
 							: ''">
 							<TzAnalysisSuppliersPanel v-if="showSuppliersSidebar && analysis?.id"
@@ -417,15 +433,10 @@
 			description="Письмо формируется по основному КП. Снимите галочки у пунктов, которые не нужно включать."
 			:ui="{ content: 'sm:max-w-4xl' }">
 			<template #body>
-				<div v-if="previewLoading" class="flex justify-center py-12">
-					<UIcon name="i-lucide-loader" class="w-7 h-7 animate-spin text-muted" />
-				</div>
-
-				<template v-else>
-					<div class="grid grid-cols-1 md:grid-cols-[15rem_minmax(0,1fr)] gap-5 min-h-0">
-						<aside class="flex flex-col gap-4 min-h-0 md:max-h-[62vh]">
-							<div class="space-y-3 shrink-0">
-								<p v-if="selectedSupplier" class="text-xs text-muted">
+				<div class="grid grid-cols-1 md:grid-cols-[15rem_minmax(0,1fr)] gap-5 min-h-0">
+					<aside class="flex flex-col gap-4 min-h-0 md:max-h-[62vh]">
+						<div class="space-y-3 shrink-0">
+							<p v-if="selectedSupplier" class="text-xs text-muted">
 									Поставщик:
 									<span class="text-default font-medium">{{ selectedSupplier.name }}</span>
 									<span v-if="primaryKpLabel"> · КП: </span>
@@ -450,16 +461,9 @@
 									</button>
 									<span v-else class="text-default font-medium">{{ primaryKpLabel }}</span>
 								</p>
-								<UFormField label="Организация" required>
-									<UInput ref="docxOrganizationInput" v-model="docxOrganization"
-										placeholder="Наименование организации" size="md" />
-								</UFormField>
 								<UFormField label="Срок ответа">
 									<UInput v-model="docxDeadline" placeholder="7 июня 2026 г." size="md" />
 								</UFormField>
-								<p v-if="!docxOrganization.trim()" class="text-xs text-muted">
-									Укажите организацию для предпросмотра
-								</p>
 							</div>
 
 							<div class="border-t border-default shrink-0" />
@@ -480,7 +484,7 @@
 							</div>
 
 							<div class="flex-1 min-h-0 overflow-y-auto space-y-4 pr-0.5">
-								<div v-if="letterModalMismatchItems.length" class="space-y-2">
+								<div v-if="letterModalMismatchItems.length" id="letter-sidebar-mismatch" class="space-y-2">
 									<p class="text-xs font-semibold text-error px-0.5">
 										Не совпадает
 										<span v-if="primaryKpLabel" class="text-muted font-normal">
@@ -499,7 +503,7 @@
 									</label>
 								</div>
 
-								<div v-if="letterModalPartialItems.length" class="space-y-2">
+								<div v-if="letterModalPartialItems.length" id="letter-sidebar-partial" class="space-y-2">
 									<p class="text-xs font-semibold text-warning px-0.5">
 										Частично совпадает
 										<span v-if="primaryKpLabel" class="text-muted font-normal">
@@ -520,24 +524,22 @@
 							</div>
 						</aside>
 
-						<div ref="letterDocumentRef" class="rounded-xl border border-default bg-elevated/30 px-5 py-6
-									max-h-[58vh] overflow-y-auto shadow-inner">
-							<template v-if="fullLetterBlocks.length">
-								<div v-for="(block, bIdx) in fullLetterBlocks" :key="bIdx" :id="block.sectionId"
-									:class="block.sectionId ? 'scroll-mt-4' : undefined">
-									<p v-for="(paragraph, pIdx) in block.paragraphs" :key="`${bIdx}-${pIdx}`"
-										class="text-sm whitespace-pre-wrap mb-2.5 last:mb-0 leading-relaxed"
-										:class="letterParagraphClass(paragraph, block.isTitle)">
-										{{ paragraph || '\u00A0' }}
-									</p>
-								</div>
-							</template>
-							<p v-else class="text-sm text-muted text-center py-10">
+						<div ref="letterDocumentRef" class="relative min-h-[58vh]">
+							<UTextarea
+								v-if="tzSelectedIndices.length > 0"
+								ref="letterTextareaRef"
+								v-model="letterEditorText"
+								class="w-full"
+								:ui="{ base: 'h-[58vh] resize-none overflow-y-auto font-[inherit] leading-relaxed' }"
+								size="md"
+								:rows="20"
+								@update:model-value="onLetterEditorInput"
+							/>
+							<p v-else class="text-sm text-muted text-center py-10 rounded-xl border border-default bg-elevated/30">
 								Выберите пункты для формирования письма
 							</p>
 						</div>
 					</div>
-				</template>
 			</template>
 			<template #footer>
 				<div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 w-full">
@@ -545,7 +547,7 @@
 						Закрыть
 					</UButton>
 					<UButton leading-icon="i-lucide-download" :loading="docxGenerating"
-						:disabled="tzSelectedIndices.length === 0 || !docxOrganization.trim()" @click="generateDocx">
+						:disabled="tzSelectedIndices.length === 0 || !letterEditorText.trim()" @click="generateDocx">
 						Скачать DOCX
 						<span v-if="tzSelectedIndices.length > 0" class="ml-1 opacity-80">
 							({{ tzSelectedIndices.length }})
@@ -561,11 +563,9 @@
 import type {
 	TZAnalysisItem,
 	TZAnalysisKpStats,
-	TZAnalysisPreviewResponse,
 	TZAnalysisSession,
 	TZAnalysisStatus,
 	TZAnalysisSupplierItem,
-	UserResponse,
 } from '#shared/types'
 import {
 	getTzItemStatusColor,
@@ -605,7 +605,7 @@ const id = computed(() => route.params.id as string)
 const { get, post, patch } = useApi()
 const { $axios } = useNuxtApp()
 const toast = useToast()
-const { formatDate } = useFormatDate()
+const { formatDate, formatLetterDate } = useFormatDate()
 const { public: publicConfig } = useRuntimeConfig()
 
 const MAX_UPLOAD_SIZE = publicConfig.maxTzUploadSize as number
@@ -629,6 +629,8 @@ const { openTzFile, openKpFile } = useTzAnalysisFiles(
 provide('tzAnalysisFiles', { openTzFile, openKpFile })
 
 const activeContentTab = ref('tz')
+const contentTabLoading = ref(false)
+const userPickedContentTab = ref(false)
 const selectedSupplierId = ref<string | null>(null)
 const contentTabItems = [
 	{ label: 'ТЗ', value: 'tz', slot: 'tz', icon: 'i-lucide-file-text' },
@@ -648,16 +650,17 @@ const itemsOverrides = ref<Record<string, { status: TZAnalysisStatus }>>({})
 const primaryKpSaving = ref(false)
 const editableRequirementsTz = ref<EditableRequirementRow[]>([])
 const editableRequirementsKp = ref<Record<string, EditableRequirementRow[]>>({})
-const docxOrganization = ref('')
 const docxDeadline = ref('')
 const docxGenerating = ref(false)
-const letterPreview = ref<TZAnalysisPreviewResponse | null>(null)
-const previewLoading = ref(false)
-const docxOrganizationInput = ref<{ $el?: HTMLElement } | null>(null)
+const letterEditorText = ref('')
+const letterEditorDirty = ref(false)
 const letterDocumentRef = ref<HTMLElement | null>(null)
+const letterTextareaRef = ref<{ $el?: HTMLElement } | null>(null)
 
 const LETTER_MISMATCH_HEADER = 'Несоответствующие параметры:'
 const LETTER_PARTIAL_HEADER = 'Требуют уточнения/дополнения:'
+const LETTER_DEADLINE_PREFIX =
+	'Просим предоставить дополненное/уточненное предложение не позже '
 
 const tzFilterOptions = [
 	{ label: 'Все', value: 'all' },
@@ -928,6 +931,66 @@ function isItemOverridden(index: number) {
 	return Boolean(itemsOverrides.value[String(index)]?.status)
 }
 
+const letterItemsView = computed((): TZItemView[] => {
+	if (!analysis.value) return []
+	return applyItemOverrides(analysis.value.items)
+		.map((item, index) => ({ ...item, _index: index }))
+})
+
+function letterSelectionStorageKey() {
+	const analysisId = analysis.value?.id
+	const supplierId = selectedSupplierId.value
+	if (!analysisId || !supplierId) return null
+	return `tz-letter-selection:${analysisId}:${supplierId}`
+}
+
+function saveLetterSelection() {
+	if (!import.meta.client) return
+	const key = letterSelectionStorageKey()
+	if (!key) return
+	sessionStorage.setItem(key, JSON.stringify(tzSelectedIndices.value))
+}
+
+function loadLetterSelection(): number[] | null {
+	if (!import.meta.client) return null
+	const key = letterSelectionStorageKey()
+	if (!key) return null
+	try {
+		const raw = sessionStorage.getItem(key)
+		if (!raw) return null
+		const parsed = JSON.parse(raw)
+		return Array.isArray(parsed)
+			? parsed.filter((value): value is number => typeof value === 'number')
+			: null
+	} catch {
+		return null
+	}
+}
+
+function restoreOrInitLetterSelection() {
+	const selectable = new Set(
+		letterItemsView.value
+			.filter((item) => belongsToPrimaryKp(item) && isTzSelectable(item.status))
+			.map((item) => item._index),
+	)
+	const saved = loadLetterSelection()
+	if (saved?.length) {
+		const restored = saved.filter((index) => selectable.has(index))
+		if (restored.length) {
+			tzSelectedIndices.value = restored
+			return
+		}
+	}
+	selectPrimaryKpLetterItems(selectedSupplierPrimaryKp.value)
+}
+
+function letterMismatchReason(item: TZAnalysisItem) {
+	if (item.status === 'not_found') {
+		return `Параметр не найден: ${item.explanation}`
+	}
+	return `Причина отклонения: ${item.explanation}`
+}
+
 const filteredTzItems = computed((): TZItemView[] => {
 	if (!analysis.value) return []
 	return applyItemOverrides(analysis.value.items)
@@ -1073,10 +1136,10 @@ function getKpStats(kpKey: string): TZAnalysisKpStats | null {
 
 function selectPrimaryKpLetterItems(kpFilename: string | null | undefined) {
 	if (!analysis.value || !kpFilename) return
-	tzSelectedIndices.value = analysis.value.items
-		.map((item, index) => ({ item, index }))
-		.filter(({ item }) => getItemKpKey(item) === kpFilename && isTzSelectable(item.status))
-		.map(({ index }) => index)
+	tzSelectedIndices.value = letterItemsView.value
+		.filter((item) => getItemKpKey(item) === kpFilename && isTzSelectable(item.status))
+		.map((item) => item._index)
+	saveLetterSelection()
 }
 
 function collectResultsKpKeys(data: TZAnalysisSession): string[] {
@@ -1174,31 +1237,24 @@ async function refreshAnalysis() {
 	}
 }
 
-const selectedLetterItems = computed((): TZItemView[] => {
-	if (!analysis.value) return []
-	return analysis.value.items
-		.map((item, index) => ({ ...item, _index: index }))
-		.filter((item) =>
-			tzSelectedIndices.value.includes(item._index) && isTzSelectable(item.status),
-		)
-})
+const selectedLetterItems = computed((): TZItemView[] =>
+	letterItemsView.value.filter((item) =>
+		tzSelectedIndices.value.includes(item._index) && isTzSelectable(item.status),
+	),
+)
 
-const letterModalMismatchItems = computed((): TZItemView[] => {
-	if (!analysis.value) return []
-	return analysis.value.items
-		.map((item, index) => ({ ...item, _index: index }))
-		.filter((item) =>
-			belongsToPrimaryKp(item)
-			&& (item.status === 'missing' || item.status === 'not_found'),
-		)
-})
+const letterModalMismatchItems = computed((): TZItemView[] =>
+	letterItemsView.value.filter((item) =>
+		belongsToPrimaryKp(item)
+		&& (item.status === 'missing' || item.status === 'not_found'),
+	),
+)
 
-const letterModalPartialItems = computed((): TZItemView[] => {
-	if (!analysis.value) return []
-	return analysis.value.items
-		.map((item, index) => ({ ...item, _index: index }))
-		.filter((item) => belongsToPrimaryKp(item) && item.status === 'partial')
-})
+const letterModalPartialItems = computed((): TZItemView[] =>
+	letterItemsView.value.filter((item) =>
+		belongsToPrimaryKp(item) && item.status === 'partial',
+	),
+)
 
 const letterItemsByTab = computed(() => ({
 	mismatch: selectedLetterItems.value.filter((item) =>
@@ -1230,12 +1286,6 @@ const letterPreviewTabs = computed(() => {
 	]
 })
 
-type LetterBlock = {
-	sectionId?: string
-	isTitle?: boolean
-	paragraphs: string[]
-}
-
 function buildDraftLetterParagraphs(): string[] {
 	const { mismatch, partial } = letterItemsByTab.value
 	const lines: string[] = [
@@ -1259,7 +1309,7 @@ function buildDraftLetterParagraphs(): string[] {
 					+ (item.offer_ref ? ` (${item.offer_ref})` : ''),
 				)
 			}
-			lines.push(`Причина отклонения: ${item.explanation}`)
+			lines.push(letterMismatchReason(item))
 		}
 	}
 
@@ -1290,79 +1340,119 @@ function buildDraftLetterParagraphs(): string[] {
 		'',
 		'С уважением,',
 		'',
-		docxOrganization.value.trim() || '[Наименование организации]',
+		formatLetterDate(),
 	)
 	return lines
 }
 
-const fullLetterBlocks = computed((): LetterBlock[] => {
-	const title = letterPreview.value?.title
-		?? 'О несоответствии предложения техническим требованиям'
-	const paragraphs = letterPreview.value?.paragraphs.length
-		? letterPreview.value.paragraphs
-		: buildDraftLetterParagraphs()
+function paragraphsToLetterText(paragraphs: string[]): string {
+	return paragraphs.join('\n\n')
+}
 
-	if (!paragraphs.length) return []
+function letterTextToParagraphs(text: string): string[] {
+	if (!text.trim()) return []
+	return text.split('\n\n')
+}
 
-	const blocks: LetterBlock[] = []
-	let sectionId: string | undefined
-	let buffer: string[] = []
+function getLetterTextarea(): HTMLTextAreaElement | null {
+	const root = letterTextareaRef.value?.$el ?? letterTextareaRef.value
+	if (root instanceof HTMLTextAreaElement) return root
+	const el = root?.querySelector('textarea')
+	return el instanceof HTMLTextAreaElement ? el : null
+}
 
-	const flush = () => {
-		if (!buffer.length) return
-		blocks.push({
-			sectionId,
-			paragraphs: [...buffer],
+function withLetterEditorScrollPreserved(update: () => void) {
+	const textarea = getLetterTextarea()
+	const scrollTop = textarea?.scrollTop ?? 0
+	const selectionStart = textarea?.selectionStart ?? null
+	const selectionEnd = textarea?.selectionEnd ?? null
+	update()
+	nextTick(() => {
+		const ta = getLetterTextarea()
+		if (!ta) return
+		ta.scrollTop = scrollTop
+		if (selectionStart != null && selectionEnd != null) {
+			ta.setSelectionRange(selectionStart, selectionEnd)
+		}
+	})
+}
+
+function currentLetterParagraphs(): string[] {
+	return buildDraftLetterParagraphs()
+}
+
+function letterClosingText(): string {
+	const deadline = docxDeadline.value.trim() || '7 дней'
+	return [
+		`${LETTER_DEADLINE_PREFIX}${deadline}.`,
+		'',
+		'С уважением,',
+		'',
+		formatLetterDate(),
+	].join('\n\n')
+}
+
+function patchLetterClosingInEditor() {
+	if (!showLetterModal.value || tzSelectedIndices.value.length === 0) return
+	const closing = letterClosingText()
+	const markerIdx = letterEditorText.value.indexOf(LETTER_DEADLINE_PREFIX)
+	if (markerIdx < 0 && !letterEditorDirty.value) {
+		syncLetterEditor(true)
+		return
+	}
+	withLetterEditorScrollPreserved(() => {
+		skipLetterEditorDirty = true
+		if (markerIdx >= 0) {
+			letterEditorText.value = letterEditorText.value.slice(0, markerIdx) + closing
+		} else {
+			letterEditorText.value = `${letterEditorText.value.trim()}\n\n${closing}`
+		}
+		nextTick(() => {
+			skipLetterEditorDirty = false
 		})
-		buffer = []
-	}
+	})
+}
 
-	for (const paragraph of paragraphs) {
-		if (paragraph === title) {
-			flush()
-			sectionId = undefined
-			blocks.push({ isTitle: true, paragraphs: [paragraph] })
-			continue
-		}
-		if (paragraph === LETTER_MISMATCH_HEADER) {
-			flush()
-			sectionId = 'letter-section-mismatch'
-			buffer = [paragraph]
-			continue
-		}
-		if (paragraph === LETTER_PARTIAL_HEADER) {
-			flush()
-			sectionId = 'letter-section-partial'
-			buffer = [paragraph]
-			continue
-		}
-		if (paragraph.startsWith('Просим предоставить')) {
-			flush()
-			sectionId = undefined
-			buffer = [paragraph]
-			continue
-		}
-		buffer.push(paragraph)
-	}
-	flush()
+function syncLetterEditor(force = false) {
+	if (letterEditorDirty.value && !force) return
+	const paragraphs = currentLetterParagraphs()
+	withLetterEditorScrollPreserved(() => {
+		skipLetterEditorDirty = true
+		letterEditorText.value = paragraphs.length
+			? paragraphsToLetterText(paragraphs)
+			: ''
+		nextTick(() => {
+			skipLetterEditorDirty = false
+		})
+	})
+}
 
-	return blocks
-})
-
-function letterParagraphClass(paragraph: string, isTitle?: boolean) {
-	if (isTitle) return 'font-semibold text-center text-base mb-3 text-highlighted'
-	if (paragraph.endsWith(':')) return 'font-semibold mt-4 first:mt-0 text-highlighted'
-	return 'text-default/90'
+function onLetterEditorInput() {
+	if (skipLetterEditorDirty) return
+	letterEditorDirty.value = true
 }
 
 function scrollToLetterSection(section: 'mismatch' | 'partial') {
 	const tab = letterPreviewTabs.value.find((t) => t.value === section)
 	if (tab?.disabled) return
 	letterPreviewTab.value = section
+	const header = section === 'mismatch'
+		? LETTER_MISMATCH_HEADER
+		: LETTER_PARTIAL_HEADER
 	nextTick(() => {
-		const root = letterDocumentRef.value
-		const target = root?.querySelector(`#letter-section-${section}`)
-		target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+		const textarea = getLetterTextarea()
+		if (textarea) {
+			const idx = letterEditorText.value.indexOf(header)
+			if (idx >= 0) {
+				textarea.focus()
+				textarea.setSelectionRange(idx, idx + header.length)
+				const lineCount = letterEditorText.value.slice(0, idx).split('\n').length
+				textarea.scrollTop = Math.max(0, (lineCount - 2) * 22)
+				return
+			}
+		}
+		document.getElementById(`letter-sidebar-${section}`)
+			?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
 	})
 }
 
@@ -1371,6 +1461,13 @@ function applyAnalysis(data: TZAnalysisSession) {
 	itemsOverrides.value = { ...(data.items_overrides ?? {}) }
 	syncEditableRequirements(data)
 	ensureSelectedSupplier()
+	if (
+		(data.suppliers?.length ?? 0) > 0
+		&& !userPickedContentTab.value
+		&& !isAnalysisClosed.value
+	) {
+		activeContentTab.value = 'kp'
+	}
 	if (data.status === TZAnalysisRunStatus.PROCESSING) {
 		processingPhase.value = inferProcessingPhase(data)
 		tzPolling.value = true
@@ -1396,7 +1493,7 @@ function applyAnalysis(data: TZAnalysisSession) {
 				return isKpScopedToSupplier(key, supplier.name)
 			}),
 		)
-		selectPrimaryKpLetterItems(selectedSupplierPrimaryKp.value)
+		restoreOrInitLetterSelection()
 	}
 }
 
@@ -1444,62 +1541,66 @@ useRunStatusPolling(
 		) ?? false,
 )
 
-let previewDebounce: ReturnType<typeof setTimeout> | null = null
+let skipLetterEditorDirty = false
 
-async function fetchLetterPreview() {
-	if (!showLetterModal.value || !analysis.value?.id) {
-		letterPreview.value = null
+function scheduleLetterPreview() {
+	if (!showLetterModal.value || !analysis.value?.id) return
+	if (tzSelectedIndices.value.length === 0) {
+		letterEditorText.value = ''
+		letterEditorDirty.value = false
 		return
 	}
-	if (!docxOrganization.value.trim() || tzSelectedIndices.value.length === 0) {
-		letterPreview.value = null
-		return
-	}
-
-	previewLoading.value = true
-	try {
-		letterPreview.value = await post<TZAnalysisPreviewResponse>(
-			`/tz-analysis/${analysis.value.id}/preview`,
-			{
-				selected_indices: tzSelectedIndices.value,
-				organization: docxOrganization.value.trim(),
-				deadline_date: docxDeadline.value.trim() || null,
-			},
-		)
-	} catch {
-		letterPreview.value = null
-	} finally {
-		previewLoading.value = false
-	}
+	letterEditorDirty.value = false
+	syncLetterEditor(true)
 }
 
 watch(selectedSupplierId, () => {
-	tzSelectedIndices.value = []
+	restoreOrInitLetterSelection()
+	scheduleLetterPreview()
 })
+
+async function onContentTabChange(tab: string) {
+	if (tab === activeContentTab.value) return
+	userPickedContentTab.value = true
+	activeContentTab.value = tab
+	contentTabLoading.value = true
+	await nextTick()
+	requestAnimationFrame(() => {
+		contentTabLoading.value = false
+	})
+}
 
 watch(isAnalysisClosed, (closed) => {
 	if (closed) activeContentTab.value = 'tz'
 })
 
-watch(
-	[showLetterModal, docxOrganization, docxDeadline, tzSelectedIndices],
-	() => {
-		if (!showLetterModal.value) return
-		if (previewDebounce) clearTimeout(previewDebounce)
-		previewDebounce = setTimeout(() => { fetchLetterPreview() }, 300)
-	},
-	{ deep: true },
-)
-
 watch(showLetterModal, (open) => {
 	if (!open) {
-		letterPreview.value = null
+		letterEditorDirty.value = false
 		return
 	}
 	const { mismatch, partial } = letterItemsByTab.value
 	if (mismatch.length > 0) letterPreviewTab.value = 'mismatch'
 	else if (partial.length > 0) letterPreviewTab.value = 'partial'
+	letterEditorDirty.value = false
+	syncLetterEditor(true)
+	scheduleLetterPreview()
 })
+
+watch(docxDeadline, () => {
+	if (!showLetterModal.value) return
+	patchLetterClosingInEditor()
+})
+
+watch(
+	[tzSelectedIndices, itemsOverrides],
+	() => {
+		if (!showLetterModal.value) return
+		saveLetterSelection()
+		scheduleLetterPreview()
+	},
+	{ deep: true },
+)
 
 watch(tzSelectedIndices, () => {
 	if (!showLetterModal.value) return
@@ -1513,21 +1614,8 @@ watch(tzSelectedIndices, () => {
 	}
 }, { deep: true })
 
-async function loadDefaultOrganization() {
-	try {
-		const me = await get<UserResponse>('/auth/me')
-		const name = me.company_name?.trim()
-		if (name && !docxOrganization.value.trim()) {
-			docxOrganization.value = name
-		}
-	} catch {
-		// profile optional for letter draft
-	}
-}
-
 onMounted(() => {
 	fetchAnalysis()
-	loadDefaultOrganization()
 })
 
 function validateAndSetFile(
@@ -1677,16 +1765,6 @@ function openLetterModal() {
 	const { mismatch, partial } = letterItemsByTab.value
 	letterPreviewTab.value = mismatch.length > 0 ? 'mismatch' : 'partial'
 	showLetterModal.value = true
-	nextTick(() => {
-		if (!docxOrganization.value.trim()) {
-			const input = docxOrganizationInput.value?.$el ?? docxOrganizationInput.value
-			if (input && 'focus' in input) {
-				(input as HTMLElement).focus()
-			}
-		} else {
-			fetchLetterPreview()
-		}
-	})
 }
 
 function isTzSelectable(status: TZAnalysisStatus) {
@@ -1725,6 +1803,7 @@ function toggleTzSelect(index: number, checked: boolean) {
 	} else {
 		tzSelectedIndices.value = tzSelectedIndices.value.filter((i) => i !== index)
 	}
+	saveLetterSelection()
 }
 
 async function downloadBlob(url: string, filename: string) {
@@ -1749,15 +1828,16 @@ async function exportTzCsv() {
 }
 
 async function generateDocx() {
-	if (!analysis.value?.id || !docxOrganization.value.trim()) return
+	if (!analysis.value?.id || !letterEditorText.value.trim()) return
+	patchLetterClosingInEditor()
 	docxGenerating.value = true
 	try {
 		const res = await $axios.post(
 			`/tz-analysis/${analysis.value.id}/docx`,
 			{
 				selected_indices: tzSelectedIndices.value,
-				organization: docxOrganization.value.trim(),
 				deadline_date: docxDeadline.value.trim() || null,
+				paragraphs: letterTextToParagraphs(letterEditorText.value),
 			},
 			{ responseType: 'blob' },
 		)
