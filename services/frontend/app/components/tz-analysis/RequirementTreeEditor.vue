@@ -6,6 +6,7 @@
 		:readonly="readonly"
 		@remove="(index) => emit('remove', index)"
 		@add-child="(parentKey) => emit('add-child', parentKey)"
+		@add-heading="(parentKey) => emit('add-heading', parentKey)"
 		@toggle-section="toggleSection"
 	/>
 </template>
@@ -30,6 +31,7 @@ const props = withDefaults(
 const emit = defineEmits<{
 	remove: [index: number]
 	'add-child': [parentKey: string]
+	'add-heading': [parentKey: string]
 }>()
 
 const tree = computed(() => buildTreeFromRows(props.rows))

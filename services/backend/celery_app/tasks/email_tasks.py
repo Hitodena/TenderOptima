@@ -268,6 +268,110 @@ async def send_reply(
     }
 
 
+@app.task(
+    name="mail.send_custom", bind=True, max_retries=3, default_retry_delay=60
+)
+@async_task
+async def send_custom_email(
+    self,
+    rs_id: str,
+    subject: str,
+    body: str,
+    attachment_paths: list[str] | None = None,
+) -> dict:
+    """Send a custom subject/body email in an existing supplier thread."""
+    db_manager = get_db_manager()
+    rs_uuid = uuid.UUID(rs_id)
+
+    async with db_manager.session() as session:
+        rs = await RequestSupplierDAO.get_by_id(session, rs_uuid)
+        if not rs:
+            logger.error(
+                "RequestSupplier not found for custom email", rs_id=rs_id
+            )
+            return {"status": "error", "reason": "rs_not_found"}
+
+    supplier = rs.supplier
+    recipient = rs.sent_to_email or supplier.main_email
+    if not recipient:
+        logger.warning("No recipient for custom email", rs_id=rs_id)
+        return {"status": "error", "reason": "no_recipient"}
+
+    user = rs.request.user
+    att_data = _prepare_attachments(attachment_paths)
+    if att_data:
+        msg = MIMEMultipart()
+        msg.attach(MIMEText(body, "plain", "utf-8"))
+        for att in att_data:
+            part = MIMEBase("application", "octet-stream")
+            part.set_payload(att["data"])
+            encoders.encode_base64(part)
+            part.add_header(
+                "Content-Disposition",
+                f'attachment; filename="{att["filename"]}"',
+            )
+            msg.attach(part)
+    else:
+        msg = MIMEText(body, "plain", "utf-8")
+
+    msg["From"] = f"{user.company_name or 'TenderOptima'} <{config.smtp_user}>"
+    msg["To"] = recipient
+    msg["Subject"] = subject
+
+    async with db_manager.session() as session:
+        thread = await EmailMessageDAO.get_thread_by_request_supplier_id(
+            session, rs_uuid
+        )
+
+    in_reply_to, references = build_threading_headers(
+        thread, rs.smtp_message_id
+    )
+    if in_reply_to:
+        msg["In-Reply-To"] = in_reply_to
+    if references:
+        msg["References"] = references
+
+    outbound_message_id = make_message_id(config.smtp_user)
+    msg["Message-ID"] = outbound_message_id
+
+    try:
+        _send_mime(msg, recipient)
+        logger.info(
+            "Custom email sent via SMTP",
+            rs_id=rs_id,
+            recipient=recipient,
+        )
+    except smtplib.SMTPException as exc:
+        logger.exception(
+            "SMTP send failed for custom email", rs_id=rs_id, error=str(exc)
+        )
+        raise self.retry(exc=exc) from exc  # type: ignore[attr-defined]
+
+    async with db_manager.session() as session:
+        await EmailMessageDAO.create(
+            session,
+            request_supplier_id=rs.id,
+            direction=EmailMessageDirection.OUTGOING,
+            message_id=outbound_message_id,
+            in_reply_to=in_reply_to,
+            subject=subject,
+            raw_body=body,
+            attachments=att_data or None,
+            received_at=datetime.now(UTC),
+        )
+        await _mark_rs_status(
+            session,
+            rs.id,
+            RequestSupplierStatus.REPLIED,
+        )
+
+    return {
+        "status": "sent",
+        "rs_id": rs_id,
+        "message_id": outbound_message_id,
+    }
+
+
 @app.task(name="mail.send", bind=True, max_retries=3, default_retry_delay=60)
 @async_task
 async def send_emails(self, request_id: str) -> dict:

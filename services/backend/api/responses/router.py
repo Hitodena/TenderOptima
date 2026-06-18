@@ -12,6 +12,7 @@ from backend.api.deps import get_current_user, get_request_or_404, get_session
 from backend.api.responses.schemas import (
     ComparisonResponse,
     ComparisonSupplier,
+    CustomEmailPayload,
     EmailMessageResponse,
     Message,
     RefreshAllResponse,
@@ -19,7 +20,7 @@ from backend.api.responses.schemas import (
     ThreadSummary,
 )
 from backend.celery_app.tasks.analysis_tasks import run_email_analysis
-from backend.celery_app.tasks.email_tasks import send_reply
+from backend.celery_app.tasks.email_tasks import send_custom_email, send_reply
 from backend.db.dao import (
     EmailMessageDAO,
     RequestSupplierDAO,
@@ -212,6 +213,72 @@ async def post_reply(
 
     send_reply.delay(str(rs_id), payload.body, None)  # type: ignore
     return {"status": "queued", "rs_id": str(rs_id)}
+
+
+async def _queue_custom_supplier_email(
+    request_id: uuid.UUID,
+    rs_id: uuid.UUID,
+    payload: CustomEmailPayload,
+    session: AsyncSession,
+    current_user: User,
+) -> dict:
+    rs = await RequestSupplierDAO.get_by_id(session, rs_id)
+    if not rs or str(rs.request_id) != str(request_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Request supplier not found",
+        )
+    await get_request_or_404(request_id, session, current_user)
+
+    if not payload.subject.strip() or not payload.body.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Subject and body cannot be empty",
+        )
+
+    send_custom_email.delay(  # type: ignore[attr-defined]
+        str(rs_id),
+        payload.subject.strip(),
+        payload.body.strip(),
+        payload.attachment_paths,
+    )
+    return {"status": "queued", "rs_id": str(rs_id)}
+
+
+@router.post(
+    "/{request_id}/suppliers/{rs_id}/improvement-request",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Queue improvement request email to supplier",
+)
+async def post_improvement_request(
+    request_id: uuid.UUID,
+    rs_id: uuid.UUID,
+    payload: CustomEmailPayload,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """Queue Celery task to send an improvement request in the thread."""
+    return await _queue_custom_supplier_email(
+        request_id, rs_id, payload, session, current_user
+    )
+
+
+@router.post(
+    "/{request_id}/suppliers/{rs_id}/winner-notification",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Queue winner notification email to supplier",
+)
+async def post_winner_notification(
+    request_id: uuid.UUID,
+    rs_id: uuid.UUID,
+    payload: CustomEmailPayload,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """Queue Celery task to send a winner notification in the thread."""
+    return await _queue_custom_supplier_email(
+        request_id, rs_id, payload, session, current_user
+    )
 
 
 @router.get(

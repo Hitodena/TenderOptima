@@ -1,6 +1,5 @@
 <template>
-	<div class="relative flex overflow-hidden mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8"
-		style="height: calc(100dvh - 80px)">
+	<div class="relative flex overflow-hidden mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 h-[calc(100dvh-5rem)]">
 
 		<div class="shrink-0 border-r border-default flex flex-col"
 			:class="[isMobile && selectedRsId ? 'hidden' : 'flex', 'w-full md:w-64 lg:w-72']">
@@ -164,6 +163,66 @@
 										</td>
 									</tr>
 								</tbody>
+								<tfoot>
+									<tr class="border-t border-default bg-elevated/30">
+										<td
+											class="sticky left-0 z-10 bg-elevated/95 px-3 py-3 text-xs font-semibold align-middle">
+											Проверка соответствия
+										</td>
+										<td v-for="supplier in comparison.suppliers" :key="`compliance-${supplier.rs_id}`"
+											class="px-3 py-3 align-middle">
+											<div class="flex items-center gap-2">
+												<UIcon
+													:name="complianceForSupplier(supplier).passed
+														? 'i-lucide-circle-check'
+														: 'i-lucide-circle-x'"
+													class="w-5 h-5 shrink-0"
+													:class="complianceForSupplier(supplier).passed
+														? 'text-success'
+														: 'text-error'"
+												/>
+												<span class="text-xs font-medium">
+													{{ complianceForSupplier(supplier).percent }}%
+												</span>
+											</div>
+										</td>
+									</tr>
+									<tr class="border-t border-default/50 bg-elevated/20">
+										<td
+											class="sticky left-0 z-10 bg-elevated/95 px-3 py-3 text-xs font-semibold align-middle">
+											Улучшить условия
+										</td>
+										<td v-for="supplier in comparison.suppliers" :key="`improve-${supplier.rs_id}`"
+											class="px-3 py-3 align-middle">
+											<UButton
+												size="xs"
+												variant="outline"
+												leading-icon="i-lucide-mail"
+												@click="openImproveModal(supplier)"
+											>
+												Улучшить условия
+											</UButton>
+										</td>
+									</tr>
+									<tr class="border-t border-default/50 bg-elevated/20">
+										<td
+											class="sticky left-0 z-10 bg-elevated/95 px-3 py-3 text-xs font-semibold align-middle">
+											Выбрать победителем
+										</td>
+										<td v-for="supplier in comparison.suppliers" :key="`winner-${supplier.rs_id}`"
+											class="px-3 py-3 align-middle">
+											<UButton
+												size="xs"
+												color="success"
+												variant="soft"
+												leading-icon="i-lucide-trophy"
+												@click="openWinnerModal(supplier)"
+											>
+												Выбрать победителем
+											</UButton>
+										</td>
+									</tr>
+								</tfoot>
 							</table>
 						</div>
 					</div>
@@ -366,12 +425,26 @@
 			</div>
 		</div>
 	</div>
+
+	<ImproveConditionsModal
+		v-if="modalSupplier"
+		v-model:open="improveModalOpen"
+		:request-id="id"
+		:supplier="modalSupplier"
+	/>
+	<WinnerNotificationModal
+		v-if="modalSupplier"
+		v-model:open="winnerModalOpen"
+		:request-id="id"
+		:supplier="modalSupplier"
+	/>
 </template>
 
 <script lang="ts" setup>
 import type {
 	Attachment,
 	ComparisonResponse,
+	ComparisonSupplier,
 	EmailAnalysisResponse,
 	Message,
 	RefreshAllResponse,
@@ -381,6 +454,8 @@ import type {
 } from '#shared/types'
 import { getOfferValueTrend } from '#shared/utils/offerValue'
 import { TZAnalysisRunStatus } from '#shared/types'
+import ImproveConditionsModal from '~/components/ImproveConditionsModal.vue'
+import WinnerNotificationModal from '~/components/WinnerNotificationModal.vue'
 import { useRunStatusPolling } from '~/composables/useRunStatusPolling'
 
 definePageMeta({ layout: 'default' })
@@ -605,6 +680,33 @@ const editingMatchValue = ref('')
 const comparison = ref<ComparisonResponse | null>(null)
 const loadingComparison = ref(false)
 const exportingComparison = ref(false)
+
+const improveModalOpen = ref(false)
+const winnerModalOpen = ref(false)
+const modalSupplier = ref<ComparisonSupplier | null>(null)
+
+function openImproveModal(supplier: ComparisonSupplier) {
+	modalSupplier.value = supplier
+	improveModalOpen.value = true
+}
+
+function openWinnerModal(supplier: ComparisonSupplier) {
+	modalSupplier.value = supplier
+	winnerModalOpen.value = true
+}
+
+function complianceForSupplier(supplier: ComparisonSupplier) {
+	const requirements = comparison.value?.requirements ?? []
+	const total = requirements.length
+	if (total === 0) return { percent: 0, passed: false }
+	let matched = 0
+	for (const req of requirements) {
+		const status = supplier.statuses[req]
+		if (status === 'met' || status === 'partial') matched += 1
+	}
+	const percent = Math.round((matched / total) * 100)
+	return { percent, passed: percent >= 60 }
+}
 
 function applyEmailAnalysis(data: EmailAnalysisResponse) {
 	requirementMatches.value = data.matches || []

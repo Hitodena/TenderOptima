@@ -164,6 +164,14 @@ class ReplyPayload(BaseModel):
     body: Annotated[str, Field(min_length=1, max_length=50000)]
 
 
+class CustomEmailPayload(BaseModel):
+    """Payload for improvement request or winner notification."""
+
+    subject: Annotated[str, Field(min_length=1, max_length=500)]
+    body: Annotated[str, Field(min_length=1, max_length=50000)]
+    attachment_paths: list[str] | None = None
+
+
 class ComparisonSupplier(BaseModel):
     """One supplier column in the comparison table."""
 

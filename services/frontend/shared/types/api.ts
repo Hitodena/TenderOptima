@@ -226,6 +226,55 @@ export interface RefreshAllResponse {
 	queued: number;
 }
 
+export interface EmailTemplate {
+	id: string;
+	user_id: string | null;
+	title: string;
+	subject: string;
+	body: string;
+	is_global: boolean;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface CustomEmailPayload {
+	subject: string;
+	body: string;
+	attachment_paths?: string[] | null;
+}
+
+export interface SupplierBookmarkItem {
+	id: string;
+	company_name: string;
+	email: string;
+	domain: string | null;
+	notes: string | null;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface SupplierBookmarkList {
+	id: string;
+	user_id: string | null;
+	title: string;
+	is_global: boolean;
+	items: SupplierBookmarkItem[];
+	created_at: string;
+	updated_at: string;
+}
+
+export interface SupplierBookmarkListCreate {
+	title: string;
+	is_global?: boolean;
+}
+
+export interface SupplierBookmarkItemCreate {
+	company_name: string;
+	email: string;
+	domain?: string | null;
+	notes?: string | null;
+}
+
 export interface RequirementNode {
 	text: string;
 	children: Record<string, RequirementNode>;

@@ -1,6 +1,10 @@
 <template>
-	<UHeader mode="slideover" :menu="{ side: 'right' }" :toggle="auth.isAuthenticated.value"
-		class="h-20 border-b border-default">
+	<UHeader
+		mode="slideover"
+		:menu="{ side: 'right' }"
+		:toggle="auth.isAuthenticated.value || isLandingPage"
+		class="h-20 border-b border-default"
+	>
 		<template #left>
 			<ULink to="/"
 				class="flex items-center gap-2 font-bold text-2xl text-highlighted hover:opacity-80 transition-opacity">
@@ -9,11 +13,30 @@
 			</ULink>
 		</template>
 
-		<UNavigationMenu v-if="auth.isAuthenticated.value" :items="navItems" class="w-full justify-center" />
+		<UNavigationMenu
+			v-if="auth.isAuthenticated.value"
+			:items="navItems"
+			class="w-full justify-center"
+		/>
+		<UNavigationMenu
+			v-else-if="isLandingPage"
+			:items="landingNavItems"
+			class="w-full justify-center"
+		/>
 
 		<template #body>
-			<UNavigationMenu v-if="auth.isAuthenticated.value" :items="navItems" orientation="vertical"
-				class="-mx-2.5" />
+			<UNavigationMenu
+				v-if="auth.isAuthenticated.value"
+				:items="navItems"
+				orientation="vertical"
+				class="-mx-2.5"
+			/>
+			<UNavigationMenu
+				v-else-if="isLandingPage"
+				:items="landingNavItems"
+				orientation="vertical"
+				class="-mx-2.5"
+			/>
 		</template>
 
 		<template #right>
@@ -50,8 +73,17 @@ if (auth.isAuthenticated.value) {
 	} catch { }
 }
 
+const isLandingPage = computed(() => route.path === '/')
+
 const isRequestsActive = computed(() => route.path.startsWith('/requests'))
 const isTzAnalysisActive = computed(() => route.path.startsWith('/tz-analysis'))
+
+const landingNavItems = computed<NavigationMenuItem[]>(() => [
+	{ label: 'Возможности', to: '/#features' },
+	{ label: 'Как работает', to: '/#how-it-works' },
+	{ label: 'Этапы', to: '/#stages' },
+	{ label: 'Подписка', to: '/#subscription' },
+])
 
 const navItems = computed<NavigationMenuItem[]>(() => [
 	{

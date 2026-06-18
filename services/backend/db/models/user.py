@@ -33,3 +33,11 @@ class User(IDMixinUUID, TimestampMixin, Base):
     added_suppliers: Mapped[list["Supplier"]] = relationship(  # noqa: F821 # type: ignore
         back_populates="added_by_user"
     )
+    email_templates: Mapped[list["EmailTemplate"]] = relationship(  # noqa: F821 # type: ignore
+        back_populates="user",
+    )
+    supplier_bookmark_lists: Mapped[list["SupplierBookmarkList"]] = (
+        relationship(  # noqa: F821 # type: ignore
+            back_populates="user",
+        )
+    )

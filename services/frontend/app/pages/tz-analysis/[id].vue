@@ -151,7 +151,8 @@
 									:scope-id="hasConfirmedResults ? 'tz-results' : 'tz-review'"
 									:readonly="hasConfirmedResults || isCompleted" show-heading-hint
 									@remove="removeTzRequirement"
-									@add-child="addTzChildRequirement" />
+									@add-child="addTzChildRequirement"
+									@add-heading="addTzHeadingRequirement" />
 								<p v-else class="text-sm text-muted text-center py-4">
 									Нет извлечённых требований
 								</p>
@@ -1204,6 +1205,17 @@ function addTzChildRequirement(parentKey: string) {
 		{
 			key: nextChildKey(parentKey, editableRequirementsTz.value),
 			text: '',
+		},
+	]
+}
+
+function addTzHeadingRequirement(parentKey: string) {
+	editableRequirementsTz.value = [
+		...editableRequirementsTz.value,
+		{
+			key: nextChildKey(parentKey, editableRequirementsTz.value),
+			text: '',
+			isHeading: true,
 		},
 	]
 }

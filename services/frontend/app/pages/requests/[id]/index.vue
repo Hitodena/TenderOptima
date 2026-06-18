@@ -68,12 +68,19 @@
 						Отправить запрос поставщикам
 					</UButton>
 
-					<UButton
-						v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED && request.status !== RequestStatus.CLOSED && request.status !== RequestStatus.SEARCHING"
-						size="lg" variant="outline" color="neutral" leading-icon="i-lucide-user-plus"
-						@click="showAddSupplier = true">
-						Добавить поставщика
-					</UButton>
+				<UButton
+					v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED && request.status !== RequestStatus.CLOSED && request.status !== RequestStatus.SEARCHING"
+					size="lg" variant="outline" color="neutral" leading-icon="i-lucide-user-plus"
+					@click="showAddSupplier = true">
+					Добавить поставщика
+				</UButton>
+
+				<UButton
+					v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED && request.status !== RequestStatus.CLOSED && request.status !== RequestStatus.SEARCHING"
+					size="lg" variant="outline" color="neutral" leading-icon="i-lucide-database"
+					@click="showBookmarkModal = true">
+					Из базы поставщиков
+				</UButton>
 				</div>
 			</div>
 
@@ -220,10 +227,11 @@
 				</div>
 			</UCard>
 
-			<RequestParamsModal v-model:open="showParamsModal" :request="request" :supplier-count="enabledCount"
-				@launched="onLaunched" />
-			<AddSupplierModal v-model:open="showAddSupplier" :request-id="id" @added="fetchSuppliers" />
-			<EditSupplierEmailModal v-model:open="showEditEmail" :supplier="emailSupplier" @saved="onEmailSaved" />
+		<RequestParamsModal v-model:open="showParamsModal" :request="request" :supplier-count="enabledCount"
+			@launched="onLaunched" />
+		<AddSupplierModal v-model:open="showAddSupplier" :request-id="id" @added="fetchSuppliers" />
+		<EditSupplierEmailModal v-model:open="showEditEmail" :supplier="emailSupplier" @saved="onEmailSaved" />
+		<SupplierBookmarkModal v-model:open="showBookmarkModal" :request-id="id" @added="fetchSuppliers" />
 
 		</template>
 
@@ -240,6 +248,7 @@
 
 <script lang="ts" setup>
 import type { RequestSupplierResponse, Supplier } from '#shared/types'
+import SupplierBookmarkModal from '~/components/SupplierBookmarkModal.vue'
 import {
 	getRequestStatusColor,
 	getRequestStatusLabel,
@@ -275,6 +284,7 @@ useSearchPolling(id, request, () => fetchSuppliers(true))
 const showParamsModal = ref(false)
 const showAddSupplier = ref(false)
 const showEditEmail = ref(false)
+const showBookmarkModal = ref(false)
 const emailSupplier = ref<Supplier | null>(null)
 const supplierSearch = ref('')
 const confirmDeleteSupplierId = ref<string | null>(null)

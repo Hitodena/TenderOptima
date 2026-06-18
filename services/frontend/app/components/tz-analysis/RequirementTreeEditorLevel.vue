@@ -12,18 +12,18 @@
 						node.isHeading && 'rounded-lg border border-default/60 bg-elevated/40 p-3',
 					]"
 				>
-					<UButton
-						type="button"
-						variant="ghost"
-						color="neutral"
-						size="xs"
-						class="shrink-0 mt-2"
-						:leading-icon="editor.isSectionExpanded(node.key)
-							? 'i-lucide-chevron-down'
-							: 'i-lucide-chevron-right'"
-						:aria-expanded="editor.isSectionExpanded(node.key)"
-						@click="emit('toggle-section', node.key)"
-					/>
+				<UButton
+					type="button"
+					variant="ghost"
+					color="neutral"
+					size="xs"
+					class="shrink-0 mt-3"
+					:leading-icon="editor.isSectionExpanded(node.key)
+						? 'i-lucide-chevron-down'
+						: 'i-lucide-chevron-right'"
+					:aria-expanded="editor.isSectionExpanded(node.key)"
+					@click="emit('toggle-section', node.key)"
+				/>
 					<span
 						class="text-sm text-muted font-medium tabular-nums pt-3 min-w-10 shrink-0 text-right"
 					>
@@ -54,16 +54,16 @@
 							<span v-else class="text-muted font-normal">Раздел</span>
 						</p>
 					</div>
-					<UButton
-						v-if="node.rowIndex !== undefined && !readonly"
-						type="button"
-						variant="ghost"
-						color="neutral"
-						size="sm"
-						class="mt-2 shrink-0"
-						icon="i-lucide-x"
-						@click="emit('remove', node.rowIndex)"
-					/>
+				<UButton
+					v-if="node.rowIndex !== undefined && !readonly"
+					type="button"
+					variant="ghost"
+					color="neutral"
+					size="sm"
+					class="mt-3 shrink-0"
+					icon="i-lucide-x"
+					@click="emit('remove', node.rowIndex)"
+				/>
 				</div>
 
 				<div
@@ -77,54 +77,75 @@
 						:readonly="readonly"
 						@remove="(index) => emit('remove', index)"
 						@add-child="(parentKey) => emit('add-child', parentKey)"
+						@add-heading="(parentKey) => emit('add-heading', parentKey)"
 						@toggle-section="(key) => emit('toggle-section', key)"
 					/>
-					<UButton
-						v-if="!readonly"
-						type="button"
-						variant="ghost"
-						color="neutral"
-						size="xs"
-						leading-icon="i-lucide-plus"
-						@click="emit('add-child', node.key)"
-					>
-						Добавить подпункт
-					</UButton>
+					<div v-if="!readonly" class="flex flex-wrap items-center gap-2">
+						<UButton
+							type="button"
+							variant="ghost"
+							color="neutral"
+							size="xs"
+							leading-icon="i-lucide-plus"
+							@click="emit('add-child', node.key)"
+						>
+							Добавить пункт
+						</UButton>
+						<UButton
+							type="button"
+							variant="ghost"
+							color="neutral"
+							size="xs"
+							leading-icon="i-lucide-heading"
+							@click="emit('add-heading', node.key)"
+						>
+							Добавить заголовок
+						</UButton>
+					</div>
 				</div>
 			</template>
 
-			<template v-else-if="node.rowIndex !== undefined">
-				<div class="flex items-start gap-3">
-					<span class="w-7 shrink-0" aria-hidden="true" />
-					<span
-						class="text-sm text-muted font-medium tabular-nums pt-3 min-w-10 shrink-0 text-right"
-					>
-						<template v-if="!node.key.startsWith('__row_')">{{ node.key }}.</template>
-					</span>
-					<div class="flex-1 min-w-0">
-						<UTextarea
-							v-if="node.rowIndex !== undefined && rowsRef[node.rowIndex]"
-							v-model="rowsRef[node.rowIndex]!.text"
-							class="w-full whitespace-pre-wrap"
-							size="md"
-							:rows="textareaRowsFromText(rowsRef[node.rowIndex]!.text)"
-							:maxrows="12"
-							:readonly="readonly"
-							autoresize
-						/>
-					</div>
+		<template v-else-if="node.rowIndex !== undefined">
+			<div class="flex items-center gap-3">
+				<span class="w-7 shrink-0" aria-hidden="true" />
+				<span
+					class="text-sm text-muted font-medium tabular-nums min-w-10 shrink-0 text-right"
+				>
+					<template v-if="!node.key.startsWith('__row_')">{{ node.key }}.</template>
+				</span>
+				<div class="flex-1 min-w-0">
+					<UTextarea
+						v-if="node.rowIndex !== undefined && rowsRef[node.rowIndex]"
+						v-model="rowsRef[node.rowIndex]!.text"
+						class="w-full whitespace-pre-wrap"
+						size="md"
+						:rows="textareaRowsFromText(rowsRef[node.rowIndex]!.text)"
+						:maxrows="12"
+						:readonly="readonly"
+						autoresize
+					/>
+				</div>
+				<div v-if="!readonly" class="flex items-center gap-1 shrink-0">
 					<UButton
-						v-if="!readonly"
 						type="button"
 						variant="ghost"
 						color="neutral"
 						size="sm"
-						class="mt-2 shrink-0"
+						icon="i-lucide-plus"
+						title="Добавить подпункт"
+						@click="emit('add-child', node.key)"
+					/>
+					<UButton
+						type="button"
+						variant="ghost"
+						color="neutral"
+						size="sm"
 						icon="i-lucide-x"
 						@click="emit('remove', node.rowIndex)"
 					/>
 				</div>
-			</template>
+			</div>
+		</template>
 		</div>
 	</div>
 </template>
@@ -151,6 +172,7 @@ defineProps<{
 const emit = defineEmits<{
 	remove: [index: number]
 	'add-child': [parentKey: string]
+	'add-heading': [parentKey: string]
 	'toggle-section': [key: string]
 }>()
 
