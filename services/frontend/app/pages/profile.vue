@@ -171,6 +171,7 @@
 
 <script lang="ts" setup>
 import type { UserResponse, UserUpdate } from '#shared/types'
+import { getApiErrorDetail } from '#shared/utils/apiError'
 
 definePageMeta({ layout: 'default' })
 
@@ -182,7 +183,9 @@ const user = ref<UserResponse | null>(null)
 
 try {
 	user.value = await get<UserResponse>('/auth/me')
-} catch { }
+} catch {
+	user.value = null
+}
 
 const form = reactive({
 	business_info: user.value?.business_info ?? '',
@@ -212,9 +215,8 @@ async function saveBusinessCard() {
 		await patch('/auth/me', payload)
 		cardSuccess.value = true
 		setTimeout(() => { cardSuccess.value = false }, 3000)
-	} catch (e: any) {
-		const detail = e?.response?.data?.detail
-		cardError.value = typeof detail === 'string' ? detail : 'Ошибка при сохранении'
+	} catch (e: unknown) {
+		cardError.value = getApiErrorDetail(e) ?? 'Ошибка при сохранении'
 	} finally {
 		savingCard.value = false
 	}
@@ -238,9 +240,8 @@ async function saveProfile() {
 		await patch('/auth/me', payload)
 		profileSuccess.value = true
 		setTimeout(() => { profileSuccess.value = false }, 3000)
-	} catch (e: any) {
-		const detail = e?.response?.data?.detail
-		profileError.value = typeof detail === 'string' ? detail : 'Ошибка при сохранении'
+	} catch (e: unknown) {
+		profileError.value = getApiErrorDetail(e) ?? 'Ошибка при сохранении'
 	} finally {
 		savingProfile.value = false
 	}

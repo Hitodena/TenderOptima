@@ -31,6 +31,7 @@
 <script lang="ts" setup>
 import { z } from 'zod'
 import type { SupplierCreate } from '#shared/types'
+import { getApiErrorDetail } from '#shared/utils/apiError'
 
 const props = defineProps<{ requestId: string }>()
 const isOpen = defineModel<boolean>('open', { default: false })
@@ -71,9 +72,8 @@ async function handleAdd() {
 		await post('/suppliers/', payload)
 		emit('added')
 		close()
-	} catch (e: any) {
-		const detail = e?.response?.data?.detail
-		error.value = typeof detail === 'string' ? detail : 'Ошибка при добавлении поставщика'
+	} catch (e: unknown) {
+		error.value = getApiErrorDetail(e) ?? 'Ошибка при добавлении поставщика'
 	} finally {
 		loading.value = false
 	}

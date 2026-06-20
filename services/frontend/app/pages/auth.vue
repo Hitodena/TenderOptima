@@ -133,6 +133,7 @@
 
 <script lang="ts" setup>
 import type { RegisterCreate, TokenResponse } from '#shared/types'
+import { getApiErrorDetail } from '#shared/utils/apiError'
 import { z } from 'zod'
 
 definePageMeta({ layout: 'auth' })
@@ -183,9 +184,8 @@ async function handleLogin() {
 		})
 		auth.setToken(data.access_token)
 		await navigateTo('/requests')
-	} catch (e: any) {
-		const detail = e.response?.data?.detail
-		loginError.value = typeof detail === 'string' ? detail : 'Внутренняя ошибка сервера'
+	} catch (e: unknown) {
+		loginError.value = getApiErrorDetail(e) ?? 'Внутренняя ошибка сервера'
 	} finally {
 		loginLoading.value = false
 	}
@@ -219,13 +219,8 @@ async function handleRegister() {
 		const data = await post<TokenResponse>('/auth/register', payload)
 		auth.setToken(data.access_token)
 		await navigateTo('/requests')
-	} catch (e: any) {
-		const detail = e.response?.data?.detail
-		if (Array.isArray(detail)) {
-			registerError.value = detail.map((d: any) => d.msg).join(', ')
-		} else {
-			registerError.value = typeof detail === 'string' ? detail : 'Ошибка регистрации'
-		}
+	} catch (e: unknown) {
+		registerError.value = getApiErrorDetail(e) ?? 'Ошибка регистрации'
 	} finally {
 		registerLoading.value = false
 	}

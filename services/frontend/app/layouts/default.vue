@@ -1,5 +1,6 @@
 <template>
-	<UHeader
+	<div class="min-h-screen flex flex-col">
+		<UHeader
 		mode="slideover"
 		:menu="{ side: 'right' }"
 		:toggle="auth.isAuthenticated.value || isLandingPage"
@@ -53,7 +54,8 @@
 		</template>
 	</UHeader>
 
-	<slot />
+		<slot />
+	</div>
 </template>
 
 
@@ -70,7 +72,9 @@ const user = ref<UserResponse | null>(null)
 if (auth.isAuthenticated.value) {
 	try {
 		user.value = await get<UserResponse>('/auth/me')
-	} catch { }
+	} catch {
+		user.value = null
+	}
 }
 
 const isLandingPage = computed(() => route.path === '/')

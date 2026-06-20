@@ -156,6 +156,7 @@ import type {
     UserResponse,
     UserUpdate,
 } from "#shared/types"
+import { getApiErrorDetail } from "#shared/utils/apiError"
 
 const props = defineProps<{
     request?: RequestResponse | null
@@ -241,7 +242,9 @@ async function loadBusinessInfo() {
         const val = user.business_info ?? ""
         form.businessInfo = val
         originalBusinessInfo.value = val
-    } catch { }
+    } catch {
+        // business info is optional for the modal
+    }
 }
 
 watch(
@@ -358,10 +361,8 @@ async function goToConfirm() {
                     uploadFormData,
                 )
                 uploadedAttachments.value = uploaded
-            } catch (uploadErr: any) {
-                const detail = uploadErr?.response?.data?.detail
-                error.value =
-                    typeof detail === "string" ? detail : "Ошибка при загрузке файлов"
+            } catch (uploadErr: unknown) {
+                error.value = getApiErrorDetail(uploadErr) ?? "Ошибка при загрузке файлов"
                 return
             }
         }
@@ -377,10 +378,8 @@ async function goToConfirm() {
         }
 
         step.value = "confirm"
-    } catch (e: any) {
-        const detail = e?.response?.data?.detail
-        error.value =
-            typeof detail === "string" ? detail : "Ошибка при генерации письма"
+    } catch (e: unknown) {
+        error.value = getApiErrorDetail(e) ?? "Ошибка при генерации письма"
     } finally {
         loadingMessage.value = false
     }
@@ -392,7 +391,10 @@ async function handleLaunch() {
     error.value = null
     try {
         // defensive: ensure subject persisted before launch (sends email_message if edited)
-        const emailPayload: any = { email_subject: form.emailSubject || null }
+        const emailPayload: {
+            email_subject: string | null
+            email_message?: string
+        } = { email_subject: form.emailSubject || null }
         if (form.emailMessage) emailPayload.email_message = form.emailMessage
         await patch(`/requests/${props.request.id}/email_message`, emailPayload)
 
@@ -407,10 +409,8 @@ async function handleLaunch() {
         })
         close()
         await navigateTo(`/requests/${props.request.id}/responses`)
-    } catch (e: any) {
-        const detail = e?.response?.data?.detail
-        error.value =
-            typeof detail === "string" ? detail : "Ошибка при запуске рассылки"
+    } catch (e: unknown) {
+        error.value = getApiErrorDetail(e) ?? "Ошибка при запуске рассылки"
         step.value = "params"
     } finally {
         loading.value = false

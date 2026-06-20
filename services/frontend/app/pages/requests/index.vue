@@ -47,6 +47,7 @@
 
 <script lang="ts" setup>
 import type { RequestResponse } from '#shared/types'
+import { getApiErrorDetail } from '#shared/utils/apiError'
 import { z } from 'zod'
 import SearchQueryRulesHint from '~/components/requests/SearchQueryRulesHint.vue'
 
@@ -72,11 +73,8 @@ async function handleSearch() {
 		})
 		await post(`/requests/${created.id}/search`)
 		await navigateTo(`/requests/${created.id}`)
-	} catch (e: any) {
-		const detail = e?.response?.data?.detail
-		error.value = typeof detail === 'string' && detail.trim()
-			? detail
-			: 'Не удалось запустить поиск. Попробуйте ещё раз.'
+	} catch (e: unknown) {
+		error.value = getApiErrorDetail(e) ?? 'Не удалось запустить поиск. Попробуйте ещё раз.'
 	} finally {
 		loading.value = false
 	}

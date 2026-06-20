@@ -37,13 +37,12 @@
 
 <script lang="ts" setup>
 import type { Supplier, SupplierEmailUpdate } from '#shared/types'
-import type { PropType } from 'vue'
+import { getApiErrorDetail } from '#shared/utils/apiError'
 
-const props = defineProps({
-	supplier: {
-		type: Object as PropType<Supplier | null>,
-		default: null,
-	},
+const props = withDefaults(defineProps<{
+	supplier?: Supplier | null
+}>(), {
+	supplier: null,
 })
 const isOpen = defineModel<boolean>('open', { default: false })
 const emit = defineEmits<{ saved: []; closed: [] }>()
@@ -96,9 +95,8 @@ async function handleSave() {
 		await patch(`/suppliers/${props.supplier.id}/email`, payload)
 		emit('saved')
 		close()
-	} catch (e: any) {
-		const detail = e?.response?.data?.detail
-		error.value = typeof detail === 'string' ? detail : 'Ошибка при обновлении email'
+	} catch (e: unknown) {
+		error.value = getApiErrorDetail(e) ?? 'Ошибка при обновлении email'
 	} finally {
 		loading.value = false
 	}

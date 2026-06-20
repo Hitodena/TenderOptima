@@ -168,11 +168,6 @@ export function countLeafRequirements(
 	return flattenHierarchy(normalizeTzRequirements(data)).length
 }
 
-function parseFlattenedLine(line: string): EditableRequirementRow {
-	const match = line.match(/^([\d./]+)\.\s+([\s\S]*)$/)
-	if (match?.[1] && match[2] !== undefined) return { key: match[1], text: match[2] }
-	return { key: '', text: line }
-}
 
 export function flattenRequirementsToEditableRows(
 	data: RequirementsHierarchy | null | undefined,

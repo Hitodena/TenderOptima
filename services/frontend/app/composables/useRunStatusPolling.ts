@@ -24,7 +24,7 @@ export function useRunStatusPolling<T extends { status?: string }>(
 				if (data.status === 'active') await onSuccess?.()
 				else if (data.status === 'failed') await onFailure?.()
 			} catch {
-				
+				// ignore transient polling errors
 			}
 		},
 		POLL_INTERVAL_MS,

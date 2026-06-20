@@ -118,10 +118,7 @@
 </template>
 
 <script lang="ts" setup>
-import {
-	type EditableRequirementRow,
-	type RequirementTreeNode,
-} from '#shared/utils/requirementsStruct'
+import type { EditableRequirementRow, RequirementTreeNode } from '#shared/utils/requirementsStruct'
 import RequirementNodeActions from '~/components/tz-analysis/RequirementNodeActions.vue'
 import RequirementTreeEditorLevel from '~/components/tz-analysis/RequirementTreeEditorLevel.vue'
 

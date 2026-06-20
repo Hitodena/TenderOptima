@@ -1,4 +1,5 @@
 <template>
+	<div>
 	<div class="relative flex overflow-hidden mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 h-[calc(100dvh-5rem)]">
 
 		<div class="shrink-0 border-r border-default flex flex-col"
@@ -438,6 +439,7 @@
 		:request-id="id"
 		:supplier="modalSupplier"
 	/>
+	</div>
 </template>
 
 <script lang="ts" setup>

@@ -122,7 +122,7 @@ function matchesTab(status: RequestStatus, tab: HistoryTab): boolean {
 
 const filteredHistory = computed(() => {
 	const q = search.value.trim().toLowerCase()
-	let list = allHistory.value.filter((r) => matchesTab(r.status, activeTab.value))
+	const list = allHistory.value.filter((r) => matchesTab(r.status, activeTab.value))
 	if (!q) return list
 	return list.filter((r) => {
 		const haystack = [

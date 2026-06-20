@@ -621,10 +621,6 @@ const uploadDescription = computed(() => {
 	return `PDF, DOCX, XLSX, TXT, изображения. До ${sizeMb} МБ`
 })
 
-type KpSlot = { id: number; file: File | null }
-
-let kpSlotCounter = 0
-
 const loading = ref(true)
 const analysis = ref<TZAnalysisSession | null>(null)
 const { openTzFile, openKpFile } = useTzAnalysisFiles(
@@ -642,7 +638,6 @@ const contentTabItems = [
 	{ label: 'КП / Результаты', value: 'kp', slot: 'kp', icon: 'i-lucide-file-spreadsheet' },
 ]
 const tzFile = ref<File | null>(null)
-const kpSlots = ref<KpSlot[]>([{ id: ++kpSlotCounter, file: null }])
 const tzAnalyzing = ref(false)
 const kpAnalyzing = ref(false)
 const confirmingTz = ref(false)
@@ -783,13 +778,6 @@ const selectedSupplier = computed(() =>
 	suppliers.value.find((entry) => entry.id === selectedSupplierId.value) ?? null,
 )
 
-const selectedSupplierKpKeys = computed(() => {
-	const supplier = selectedSupplier.value
-	if (!supplier) return [] as string[]
-	const prefix = supplierKpScopedPrefix(supplier.name)
-	return displayKpFilenames.value.filter((name) => name.startsWith(prefix))
-})
-
 const selectedSupplierKpOptions = computed(() => {
 	const supplier = selectedSupplier.value
 	if (!supplier) return []
@@ -877,34 +865,6 @@ const selectedSupplierStats = computed(() => {
 		not_found_count: items.filter((item) => item.status === 'not_found').length,
 	}
 })
-
-function findSupplierKpFileByFlatIndex(flatIndex: number) {
-	let cursor = 0
-	for (const supplier of suppliers.value) {
-		for (const filename of supplier.kp_filenames) {
-			if (cursor === flatIndex) {
-				return { supplier, filename }
-			}
-			cursor++
-		}
-	}
-	return null
-}
-
-function findSupplierKpFile(displayName: string) {
-	const parsed = parseScopedKpName(displayName)
-	if (parsed) {
-		const supplier = suppliers.value.find(
-			(entry) => entry.name === parsed.supplierName,
-		)
-		if (supplier) {
-			return { supplier, filename: parsed.filename }
-		}
-	}
-	const flatIndex = displayKpFilenames.value.indexOf(displayName)
-	if (flatIndex < 0) return null
-	return findSupplierKpFileByFlatIndex(flatIndex)
-}
 
 const visibleKpItemGroups = computed(() => {
 	if (suppliers.value.length === 0) {
@@ -1087,10 +1047,6 @@ const displayKpFilenames = computed(() => {
 	return []
 })
 
-const hasMultipleLetterKps = computed(() => hasMultipleSelectedSupplierKps.value)
-
-const primaryKpOptions = computed(() => selectedSupplierKpOptions.value)
-
 const primaryKpLabel = computed(() => selectedSupplierPrimaryKpLabel.value)
 
 async function setPrimaryKp(scopedKpFilename: string | null) {
@@ -1238,10 +1194,6 @@ function removeTzRequirement(index: number) {
 		rows.filter((_, idx) => idx !== index),
 	)
 }
-
-const hasAnyKpFile = computed(() =>
-	kpSlots.value.some((slot) => slot.file !== null),
-)
 
 const canRunKpAnalysis = computed(() =>
 	!isCompleted.value
@@ -1504,12 +1456,6 @@ function applyAnalysis(data: TZAnalysisSession) {
 	}
 	if (
 		data.status === TZAnalysisRunStatus.ACTIVE
-		&& !data.confirmed
-	) {
-		kpSlots.value = [{ id: ++kpSlotCounter, file: null }]
-	}
-	if (
-		data.status === TZAnalysisRunStatus.ACTIVE
 		&& data.confirmed
 		&& (data.items?.length ?? 0) > 0
 	) {
@@ -1670,35 +1616,6 @@ function onTzFileChange(file: File | null | undefined) {
 	validateAndSetFile(file, tzFile)
 }
 
-function addKpSlot() {
-	kpSlots.value = [...kpSlots.value, { id: ++kpSlotCounter, file: null }]
-}
-
-function removeKpSlot(slotId: number) {
-	if (kpSlots.value.length <= 1) return
-	kpSlots.value = kpSlots.value.filter((slot) => slot.id !== slotId)
-}
-
-function onKpSlotChange(slotId: number, file: File | null | undefined) {
-	const slot = kpSlots.value.find((s) => s.id === slotId)
-	if (!slot) return
-	if (!file) {
-		slot.file = null
-		return
-	}
-	if (file.size > MAX_UPLOAD_SIZE) {
-		const sizeMb = Math.round(MAX_UPLOAD_SIZE / 1024 / 1024)
-		toast.add({
-			title: 'Файл слишком большой',
-			description: `${file.name} превышает ${sizeMb} МБ`,
-			color: 'error',
-		})
-		slot.file = null
-		return
-	}
-	slot.file = file
-}
-
 async function runTzAnalysis() {
 	if (!tzFile.value || !analysis.value?.id) return
 	tzAnalyzing.value = true
@@ -1790,8 +1707,7 @@ async function runKpAnalysis() {
 			return
 		}
 
-		let result: TZAnalysisSession
-		result = await post<TZAnalysisSession>(
+		const result = await post<TZAnalysisSession>(
 			`/tz-analysis/${analysis.value.id}/run-kp`,
 			new FormData(),
 		)
@@ -1833,7 +1749,7 @@ function openLetterModal() {
 		})
 		return
 	}
-	const { mismatch, partial } = letterItemsByTab.value
+	const { mismatch } = letterItemsByTab.value
 	letterPreviewTab.value = mismatch.length > 0 ? 'mismatch' : 'partial'
 	showLetterModal.value = true
 }

@@ -262,7 +262,7 @@ import {
 	RequestStatus,
 	RequestSupplierStatus,
 } from '#shared/types'
-import { formatDomainLabel, toExternalUrl } from '#shared/utils/url'
+import { getApiErrorDetail } from '#shared/utils/apiError'
 import type { TableColumn, TableRow } from '@nuxt/ui'
 
 const route = useRoute()
@@ -371,9 +371,8 @@ async function runSearch() {
 	try {
 		await post(`/requests/${id}/search`)
 		if (request.value) request.value.status = RequestStatus.SEARCHING
-	} catch (e: any) {
-		const detail = e?.response?.data?.detail
-		actionError.value = typeof detail === 'string' ? detail : 'Не удалось выполнить поиск поставщиков'
+	} catch (e: unknown) {
+		actionError.value = getApiErrorDetail(e) ?? 'Не удалось выполнить поиск поставщиков'
 	} finally {
 		searching.value = false
 	}
