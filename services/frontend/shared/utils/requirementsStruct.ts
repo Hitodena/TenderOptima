@@ -413,6 +413,33 @@ export function buildTreeFromRows(rows: EditableRequirementRow[]): RequirementTr
 	return roots
 }
 
+/** Reassign sequential keys (1, 2, 1.1, …) from current tree order after add/remove. */
+export function renumberRequirementRows(
+	rows: EditableRequirementRow[],
+): EditableRequirementRow[] {
+	const tree = buildTreeFromRows(rows)
+	const updated = rows.map((row) => ({ ...row }))
+
+	function walk(nodes: RequirementTreeNode[], parentKey: string | null) {
+		for (const [index, node] of nodes.entries()) {
+			const newKey = parentKey === null
+				? String(index + 1)
+				: `${parentKey}.${index + 1}`
+
+			if (node.rowIndex !== undefined) {
+				updated[node.rowIndex]!.key = newKey
+			}
+
+			if (node.children.length > 0) {
+				walk(node.children, newKey)
+			}
+		}
+	}
+
+	walk(tree, null)
+	return updated
+}
+
 function collectHierarchyKeys(hierarchy: RequirementsHierarchy): Set<string> {
 	const keys = new Set<string>()
 

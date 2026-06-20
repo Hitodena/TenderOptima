@@ -86,7 +86,7 @@
 					description="Не удалось выполнить анализ. Создайте новый анализ и попробуйте снова." />
 			</template>
 
-			<template v-else-if="isTzReviewPhase || hasConfirmedResults || kpAnalysisStarted">
+			<template v-else-if="isTzReviewPhase || isTzConfirmed || kpAnalysisStarted">
 				<UAlert
 					v-if="isCompleted && hasKpContent && !hasSuppliersProcessing"
 					color="neutral"
@@ -128,8 +128,8 @@
 									</p>
 									<p class="text-sm text-muted">
 										Система извлекла требования из ТЗ. Удалите лишние пункты,
-										добавьте недостающие, затем добавьте поставщиков с КП
-										для сравнения.
+										добавьте недостающие, затем подтвердите список —
+										после этого станет доступна загрузка КП.
 									</p>
 								</div>
 							</div>
@@ -148,8 +148,8 @@
 
 							<div class="overflow-y-auto pr-1">
 								<RequirementTreeEditor v-if="editableTzCount > 0" :rows="editableRequirementsTz"
-									:scope-id="hasConfirmedResults ? 'tz-results' : 'tz-review'"
-									:readonly="hasConfirmedResults || isCompleted" show-heading-hint
+									:scope-id="isTzConfirmed ? 'tz-results' : 'tz-review'"
+									:readonly="isTzConfirmed || isCompleted" show-heading-hint
 									@remove="removeTzRequirement"
 									@add-child="addTzChildRequirement"
 									@add-heading="addTzHeadingRequirement" />
@@ -158,11 +158,19 @@
 								</p>
 							</div>
 
-							<template v-if="!hasConfirmedResults && !isCompleted" #footer>
-								<UButton type="button" variant="outline" size="sm" leading-icon="i-lucide-plus"
-									@click="addTzRequirement">
-									Добавить требование
-								</UButton>
+							<template v-if="!isTzConfirmed && !isCompleted" #footer>
+								<div class="flex flex-wrap items-center gap-2">
+									<UButton type="button" variant="outline" size="sm" leading-icon="i-lucide-plus"
+										@click="addTzRequirement">
+										Добавить требование
+									</UButton>
+									<UButton color="warning" variant="solid" size="sm"
+										leading-icon="i-lucide-check" :loading="confirmingTz"
+										:disabled="!requirementsRowsNonempty(editableRequirementsTz)"
+										@click="confirmTzRequirements">
+										Подтвердить требования
+									</UButton>
+								</div>
 							</template>
 						</UCard>
 						</div>
@@ -174,48 +182,43 @@
 							<USkeleton class="h-64 w-full" />
 							<USkeleton class="h-48 w-full" />
 						</div>
-						<div v-else class="grid grid-cols-1 gap-6" :class="showSuppliersSidebar && !isTzReviewPhase
-							? 'xl:grid-cols-[16rem_minmax(0,1fr)]'
+						<div v-else class="grid grid-cols-1 gap-6" :class="showSuppliersSidebar
+							? 'xl:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)]'
 							: ''">
 							<TzAnalysisSuppliersPanel v-if="showSuppliersSidebar && analysis?.id"
 								:analysis-id="analysis.id" :suppliers="suppliers" :file-accept="fileAccept"
 								:readonly="isCompleted || isAnalysisClosed"
-								:selected-supplier-id="selectedSupplierId" :compact="!isTzReviewPhase"
+								:selected-supplier-id="selectedSupplierId" compact
 								@select="selectedSupplierId = $event"
 								@open-kp="({ supplierId, filename }) => openKpFile(filename, supplierId)"
 								@updated="refreshAnalysis" />
 
 							<div class="min-w-0 space-y-6">
 								<UCard
-									v-if="hasSuppliersProcessing && !isTzReviewPhase"
+									v-if="hasSuppliersProcessing && isTzConfirmed"
 									class="shadow-sm"
 								>
-									<div class="flex items-center gap-3 py-4 text-muted">
-										<UIcon name="i-lucide-loader" class="w-5 h-5 animate-spin text-warning shrink-0" />
-										<p class="text-sm">
-											Анализ коммерческих предложений выполняется. Раздел ТЗ доступен для просмотра.
+									<div class="flex flex-col gap-1 py-4 text-muted">
+										<div class="flex items-center gap-3">
+											<UIcon name="i-lucide-loader" class="w-5 h-5 animate-spin text-warning shrink-0" />
+											<p class="text-sm">
+												Анализ коммерческих предложений выполняется. Раздел ТЗ доступен для просмотра.
+											</p>
+										</div>
+										<p class="text-xs pl-8">
+											Ожидайте до 2 часов. Страница обновится автоматически.
 										</p>
 									</div>
 								</UCard>
 
 								<UCard
-									v-if="selectedSupplier && !hasConfirmedResults && !isAnalysisClosed"
+									v-if="selectedSupplier && !hasComparisonResults && !isAnalysisClosed"
 									class="shadow-sm"
 								>
 									<template #header>
-										<div class="flex items-center justify-between gap-2">
-											<p class="font-semibold text-sm">
-												КП — {{ selectedSupplier.name }}
-											</p>
-											<UBadge
-												v-if="selectedSupplier.status === TZAnalysisSupplierStatus.PROCESSING"
-												color="warning"
-												variant="subtle"
-												size="xs"
-											>
-												Обрабатывается
-											</UBadge>
-										</div>
+										<p class="font-semibold text-sm">
+											КП — {{ selectedSupplier.name }}
+										</p>
 									</template>
 									<div
 										v-if="selectedSupplier.kp_filenames.length"
@@ -242,7 +245,7 @@
 										description="Анализ завершён без сравнения с КП. Этот раздел недоступен." />
 								</template>
 
-								<template v-else-if="isTzReviewPhase && !isCompleted">
+								<template v-else-if="isTzConfirmed && !hasComparisonResults && !isCompleted">
 									<div class="flex flex-wrap items-center gap-2">
 										<UButton color="warning" variant="solid" :loading="kpAnalyzing"
 											:disabled="!canRunKpAnalysis" @click="runKpAnalysis">
@@ -254,12 +257,12 @@
 									</div>
 								</template>
 
-								<template v-else-if="isCompleted && isTzReviewPhase">
+								<template v-else-if="isCompleted && !hasComparisonResults">
 									<UAlert color="neutral" variant="soft" icon="i-lucide-archive"
 										description="Сравнение с КП не выполнялось. Анализ завершён — запуск сравнения недоступен." />
 								</template>
 
-								<template v-else-if="hasConfirmedResults">
+								<template v-else-if="hasComparisonResults">
 									<div
 										v-if="hasPendingSuppliers && !isCompleted"
 										class="flex flex-wrap items-center gap-2"
@@ -587,6 +590,7 @@ import {
 	countRequirementRows,
 	flattenRequirementsToRows,
 	nextChildKey,
+	renumberRequirementRows,
 	requirementsNonempty,
 	requirementsRowsNonempty,
 	rowsToHierarchy,
@@ -641,6 +645,7 @@ const tzFile = ref<File | null>(null)
 const kpSlots = ref<KpSlot[]>([{ id: ++kpSlotCounter, file: null }])
 const tzAnalyzing = ref(false)
 const kpAnalyzing = ref(false)
+const confirmingTz = ref(false)
 const tzPolling = ref(false)
 const tzSelectedIndices = ref<number[]>([])
 const tzStatusFilter = ref('all')
@@ -750,11 +755,13 @@ const kpAnalysisStarted = computed(() =>
 const isTzReviewPhase = computed(() =>
 	hasResults.value
 	&& !analysis.value?.confirmed
-	&& Object.keys(analysis.value?.requirements_kp ?? {}).length === 0
 	&& !kpAnalysisStarted.value,
 )
-const hasConfirmedResults = computed(() =>
-	hasResults.value && Boolean(analysis.value?.confirmed),
+const isTzConfirmed = computed(() =>
+	Boolean(analysis.value?.confirmed),
+)
+const hasComparisonResults = computed(() =>
+	(analysis.value?.items?.length ?? 0) > 0,
 )
 const isCompleted = computed(() =>
 	analysis.value?.status === TZAnalysisRunStatus.COMPLETED,
@@ -848,16 +855,14 @@ const hasKpContent = computed(() => {
 const isAnalysisClosed = computed(() =>
 	isCompleted.value && !hasKpContent.value,
 )
-const visibleContentTabItems = computed(() =>
-	isAnalysisClosed.value
-		? contentTabItems.filter((item) => item.value === 'tz')
-		: contentTabItems,
-)
+const visibleContentTabItems = computed(() => {
+	if (isAnalysisClosed.value || !isTzConfirmed.value) {
+		return contentTabItems.filter((item) => item.value === 'tz')
+	}
+	return contentTabItems
+})
 const showSuppliersSidebar = computed(() =>
-	(isTzReviewPhase.value
-		|| hasConfirmedResults.value
-		|| kpAnalysisStarted.value)
-	&& !isAnalysisClosed.value,
+	isTzConfirmed.value && !isAnalysisClosed.value,
 )
 const selectedSupplierStats = computed(() => {
 	const primary = selectedSupplierPrimaryKp.value
@@ -918,7 +923,7 @@ const statusLabel = computed(() =>
 )
 
 const overrideSaving = ref(false)
-const canEditItemStatuses = computed(() => hasConfirmedResults.value)
+const canEditItemStatuses = computed(() => hasComparisonResults.value)
 
 function applyItemOverrides(items: TZAnalysisItem[]): TZAnalysisItem[] {
 	return items.map((item, index) => {
@@ -1192,37 +1197,45 @@ function nextTopLevelKey(rows: EditableRequirementRow[]): string {
 	return String(maxTop + 1)
 }
 
+function updateEditableRequirementsTz(
+	mutator: (rows: EditableRequirementRow[]) => EditableRequirementRow[],
+) {
+	editableRequirementsTz.value = renumberRequirementRows(
+		mutator(editableRequirementsTz.value),
+	)
+}
+
 function addTzRequirement() {
-	editableRequirementsTz.value = [
-		...editableRequirementsTz.value,
-		{ key: nextTopLevelKey(editableRequirementsTz.value), text: '' },
-	]
+	updateEditableRequirementsTz((rows) => [
+		...rows,
+		{ key: nextTopLevelKey(rows), text: '' },
+	])
 }
 
 function addTzChildRequirement(parentKey: string) {
-	editableRequirementsTz.value = [
-		...editableRequirementsTz.value,
+	updateEditableRequirementsTz((rows) => [
+		...rows,
 		{
-			key: nextChildKey(parentKey, editableRequirementsTz.value),
+			key: nextChildKey(parentKey, rows),
 			text: '',
 		},
-	]
+	])
 }
 
 function addTzHeadingRequirement(parentKey: string) {
-	editableRequirementsTz.value = [
-		...editableRequirementsTz.value,
+	updateEditableRequirementsTz((rows) => [
+		...rows,
 		{
-			key: nextChildKey(parentKey, editableRequirementsTz.value),
+			key: nextChildKey(parentKey, rows),
 			text: '',
 			isHeading: true,
 		},
-	]
+	])
 }
 
 function removeTzRequirement(index: number) {
-	editableRequirementsTz.value = editableRequirementsTz.value.filter(
-		(_, idx) => idx !== index,
+	updateEditableRequirementsTz((rows) =>
+		rows.filter((_, idx) => idx !== index),
 	)
 }
 
@@ -1232,11 +1245,10 @@ const hasAnyKpFile = computed(() =>
 
 const canRunKpAnalysis = computed(() =>
 	!isCompleted.value
+	&& isTzConfirmed.value
 	&& requirementsRowsNonempty(editableRequirementsTz.value)
-	&& (
-		(isTzReviewPhase.value && hasSuppliersWithFiles.value)
-		|| (hasConfirmedResults.value && hasPendingSuppliers.value)
-	),
+	&& hasSuppliersWithFiles.value
+	&& hasPendingSuppliers.value,
 )
 
 async function refreshAnalysis() {
@@ -1473,13 +1485,6 @@ function applyAnalysis(data: TZAnalysisSession) {
 	itemsOverrides.value = { ...(data.items_overrides ?? {}) }
 	syncEditableRequirements(data)
 	ensureSelectedSupplier()
-	if (
-		(data.suppliers?.length ?? 0) > 0
-		&& !userPickedContentTab.value
-		&& !isAnalysisClosed.value
-	) {
-		activeContentTab.value = 'kp'
-	}
 	if (data.status === TZAnalysisRunStatus.PROCESSING) {
 		processingPhase.value = inferProcessingPhase(data)
 		tzPolling.value = true
@@ -1491,13 +1496,23 @@ function applyAnalysis(data: TZAnalysisSession) {
 		tzPolling.value = true
 	}
 	if (
+		data.confirmed
+		&& !userPickedContentTab.value
+		&& !isAnalysisClosed.value
+	) {
+		activeContentTab.value = 'kp'
+	}
+	if (
 		data.status === TZAnalysisRunStatus.ACTIVE
 		&& !data.confirmed
-		&& Object.keys(data.requirements_kp ?? {}).length === 0
 	) {
 		kpSlots.value = [{ id: ++kpSlotCounter, file: null }]
 	}
-	if (data.status === TZAnalysisRunStatus.ACTIVE && data.confirmed) {
+	if (
+		data.status === TZAnalysisRunStatus.ACTIVE
+		&& data.confirmed
+		&& (data.items?.length ?? 0) > 0
+	) {
 		ensureResultsKpExpanded(
 			collectResultsKpKeys(data).filter((key) => {
 				const supplier = selectedSupplier.value
@@ -1529,9 +1544,9 @@ useRunStatusPolling(
 	async () => get<TZAnalysisSession>(`/tz-analysis/${id.value}`),
 	(data: TZAnalysisSession) => { applyAnalysis(data) },
 	() => {
-		const title = analysis.value?.confirmed
+		const title = (analysis.value?.items?.length ?? 0) > 0
 			? 'Сравнение ТЗ и КП завершено'
-			: hasSuppliersProcessing.value
+			: analysis.value?.confirmed
 				? 'Анализ КП завершён'
 				: 'Извлечение требований завершено'
 		toast.add({
@@ -1712,6 +1727,49 @@ async function runTzAnalysis() {
 	}
 }
 
+async function confirmTzRequirements() {
+	if (!analysis.value?.id || confirmingTz.value) return
+	if (!requirementsRowsNonempty(editableRequirementsTz.value)) {
+		toast.add({
+			title: 'Добавьте хотя бы одно требование из ТЗ',
+			color: 'warning',
+		})
+		return
+	}
+	confirmingTz.value = true
+	try {
+		const rows = renumberRequirementRows(editableRequirementsTz.value)
+		editableRequirementsTz.value = rows
+		const hierarchy = rowsToHierarchy(rows)
+		await patch<TZAnalysisSession>(
+			`/tz-analysis/${analysis.value.id}/requirements`,
+			{ requirements_tz: hierarchy },
+		)
+		const result = await post<TZAnalysisSession>(
+			`/tz-analysis/${analysis.value.id}/confirm`,
+			{ requirements_tz: hierarchy },
+		)
+		userPickedContentTab.value = false
+		applyAnalysis(result)
+		activeContentTab.value = 'kp'
+		toast.add({
+			title: 'Требования подтверждены',
+			description: 'Теперь добавьте поставщиков и загрузите КП.',
+			color: 'success',
+			icon: 'i-lucide-check',
+		})
+	} catch (e: unknown) {
+		const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+		toast.add({
+			title: typeof detail === 'string' ? detail : 'Не удалось подтвердить требования',
+			color: 'error',
+			icon: 'i-lucide-circle-alert',
+		})
+	} finally {
+		confirmingTz.value = false
+	}
+}
+
 async function runKpAnalysis() {
 	if (!analysis.value?.id || kpAnalyzing.value || !canRunKpAnalysis.value) return
 	kpAnalyzing.value = true
@@ -1725,10 +1783,11 @@ async function runKpAnalysis() {
 		}
 
 		if (!analysis.value.confirmed) {
-			await patch<TZAnalysisSession>(
-				`/tz-analysis/${analysis.value.id}/requirements`,
-				{ requirements_tz: rowsToHierarchy(editableRequirementsTz.value) },
-			)
+			toast.add({
+				title: 'Сначала подтвердите требования ТЗ',
+				color: 'warning',
+			})
+			return
 		}
 
 		let result: TZAnalysisSession

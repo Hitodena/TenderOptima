@@ -1,7 +1,7 @@
 <template>
 	<component
 		:is="compact ? 'aside' : 'section'"
-		class="rounded-xl border border-default bg-elevated/20 p-4 space-y-4 w-full min-w-0"
+		class="@container rounded-xl border border-default bg-elevated/20 p-4 space-y-4 w-full min-w-0"
 	>
 		<div class="flex items-center justify-between gap-2">
 			<p class="text-sm font-semibold text-highlighted">Поставщики</p>
@@ -25,12 +25,14 @@
 		<div
 			v-else
 			class="gap-3"
-			:class="compact ? 'space-y-2' : 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3'"
+			:class="compact
+				? 'flex flex-col'
+				: 'grid grid-cols-1 @md:grid-cols-2 @3xl:grid-cols-3'"
 		>
 			<div
 				v-for="supplier in suppliers"
 				:key="supplier.id"
-				class="rounded-lg border p-3 space-y-2 transition-colors"
+				class="rounded-lg border p-3 space-y-2 transition-colors min-w-0 w-full"
 				:class="supplierCardClass(supplier)"
 			>
 				<div class="flex items-start justify-between gap-2">

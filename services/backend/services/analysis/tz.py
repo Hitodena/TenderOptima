@@ -25,9 +25,14 @@ from backend.utils.requirements_struct import (
     count_requirements,
     dedupe_hierarchy,
     flatten_hierarchy,
+    format_kp_offer_ref,
+    format_tz_requirement_ref,
+    key_from_reference,
     merge_requirement_chunks,
     normalize_requirements_kp_flat,
     normalize_tz_requirements,
+    requirement_key_from_flat,
+    strip_page_from_ref,
 )
 from backend.utils.text_chunker import chunk_text, clean_text
 
@@ -400,6 +405,39 @@ def _chunk_list(items: list[str], size: int) -> list[list[str]]:
     return [items[i : i + size] for i in range(0, len(items), size)]
 
 
+def _ensure_item_refs(items: list[TZAnalysisItem]) -> list[TZAnalysisItem]:
+    """Fill missing refs and strip page numbers from LLM output."""
+    updated: list[TZAnalysisItem] = []
+    for item in items:
+        req_key = requirement_key_from_flat(item.requirement)
+        requirement_ref = strip_page_from_ref(item.requirement_ref)
+        if not requirement_ref and req_key:
+            requirement_ref = format_tz_requirement_ref(
+                req_key,
+                None,
+                item.requirement,
+            )
+
+        offer_ref = strip_page_from_ref(item.offer_ref)
+        if item.offer_value and item.offer_value.strip() and not offer_ref:
+            offer_key = key_from_reference(offer_ref) or req_key
+            offer_ref = format_kp_offer_ref(
+                offer_key,
+                None,
+                item.offer_value,
+            )
+
+        updated.append(
+            item.model_copy(
+                update={
+                    "requirement_ref": requirement_ref,
+                    "offer_ref": offer_ref,
+                },
+            ),
+        )
+    return updated
+
+
 async def _llm_compare_chunk(
     tz_chunk: list[str],
     kp_name: str,
@@ -422,10 +460,11 @@ async def _llm_compare_chunk(
         try:
             raw = await llm_client.complete(system, user)
             result = TZAnalysisResult(**raw)
-            return [
+            items = [
                 item.model_copy(update={"kp_name": kp_name})
                 for item in result.items
             ]
+            return _ensure_item_refs(items)
         except (ValidationError, ValueError, TypeError) as exc:
             last_exc = exc
             logger.warning(

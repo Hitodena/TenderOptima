@@ -12,15 +12,7 @@ def build_request_email_body(
     request: Request,
     user: User,
 ) -> str:
-    """Build email body for supplier request.
-
-    Args:
-        request: The request object
-        user: The user who created the request
-
-    Returns:
-        Formatted email body string
-    """
+    """Build email body for supplier request."""
     if request.email_message and request.email_message.strip():
         return request.email_message.strip()
 
@@ -37,8 +29,7 @@ def build_request_email_body(
                 + "\n"
             )
 
-    plain_body = (
-        "Запрос коммерческого предложения\n\n"
+    return (
         "Добрый день.\n\n"
         "Направляем запрос для получения вашего коммерческого предложения на:\n\n"
         f"{request.description}\n\n"
@@ -50,8 +41,6 @@ def build_request_email_body(
         "Важно: не меняйте тему сообщения в ответе, чтобы не потерять идентификатор отслеживания.\n\n"
         f"{user.business_info or build_business_info(user)}\n"
     )
-
-    return plain_body
 
 
 def build_request_email_subject(request: Request) -> str:

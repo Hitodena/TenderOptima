@@ -709,8 +709,6 @@ async def run_supplier_kp_process(
                 )
             ),
         )
-        suppliers = await TZAnalysisSupplierDAO.list_by_analysis(session, aid)
-        all_done = _all_supplier_kp_tasks_done(suppliers)
 
         await TZAnalysisDAO.update_fields(
             session,
@@ -720,7 +718,7 @@ async def run_supplier_kp_process(
             requirements_kp=merged_req_kp,
             kp_stats=kp_stats,
             items=merged_items,
-            confirmed=all_done and bool(merged_items),
+            confirmed=bool(row.confirmed),
             match_score=top_stats["match_score"],
             met_count=top_stats["met_count"],
             partial_count=top_stats["partial_count"],

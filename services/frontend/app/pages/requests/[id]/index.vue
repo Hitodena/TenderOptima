@@ -147,13 +147,17 @@
 							</template>
 
 							<template #company_name-cell="{ row }">
-								<div class="flex items-center gap-2">
+								<div class="flex items-center gap-2 min-w-0">
 									<div
 										class="w-7 h-7 rounded-lg bg-elevated flex items-center justify-center shrink-0">
 										<UIcon name="i-lucide-building-2" class="w-3.5 h-3.5 text-muted" />
 									</div>
 									<span class="font-medium truncate max-w-50">{{ row.original.supplier?.company_name
 									}}</span>
+									<SupplierInfoHint
+										v-if="row.original.supplier"
+										:supplier="row.original.supplier"
+									/>
 								</div>
 							</template>
 
@@ -249,6 +253,7 @@
 <script lang="ts" setup>
 import type { RequestSupplierResponse, Supplier } from '#shared/types'
 import SupplierBookmarkModal from '~/components/SupplierBookmarkModal.vue'
+import SupplierInfoHint from '~/components/requests/SupplierInfoHint.vue'
 import {
 	getRequestStatusColor,
 	getRequestStatusLabel,
