@@ -113,9 +113,12 @@
 					@update:model-value="onContentTabChange"
 				>
 					<template #tz>
-						<div v-if="contentTabLoading" class="space-y-4 min-h-[40vh]">
-							<USkeleton class="h-24 w-full" />
-							<USkeleton class="h-64 w-full" />
+						<div
+							v-if="panelLoading && activeContentTab === 'tz'"
+							class="flex flex-col items-center justify-center gap-3 min-h-[40vh] text-muted"
+						>
+							<UIcon name="i-lucide-loader" class="w-8 h-8 animate-spin text-primary" />
+							<p class="text-sm">Загрузка раздела…</p>
 						</div>
 						<div v-else>
 						<div v-if="isTzReviewPhase && !isAnalysisClosed"
@@ -177,10 +180,12 @@
 					</template>
 
 					<template #kp>
-						<div v-if="contentTabLoading" class="space-y-4 min-h-[40vh]">
-							<USkeleton class="h-24 w-full" />
-							<USkeleton class="h-64 w-full" />
-							<USkeleton class="h-48 w-full" />
+						<div
+							v-if="panelLoading && activeContentTab === 'kp'"
+							class="flex flex-col items-center justify-center gap-3 min-h-[40vh] text-muted"
+						>
+							<UIcon name="i-lucide-loader" class="w-8 h-8 animate-spin text-primary" />
+							<p class="text-sm">Загрузка результатов…</p>
 						</div>
 						<div v-else class="grid grid-cols-1 gap-6" :class="showSuppliersSidebar
 							? 'xl:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)]'
@@ -189,11 +194,19 @@
 								:analysis-id="analysis.id" :suppliers="suppliers" :file-accept="fileAccept"
 								:readonly="isCompleted || isAnalysisClosed"
 								:selected-supplier-id="selectedSupplierId" compact
-								@select="selectedSupplierId = $event"
+								@select="onSelectSupplier"
 								@open-kp="({ supplierId, filename }) => openKpFile(filename, supplierId)"
 								@updated="refreshAnalysis" />
 
 							<div class="min-w-0 space-y-6">
+								<div
+									v-if="supplierResultsLoading"
+									class="flex flex-col items-center justify-center gap-3 min-h-[40vh] text-muted rounded-xl border border-default/60 bg-elevated/20"
+								>
+									<UIcon name="i-lucide-loader" class="w-8 h-8 animate-spin text-primary" />
+									<p class="text-sm">Загрузка данных поставщика…</p>
+								</div>
+								<template v-else>
 								<UCard
 									v-if="hasSuppliersProcessing && isTzConfirmed"
 									class="shadow-sm"
@@ -426,6 +439,7 @@
 										</div>
 									</UCard>
 								</template>
+								</template>
 							</div>
 						</div>
 					</template>
@@ -630,9 +644,12 @@ const { openTzFile, openKpFile } = useTzAnalysisFiles(
 provide('tzAnalysisFiles', { openTzFile, openKpFile })
 
 const activeContentTab = ref('tz')
-const contentTabLoading = ref(false)
+const renderedContentTab = ref('tz')
+const panelLoading = ref(false)
+const supplierResultsLoading = ref(false)
 const userPickedContentTab = ref(false)
 const selectedSupplierId = ref<string | null>(null)
+const renderedSupplierId = ref<string | null>(null)
 const contentTabItems = [
 	{ label: 'ТЗ', value: 'tz', slot: 'tz', icon: 'i-lucide-file-text' },
 	{ label: 'КП / Результаты', value: 'kp', slot: 'kp', icon: 'i-lucide-file-spreadsheet' },
@@ -775,7 +792,7 @@ const hasPendingSuppliers = computed(() =>
 )
 
 const selectedSupplier = computed(() =>
-	suppliers.value.find((entry) => entry.id === selectedSupplierId.value) ?? null,
+	suppliers.value.find((entry) => entry.id === renderedSupplierId.value) ?? null,
 )
 
 const selectedSupplierKpOptions = computed(() => {
@@ -817,13 +834,16 @@ function ensureSelectedSupplier() {
 	const list = suppliers.value
 	if (list.length === 0) {
 		selectedSupplierId.value = null
+		renderedSupplierId.value = null
 		return
 	}
 	if (
 		!selectedSupplierId.value
 		|| !list.some((entry) => entry.id === selectedSupplierId.value)
 	) {
-		selectedSupplierId.value = list[0]!.id
+		const firstId = list[0]!.id
+		selectedSupplierId.value = firstId
+		renderedSupplierId.value = firstId
 	}
 }
 
@@ -905,7 +925,7 @@ const letterItemsView = computed((): TZItemView[] => {
 
 function letterSelectionStorageKey() {
 	const analysisId = analysis.value?.id
-	const supplierId = selectedSupplierId.value
+	const supplierId = renderedSupplierId.value
 	if (!analysisId || !supplierId) return null
 	return `tz-letter-selection:${analysisId}:${supplierId}`
 }
@@ -968,7 +988,7 @@ const filteredTzItems = computed((): TZItemView[] => {
 
 const resultTreesByGroupId = computed(() => {
 	const map = new Map<number, ReturnType<typeof buildResultTree>>()
-	for (const group of kpItemGroups.value) {
+	for (const group of visibleKpItemGroups.value) {
 		map.set(
 			group.id,
 			buildResultTree(analysis.value?.requirements_tz, group.items),
@@ -1453,6 +1473,7 @@ function applyAnalysis(data: TZAnalysisSession) {
 		&& !isAnalysisClosed.value
 	) {
 		activeContentTab.value = 'kp'
+		renderedContentTab.value = 'kp'
 	}
 	if (
 		data.status === TZAnalysisRunStatus.ACTIVE
@@ -1527,24 +1548,55 @@ function scheduleLetterPreview() {
 	syncLetterEditor(true)
 }
 
-watch(selectedSupplierId, () => {
+watch(renderedSupplierId, () => {
 	restoreOrInitLetterSelection()
 	scheduleLetterPreview()
 })
 
-async function onContentTabChange(tab: string) {
+function deferPanelContentUpdate(apply: () => void) {
+	panelLoading.value = true
+	requestAnimationFrame(() => {
+		apply()
+		nextTick(() => {
+			requestAnimationFrame(() => {
+				panelLoading.value = false
+			})
+		})
+	})
+}
+
+function onContentTabChange(tab: string) {
 	if (tab === activeContentTab.value) return
 	userPickedContentTab.value = true
 	activeContentTab.value = tab
-	contentTabLoading.value = true
-	await nextTick()
+	deferPanelContentUpdate(() => {
+		renderedContentTab.value = tab
+	})
+}
+
+function onSelectSupplier(supplierId: string) {
+	if (supplierId === selectedSupplierId.value) return
+	selectedSupplierId.value = supplierId
+	if (activeContentTab.value !== 'kp') {
+		renderedSupplierId.value = supplierId
+		return
+	}
+	supplierResultsLoading.value = true
 	requestAnimationFrame(() => {
-		contentTabLoading.value = false
+		renderedSupplierId.value = supplierId
+		nextTick(() => {
+			requestAnimationFrame(() => {
+				supplierResultsLoading.value = false
+			})
+		})
 	})
 }
 
 watch(isAnalysisClosed, (closed) => {
-	if (closed) activeContentTab.value = 'tz'
+	if (closed) {
+		activeContentTab.value = 'tz'
+		renderedContentTab.value = 'tz'
+	}
 })
 
 watch(showLetterModal, (open) => {
@@ -1669,6 +1721,7 @@ async function confirmTzRequirements() {
 		userPickedContentTab.value = false
 		applyAnalysis(result)
 		activeContentTab.value = 'kp'
+		renderedContentTab.value = 'kp'
 		toast.add({
 			title: 'Требования подтверждены',
 			description: 'Теперь добавьте поставщиков и загрузите КП.',
