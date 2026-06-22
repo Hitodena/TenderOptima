@@ -109,8 +109,8 @@
 							<UIcon name="i-lucide-users" class="w-10 h-10 opacity-20" />
 							<p class="text-sm">Нет проанализированных ответов</p>
 						</div>
-						<div v-else class="overflow-x-auto rounded-xl border border-default">
-							<table class="min-w-full text-sm">
+						<div v-else class="max-w-full overflow-x-auto rounded-xl border border-default">
+							<table class="w-max min-w-full text-sm">
 								<thead>
 									<tr class="border-b border-default bg-elevated/50">
 										<th
