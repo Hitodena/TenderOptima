@@ -61,10 +61,23 @@ async def run_parser_search(self, request_id: str) -> dict:
             resp.raise_for_status()
             raw_results: list[dict] = resp.json().get("results", [])
 
-        results = [ParserResult(**r) for r in raw_results]
+        results: list[ParserResult] = []
+        skipped_invalid = 0
+        for raw in raw_results:
+            try:
+                results.append(ParserResult(**raw))
+            except Exception as exc:
+                skipped_invalid += 1
+                logger.warning(
+                    "Invalid parser result, skipping",
+                    request_id=request_id,
+                    error=str(exc),
+                )
+
         logger.info(
             "Parser returned results",
             count=len(results),
+            skipped_invalid=skipped_invalid,
             request_id=request_id,
         )
 
@@ -138,11 +151,13 @@ async def run_parser_search(self, request_id: str) -> dict:
             saved=saved,
             skipped_blacklisted=skipped_blacklisted,
             skipped_no_email=skipped_no_email,
+            skipped_invalid=skipped_invalid,
         )
         return {
             "saved": saved,
             "skipped_blacklisted": skipped_blacklisted,
             "skipped_no_email": skipped_no_email,
+            "skipped_invalid": skipped_invalid,
             "request_id": str(req_uuid),
         }
 

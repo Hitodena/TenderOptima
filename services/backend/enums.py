@@ -70,3 +70,18 @@ class TZAnalysisSupplierStatus(StrEnum):
     PROCESSING = "processing"
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+class SubscriptionPlan(StrEnum):
+    """Tariff tier for a user subscription."""
+
+    BASIC = "basic"
+    ADVANCED = "advanced"
+    CORPORATE = "corporate"
+
+
+class SubscriptionGeo(StrEnum):
+    """Billing geography (reserved for multi-currency admin)."""
+
+    BY = "BY"
+    US = "US"

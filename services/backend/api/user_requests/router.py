@@ -21,6 +21,10 @@ from backend.api.deps import (
     get_request_or_404,
     get_session,
 )
+from backend.api.subscriptions.enforcement import (
+    ensure_can_search,
+    ensure_can_send_emails,
+)
 from backend.api.user_requests.schemas import (
     Attachment,
     LaunchMailingResponse,
@@ -107,6 +111,11 @@ async def search_suppliers(
             detail=f"Cannot search in status '{request.status}'",
         )
 
+    await ensure_can_search(session, current_user)
+
+    await RequestDAO.update_fields(
+        session, request_id, status=RequestStatus.SEARCHING.value
+    )
     run_parser_search.delay(str(request_id))  # type: ignore
     logger.info("parser.search task queued", request_id=str(request_id))
     return SearchQueuedResponse(
@@ -146,6 +155,10 @@ async def launch_mailing(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot launch mailing in status '{request.status}'",
         )
+
+    await ensure_can_send_emails(
+        session, current_user, pending_count=pending_count
+    )
 
     send_emails.delay(str(request_id))  # type: ignore
     logger.info("send_emails task queued", request_id=str(request_id))

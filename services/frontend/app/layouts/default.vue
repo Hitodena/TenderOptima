@@ -62,6 +62,11 @@
 <script lang="ts" setup>
 import type { UserResponse } from '#shared/types'
 import type { DropdownMenuItem, NavigationMenuItem } from '@nuxt/ui'
+import {
+	subscriptionModulesSummary,
+	subscriptionNavBadge,
+	subscriptionProfilePath,
+} from '#shared/utils/subscriptionDisplay'
 
 const auth = useAuthStore()
 const { get } = useApi()
@@ -81,6 +86,11 @@ const isLandingPage = computed(() => route.path === '/')
 
 const isRequestsActive = computed(() => route.path.startsWith('/requests'))
 const isTzAnalysisActive = computed(() => route.path.startsWith('/tz-analysis'))
+const isProfileSubscriptionActive = computed(
+	() => route.path === '/profile' && route.query.tab === 'subscription',
+)
+
+const subscriptionBadge = computed(() => subscriptionNavBadge(user.value?.subscription))
 
 const landingNavItems = computed<NavigationMenuItem[]>(() => [
 	{ label: 'Возможности', to: '/#features' },
@@ -95,6 +105,9 @@ const navItems = computed<NavigationMenuItem[]>(() => [
 		icon: 'i-lucide-layers',
 		active: isRequestsActive.value,
 		to: '/requests',
+		badge: user.value?.subscription?.module_1_enabled === false
+			? { label: 'М1 выкл.', color: 'warning' as const, variant: 'subtle' as const, size: 'sm' as const }
+			: undefined,
 		children: [
 			{
 				label: 'Поиск',
@@ -115,6 +128,9 @@ const navItems = computed<NavigationMenuItem[]>(() => [
 		icon: 'i-lucide-file-search',
 		active: isTzAnalysisActive.value,
 		to: '/tz-analysis',
+		badge: user.value?.subscription?.module_2_enabled === false
+			? { label: 'М2 выкл.', color: 'warning' as const, variant: 'subtle' as const, size: 'sm' as const }
+			: undefined,
 		children: [
 			{
 				label: 'Новый анализ',
@@ -133,8 +149,15 @@ const navItems = computed<NavigationMenuItem[]>(() => [
 	{
 		label: 'Подписка',
 		icon: 'i-lucide-credit-card',
-		disabled: true,
-		badge: { label: 'Скоро', color: 'neutral', variant: 'subtle', size: 'sm' },
+		active: isProfileSubscriptionActive.value,
+		to: subscriptionProfilePath(),
+		description: subscriptionModulesSummary(user.value?.subscription),
+		badge: {
+			label: subscriptionBadge.value.label,
+			color: subscriptionBadge.value.color,
+			variant: 'subtle',
+			size: 'sm',
+		},
 	},
 ])
 

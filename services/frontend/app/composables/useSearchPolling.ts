@@ -1,5 +1,5 @@
 import type { Ref } from 'vue';
-import type { RequestResponse } from '#shared/types';
+import type { RequestResponse, RequestSupplierResponse } from '#shared/types';
 import { RequestStatus } from '#shared/types';
 import { useIntervalFn } from '@vueuse/core';
 
@@ -8,6 +8,7 @@ const SEARCH_POLL_INTERVAL_MS = 5_000;
 export function useSearchPolling(
 	requestId: string,
 	request: Ref<RequestResponse | null>,
+	suppliers: Ref<RequestSupplierResponse[]>,
 	onSearchComplete: () => void | Promise<void>,
 ) {
 	const { get } = useApi();
@@ -30,11 +31,14 @@ export function useSearchPolling(
 				await onSearchComplete();
 
 				if (updated.status === RequestStatus.ACTIVE) {
+					const count = suppliers.value.length
 					toast.add({
 						title: 'Поиск завершён',
-						description: 'Поставщики добавлены в запрос.',
-						color: 'success',
-						icon: 'i-lucide-check',
+						description: count > 0
+							? 'Поставщики добавлены в запрос.'
+							: 'Поставщики не найдены. Попробуйте изменить запрос или регион.',
+						color: count > 0 ? 'success' : 'warning',
+						icon: count > 0 ? 'i-lucide-check' : 'i-lucide-search-x',
 					});
 				} else if (updated.status === RequestStatus.DRAFT) {
 					toast.add({

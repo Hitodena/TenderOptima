@@ -1,6 +1,6 @@
 <template>
 	<UContainer class="py-8">
-		<div class="max-w-3xl mx-auto space-y-4">
+		<div class="max-w-6xl mx-auto space-y-4">
 
 			<UCard>
 				<template #header>
@@ -15,13 +15,15 @@
 					</div>
 				</template>
 
-				<UTabs :items="tabs" :ui="{ list: 'mb-6' }">
+				<UTabs v-model="activeTab" :items="tabs" :ui="{ list: 'mb-6' }">
 
 					<template #subscription>
-						<div class="flex flex-col items-center justify-center py-16 gap-3">
-							<UIcon name="i-lucide-credit-card" class="w-10 h-10 text-muted opacity-40" />
-							<p class="text-muted">Управление подпиской</p>
-							<UBadge color="neutral" variant="subtle" label="Скоро" size="sm" />
+						<div>
+							<h2 class="text-base font-semibold mb-0.5">Статус подписки</h2>
+							<p class="text-sm text-muted mb-5">
+								Текущий тариф и лимиты вашей учётной записи
+							</p>
+							<ProfileSubscriptionPanel :subscription="user?.subscription" />
 						</div>
 					</template>
 
@@ -136,6 +138,10 @@
 						</div>
 					</template>
 
+					<template v-if="user?.is_admin" #admin>
+						<ProfileAdminPanel />
+					</template>
+
 				</UTabs>
 			</UCard>
 
@@ -177,6 +183,7 @@ definePageMeta({ layout: 'default' })
 
 const { get, patch } = useApi()
 const auth = useAuthStore()
+const route = useRoute()
 const { public: publicConfig } = useRuntimeConfig()
 
 const user = ref<UserResponse | null>(null)
@@ -194,12 +201,45 @@ const form = reactive({
 	contact_email: user.value?.contact_email ?? '',
 })
 
-const tabs = [
-	{ label: 'Статус подписки', slot: 'subscription', icon: 'i-lucide-credit-card' },
-	{ label: 'Визитная карточка', slot: 'business_card', icon: 'i-lucide-id-card' },
-	{ label: 'Профиль', slot: 'profile', icon: 'i-lucide-user' },
-	{ label: 'Свяжитесь с нами', slot: 'contact', icon: 'i-lucide-mail' },
-]
+const tabs = computed(() => {
+	const items = [
+		{ label: 'Статус подписки', slot: 'subscription', value: 'subscription', icon: 'i-lucide-credit-card' },
+		{ label: 'Визитная карточка', slot: 'business_card', value: 'business_card', icon: 'i-lucide-id-card' },
+		{ label: 'Профиль', slot: 'profile', value: 'profile', icon: 'i-lucide-user' },
+		{ label: 'Свяжитесь с нами', slot: 'contact', value: 'contact', icon: 'i-lucide-mail' },
+	]
+	if (user.value?.is_admin) {
+		items.push({
+			label: 'Админка',
+			slot: 'admin',
+			value: 'admin',
+			icon: 'i-lucide-shield',
+		})
+	}
+	return items
+})
+
+const tabFromQuery = computed(() => {
+	const raw = route.query.tab
+	return typeof raw === 'string' ? raw : null
+})
+
+const activeTab = ref('subscription')
+
+watch(
+	tabFromQuery,
+	(tab) => {
+		if (tab && tabs.value.some((item) => item.value === tab)) {
+			activeTab.value = tab
+		}
+	},
+	{ immediate: true },
+)
+
+watch(activeTab, (tab) => {
+	if (route.query.tab === tab) return
+	navigateTo({ path: '/profile', query: { tab } }, { replace: true })
+})
 
 const savingCard = ref(false)
 const cardError = ref<string | null>(null)

@@ -268,6 +268,42 @@ def flatten_supplier_kp_entries(
     return result
 
 
+def parse_scoped_kp_display_name(
+    display_name: str,
+) -> tuple[str, str] | None:
+    """Split ``Supplier: file.pdf`` into supplier name and raw filename."""
+    idx = display_name.find(_SCOPED_KP_SEP)
+    if idx < 0:
+        return None
+    supplier_name = display_name[:idx]
+    filename = display_name[idx + len(_SCOPED_KP_SEP) :]
+    if not supplier_name or not filename:
+        return None
+    return supplier_name, filename
+
+
+def resolve_scoped_supplier_kp_file(
+    analysis_id: uuid.UUID,
+    display_name: str,
+    suppliers: list[tuple[uuid.UUID, str, list[str] | None]],
+) -> Path | None:
+    """Resolve supplier-scoped KP display names to on-disk supplier files."""
+    parsed = parse_scoped_kp_display_name(display_name)
+    if not parsed:
+        return None
+    supplier_name, raw_filename = parsed
+    for supplier_id, name, kp_filenames in suppliers:
+        if name != supplier_name:
+            continue
+        return resolve_supplier_kp_file_by_display_name(
+            analysis_id,
+            supplier_id,
+            raw_filename,
+            kp_filenames,
+        )
+    return None
+
+
 def remove_supplier_dir(
     analysis_id: uuid.UUID, supplier_id: uuid.UUID
 ) -> None:

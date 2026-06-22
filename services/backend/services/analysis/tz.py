@@ -1,10 +1,12 @@
 import asyncio
+import re
 from pathlib import Path
 from typing import Literal
 
 from loguru import logger
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
+from backend.enums import TZAnalysisStatus
 from backend.schemas.analysis import (
     TZAnalysisItem,
     TZAnalysisResult,
@@ -15,9 +17,9 @@ from backend.services.extraction.assembler import TextAssembler
 from backend.services.extraction.router import ExtractorRouter
 from backend.services.llm.client import llm_client
 from backend.services.llm.prompts.tz import (
-    build_comparison_chunk_prompt,
     build_heading_names_prompt,
     build_kp_chunk_prompt,
+    build_kp_match_chunk_prompt,
     build_tz_chunk_prompt,
 )
 from backend.utils.requirements_struct import (
@@ -29,7 +31,6 @@ from backend.utils.requirements_struct import (
     format_tz_requirement_ref,
     key_from_reference,
     merge_requirement_chunks,
-    normalize_requirements_kp_flat,
     normalize_tz_requirements,
     requirement_key_from_flat,
     strip_page_from_ref,
@@ -42,7 +43,13 @@ _assembler = TextAssembler()
 _ROLLING_SUMMARY_KEYS = 10
 _LLM_CHUNK_MAX_ATTEMPTS = 3
 _LLM_CHUNK_RETRY_DELAY_SEC = 2.0
-_COMPARISON_CHUNK_SIZE = 15
+_NUMBERED_REQ_LINE_RE = re.compile(r"^\d+\.\s+(.*)$")
+_STATUS_RANK = {
+    TZAnalysisStatus.NOT_FOUND: 0,
+    TZAnalysisStatus.MISSING: 1,
+    TZAnalysisStatus.PARTIAL: 2,
+    TZAnalysisStatus.MET: 3,
+}
 
 
 class TZExtractResult(BaseModel):
@@ -401,8 +408,62 @@ async def extract_kp_requirements(
     )
 
 
-def _chunk_list(items: list[str], size: int) -> list[list[str]]:
-    return [items[i : i + size] for i in range(0, len(items), size)]
+def _parse_numbered_requirement_batch(batch_text: str) -> list[str]:
+    """Restore requirement strings from a numbered batch produced by chunk_text."""
+    requirements: list[str] = []
+    for line in batch_text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        match = _NUMBERED_REQ_LINE_RE.match(stripped)
+        if match:
+            requirements.append(match.group(1).strip())
+            continue
+        if requirements:
+            requirements[-1] = f"{requirements[-1]} {stripped}"
+    return requirements
+
+
+def _batch_tz_requirements(tz_flat: list[str]) -> list[list[str]]:
+    """Split TZ requirements into LLM-sized batches using chunk_text (8000 chars)."""
+    if not tz_flat:
+        return []
+    numbered = "\n".join(
+        f"{index + 1}. {req}" for index, req in enumerate(tz_flat)
+    )
+    batches: list[list[str]] = []
+    for batch in chunk_text(numbered):
+        parsed = _parse_numbered_requirement_batch(batch)
+        if parsed:
+            batches.append(parsed)
+    return batches
+
+
+def _status_rank(status: TZAnalysisStatus) -> int:
+    return _STATUS_RANK.get(status, 0)
+
+
+def _should_keep_searching(item: TZAnalysisItem | None) -> bool:
+    if item is None:
+        return True
+    return item.status != TZAnalysisStatus.MET
+
+
+def _merge_match_item(
+    found: dict[str, TZAnalysisItem],
+    item: TZAnalysisItem,
+    *,
+    kp_name: str,
+) -> None:
+    req_key = requirement_key_from_flat(item.requirement)
+    if not req_key:
+        return
+    normalized = item.model_copy(update={"kp_name": kp_name})
+    existing = found.get(req_key)
+    if existing is None or _status_rank(normalized.status) > _status_rank(
+        existing.status
+    ):
+        found[req_key] = normalized
 
 
 def _ensure_item_refs(items: list[TZAnalysisItem]) -> list[TZAnalysisItem]:
@@ -438,22 +499,28 @@ def _ensure_item_refs(items: list[TZAnalysisItem]) -> list[TZAnalysisItem]:
     return updated
 
 
-async def _llm_compare_chunk(
-    tz_chunk: list[str],
+async def _llm_match_kp_chunk(
+    tz_batch: list[str],
+    kp_chunk: str,
     kp_name: str,
-    kp_offerings: list[str],
     *,
-    chunk_idx: int,
-    total_chunks: int,
+    already_found: list[str],
+    kp_chunk_idx: int,
+    total_kp_chunks: int,
+    tz_batch_idx: int,
+    total_tz_batches: int,
     analysis_id: str,
     user_id: str,
 ) -> list[TZAnalysisItem]:
-    system, user = build_comparison_chunk_prompt(
-        tz_chunk,
+    system, user = build_kp_match_chunk_prompt(
+        tz_batch,
+        kp_chunk,
         kp_name,
-        kp_offerings,
-        chunk_idx=chunk_idx,
-        total_chunks=total_chunks,
+        already_found=already_found,
+        kp_chunk_idx=kp_chunk_idx,
+        total_kp_chunks=total_kp_chunks,
+        tz_batch_idx=tz_batch_idx,
+        total_tz_batches=total_tz_batches,
     )
     last_exc: Exception | None = None
     for attempt in range(1, _LLM_CHUNK_MAX_ATTEMPTS + 1):
@@ -463,17 +530,18 @@ async def _llm_compare_chunk(
             items = [
                 item.model_copy(update={"kp_name": kp_name})
                 for item in result.items
+                if item.status != TZAnalysisStatus.NOT_FOUND
             ]
             return _ensure_item_refs(items)
         except (ValidationError, ValueError, TypeError) as exc:
             last_exc = exc
             logger.warning(
-                "Comparison chunk LLM attempt failed",
+                "KP match chunk LLM attempt failed",
                 analysis_id=analysis_id,
                 user_id=user_id,
                 kp_name=kp_name,
-                chunk=chunk_idx + 1,
-                total=total_chunks,
+                kp_chunk=kp_chunk_idx + 1,
+                tz_batch=tz_batch_idx + 1,
                 attempt=attempt,
                 max_attempts=_LLM_CHUNK_MAX_ATTEMPTS,
                 error=str(exc),
@@ -486,111 +554,196 @@ async def _llm_compare_chunk(
     raise last_exc
 
 
-async def _compare_single_kp(
-    requirements_tz: list[str],
+def _build_not_found_items(
+    tz_flat: list[str],
+    found: dict[str, TZAnalysisItem],
+    *,
     kp_name: str,
-    kp_offerings: list[str],
+) -> list[TZAnalysisItem]:
+    """Append not_found rows for TZ requirements missing from *found*."""
+    items: list[TZAnalysisItem] = []
+    for requirement in tz_flat:
+        req_key = requirement_key_from_flat(requirement)
+        if req_key and req_key in found:
+            items.append(found[req_key])
+            continue
+        items.append(
+            TZAnalysisItem(
+                requirement=requirement,
+                requirement_ref=format_tz_requirement_ref(
+                    req_key,
+                    None,
+                    requirement,
+                ),
+                offer_value=None,
+                offer_ref=None,
+                explanation="В КП не найдена информация по требованию.",
+                status=TZAnalysisStatus.NOT_FOUND,
+                kp_name=kp_name,
+            ),
+        )
+    return _ensure_item_refs(items)
+
+
+def _matches_to_kp_hierarchy(items: list[TZAnalysisItem]) -> dict:
+    """Build diagnostic KP hierarchy from direct match results."""
+    partial: dict = {}
+    for item in items:
+        if not item.offer_value or not str(item.offer_value).strip():
+            continue
+        req_key = requirement_key_from_flat(item.requirement)
+        offer_key = key_from_reference(item.offer_ref) or req_key
+        if not offer_key:
+            continue
+        partial[offer_key] = {
+            "text": str(item.offer_value).strip(),
+            "children": {},
+        }
+    return normalize_tz_requirements(partial)
+
+
+async def _match_kp_text_against_tz(
+    kp_text: str,
+    tz_flat: list[str],
+    kp_name: str,
     *,
     analysis_id: str,
     user_id: str,
-) -> list[TZAnalysisItem]:
-    tz_chunks = _chunk_list(requirements_tz, _COMPARISON_CHUNK_SIZE)
-    if not tz_chunks:
-        return []
-
-    logger.info(
-        "TZ vs KP comparison started for supplier",
-        analysis_id=analysis_id,
-        user_id=user_id,
-        kp_name=kp_name,
-        tz_items=len(requirements_tz),
-        kp_items=len(kp_offerings),
-        chunks=len(tz_chunks),
-    )
-
-    all_items: list[TZAnalysisItem] = []
-    for index, tz_chunk in enumerate(tz_chunks):
-        logger.info(
-            "Comparison chunk processing",
+    found: dict[str, TZAnalysisItem] | None = None,
+) -> dict[str, TZAnalysisItem]:
+    """Search KP text chunks for TZ requirement matches."""
+    cleaned = clean_text(kp_text)
+    kp_chunks = chunk_text(cleaned)
+    if not kp_chunks:
+        logger.warning(
+            "KP match skipped",
             analysis_id=analysis_id,
             user_id=user_id,
             kp_name=kp_name,
-            chunk=index + 1,
-            total=len(tz_chunks),
-            chunk_items=len(tz_chunk),
+            reason="empty_text",
         )
-        items = await _llm_compare_chunk(
-            tz_chunk,
-            kp_name,
-            kp_offerings,
-            chunk_idx=index,
-            total_chunks=len(tz_chunks),
-            analysis_id=analysis_id,
-            user_id=user_id,
-        )
-        all_items.extend(items)
-        logger.info(
-            "Comparison chunk done",
-            analysis_id=analysis_id,
-            user_id=user_id,
-            kp_name=kp_name,
-            chunk=index + 1,
-            total=len(tz_chunks),
-            items=len(items),
-        )
+        return found or {}
+
+    tz_batches = _batch_tz_requirements(tz_flat)
+    if not tz_batches:
+        return found or {}
+
+    matches = dict(found or {})
+    total_kp_chunks = len(kp_chunks)
+    total_tz_batches = len(tz_batches)
 
     logger.info(
-        "TZ vs KP comparison finished for supplier",
+        "KP direct match started",
         analysis_id=analysis_id,
         user_id=user_id,
         kp_name=kp_name,
-        items=len(all_items),
+        tz_items=len(tz_flat),
+        kp_chunks=total_kp_chunks,
+        tz_batches=total_tz_batches,
     )
-    return all_items
 
+    for kp_idx, kp_chunk in enumerate(kp_chunks):
+        already_found = [
+            item.requirement
+            for key, item in sorted(matches.items())
+            if not _should_keep_searching(item)
+        ]
 
-async def compare_requirements(
-    requirements_tz: list[str],
-    requirements_kp: dict[str, list[str]],
-    *,
-    analysis_id: str,
-    user_id: str,
-) -> list[TZAnalysisItem]:
-    if not requirements_kp:
-        return []
-
-    tasks = [
-        _compare_single_kp(
-            requirements_tz,
-            kp_name,
-            kp_offerings,
+        logger.info(
+            "KP match chunk processing",
             analysis_id=analysis_id,
             user_id=user_id,
+            kp_name=kp_name,
+            kp_chunk=kp_idx + 1,
+            total_kp_chunks=total_kp_chunks,
+            chunk_chars=len(kp_chunk),
         )
-        for kp_name, kp_offerings in requirements_kp.items()
-    ]
-    results = await asyncio.gather(*tasks)
-    all_items: list[TZAnalysisItem] = []
-    for items in results:
-        all_items.extend(items)
-    return all_items
+
+        for tz_idx, tz_batch in enumerate(tz_batches):
+            pending = [
+                req
+                for req in tz_batch
+                if _should_keep_searching(
+                    matches.get(requirement_key_from_flat(req) or "")
+                )
+            ]
+            if not pending:
+                continue
+
+            items = await _llm_match_kp_chunk(
+                pending,
+                kp_chunk,
+                kp_name,
+                already_found=already_found,
+                kp_chunk_idx=kp_idx,
+                total_kp_chunks=total_kp_chunks,
+                tz_batch_idx=tz_idx,
+                total_tz_batches=total_tz_batches,
+                analysis_id=analysis_id,
+                user_id=user_id,
+            )
+            for item in items:
+                _merge_match_item(matches, item, kp_name=kp_name)
+
+        logger.info(
+            "KP match chunk done",
+            analysis_id=analysis_id,
+            user_id=user_id,
+            kp_name=kp_name,
+            kp_chunk=kp_idx + 1,
+            total_kp_chunks=total_kp_chunks,
+            matched=len(matches),
+        )
+
+    logger.info(
+        "KP direct match finished",
+        analysis_id=analysis_id,
+        user_id=user_id,
+        kp_name=kp_name,
+        matched=len(matches),
+        tz_items=len(tz_flat),
+    )
+    return matches
 
 
-async def compare_only(
-    requirements_tz: dict,
-    requirements_kp: dict[str, dict],
+async def _match_kp_paths_against_tz(
+    kp_paths: list[Path],
+    tz_flat: list[str],
+    kp_name: str,
     *,
     analysis_id: str,
     user_id: str,
-) -> list[TZAnalysisItem]:
-    tz_flat = flatten_hierarchy(normalize_tz_requirements(requirements_tz))
-    kp_flat = normalize_requirements_kp_flat(requirements_kp)
-    return await compare_requirements(
-        tz_flat,
-        kp_flat,
-        analysis_id=analysis_id,
-        user_id=user_id,
-    )
+) -> tuple[list[TZAnalysisItem], dict]:
+    """Match one or more KP files against TZ and return items + hierarchy."""
+    found: dict[str, TZAnalysisItem] = {}
+    for kp_path in kp_paths:
+        logger.info(
+            "KP file match started",
+            analysis_id=analysis_id,
+            user_id=user_id,
+            kp_name=kp_name,
+            path=str(kp_path),
+        )
+        raw_text = _assembler.assemble(_router.get(kp_path).extract(kp_path))
+        found = await _match_kp_text_against_tz(
+            raw_text,
+            tz_flat,
+            kp_name,
+            analysis_id=analysis_id,
+            user_id=user_id,
+            found=found,
+        )
+        logger.info(
+            "KP file match finished",
+            analysis_id=analysis_id,
+            user_id=user_id,
+            kp_name=kp_name,
+            path=str(kp_path),
+            matched=len(found),
+        )
+
+    items = _build_not_found_items(tz_flat, found, kp_name=kp_name)
+    return items, _matches_to_kp_hierarchy(items)
 
 
 async def extract_tz_from_file(
@@ -630,7 +783,7 @@ async def analyze_kp_files(
     analysis_id: str,
     user_id: str,
 ) -> TZAnalysisSessionResult:
-    """Extract KP offerings and compare them against saved TZ requirements."""
+    """Match KP files directly against saved TZ requirements."""
     if not kp_paths:
         raise ValueError("At least one KP file is required")
 
@@ -643,48 +796,26 @@ async def analyze_kp_files(
     tz_count = len(tz_flat)
 
     requirements_kp: dict[str, dict] = {}
+    all_items: list[TZAnalysisItem] = []
     for kp_path, kp_name in zip(kp_paths, names, strict=True):
-        logger.info(
-            "KP file extraction started",
-            analysis_id=analysis_id,
-            user_id=user_id,
-            kp_name=kp_name,
-            path=str(kp_path),
-        )
-        raw_text = _assembler.assemble(_router.get(kp_path).extract(kp_path))
-        requirements_kp[kp_name] = await extract_kp_requirements(
-            raw_text,
+        items, hierarchy = await _match_kp_paths_against_tz(
+            [kp_path],
+            tz_flat,
+            kp_name,
             analysis_id=analysis_id,
             user_id=user_id,
         )
+        requirements_kp[kp_name] = hierarchy
+        all_items.extend(items)
         logger.info(
-            "KP file extraction finished",
+            "KP analysis finished",
             analysis_id=analysis_id,
             user_id=user_id,
             kp_name=kp_name,
-            items=count_requirements(requirements_kp[kp_name]),
+            items=len(items),
+            matched=count_requirements(hierarchy),
         )
 
-    logger.info(
-        "TZ vs KP comparison started",
-        analysis_id=analysis_id,
-        user_id=user_id,
-        kp_count=len(names),
-    )
-    kp_flat = normalize_requirements_kp_flat(requirements_kp)
-    all_items = await compare_requirements(
-        tz_flat,
-        kp_flat,
-        analysis_id=analysis_id,
-        user_id=user_id,
-    )
-    logger.info(
-        "TZ vs KP comparison finished",
-        analysis_id=analysis_id,
-        user_id=user_id,
-        kp_count=len(names),
-        items=len(all_items),
-    )
     kp_stats, primary_kp, top_stats = build_analysis_stats(all_items, names)
 
     return TZAnalysisSessionResult(
@@ -703,32 +834,6 @@ async def analyze_kp_files(
     )
 
 
-async def _extract_kp_hierarchy_from_paths(
-    kp_paths: list[Path],
-    *,
-    analysis_id: str,
-    user_id: str,
-    supplier_name: str,
-) -> dict:
-    merged: dict = {}
-    for kp_path in kp_paths:
-        logger.info(
-            "KP file extraction started",
-            analysis_id=analysis_id,
-            user_id=user_id,
-            kp_name=supplier_name,
-            path=str(kp_path),
-        )
-        raw_text = _assembler.assemble(_router.get(kp_path).extract(kp_path))
-        partial = await extract_kp_requirements(
-            raw_text,
-            analysis_id=analysis_id,
-            user_id=user_id,
-        )
-        merged = merge_requirement_chunks([merged, partial])
-    return merged
-
-
 async def analyze_supplier_kps(
     requirements_tz: dict,
     kp_files: list[tuple[str, list[Path]]],
@@ -736,7 +841,7 @@ async def analyze_supplier_kps(
     analysis_id: str,
     user_id: str,
 ) -> TZAnalysisSessionResult:
-    """Extract KP offerings per file and compare against TZ."""
+    """Match supplier KP files directly against TZ requirements."""
     if not kp_files:
         raise ValueError("At least one KP file is required")
 
@@ -746,31 +851,29 @@ async def analyze_supplier_kps(
     kp_display_names = [name for name, _ in kp_files]
 
     requirements_kp: dict[str, dict] = {}
+    all_items: list[TZAnalysisItem] = []
     for display_name, kp_paths in kp_files:
         if not kp_paths:
             raise ValueError(f"KP file {display_name!r} has no paths")
-        requirements_kp[display_name] = await _extract_kp_hierarchy_from_paths(
+        items, hierarchy = await _match_kp_paths_against_tz(
             kp_paths,
+            tz_flat,
+            display_name,
             analysis_id=analysis_id,
             user_id=user_id,
-            supplier_name=display_name,
         )
+        requirements_kp[display_name] = hierarchy
+        all_items.extend(items)
         logger.info(
-            "Supplier KP extraction finished",
+            "Supplier KP analysis finished",
             analysis_id=analysis_id,
             user_id=user_id,
             kp_name=display_name,
             files=len(kp_paths),
-            items=count_requirements(requirements_kp[display_name]),
+            items=len(items),
+            matched=count_requirements(hierarchy),
         )
 
-    kp_flat = normalize_requirements_kp_flat(requirements_kp)
-    all_items = await compare_requirements(
-        tz_flat,
-        kp_flat,
-        analysis_id=analysis_id,
-        user_id=user_id,
-    )
     kp_stats, primary_kp, top_stats = build_analysis_stats(
         all_items,
         kp_display_names,

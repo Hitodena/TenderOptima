@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from backend.api.admin.router import router as admin_router
 from backend.api.auth.router import router as auth_router
 from backend.api.blacklist_domains.router import (
     router as blacklist_domains_router,
@@ -23,6 +24,7 @@ from backend.api.tz_analysis.router import router as tz_analysis_router
 from backend.api.user_requests.router import router as user_requests_router
 
 api_router = APIRouter(prefix="/api")
+api_router.include_router(admin_router)
 api_router.include_router(email_templates_router)
 api_router.include_router(supplier_bookmarks_router)
 api_router.include_router(auth_router)

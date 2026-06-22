@@ -19,16 +19,15 @@ from backend.api.responses.schemas import (
     ReplyPayload,
     ThreadSummary,
 )
-from backend.celery_app.tasks.analysis_tasks import run_email_analysis
 from backend.celery_app.tasks.email_tasks import send_custom_email, send_reply
 from backend.db.dao import (
     EmailMessageDAO,
     RequestSupplierDAO,
-    ResponseAnalysisDAO,
 )
 from backend.db.models import Request, User
 from backend.enums import TZAnalysisRunStatus
 from backend.schemas.analysis import EmailAnalysisResult
+from backend.services.analysis.email_queue import queue_email_analysis
 
 router = APIRouter(prefix="/requests", tags=["Responses"])
 
@@ -368,36 +367,10 @@ async def refresh_all_analysis(
         if not latest:
             continue
 
-        existing = await ResponseAnalysisDAO.get_by_response_id(
-            session, latest.id
-        )
-        if existing and existing.status in (
-            TZAnalysisRunStatus.ACTIVE.value,
-            TZAnalysisRunStatus.PROCESSING.value,
+        if await queue_email_analysis(
+            session, latest.id, request, reanalyze=False
         ):
-            continue
-
-        if existing:
-            await ResponseAnalysisDAO.update_fields(
-                session,
-                existing.id,
-                raw_llm_response=None,
-                previous_parameters=None,
-                llm_model="",
-                status=TZAnalysisRunStatus.PROCESSING.value,
-            )
-        else:
-            await ResponseAnalysisDAO.create(
-                session,
-                response_id=latest.id,
-                llm_model="",
-                raw_llm_response=None,
-                previous_parameters=None,
-                status=TZAnalysisRunStatus.PROCESSING.value,
-            )
-
-        run_email_analysis.delay(str(latest.id))  # type: ignore[attr-defined]
-        queued += 1
+            queued += 1
 
     logger.info(
         "Bulk email analysis queued",

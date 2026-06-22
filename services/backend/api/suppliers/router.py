@@ -58,6 +58,14 @@ async def create_supplier(
     """
     normalized_domain = body.domain.lower().strip() if body.domain else None
     normalized_email = body.email.lower().strip()
+    extra_emails: list[str] | None = None
+    if body.extra_emails:
+        extra_emails = [
+            email.lower().strip()
+            for email in body.extra_emails
+            if email and email.lower().strip() != normalized_email
+        ]
+        extra_emails = extra_emails or None
 
     existing = await SupplierDAO.get_by_domain(session, normalized_domain)
     is_new = False
@@ -69,6 +77,7 @@ async def create_supplier(
             domain=normalized_domain,
             company_name=body.company_name,
             main_email=normalized_email,
+            extra_emails=extra_emails,
             from_source=body.source,
             added_by_user_id=current_user.id,
         )

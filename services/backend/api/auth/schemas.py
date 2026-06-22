@@ -3,6 +3,8 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from backend.api.subscriptions.schemas import SubscriptionResponse
+
 
 class RegisterCreate(BaseModel):
     """User registration payload."""
@@ -135,6 +137,20 @@ class UserResponse(BaseModel):
             examples=[
                 "С Уважением,\nспециалист отдела закупок\nИван Иванов\n(Email для связи: ivan@corp.ru)"
             ],
+        ),
+    ]
+    is_admin: Annotated[
+        bool,
+        Field(
+            default=False,
+            description="Whether the user has admin privileges",
+        ),
+    ]
+    subscription: Annotated[
+        SubscriptionResponse | None,
+        Field(
+            default=None,
+            description="Current subscription, if assigned",
         ),
     ]
 

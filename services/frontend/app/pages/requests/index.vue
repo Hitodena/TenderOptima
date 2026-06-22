@@ -35,8 +35,11 @@
 							Найти поставщиков
 						</UButton>
 
-						<UAlert v-if="error" color="error" variant="soft" icon="i-lucide-circle-alert"
-							:description="error" />
+						<SubscriptionErrorAlert
+							v-if="searchError"
+							:error="searchError"
+							fallback="Не удалось запустить поиск. Попробуйте ещё раз."
+						/>
 					</UForm>
 				</UCard>
 			</div>
@@ -47,7 +50,6 @@
 
 <script lang="ts" setup>
 import type { RequestResponse } from '#shared/types'
-import { getApiErrorDetail } from '#shared/utils/apiError'
 import { z } from 'zod'
 import SearchQueryRulesHint from '~/components/requests/SearchQueryRulesHint.vue'
 
@@ -60,11 +62,11 @@ const schema = z.object({
 
 const form = reactive({ query: '', delivery_region: '' })
 const loading = ref(false)
-const error = ref<string | null>(null)
+const searchError = ref<unknown | null>(null)
 
 async function handleSearch() {
 	if (loading.value) return
-	error.value = null
+	searchError.value = null
 	loading.value = true
 	try {
 		const created = await post<RequestResponse>('/requests/', {
@@ -74,7 +76,7 @@ async function handleSearch() {
 		await post(`/requests/${created.id}/search`)
 		await navigateTo(`/requests/${created.id}`)
 	} catch (e: unknown) {
-		error.value = getApiErrorDetail(e) ?? 'Не удалось запустить поиск. Попробуйте ещё раз.'
+		searchError.value = e
 	} finally {
 		loading.value = false
 	}

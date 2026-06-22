@@ -70,8 +70,15 @@ async def create_supplier_bookmark_list(
         title=body.title.strip(),
         is_global=body.is_global,
     )
-    instance.items = []
-    return _list_response(instance)
+    reloaded = await SupplierBookmarkListDAO.get_by_id_for_user(
+        session, instance.id, current_user.id
+    )
+    if reloaded is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to load created bookmark list",
+        )
+    return _list_response(reloaded)
 
 
 @router.patch(
@@ -103,11 +110,16 @@ async def update_supplier_bookmark_list(
     if not values:
         return _list_response(bookmark_list)
 
-    updated = await SupplierBookmarkListDAO.update_fields(
-        session, list_id, **values
+    await SupplierBookmarkListDAO.update_fields(session, list_id, **values)
+    reloaded = await SupplierBookmarkListDAO.get_by_id_for_user(
+        session, list_id, current_user.id
     )
-    updated.items = bookmark_list.items
-    return _list_response(updated)
+    if reloaded is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Bookmark list not found",
+        )
+    return _list_response(reloaded)
 
 
 @router.delete(

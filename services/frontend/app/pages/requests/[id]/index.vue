@@ -284,7 +284,7 @@ const {
 	removeSupplier,
 } = useRequestDetail(id)
 
-useSearchPolling(id, request, () => fetchSuppliers(true))
+useSearchPolling(id, request, suppliers, () => fetchSuppliers(true))
 
 const showParamsModal = ref(false)
 const showAddSupplier = ref(false)
@@ -333,6 +333,9 @@ const supplierColumns = computed<TableColumn<RequestSupplierResponse>[]>(() => {
 
 onMounted(async () => {
 	await fetchRequest()
+	if (route.query.searching === '1' && request.value?.status === RequestStatus.DRAFT) {
+		request.value.status = RequestStatus.SEARCHING
+	}
 	if (request.value) await fetchSuppliers()
 })
 

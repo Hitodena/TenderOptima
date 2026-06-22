@@ -1,5 +1,5 @@
 <template>
-	<UContainer class="py-8">
+	<UContainer class="py-8 max-w-7xl">
 		<template v-if="loading">
 			<div class="space-y-4">
 				<USkeleton class="h-10 w-72" />
@@ -39,11 +39,6 @@
 						</span>
 					</div>
 				</div>
-
-				<UButton v-if="isDraft" size="lg" leading-icon="i-lucide-scan-search" :loading="tzAnalyzing"
-					:disabled="!tzFile" @click="runTzAnalysis">
-					Анализировать ТЗ
-				</UButton>
 			</div>
 
 			<template v-if="isDraft">
@@ -65,6 +60,27 @@
 					</UFormField>
 
 					<UProgress v-if="tzAnalyzing" animation="carousel" size="sm" class="mt-5" />
+
+					<UButton
+						block
+						size="lg"
+						class="mt-5"
+						leading-icon="i-lucide-scan-search"
+						:loading="tzAnalyzing"
+						:disabled="!tzFile || !canRunTzAnalysis"
+						@click="runTzAnalysis"
+					>
+						Анализировать ТЗ
+					</UButton>
+					<p v-if="module2BlockReason" class="text-xs text-muted mt-2">
+						{{ module2BlockReason }}
+						<ULink
+							:to="subscriptionProfilePath()"
+							class="text-primary hover:underline underline-offset-2 ml-1"
+						>
+							Подписка
+						</ULink>
+					</p>
 				</UCard>
 			</template>
 
@@ -107,20 +123,12 @@
 				/>
 
 				<UTabs
-					:model-value="activeContentTab"
+					v-model="activeContentTab"
 					:items="visibleContentTabItems"
 					:ui="{ list: 'mb-6' }"
-					@update:model-value="onContentTabChange"
+					@update:model-value="onUserTabPick"
 				>
 					<template #tz>
-						<div
-							v-if="panelLoading && activeContentTab === 'tz'"
-							class="flex flex-col items-center justify-center gap-3 min-h-[40vh] text-muted"
-						>
-							<UIcon name="i-lucide-loader" class="w-8 h-8 animate-spin text-primary" />
-							<p class="text-sm">Загрузка раздела…</p>
-						</div>
-						<div v-else>
 						<div v-if="isTzReviewPhase && !isAnalysisClosed"
 							class="mb-6 rounded-xl border border-warning/25 bg-warning/10 p-4 sm:p-5">
 							<div class="flex gap-3 min-w-0">
@@ -149,46 +157,56 @@
 								</div>
 							</template>
 
+							<UButton
+								v-if="!isTzConfirmed && !isCompleted"
+								color="warning"
+								variant="solid"
+								size="lg"
+								block
+								class="mb-4"
+								leading-icon="i-lucide-check"
+								:loading="confirmingTz"
+								:disabled="!requirementsRowsNonempty(editableRequirementsTz)"
+								@click="confirmTzRequirements"
+							>
+								Подтвердить требования
+							</UButton>
+
 							<div class="overflow-y-auto pr-1">
 								<RequirementTreeEditor v-if="editableTzCount > 0" :rows="editableRequirementsTz"
 									:scope-id="isTzConfirmed ? 'tz-results' : 'tz-review'"
 									:readonly="isTzConfirmed || isCompleted" show-heading-hint
 									@remove="removeTzRequirement"
 									@add-child="addTzChildRequirement"
-									@add-heading="addTzHeadingRequirement" />
+									@add-heading="addTzHeadingRequirement"
+									@add-sibling="addTzSiblingRequirement"
+									@reorder="reorderTzRequirement" />
 								<p v-else class="text-sm text-muted text-center py-4">
 									Нет извлечённых требований
 								</p>
 							</div>
 
-							<template v-if="!isTzConfirmed && !isCompleted" #footer>
-								<div class="flex flex-wrap items-center gap-2">
-									<UButton type="button" variant="outline" size="sm" leading-icon="i-lucide-plus"
-										@click="addTzRequirement">
-										Добавить требование
-									</UButton>
-									<UButton color="warning" variant="solid" size="sm"
-										leading-icon="i-lucide-check" :loading="confirmingTz"
-										:disabled="!requirementsRowsNonempty(editableRequirementsTz)"
-										@click="confirmTzRequirements">
-										Подтвердить требования
-									</UButton>
-								</div>
-							</template>
+							<div
+								v-if="!isTzConfirmed && !isCompleted"
+								class="mt-4 pt-4 border-t border-default"
+							>
+								<UButton
+									type="button"
+									variant="outline"
+									size="lg"
+									block
+									leading-icon="i-lucide-plus"
+									@click="addTzRequirement"
+								>
+									Добавить требование
+								</UButton>
+							</div>
 						</UCard>
-						</div>
 					</template>
 
 					<template #kp>
-						<div
-							v-if="panelLoading && activeContentTab === 'kp'"
-							class="flex flex-col items-center justify-center gap-3 min-h-[40vh] text-muted"
-						>
-							<UIcon name="i-lucide-loader" class="w-8 h-8 animate-spin text-primary" />
-							<p class="text-sm">Загрузка результатов…</p>
-						</div>
-						<div v-else class="grid grid-cols-1 gap-6" :class="showSuppliersSidebar
-							? 'xl:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)]'
+						<div class="grid grid-cols-1 gap-6" :class="showSuppliersSidebar
+							? 'xl:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)]'
 							: ''">
 							<TzAnalysisSuppliersPanel v-if="showSuppliersSidebar && analysis?.id"
 								:analysis-id="analysis.id" :suppliers="suppliers" :file-accept="fileAccept"
@@ -200,7 +218,7 @@
 
 							<div class="min-w-0 space-y-6">
 								<div
-									v-if="supplierResultsLoading"
+									v-if="kpPanelLoading || supplierResultsLoading"
 									class="flex flex-col items-center justify-center gap-3 min-h-[40vh] text-muted rounded-xl border border-default/60 bg-elevated/20"
 								>
 									<UIcon name="i-lucide-loader" class="w-8 h-8 animate-spin text-primary" />
@@ -584,6 +602,7 @@ import type {
 	TZAnalysisSession,
 	TZAnalysisStatus,
 	TZAnalysisSupplierItem,
+	UserResponse,
 } from '#shared/types'
 import {
 	getTzItemStatusColor,
@@ -605,11 +624,19 @@ import {
 	flattenRequirementsToRows,
 	nextChildKey,
 	renumberRequirementRows,
+	insertSiblingAfterRow,
+	moveRequirementRowBlock,
 	requirementsNonempty,
 	requirementsRowsNonempty,
 	rowsToHierarchy,
 	type EditableRequirementRow,
 } from '#shared/utils/requirementsStruct'
+import { getApiErrorDetail, isSubscriptionApiError } from '#shared/utils/apiError'
+import {
+	canStartModule2Work,
+	module2WorkBlockMessage,
+} from '#shared/utils/subscriptionAccess'
+import { subscriptionProfilePath } from '#shared/utils/subscriptionDisplay'
 import RequirementResultsTree from '~/components/tz-analysis/RequirementResultsTree.vue'
 import RequirementTreeEditor from '~/components/tz-analysis/RequirementTreeEditor.vue'
 import TzAnalysisSuppliersPanel from '~/components/tz-analysis/TzAnalysisSuppliersPanel.vue'
@@ -624,6 +651,10 @@ const id = computed(() => route.params.id as string)
 const { get, post, patch } = useApi()
 const { $axios } = useNuxtApp()
 const toast = useToast()
+
+function openSubscriptionProfile(): void {
+	void navigateTo(subscriptionProfilePath())
+}
 const { formatDate, formatLetterDate } = useFormatDate()
 const { public: publicConfig } = useRuntimeConfig()
 
@@ -637,6 +668,15 @@ const uploadDescription = computed(() => {
 
 const loading = ref(true)
 const analysis = ref<TZAnalysisSession | null>(null)
+const user = ref<UserResponse | null>(null)
+
+const canRunTzAnalysis = computed(() =>
+	canStartModule2Work(user.value?.subscription),
+)
+
+const module2BlockReason = computed(() =>
+	module2WorkBlockMessage(user.value?.subscription),
+)
 const { openTzFile, openKpFile } = useTzAnalysisFiles(
 	computed(() => analysis.value?.id),
 	computed(() => analysis.value?.tz_filename),
@@ -644,12 +684,12 @@ const { openTzFile, openKpFile } = useTzAnalysisFiles(
 provide('tzAnalysisFiles', { openTzFile, openKpFile })
 
 const activeContentTab = ref('tz')
-const renderedContentTab = ref('tz')
-const panelLoading = ref(false)
+const kpPanelLoading = ref(false)
 const supplierResultsLoading = ref(false)
 const userPickedContentTab = ref(false)
 const selectedSupplierId = ref<string | null>(null)
-const renderedSupplierId = ref<string | null>(null)
+const displayedSupplierId = ref<string | null>(null)
+let skipTabPickHandler = false
 const contentTabItems = [
 	{ label: 'ТЗ', value: 'tz', slot: 'tz', icon: 'i-lucide-file-text' },
 	{ label: 'КП / Результаты', value: 'kp', slot: 'kp', icon: 'i-lucide-file-spreadsheet' },
@@ -792,7 +832,7 @@ const hasPendingSuppliers = computed(() =>
 )
 
 const selectedSupplier = computed(() =>
-	suppliers.value.find((entry) => entry.id === renderedSupplierId.value) ?? null,
+	suppliers.value.find((entry) => entry.id === displayedSupplierId.value) ?? null,
 )
 
 const selectedSupplierKpOptions = computed(() => {
@@ -834,7 +874,7 @@ function ensureSelectedSupplier() {
 	const list = suppliers.value
 	if (list.length === 0) {
 		selectedSupplierId.value = null
-		renderedSupplierId.value = null
+		displayedSupplierId.value = null
 		return
 	}
 	if (
@@ -843,7 +883,7 @@ function ensureSelectedSupplier() {
 	) {
 		const firstId = list[0]!.id
 		selectedSupplierId.value = firstId
-		renderedSupplierId.value = firstId
+		displayedSupplierId.value = firstId
 	}
 }
 
@@ -925,7 +965,7 @@ const letterItemsView = computed((): TZItemView[] => {
 
 function letterSelectionStorageKey() {
 	const analysisId = analysis.value?.id
-	const supplierId = renderedSupplierId.value
+	const supplierId = displayedSupplierId.value
 	if (!analysisId || !supplierId) return null
 	return `tz-letter-selection:${analysisId}:${supplierId}`
 }
@@ -1189,13 +1229,21 @@ function addTzRequirement() {
 }
 
 function addTzChildRequirement(parentKey: string) {
-	updateEditableRequirementsTz((rows) => [
-		...rows,
-		{
-			key: nextChildKey(parentKey, rows),
-			text: '',
-		},
-	])
+	const parentNorm = parentKey.trim().replace(/\//g, '.')
+	updateEditableRequirementsTz((rows) => {
+		const withHeading = rows.map((row) =>
+			row.key.trim().replace(/\//g, '.') === parentNorm
+				? { ...row, isHeading: true }
+				: row,
+		)
+		return [
+			...withHeading,
+			{
+				key: nextChildKey(parentKey, withHeading),
+				text: '',
+			},
+		]
+	})
 }
 
 function addTzHeadingRequirement(parentKey: string) {
@@ -1215,12 +1263,25 @@ function removeTzRequirement(index: number) {
 	)
 }
 
+function addTzSiblingRequirement(afterIndex: number) {
+	updateEditableRequirementsTz((rows) =>
+		insertSiblingAfterRow(rows, afterIndex),
+	)
+}
+
+function reorderTzRequirement(fromIndex: number, toIndex: number) {
+	updateEditableRequirementsTz((rows) =>
+		moveRequirementRowBlock(rows, fromIndex, toIndex),
+	)
+}
+
 const canRunKpAnalysis = computed(() =>
 	!isCompleted.value
 	&& isTzConfirmed.value
 	&& requirementsRowsNonempty(editableRequirementsTz.value)
 	&& hasSuppliersWithFiles.value
-	&& hasPendingSuppliers.value,
+	&& hasPendingSuppliers.value
+	&& canRunTzAnalysis.value,
 )
 
 async function refreshAnalysis() {
@@ -1351,9 +1412,11 @@ function letterTextToParagraphs(text: string): string[] {
 }
 
 function getLetterTextarea(): HTMLTextAreaElement | null {
-	const root = letterTextareaRef.value?.$el ?? letterTextareaRef.value
+	const raw = letterTextareaRef.value
+	const root = raw?.$el ?? raw
 	if (root instanceof HTMLTextAreaElement) return root
-	const el = root?.querySelector('textarea')
+	if (!(root instanceof HTMLElement)) return null
+	const el = root.querySelector('textarea')
 	return el instanceof HTMLTextAreaElement ? el : null
 }
 
@@ -1472,8 +1535,10 @@ function applyAnalysis(data: TZAnalysisSession) {
 		&& !userPickedContentTab.value
 		&& !isAnalysisClosed.value
 	) {
+		skipTabPickHandler = true
 		activeContentTab.value = 'kp'
-		renderedContentTab.value = 'kp'
+		skipTabPickHandler = false
+		deferKpPanelRender()
 	}
 	if (
 		data.status === TZAnalysisRunStatus.ACTIVE
@@ -1548,42 +1613,40 @@ function scheduleLetterPreview() {
 	syncLetterEditor(true)
 }
 
-watch(renderedSupplierId, () => {
+watch(displayedSupplierId, () => {
 	restoreOrInitLetterSelection()
 	scheduleLetterPreview()
 })
 
-function deferPanelContentUpdate(apply: () => void) {
-	panelLoading.value = true
+function deferKpPanelRender() {
+	kpPanelLoading.value = true
 	requestAnimationFrame(() => {
-		apply()
 		nextTick(() => {
 			requestAnimationFrame(() => {
-				panelLoading.value = false
+				kpPanelLoading.value = false
 			})
 		})
 	})
 }
 
-function onContentTabChange(tab: string) {
-	if (tab === activeContentTab.value) return
+function onUserTabPick(tab: string | number) {
+	if (skipTabPickHandler) return
 	userPickedContentTab.value = true
-	activeContentTab.value = tab
-	deferPanelContentUpdate(() => {
-		renderedContentTab.value = tab
-	})
+	if (tab === 'kp') {
+		deferKpPanelRender()
+	}
 }
 
 function onSelectSupplier(supplierId: string) {
 	if (supplierId === selectedSupplierId.value) return
 	selectedSupplierId.value = supplierId
 	if (activeContentTab.value !== 'kp') {
-		renderedSupplierId.value = supplierId
+		displayedSupplierId.value = supplierId
 		return
 	}
 	supplierResultsLoading.value = true
 	requestAnimationFrame(() => {
-		renderedSupplierId.value = supplierId
+		displayedSupplierId.value = supplierId
 		nextTick(() => {
 			requestAnimationFrame(() => {
 				supplierResultsLoading.value = false
@@ -1594,8 +1657,9 @@ function onSelectSupplier(supplierId: string) {
 
 watch(isAnalysisClosed, (closed) => {
 	if (closed) {
+		skipTabPickHandler = true
 		activeContentTab.value = 'tz'
-		renderedContentTab.value = 'tz'
+		skipTabPickHandler = false
 	}
 })
 
@@ -1639,8 +1703,13 @@ watch(tzSelectedIndices, () => {
 	}
 }, { deep: true })
 
-onMounted(() => {
-	fetchAnalysis()
+onMounted(async () => {
+	try {
+		user.value = await get<UserResponse>('/auth/me')
+	} catch {
+		user.value = null
+	}
+	await fetchAnalysis()
 })
 
 function validateAndSetFile(
@@ -1669,7 +1738,7 @@ function onTzFileChange(file: File | null | undefined) {
 }
 
 async function runTzAnalysis() {
-	if (!tzFile.value || !analysis.value?.id) return
+	if (!tzFile.value || !analysis.value?.id || !canRunTzAnalysis.value) return
 	tzAnalyzing.value = true
 	try {
 		const fd = new FormData()
@@ -1685,11 +1754,19 @@ async function runTzAnalysis() {
 			tzPolling.value = true
 		}
 	} catch (e: unknown) {
-		const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
 		toast.add({
-			title: typeof detail === 'string' ? detail : 'Ошибка запуска анализа',
+			title: getApiErrorDetail(e) ?? 'Ошибка запуска анализа',
+			description: isSubscriptionApiError(e)
+				? 'Проверьте подключённые модули в разделе «Подписка».'
+				: undefined,
 			color: 'error',
 			icon: 'i-lucide-circle-alert',
+			actions: isSubscriptionApiError(e)
+				? [{
+					label: 'Подписка',
+					onClick: openSubscriptionProfile,
+				}]
+				: undefined,
 		})
 	} finally {
 		tzAnalyzing.value = false
@@ -1720,8 +1797,10 @@ async function confirmTzRequirements() {
 		)
 		userPickedContentTab.value = false
 		applyAnalysis(result)
+		skipTabPickHandler = true
 		activeContentTab.value = 'kp'
-		renderedContentTab.value = 'kp'
+		skipTabPickHandler = false
+		deferKpPanelRender()
 		toast.add({
 			title: 'Требования подтверждены',
 			description: 'Теперь добавьте поставщиков и загрузите КП.',
@@ -1729,9 +1808,8 @@ async function confirmTzRequirements() {
 			icon: 'i-lucide-check',
 		})
 	} catch (e: unknown) {
-		const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
 		toast.add({
-			title: typeof detail === 'string' ? detail : 'Не удалось подтвердить требования',
+			title: getApiErrorDetail(e) ?? 'Не удалось подтвердить требования',
 			color: 'error',
 			icon: 'i-lucide-circle-alert',
 		})
@@ -1782,11 +1860,19 @@ async function runKpAnalysis() {
 			icon: 'i-lucide-check',
 		})
 	} catch (e: unknown) {
-		const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
 		toast.add({
-			title: typeof detail === 'string' ? detail : 'Ошибка запуска анализа КП',
+			title: getApiErrorDetail(e) ?? 'Ошибка запуска анализа КП',
+			description: isSubscriptionApiError(e)
+				? 'Проверьте лимиты и модули в разделе «Подписка».'
+				: undefined,
 			color: 'error',
 			icon: 'i-lucide-circle-alert',
+			actions: isSubscriptionApiError(e)
+				? [{
+					label: 'Подписка',
+					onClick: openSubscriptionProfile,
+				}]
+				: undefined,
 		})
 	} finally {
 		kpAnalyzing.value = false

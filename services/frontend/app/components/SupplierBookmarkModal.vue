@@ -144,14 +144,6 @@
 											class="space-y-3"
 											@submit="() => createItem(list.id)"
 										>
-											<UFormField label="Домен" name="domain" hint="example.com">
-												<UInput
-													v-model="itemForm.domain"
-													placeholder="supplier.ru"
-													icon="i-lucide-globe"
-													class="w-full"
-												/>
-											</UFormField>
 											<UFormField label="Название компании" name="company_name" required>
 												<UInput
 													v-model="itemForm.company_name"
@@ -169,6 +161,44 @@
 													class="w-full"
 												/>
 											</UFormField>
+
+											<div>
+												<UButton
+													type="button"
+													variant="ghost"
+													color="neutral"
+													size="sm"
+													class="px-0"
+													:trailing-icon="showItemOptional ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+													@click="showItemOptional = !showItemOptional"
+												>
+													Дополнительные поля
+												</UButton>
+
+												<div v-show="showItemOptional" class="mt-3 space-y-3">
+													<UFormField label="Домен" name="domain" hint="example.com">
+														<UInput
+															v-model="itemForm.domain"
+															placeholder="supplier.ru"
+															icon="i-lucide-globe"
+															class="w-full"
+														/>
+													</UFormField>
+													<UFormField
+														label="Заметки"
+														name="notes"
+														hint="Контакты, телефоны, комментарии"
+													>
+														<UTextarea
+															v-model="itemForm.notes"
+															:rows="3"
+															placeholder="Телефон, контактное лицо, условия поставки..."
+															class="w-full"
+														/>
+													</UFormField>
+												</div>
+											</div>
+
 											<div class="flex justify-end gap-2">
 												<UButton
 													size="sm"
@@ -247,7 +277,8 @@ const expandedListIds = ref(new Set<string>())
 const createListOpen = ref(false)
 
 const listForm = reactive({ title: '' })
-const itemForm = reactive({ domain: '', company_name: '', email: '' })
+const itemForm = reactive({ domain: '', company_name: '', email: '', notes: '' })
+const showItemOptional = ref(false)
 
 const listSchema = z.object({
 	title: z.string().min(1, 'Обязательное поле').max(255),
@@ -257,6 +288,7 @@ const itemSchema = z.object({
 	domain: z.string().optional(),
 	company_name: z.string().min(1, 'Обязательное поле').max(200),
 	email: z.string().email('Неверный формат email'),
+	notes: z.string().optional(),
 })
 
 const filteredLists = computed(() => {
@@ -353,10 +385,13 @@ function startAddItem(listId: string) {
 	itemForm.domain = ''
 	itemForm.company_name = ''
 	itemForm.email = ''
+	itemForm.notes = ''
+	showItemOptional.value = false
 }
 
 function cancelAddItem() {
 	addingToListId.value = null
+	showItemOptional.value = false
 }
 
 async function createItem(listId: string) {
@@ -367,7 +402,7 @@ async function createItem(listId: string) {
 			company_name: itemForm.company_name.trim(),
 			email: itemForm.email.trim(),
 			domain: normalizeDomain(itemForm.domain),
-			notes: null,
+			notes: itemForm.notes.trim() || null,
 		})
 		lists.value = lists.value.map((list) =>
 			list.id === listId

@@ -106,7 +106,11 @@ async function send() {
 	}
 }
 
-watch(isOpen, (open) => {
-	if (open) resetForm()
-})
+watch(
+	() => [isOpen.value, props.supplier.rs_id] as const,
+	([open]) => {
+		if (open) resetForm()
+	},
+	{ immediate: true },
+)
 </script>

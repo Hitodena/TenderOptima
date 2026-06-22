@@ -416,11 +416,33 @@
 							</div>
 						</div>
 					</div>
+					<div v-else-if="analysisNotReady && !extracting && !analysisPolling"
+						class="flex flex-col items-center justify-center py-8 gap-3 text-muted">
+						<UIcon name="i-lucide-loader" class="w-7 h-7 animate-spin opacity-50" />
+						<p class="text-xs text-center">
+							Анализ выполняется автоматически при получении письма
+						</p>
+						<UButton
+							size="xs"
+							variant="outline"
+							:loading="extracting"
+							@click="reExtract()"
+						>
+							Запустить вручную
+						</UButton>
+					</div>
 					<div v-else-if="!extracting && !analysisPolling"
 						class="flex flex-col items-center justify-center py-8 gap-2 text-muted">
 						<UIcon name="i-lucide-file-x" class="w-7 h-7 opacity-20" />
 						<p class="text-xs text-center">Данные не извлечены</p>
-						<p class="text-[10px] text-center">Анализ запустится автоматически</p>
+						<UButton
+							size="xs"
+							variant="outline"
+							:loading="extracting"
+							@click="reExtract()"
+						>
+							Запустить анализ
+						</UButton>
 					</div>
 				</div>
 			</div>
@@ -459,6 +481,7 @@ import { TZAnalysisRunStatus } from '#shared/types'
 import ImproveConditionsModal from '~/components/ImproveConditionsModal.vue'
 import WinnerNotificationModal from '~/components/WinnerNotificationModal.vue'
 import { useRunStatusPolling } from '~/composables/useRunStatusPolling'
+import { useIntervalFn } from '@vueuse/core'
 
 definePageMeta({ layout: 'default' })
 
@@ -494,16 +517,32 @@ const threadSortOptions = [
 	{ label: 'Непрочитанные сначала', value: 'unread_first' },
 ]
 
-async function fetchThreads() {
-	loadingThreads.value = true
+async function fetchThreads(silent = false) {
+	if (!silent) loadingThreads.value = true
 	try {
 		threads.value = await get<ThreadSummary[]>(`/requests/${id}/threads`)
 	} catch {
-		threads.value = []
+		if (!silent) threads.value = []
 	} finally {
-		loadingThreads.value = false
+		if (!silent) loadingThreads.value = false
 	}
 }
+
+const THREAD_POLL_MS = 45_000
+const { pause: pauseThreadPoll, resume: resumeThreadPoll } = useIntervalFn(
+	async () => {
+		const prevLastId = selectedThread.value?.last_message?.id
+		await fetchThreads(true)
+		const newLastId = selectedThread.value?.last_message?.id
+		if (selectedRsId.value && prevLastId !== newLastId) {
+			await fetchMessages(selectedRsId.value, { silent: true })
+			await fetchAnalysis()
+		} else if (analysisNotReady.value && selectedRsId.value) {
+			await fetchAnalysis()
+		}
+	},
+	THREAD_POLL_MS,
+)
 
 async function refreshAll() {
 	refreshingAll.value = true
@@ -540,6 +579,11 @@ async function refreshAll() {
 
 onMounted(() => {
 	fetchThreads()
+	resumeThreadPoll()
+})
+
+onUnmounted(() => {
+	pauseThreadPoll()
 })
 
 const filteredThreads = computed(() => {
@@ -676,6 +720,7 @@ const loadingAnalysis = ref(false)
 const savingParams = ref(false)
 const extracting = ref(false)
 const analysisPolling = ref(false)
+const analysisNotReady = ref(false)
 const editingMatchIdx = ref<number | null>(null)
 const editingMatchValue = ref('')
 
@@ -713,6 +758,7 @@ function complianceForSupplier(supplier: ComparisonSupplier) {
 function applyEmailAnalysis(data: EmailAnalysisResponse) {
 	requirementMatches.value = data.matches || []
 	previousMatchValues.value = data.previous_parameters || {}
+	analysisNotReady.value = false
 	if (data.status === TZAnalysisRunStatus.PROCESSING) {
 		analysisPolling.value = true
 	} else {
@@ -730,6 +776,7 @@ async function fetchAnalysis() {
 		requirementMatches.value = []
 		previousMatchValues.value = {}
 		analysisPolling.value = false
+		analysisNotReady.value = false
 		return
 	}
 	loadingAnalysis.value = true
@@ -740,10 +787,14 @@ async function fetchAnalysis() {
 		applyEmailAnalysis(data)
 	} catch (e: unknown) {
 		const status = (e as { response?: { status?: number } })?.response?.status
-		if (status === 404 && latestIncomingId.value) {
-			await reExtract(true)
+		if (status === 404) {
+			analysisNotReady.value = true
+			previousMatchValues.value = {}
+			requirementMatches.value = []
+			analysisPolling.value = false
 			return
 		}
+		analysisNotReady.value = false
 		previousMatchValues.value = {}
 		requirementMatches.value = []
 		analysisPolling.value = false

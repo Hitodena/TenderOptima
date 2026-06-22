@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.api.auth.helpers import user_to_response
 from backend.api.auth.schemas import (
     RegisterCreate,
     TokenResponse,
@@ -11,7 +12,7 @@ from backend.api.auth.schemas import (
     UserUpdate,
 )
 from backend.api.deps import get_current_user, get_session
-from backend.db.dao import UserDAO
+from backend.db.dao import SubscriptionDAO, UserDAO
 from backend.db.models import User
 from backend.utils.jwt_utils import create_access_token
 from backend.utils.security import hash_password, verify_password
@@ -57,6 +58,7 @@ async def register(
     await UserDAO.update_contact_info(
         session, user.id, business_info=business_info
     )
+    await SubscriptionDAO.upsert_for_user(session, user.id)
 
     access_token = create_access_token(data={"sub": user.email})
     return TokenResponse(access_token=access_token, token_type="bearer")
@@ -105,12 +107,13 @@ async def login(
 )
 async def get_user(
     current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> UserResponse:
     """
     Returns profile data for the currently authenticated user using the
     provided JWT.
     """
-    return UserResponse.model_validate(current_user)
+    return await user_to_response(session, current_user)
 
 
 @router.patch(
@@ -142,7 +145,7 @@ async def update_user(
         ]
     )
     if not has_updates:
-        return UserResponse.model_validate(current_user)
+        return await user_to_response(session, current_user)
 
     updated_user = await UserDAO.update_contact_info(
         session,
@@ -152,4 +155,4 @@ async def update_user(
         contact_email=request.contact_email,
         business_info=request.business_info,
     )
-    return UserResponse.model_validate(updated_user)
+    return await user_to_response(session, updated_user)

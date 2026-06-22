@@ -21,12 +21,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.celery_app.celery_config import app
 from backend.celery_app.utils import async_task, get_db_manager
 from backend.core import get_config
-from backend.db.dao import EmailMessageDAO, RequestDAO, RequestSupplierDAO
+from backend.db.dao import (
+    EmailMessageDAO,
+    RequestDAO,
+    RequestSupplierDAO,
+    UserAdminDAO,
+)
 from backend.enums import (
     EmailMessageDirection,
     RequestStatus,
     RequestSupplierStatus,
 )
+from backend.services.analysis.email_queue import queue_email_analysis
 from backend.utils.email_utils import (
     build_outbound_subject,
     build_request_email_body,
@@ -36,6 +42,12 @@ from backend.utils.email_utils import (
     resolve_reply_subject,
 )
 from backend.utils.short_id import generate_tid
+from backend.utils.user_email_credentials import (
+    ImapCredentials,
+    SmtpCredentials,
+    resolve_imap_credentials,
+    resolve_smtp_credentials,
+)
 
 config = get_config()
 
@@ -137,14 +149,18 @@ def _prepare_attachments(attachment_paths: list[str] | None) -> list[dict]:
     return data_list
 
 
-def _send_mime(msg: email.message.Message, recipient: str) -> None:
-    smtp = smtplib.SMTP(config.smtp_host, config.smtp_port)
+def _send_mime(
+    msg: email.message.Message,
+    recipient: str,
+    smtp_creds: SmtpCredentials,
+) -> None:
+    smtp = smtplib.SMTP(smtp_creds.host, smtp_creds.port)
     try:
         smtp.ehlo()
         smtp.starttls()
         smtp.ehlo()
-        smtp.login(config.smtp_user, config.smtp_password)
-        smtp.sendmail(config.smtp_user, recipient, msg.as_string())
+        smtp.login(smtp_creds.user, smtp_creds.password)
+        smtp.sendmail(smtp_creds.user, recipient, msg.as_string())
     finally:
         try:
             smtp.quit()
@@ -195,6 +211,7 @@ async def send_reply(
 
     user = rs.request.user
     request = rs.request
+    smtp_creds = resolve_smtp_credentials(user, config)
 
     att_data = _prepare_attachments(attachment_paths)
     if att_data:
@@ -212,7 +229,7 @@ async def send_reply(
     else:
         msg = MIMEText(body, "plain", "utf-8")
 
-    msg["From"] = f"{user.company_name or 'TenderOptima'} <{config.smtp_user}>"
+    msg["From"] = f"{user.company_name or 'TenderOptima'} <{smtp_creds.user}>"
     msg["To"] = recipient
 
     async with db_manager.session() as session:
@@ -231,11 +248,11 @@ async def send_reply(
     if references:
         msg["References"] = references
 
-    outbound_message_id = make_message_id(config.smtp_user)
+    outbound_message_id = make_message_id(smtp_creds.user)
     msg["Message-ID"] = outbound_message_id
 
     try:
-        _send_mime(msg, recipient)
+        _send_mime(msg, recipient, smtp_creds)
         logger.info("Reply sent via SMTP", rs_id=rs_id, recipient=recipient)
     except smtplib.SMTPException as exc:
         logger.exception(
@@ -298,6 +315,7 @@ async def send_custom_email(
         return {"status": "error", "reason": "no_recipient"}
 
     user = rs.request.user
+    smtp_creds = resolve_smtp_credentials(user, config)
     att_data = _prepare_attachments(attachment_paths)
     if att_data:
         msg = MIMEMultipart()
@@ -314,7 +332,7 @@ async def send_custom_email(
     else:
         msg = MIMEText(body, "plain", "utf-8")
 
-    msg["From"] = f"{user.company_name or 'TenderOptima'} <{config.smtp_user}>"
+    msg["From"] = f"{user.company_name or 'TenderOptima'} <{smtp_creds.user}>"
     msg["To"] = recipient
     msg["Subject"] = subject
 
@@ -331,11 +349,11 @@ async def send_custom_email(
     if references:
         msg["References"] = references
 
-    outbound_message_id = make_message_id(config.smtp_user)
+    outbound_message_id = make_message_id(smtp_creds.user)
     msg["Message-ID"] = outbound_message_id
 
     try:
-        _send_mime(msg, recipient)
+        _send_mime(msg, recipient, smtp_creds)
         logger.info(
             "Custom email sent via SMTP",
             rs_id=rs_id,
@@ -391,17 +409,20 @@ async def send_emails(self, request_id: str) -> dict:
             logger.warning("No pending suppliers", request_id=request_id)
             return {"sent": 0, "failed": 0}
 
+        user = request.user
+        smtp_creds = resolve_smtp_credentials(user, config)
+
     sent = 0
     failed = 0
     results: list[SendResult] = []
     attachment_data = _prepare_attachments(request.attachment_paths)
 
     try:
-        smtp = smtplib.SMTP(config.smtp_host, config.smtp_port)
+        smtp = smtplib.SMTP(smtp_creds.host, smtp_creds.port)
         smtp.ehlo()
         smtp.starttls()
         smtp.ehlo()
-        smtp.login(config.smtp_user, config.smtp_password)
+        smtp.login(smtp_creds.user, smtp_creds.password)
     except smtplib.SMTPException as exc:
         logger.exception("SMTP connection failed", error=str(exc))
         raise self.retry(exc=exc) from exc  # noqa: B904
@@ -450,15 +471,15 @@ async def send_emails(self, request_id: str) -> dict:
             else:
                 msg = MIMEText(plain_body, "plain", "utf-8")
             msg["From"] = (
-                f"{user.company_name or 'TenderOptima'} <{config.smtp_user}>"
+                f"{user.company_name or 'TenderOptima'} <{smtp_creds.user}>"
             )
             msg["To"] = recipient
             msg["Subject"] = outbound_subject
-            outbound_message_id = make_message_id(config.smtp_user)
+            outbound_message_id = make_message_id(smtp_creds.user)
             msg["Message-ID"] = outbound_message_id
 
             try:
-                smtp.sendmail(config.smtp_user, recipient, msg.as_string())
+                smtp.sendmail(smtp_creds.user, recipient, msg.as_string())
                 results.append(
                     SendResult(
                         rs.id,
@@ -539,230 +560,281 @@ async def send_emails(self, request_id: str) -> dict:
 @async_task
 async def poll_imap(self) -> dict:
     logger.info("Starting IMAP poll")
-    processed = 0
-    skipped = 0
     db_manager = get_db_manager()
+    total_processed = 0
+    total_skipped = 0
 
-    try:
-        imap = imaplib.IMAP4_SSL(config.imap_host, config.imap_port)
-        imap.login(config.imap_user, config.imap_password)
-        imap.select("INBOX")
-    except imaplib.IMAP4.error as exc:
-        logger.exception("IMAP connection failed", error=str(exc))
-        raise self.retry(exc=exc) from exc  # noqa: B904
+    async with db_manager.session() as session:
+        imap_users = await UserAdminDAO.list_imap_configured_users(session)
 
-    try:
-        status_code, message_ids = imap.search(None, "UNSEEN")
-        if status_code != "OK" or not message_ids[0]:
-            logger.info("No unseen messages")
-            return {"processed": 0, "skipped": 0}
+    mailboxes: list[tuple[str, ImapCredentials]] = []
+    seen_mailbox_keys: set[tuple[str, str]] = set()
+    for user in imap_users:
+        creds = resolve_imap_credentials(user, config)
+        key = (creds.host, creds.user)
+        if key in seen_mailbox_keys:
+            continue
+        seen_mailbox_keys.add(key)
+        mailboxes.append((str(user.id), creds))
 
-        uid_list = message_ids[0].split()
-        logger.info("Unseen messages found", count=len(uid_list))
+    if not mailboxes:
+        global_creds = resolve_imap_credentials(None, config)
+        mailboxes.append(("global", global_creds))
 
-        parsed: list[dict] = []
-        seen_uids: list = []
+    for mailbox_label, imap_creds in mailboxes:
+        try:
+            imap = imaplib.IMAP4_SSL(imap_creds.host, imap_creds.port)
+            imap.login(imap_creds.user, imap_creds.password)
+            imap.select("INBOX")
+        except imaplib.IMAP4.error as exc:
+            logger.exception(
+                "IMAP connection failed",
+                mailbox=mailbox_label,
+                error=str(exc),
+            )
+            continue
 
-        for uid in uid_list:
-            uid_str = uid.decode()
-            try:
-                _, msg_data = imap.fetch(uid, "(RFC822)")
-                msg = email.message_from_bytes(msg_data[0][1])  # type: ignore
-
-                subject = _decode_header_value(msg.get("Subject", ""))
-                match = TRACKING_ID_RE.search(subject)
-                if not match:
-                    logger.debug(
-                        "No TID in subject, skipping", subject=subject
-                    )
-                    skipped += 1
-                    continue
-
-                body = _extract_body(msg)
-                attachments = _extract_attachments(msg)
-
-                try:
-                    received_at = email.utils.parsedate_to_datetime(
-                        msg.get("Date")
-                    )
-                except Exception:
-                    received_at = datetime.now(UTC)
-
-                parsed.append(
-                    {
-                        "uid": uid,
-                        "uid_str": uid_str,
-                        "tracking_id": match.group(1),
-                        "subject": subject,
-                        "body": body,
-                        "attachments": attachments,
-                        "received_at": received_at,
-                        "message_id": normalize_message_id(
-                            msg.get("Message-ID")
-                        ),
-                        "in_reply_to": normalize_message_id(
-                            msg.get("In-Reply-To")
-                        ),
-                    }
-                )
-
-            except Exception as exc:
-                logger.exception(
-                    "Failed to parse message", imap_id=uid_str, error=str(exc)
-                )
-                skipped += 1
+        processed = 0
+        skipped = 0
+        try:
+            status_code, message_ids = imap.search(None, "UNSEEN")
+            if status_code != "OK" or not message_ids[0]:
+                logger.info("No unseen messages", mailbox=mailbox_label)
                 continue
 
-        async with db_manager.session() as session:
-            for item in parsed:
+            uid_list = message_ids[0].split()
+            logger.info(
+                "Unseen messages found",
+                mailbox=mailbox_label,
+                count=len(uid_list),
+            )
+
+            parsed: list[dict] = []
+            seen_uids: list = []
+
+            for uid in uid_list:
+                uid_str = uid.decode()
                 try:
-                    rs = await RequestSupplierDAO.get_by_tracking_id(
-                        session, item["tracking_id"]
-                    )
-                    if not rs:
-                        logger.warning(
-                            "RequestSupplier not found for TID",
-                            tracking_id=str(item["tracking_id"]),
+                    _, msg_data = imap.fetch(uid, "(RFC822)")
+                    msg = email.message_from_bytes(msg_data[0][1])  # type: ignore
+
+                    subject = _decode_header_value(msg.get("Subject", ""))
+                    match = TRACKING_ID_RE.search(subject)
+                    if not match:
+                        logger.debug(
+                            "No TID in subject, skipping", subject=subject
                         )
                         skipped += 1
                         continue
 
-                    existing = await EmailMessageDAO.get_by_imap_id(
-                        session, item["uid_str"]
-                    )
-                    if existing:
-                        skipped += 1
-                        continue
+                    body = _extract_body(msg)
+                    attachments = _extract_attachments(msg)
 
-                    email_body_text = _parse_email_body(item["body"])
+                    try:
+                        received_at = email.utils.parsedate_to_datetime(
+                            msg.get("Date")
+                        )
+                    except Exception:
+                        received_at = datetime.now(UTC)
 
-                    processed_attachments: list[dict] = []
-                    raw_attachments: list[dict] = item.get("attachments") or []
-                    if raw_attachments:
-                        upload_dir = Path(config.upload_dir)
-                        request_dir = upload_dir / str(rs.request_id)
-                        supplier_dir = request_dir / f"supplier_{rs.id}"
-                        try:
-                            supplier_dir.mkdir(parents=True, exist_ok=True)
-                        except PermissionError as exc:
-                            logger.error(
-                                "Permission denied creating attachment directory",
-                                path=str(supplier_dir),
-                                error=str(exc),
-                            )
-                            processed_attachments = [
-                                {
-                                    "filename": att.get("filename"),
-                                    "content_type": att.get("content_type"),
-                                    "size": att.get("size"),
-                                    "path": None,
-                                }
-                                for att in raw_attachments
-                            ]
-                        else:
-                            for att in raw_attachments:
-                                filename = (
-                                    att.get("filename") or "attachment.bin"
-                                )
-                                safe_filename = Path(
-                                    str(filename)
-                                ).name.replace("..", "_")
-                                data: bytes | None = att.get("data")
-                                if data:
-                                    unique_filename = (
-                                        f"{uuid.uuid4().hex}_{safe_filename}"
-                                    )
-                                    file_path = supplier_dir / unique_filename
-                                    try:
-                                        file_path.write_bytes(data)
-                                        processed_attachments.append(
-                                            {
-                                                "filename": safe_filename,
-                                                "content_type": att.get(
-                                                    "content_type"
-                                                ),
-                                                "size": len(data),
-                                                "path": str(file_path),
-                                            }
-                                        )
-                                        logger.info(
-                                            "Saved reply attachment",
-                                            rs_id=str(rs.id),
-                                            filename=safe_filename,
-                                            path=str(file_path),
-                                        )
-                                    except Exception as exc:
-                                        logger.exception(
-                                            "Failed to write attachment file",
-                                            filename=safe_filename,
-                                            error=str(exc),
-                                        )
-                                        processed_attachments.append(
-                                            {
-                                                "filename": safe_filename,
-                                                "content_type": att.get(
-                                                    "content_type"
-                                                ),
-                                                "size": len(data),
-                                                "path": None,
-                                            }
-                                        )
-                                else:
-                                    processed_attachments.append(
-                                        {
-                                            "filename": safe_filename,
-                                            "content_type": att.get(
-                                                "content_type"
-                                            ),
-                                            "size": att.get("size"),
-                                            "path": None,
-                                        }
-                                    )
-
-                    await EmailMessageDAO.create(
-                        session,
-                        request_supplier_id=rs.id,
-                        direction=EmailMessageDirection.INCOMING,
-                        message_id=item.get("message_id"),
-                        in_reply_to=item.get("in_reply_to"),
-                        imap_id=item["uid_str"],
-                        subject=item["subject"],
-                        raw_body=email_body_text,
-                        attachments=processed_attachments or None,
-                        extracted_text=item["body"],
-                        received_at=item["received_at"],
-                    )
-                    await _mark_rs_status(
-                        session, rs.id, RequestSupplierStatus.REPLIED
-                    )
-                    seen_uids.append(item["uid"])
-
-                    processed += 1
-                    logger.info(
-                        "Reply processed",
-                        tracking_id=str(item["tracking_id"]),
-                        rs_id=str(rs.id),
-                        attachments=len(item["attachments"]),
+                    parsed.append(
+                        {
+                            "uid": uid,
+                            "uid_str": uid_str,
+                            "tracking_id": match.group(1),
+                            "subject": subject,
+                            "body": body,
+                            "attachments": attachments,
+                            "received_at": received_at,
+                            "message_id": normalize_message_id(
+                                msg.get("Message-ID")
+                            ),
+                            "in_reply_to": normalize_message_id(
+                                msg.get("In-Reply-To")
+                            ),
+                        }
                     )
 
                 except Exception as exc:
                     logger.exception(
-                        "Failed to save message",
-                        imap_id=item["uid_str"],
+                        "Failed to parse message",
+                        imap_id=uid_str,
                         error=str(exc),
                     )
                     skipped += 1
                     continue
 
-        for uid in seen_uids:
-            imap.store(uid, "+FLAGS", "\\Seen")
+            async with db_manager.session() as session:
+                for item in parsed:
+                    try:
+                        rs = await RequestSupplierDAO.get_by_tracking_id(
+                            session, item["tracking_id"]
+                        )
+                        if not rs:
+                            logger.warning(
+                                "RequestSupplier not found for TID",
+                                tracking_id=str(item["tracking_id"]),
+                            )
+                            skipped += 1
+                            continue
 
-    finally:
-        try:
-            imap.close()
-            imap.logout()
-        except Exception:
-            pass
+                        existing = await EmailMessageDAO.get_by_imap_id(
+                            session, item["uid_str"]
+                        )
+                        if existing:
+                            skipped += 1
+                            continue
 
-    logger.info("IMAP poll done", processed=processed, skipped=skipped)
-    return {"processed": processed, "skipped": skipped}
+                        email_body_text = _parse_email_body(item["body"])
+
+                        processed_attachments: list[dict] = []
+                        raw_attachments: list[dict] = (
+                            item.get("attachments") or []
+                        )
+                        if raw_attachments:
+                            upload_dir = Path(config.upload_dir)
+                            request_dir = upload_dir / str(rs.request_id)
+                            supplier_dir = request_dir / f"supplier_{rs.id}"
+                            try:
+                                supplier_dir.mkdir(parents=True, exist_ok=True)
+                            except PermissionError as exc:
+                                logger.error(
+                                    "Permission denied creating attachment directory",
+                                    path=str(supplier_dir),
+                                    error=str(exc),
+                                )
+                                processed_attachments = [
+                                    {
+                                        "filename": att.get("filename"),
+                                        "content_type": att.get(
+                                            "content_type"
+                                        ),
+                                        "size": att.get("size"),
+                                        "path": None,
+                                    }
+                                    for att in raw_attachments
+                                ]
+                            else:
+                                for att in raw_attachments:
+                                    filename = (
+                                        att.get("filename") or "attachment.bin"
+                                    )
+                                    safe_filename = Path(
+                                        str(filename)
+                                    ).name.replace("..", "_")
+                                    data: bytes | None = att.get("data")
+                                    if data:
+                                        unique_filename = f"{uuid.uuid4().hex}_{safe_filename}"
+                                        file_path = (
+                                            supplier_dir / unique_filename
+                                        )
+                                        try:
+                                            file_path.write_bytes(data)
+                                            processed_attachments.append(
+                                                {
+                                                    "filename": safe_filename,
+                                                    "content_type": att.get(
+                                                        "content_type"
+                                                    ),
+                                                    "size": len(data),
+                                                    "path": str(file_path),
+                                                }
+                                            )
+                                            logger.info(
+                                                "Saved reply attachment",
+                                                rs_id=str(rs.id),
+                                                filename=safe_filename,
+                                                path=str(file_path),
+                                            )
+                                        except Exception as exc:
+                                            logger.exception(
+                                                "Failed to write attachment file",
+                                                filename=safe_filename,
+                                                error=str(exc),
+                                            )
+                                            processed_attachments.append(
+                                                {
+                                                    "filename": safe_filename,
+                                                    "content_type": att.get(
+                                                        "content_type"
+                                                    ),
+                                                    "size": len(data),
+                                                    "path": None,
+                                                }
+                                            )
+                                    else:
+                                        processed_attachments.append(
+                                            {
+                                                "filename": safe_filename,
+                                                "content_type": att.get(
+                                                    "content_type"
+                                                ),
+                                                "size": att.get("size"),
+                                                "path": None,
+                                            }
+                                        )
+
+                        email_msg = await EmailMessageDAO.create(
+                            session,
+                            request_supplier_id=rs.id,
+                            direction=EmailMessageDirection.INCOMING,
+                            message_id=item.get("message_id"),
+                            in_reply_to=item.get("in_reply_to"),
+                            imap_id=item["uid_str"],
+                            subject=item["subject"],
+                            raw_body=email_body_text,
+                            attachments=processed_attachments or None,
+                            extracted_text=item["body"],
+                            received_at=item["received_at"],
+                        )
+                        request = await RequestDAO.get_by_id(
+                            session, rs.request_id
+                        )
+                        if request:
+                            await queue_email_analysis(
+                                session,
+                                email_msg.id,
+                                request,
+                                reanalyze=False,
+                            )
+                        await _mark_rs_status(
+                            session, rs.id, RequestSupplierStatus.REPLIED
+                        )
+                        seen_uids.append(item["uid"])
+
+                        processed += 1
+                        logger.info(
+                            "Reply processed",
+                            tracking_id=str(item["tracking_id"]),
+                            rs_id=str(rs.id),
+                            attachments=len(item["attachments"]),
+                        )
+
+                    except Exception as exc:
+                        logger.exception(
+                            "Failed to save message",
+                            imap_id=item["uid_str"],
+                            error=str(exc),
+                        )
+                        skipped += 1
+                        continue
+
+            for uid in seen_uids:
+                imap.store(uid, "+FLAGS", "\\Seen")
+
+        finally:
+            try:
+                imap.close()
+                imap.logout()
+            except Exception:
+                pass
+
+        total_processed += processed
+        total_skipped += skipped
+
+    logger.info(
+        "IMAP poll done",
+        processed=total_processed,
+        skipped=total_skipped,
+    )
+    return {"processed": total_processed, "skipped": total_skipped}

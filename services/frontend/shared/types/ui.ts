@@ -42,7 +42,7 @@ export const SUPPLIER_STATUS_COLOR: Record<RequestSupplierStatus, BadgeColor> =
 	};
 
 export const SUPPLIER_STATUS_LABEL: Record<RequestSupplierStatus, string> = {
-	[RequestSupplierStatus.PENDING]: 'Ожидает рассылки',
+	[RequestSupplierStatus.PENDING]: '-',
 	[RequestSupplierStatus.SENT]: 'Отправлено',
 	[RequestSupplierStatus.REPLIED]: 'Ответил',
 	[RequestSupplierStatus.FAILED]: 'Ошибка',

@@ -18,17 +18,53 @@
 
 				<UCard class="shadow-sm mb-4">
 					<UForm :schema="schema" :state="form" @submit="handleCreate" class="space-y-5">
+						<UAlert
+							v-if="module2BlockReason"
+							color="warning"
+							variant="soft"
+							icon="i-lucide-triangle-alert"
+							class="mb-1"
+						>
+							<template #description>
+								<div class="space-y-2">
+									<p>{{ module2BlockReason }}</p>
+									<ULink
+										to="/profile?tab=subscription"
+										class="text-sm font-medium text-primary hover:underline underline-offset-2"
+									>
+										Открыть подписку в профиле
+									</ULink>
+								</div>
+							</template>
+						</UAlert>
+
 						<UFormField label="Название" name="title" required>
-							<UInput v-model="form.title" placeholder="Сравнение КП ООО «Поставщик» с ТЗ №12..."
-								icon="i-lucide-file-search" size="lg" class="w-full" />
+							<UInput
+								v-model="form.title"
+								placeholder="Сравнение КП ООО «Поставщик» с ТЗ №12..."
+								icon="i-lucide-file-search"
+								size="lg"
+								class="w-full"
+								:disabled="!canCreateAnalysis"
+							/>
 						</UFormField>
 
-						<UButton type="submit" block size="lg" leading-icon="i-lucide-plus" :loading="loading">
+						<UButton
+							type="submit"
+							block
+							size="lg"
+							leading-icon="i-lucide-plus"
+							:loading="loading"
+							:disabled="!canCreateAnalysis"
+						>
 							Создать анализ
 						</UButton>
 
-						<UAlert v-if="error" color="error" variant="soft" icon="i-lucide-circle-alert"
-							:description="error" />
+						<SubscriptionErrorAlert
+							v-if="createError"
+							:error="createError"
+							fallback="Не удалось создать анализ. Попробуйте ещё раз."
+						/>
 					</UForm>
 				</UCard>
 			</div>
@@ -37,12 +73,34 @@
 </template>
 
 <script lang="ts" setup>
-import type { TZAnalysisSession } from '#shared/types'
+import type { TZAnalysisSession, UserResponse } from '#shared/types'
+import {
+	canStartModule2Work,
+	module2WorkBlockMessage,
+} from '#shared/utils/subscriptionAccess'
 import { z } from 'zod'
 
 definePageMeta({ layout: 'default' })
 
-const { post } = useApi()
+const { get, post } = useApi()
+
+const user = ref<UserResponse | null>(null)
+
+onMounted(async () => {
+	try {
+		user.value = await get<UserResponse>('/auth/me')
+	} catch {
+		user.value = null
+	}
+})
+
+const canCreateAnalysis = computed(() =>
+	canStartModule2Work(user.value?.subscription),
+)
+
+const module2BlockReason = computed(() =>
+	module2WorkBlockMessage(user.value?.subscription),
+)
 
 const schema = z.object({
 	title: z.string().min(3, 'Минимум 3 символа').max(500, 'Максимум 500 символов'),
@@ -50,11 +108,11 @@ const schema = z.object({
 
 const form = reactive({ title: '' })
 const loading = ref(false)
-const error = ref<string | null>(null)
+const createError = ref<unknown | null>(null)
 
 async function handleCreate() {
-	if (loading.value) return
-	error.value = null
+	if (loading.value || !canCreateAnalysis.value) return
+	createError.value = null
 	loading.value = true
 	try {
 		const created = await post<TZAnalysisSession>('/tz-analysis/', {
@@ -62,10 +120,7 @@ async function handleCreate() {
 		})
 		await navigateTo(`/tz-analysis/${created.id}`)
 	} catch (e: unknown) {
-		const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-		error.value = typeof detail === 'string' && detail.trim()
-			? detail
-			: 'Не удалось создать анализ. Попробуйте ещё раз.'
+		createError.value = e
 	} finally {
 		loading.value = false
 	}

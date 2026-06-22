@@ -41,6 +41,13 @@ class SupplierCreate(BaseModel):
             examples=["sales@example-supplier.ru"],
         ),
     ]
+    extra_emails: Annotated[
+        list[EmailStr] | None,
+        Field(
+            default=None,
+            description="Additional contact emails besides the primary email",
+        ),
+    ]
     source: Annotated[
         SupplierSource | None,
         Field(

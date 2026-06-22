@@ -20,6 +20,10 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_current_user, get_session
+from backend.api.subscriptions.enforcement import (
+    ensure_can_process_kp,
+    ensure_module_2_work_allowed,
+)
 from backend.api.tz_analysis.schemas import (
     STATUS_LABELS,
     TZAnalysisCompleteResponse,
@@ -77,6 +81,7 @@ from backend.utils.tz_storage import (
     purge_supplier_kp_from_analysis,
     remove_supplier_dir,
     resolve_kp_file_by_display_name,
+    resolve_scoped_supplier_kp_file,
     resolve_supplier_kp_file_by_display_name,
     resolve_supplier_kp_files,
     resolve_tz_only_file,
@@ -212,6 +217,7 @@ async def create_tz_analysis(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> TZAnalysisDetailResponse:
     """Create a draft analysis session before uploading TZ and KP files."""
+    await ensure_module_2_work_allowed(session, current_user)
     row = await TZAnalysisDAO.create(
         session,
         user_id=current_user.id,
@@ -270,6 +276,8 @@ async def run_tz_analysis(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot run analysis in status '{row.status}'",
         )
+
+    await ensure_module_2_work_allowed(session, current_user)
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
@@ -361,6 +369,11 @@ async def run_tz_kp_analysis(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No new suppliers to analyze",
             )
+        await ensure_can_process_kp(
+            session,
+            current_user,
+            kp_count=len(suppliers_to_run),
+        )
         _validate_supplier_kp_files(row.id, suppliers_to_run)
         supplier_entries: list[tuple[str, list[str], list[Path]]] = []
         for supplier in suppliers_to_run:
@@ -395,6 +408,11 @@ async def run_tz_kp_analysis(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="At least one KP file or supplier is required",
             )
+        await ensure_can_process_kp(
+            session,
+            current_user,
+            kp_count=len(uploads),
+        )
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             raw_kp_names = [
@@ -1181,6 +1199,19 @@ async def download_kp_analysis_file(
         row.kp_filenames,
         row.kp_filename,
     )
+    if not kp_path:
+        suppliers = await TZAnalysisSupplierDAO.list_by_analysis(
+            session, analysis_id
+        )
+        supplier_entries = [
+            (supplier.id, supplier.name, supplier.kp_filenames)
+            for supplier in suppliers
+        ]
+        kp_path = resolve_scoped_supplier_kp_file(
+            analysis_id,
+            filename.strip(),
+            supplier_entries,
+        )
     if not kp_path:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

@@ -352,7 +352,10 @@ function sortTreeNodes<T extends { key: string; children: T[] }>(nodes: T[]) {
 	for (const node of nodes) sortTreeNodes(node.children)
 }
 
-export function buildTreeFromRows(rows: EditableRequirementRow[]): RequirementTreeNode[] {
+export function buildTreeFromRows(
+	rows: EditableRequirementRow[],
+	options?: { sort?: boolean },
+): RequirementTreeNode[] {
 	const nodeByKey = new Map<string, RequirementTreeNode>()
 	const roots: RequirementTreeNode[] = []
 
@@ -404,15 +407,99 @@ export function buildTreeFromRows(rows: EditableRequirementRow[]): RequirementTr
 		attachToParent(node)
 	}
 
-	sortTreeNodes(roots)
+	if (options?.sort !== false) {
+		sortTreeNodes(roots)
+	}
 	return roots
+}
+
+export function isDescendantRowKey(key: string, ancestorKey: string): boolean {
+	const normalized = normalizeRequirementKey(key)
+	const ancestor = normalizeRequirementKey(ancestorKey)
+	return normalized.startsWith(`${ancestor}.`)
+}
+
+/** Inclusive row index range for a node and all nested rows (preorder flat list). */
+export function getRowSubtreeRange(
+	rows: EditableRequirementRow[],
+	rowIndex: number,
+): [number, number] {
+	const key = normalizeRequirementKey(rows[rowIndex]?.key ?? '')
+	if (!key || key.startsWith('__row_')) return [rowIndex, rowIndex]
+
+	let end = rowIndex
+	for (let i = rowIndex + 1; i < rows.length; i++) {
+		const rowKey = normalizeRequirementKey(rows[i]?.key ?? '')
+		if (isDescendantRowKey(rowKey, key)) {
+			end = i
+		} else {
+			break
+		}
+	}
+	return [rowIndex, end]
+}
+
+export function canReorderRequirementRows(
+	rows: EditableRequirementRow[],
+	fromIndex: number,
+	toIndex: number,
+): boolean {
+	if (fromIndex === toIndex) return false
+	const fromRow = rows[fromIndex]
+	const toRow = rows[toIndex]
+	if (!fromRow || !toRow) return false
+
+	const fromParent = parentRequirementKey(fromRow.key)
+	const toParent = parentRequirementKey(toRow.key)
+	if (fromParent !== toParent) return false
+
+	const [, fromEnd] = getRowSubtreeRange(rows, fromIndex)
+	if (toIndex > fromIndex && toIndex <= fromEnd) return false
+
+	return true
+}
+
+export function moveRequirementRowBlock(
+	rows: EditableRequirementRow[],
+	fromIndex: number,
+	toIndex: number,
+): EditableRequirementRow[] {
+	if (!canReorderRequirementRows(rows, fromIndex, toIndex)) return rows
+
+	const [fromStart, fromEnd] = getRowSubtreeRange(rows, fromIndex)
+	const block = rows.slice(fromStart, fromEnd + 1)
+	const without = [...rows.slice(0, fromStart), ...rows.slice(fromEnd + 1)]
+
+	const [targetStart, targetEnd] = getRowSubtreeRange(rows, toIndex)
+	let insertAt = targetStart
+	if (fromStart < targetStart) {
+		insertAt = targetEnd - block.length + 1
+	}
+
+	without.splice(insertAt, 0, ...block)
+	return without
+}
+
+export function insertSiblingAfterRow(
+	rows: EditableRequirementRow[],
+	afterIndex: number,
+	options?: { isHeading?: boolean },
+): EditableRequirementRow[] {
+	const [, end] = getRowSubtreeRange(rows, afterIndex)
+	const next = [...rows]
+	next.splice(end + 1, 0, {
+		key: '',
+		text: '',
+		isHeading: options?.isHeading,
+	})
+	return next
 }
 
 /** Reassign sequential keys (1, 2, 1.1, …) from current tree order after add/remove. */
 export function renumberRequirementRows(
 	rows: EditableRequirementRow[],
 ): EditableRequirementRow[] {
-	const tree = buildTreeFromRows(rows)
+	const tree = buildTreeFromRows(rows, { sort: false })
 	const updated = rows.map((row) => ({ ...row }))
 
 	function walk(nodes: RequirementTreeNode[], parentKey: string | null) {

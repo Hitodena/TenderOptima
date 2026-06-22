@@ -18,6 +18,87 @@ export interface UserResponse {
 	company_name?: string | null;
 	contact_email?: string | null;
 	business_info?: string | null;
+	is_admin?: boolean;
+	subscription?: SubscriptionResponse | null;
+}
+
+export type SubscriptionPlan = 'basic' | 'advanced' | 'corporate';
+
+export interface SubscriptionResponse {
+	id: string;
+	plan: SubscriptionPlan;
+	module_1_enabled: boolean;
+	module_2_enabled: boolean;
+	max_searches_per_month: number | null;
+	max_emails_per_month: number | null;
+	max_kp_processed_per_month: number | null;
+	geo_code: string;
+	currency_code: string;
+	price_module_1_monthly: string | null;
+	price_module_2_monthly: string | null;
+	price_bundle_monthly: string | null;
+	is_active: boolean;
+	expires_at: string | null;
+	searches_used_this_month?: number;
+	emails_sent_this_month?: number;
+	kp_processed_this_month?: number;
+}
+
+export interface UserEmailSettingsResponse {
+	smtp_host: string | null;
+	smtp_user: string | null;
+	smtp_password_configured: boolean;
+	imap_host: string | null;
+	imap_user: string | null;
+	imap_password_configured: boolean;
+}
+
+export interface UserEmailSettingsUpdate {
+	smtp_host?: string | null;
+	smtp_user?: string | null;
+	smtp_password?: string | null;
+	clear_smtp_password?: boolean;
+	imap_host?: string | null;
+	imap_user?: string | null;
+	imap_password?: string | null;
+	clear_imap_password?: boolean;
+}
+
+export interface SubscriptionUpdate {
+	plan?: SubscriptionPlan | null;
+	module_1_enabled?: boolean | null;
+	module_2_enabled?: boolean | null;
+	max_searches_per_month?: number | null;
+	max_emails_per_month?: number | null;
+	max_kp_processed_per_month?: number | null;
+	geo_code?: string | null;
+	currency_code?: string | null;
+	price_module_1_monthly?: string | null;
+	price_module_2_monthly?: string | null;
+	price_bundle_monthly?: string | null;
+	is_active?: boolean | null;
+	expires_at?: string | null;
+}
+
+export interface AdminUserListItem {
+	id: string;
+	email: string;
+	full_name: string | null;
+	company_name: string | null;
+	is_admin: boolean;
+	smtp_password_configured: boolean;
+	imap_password_configured: boolean;
+	subscription: SubscriptionResponse | null;
+}
+
+export interface AdminUserDetail {
+	id: string;
+	email: string;
+	full_name: string | null;
+	company_name: string | null;
+	is_admin: boolean;
+	email_settings: UserEmailSettingsResponse;
+	subscription: SubscriptionResponse | null;
 }
 
 export interface RegisterCreate {
@@ -100,6 +181,7 @@ export interface SupplierCreate {
 	domain?: string | null;
 	company_name: string;
 	email: string;
+	extra_emails?: string[] | null;
 	source?: string | null;
 	request_id?: string | null;
 }

@@ -16,6 +16,14 @@ class User(IDMixinUUID, TimestampMixin, Base):
     contact_email: Mapped[str | None] = mapped_column()
     business_info: Mapped[str | None] = mapped_column(Text)
 
+    smtp_host: Mapped[str | None] = mapped_column()
+    smtp_user: Mapped[str | None] = mapped_column()
+    smtp_password: Mapped[str | None] = mapped_column()
+
+    imap_host: Mapped[str | None] = mapped_column()
+    imap_user: Mapped[str | None] = mapped_column()
+    imap_password: Mapped[str | None] = mapped_column()
+
     is_admin: Mapped[bool] = mapped_column(default=False)
     agree_terms: Mapped[bool] = mapped_column(default=True)
     agree_marketing: Mapped[bool] = mapped_column(default=False)
