@@ -1,41 +1,59 @@
 import json
 
+from backend.schemas.analysis import RequirementMatch
+
 
 def build_email_prompt(
     user_requirements: str,
     email_text: str,
     baseline_matches: dict[str, str] | None = None,
+    prior_matches: dict[str, RequirementMatch] | None = None,
 ) -> tuple[str, str]:
-    has_baseline = bool(baseline_matches)
+    has_prior = bool(prior_matches)
     baseline_block = ""
     if baseline_matches:
         baseline_json = json.dumps(baseline_matches, ensure_ascii=False)
         baseline_block = f"""
-Изначальный ответ поставщика (первое письмо в переписке, только для справки):
+Изначальный ответ поставщика (первое письмо, только для справки об изменениях):
 {baseline_json}
+"""
 
-Это НЕ текущее предложение. Не копируй эти значения в offer_value, если их нет в новом письме ниже.
+    prior_block = ""
+    if prior_matches:
+        prior_payload = [
+            {
+                "requirement": match.requirement,
+                "offer_value": match.offer_value,
+                "status": match.status.value,
+                "explanation": match.explanation,
+            }
+            for match in prior_matches.values()
+        ]
+        prior_json = json.dumps(prior_payload, ensure_ascii=False)
+        prior_block = f"""
+Накопленное состояние переписки (актуальные ответы поставщика из предыдущих писем):
+{prior_json}
+
+Если в новом письме тема НЕ упомянута — сохрани offer_value и status из этого состояния.
 """
 
     repeat_rules = ""
-    if has_baseline:
+    if has_prior:
         repeat_rules = """
-Правила для повторного анализа (есть изначальный ответ поставщика):
-1. База сравнения — ТРЕБОВАНИЯ ЗАКАЗЧИКА из списка выше (изначальное ТЗ), а не предыдущие письма
-2. Анализируй ТОЛЬКО новое письмо ниже; offer_value бери ТОЛЬКО из этого письма и вложений
-3. Если требование не упомянуто в новом письме → offer_value = null, status = "not_found"
-   (отсутствие в письме ≠ подтверждение прежнего значения)
-4. status ("met"/"partial"/"missing"/"not_found") определяй по соответствию offer_value из НОВОГО письма
-   требованию заказчика из изначального ТЗ
-5. Если поставщик явно указал новое значение → offer_value из нового письма; сравни с изначальным ТЗ
-6. Если поставщик явно отказал или противоречит требованию → status = "missing" или "partial"
-7. Изначальный ответ поставщика используй только чтобы понять, изменилось ли значение;
-   НЕ подставляй его в offer_value и НЕ ставь "met" из-за молчания
-8. НЕ домысливай: если в новом письме нет итога по требованию — offer_value = null, status = "not_found"
+Правила для повторного анализа (есть предыдущие ответы поставщика):
+1. База сравнения — ТРЕБОВАНИЯ ЗАКАЗЧИКА из списка выше (изначальное ТЗ)
+2. Ищи в новом письме только ИЗМЕНЕНИЯ и НОВЫЕ данные по требованиям
+3. Если требование не упомянуто в новом письме → сохрани offer_value и status \
+из накопленного состояния (НЕ сбрасывай в null / not_found)
+4. Если поставщик явно указал новое значение → offer_value из нового письма; \
+пересчитай status относительно ТЗ
+5. Если поставщик явно отказал или противоречит требованию → status = "missing" \
+или "partial" с новым offer_value из письма
+6. Молчание по теме ≠ отказ: не обнуляй ранее зафиксированные ответы
 """
 
     first_letter_rules = ""
-    if not has_baseline:
+    if not has_prior:
         first_letter_rules = """
 Правила для первого письма (изначального ответа поставщика):
 1. Сравнивай ответ поставщика с требованиями заказчика из изначального ТЗ
@@ -45,27 +63,46 @@ def build_email_prompt(
 5. Не упомянул вообще → status = "not_found", offer_value = null
 """
 
+    if has_prior:
+        offer_value_rule = (
+            '3. "offer_value" — из нового письма; если тема не упомянута — '
+            "из накопленного состояния"
+        )
+        not_found_rule = (
+            '- "not_found"  — только если тема не упомянута в новом письме И '
+            "ранее тоже не было ответа (offer_value = null)"
+        )
+    else:
+        offer_value_rule = (
+            '3. "offer_value" — конкретное предложение поставщика из '
+            "анализируемого письма (число, текст, условие); "
+            "без интерпретаций; только то, что явно есть в письме"
+        )
+        not_found_rule = (
+            '- "not_found"  — в письме нет информации по требованию '
+            "(offer_value = null)"
+        )
+
     system = f"""\
 Ты — аналитик, который разбирает ответы поставщиков в тендерной переписке.
 
 Изначальное ТЗ заказчика (эталон для оценки соответствия; формулировки использовать дословно в поле requirement):
 {user_requirements}
-{baseline_block}
+{baseline_block}{prior_block}
 {repeat_rules}{first_letter_rules}
 Общие правила:
 1. В "matches" — ровно одна запись на КАЖДОЕ требование из списка заказчика
 2. Поле "requirement" — точная формулировка из списка требований
-3. "offer_value" — конкретное предложение поставщика из анализируемого письма (число, текст, условие);
-   без интерпретаций; только то, что явно есть в новом письме
+{offer_value_rule}
 4. "explanation" — только при status "partial" или "missing"; для "met" и "not_found" — null
 5. Не пиши в explanation фразы вроде «сохранено из предыдущего» или «как в первом письме»
 6. Поле "parameters" всегда возвращай как пустой объект {{}}
 
 Статусы (всегда относительно изначального ТЗ заказчика):
-- "met"        — в новом письме явно указано предложение, закрывающее требование ТЗ
-- "partial"    — в новом письме есть ответ, но частично, условно или с оговорками
-- "missing"    — в новом письме есть ответ по теме, но он не соответствует требованию ТЗ
-- "not_found"  — в новом письме нет информации по требованию (offer_value = null)
+- "met"        — предложение закрывает требование ТЗ
+- "partial"    — есть ответ, но частично, условно или с оговорками
+- "missing"    — есть ответ по теме, но он не соответствует требованию ТЗ
+{not_found_rule}
 
 Верни ТОЛЬКО JSON без markdown-обёрток:
 {{
@@ -73,7 +110,7 @@ def build_email_prompt(
   "matches": [
     {{
       "requirement": "формулировка требования",
-      "offer_value": "значение из нового письма или null",
+      "offer_value": "значение или null",
       "explanation": "пояснение или null",
       "status": "met|partial|missing|not_found"
     }}

@@ -2,7 +2,8 @@ from pathlib import Path
 
 from loguru import logger
 
-from backend.schemas.analysis import EmailAnalysisResult
+from backend.enums import TZAnalysisStatus
+from backend.schemas.analysis import EmailAnalysisResult, RequirementMatch
 from backend.services.extraction.assembler import TextAssembler
 from backend.services.extraction.router import (
     ExtractorRouter,
@@ -14,6 +15,41 @@ from backend.utils.ocr import OcrNotAvailableError
 
 _router = ExtractorRouter()
 _assembler = TextAssembler()
+
+
+def _merge_email_with_prior(
+    result: EmailAnalysisResult,
+    prior_matches: dict[str, RequirementMatch],
+) -> EmailAnalysisResult:
+    """Carry forward prior offer values when the new email is silent on a topic."""
+    if not prior_matches:
+        return result
+
+    merged: list[RequirementMatch] = []
+    for match in result.matches:
+        req = match.requirement.strip()
+        prior = prior_matches.get(req)
+        if prior is None:
+            merged.append(match)
+            continue
+
+        has_new_value = bool(
+            match.offer_value and str(match.offer_value).strip(),
+        )
+        silent_in_new_email = (
+            match.status == TZAnalysisStatus.NOT_FOUND and not has_new_value
+        )
+        if silent_in_new_email and (
+            prior.offer_value and str(prior.offer_value).strip()
+        ):
+            merged.append(prior)
+            continue
+        if silent_in_new_email and prior.status != TZAnalysisStatus.NOT_FOUND:
+            merged.append(prior)
+            continue
+        merged.append(match)
+
+    return result.model_copy(update={"matches": merged})
 
 
 def _extract_attachment_text(path: Path) -> str | None:
@@ -60,6 +96,7 @@ async def analyze_email(
     email_body: str,
     attachment_paths: list[Path] | None = None,
     baseline_matches: dict[str, str] | None = None,
+    prior_matches: dict[str, RequirementMatch] | None = None,
 ) -> EmailAnalysisResult:
     parts: list[str] = []
     if email_body.strip():
@@ -82,7 +119,11 @@ async def analyze_email(
         user_requirements,
         full_text,
         baseline_matches=baseline_matches,
+        prior_matches=prior_matches,
     )
     raw = await llm_client.complete(system, user)
 
-    return EmailAnalysisResult(**raw)
+    result = EmailAnalysisResult(**raw)
+    if prior_matches:
+        result = _merge_email_with_prior(result, prior_matches)
+    return result

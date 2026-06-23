@@ -13,7 +13,11 @@ from backend.db.dao import (
     TZAnalysisSupplierDAO,
 )
 from backend.enums import TZAnalysisRunStatus, TZAnalysisSupplierStatus
-from backend.schemas.analysis import TZAnalysisItem, build_analysis_stats
+from backend.schemas.analysis import (
+    RequirementMatch,
+    TZAnalysisItem,
+    build_analysis_stats,
+)
 from backend.services.analysis.email import (
     analyze_email,
 )
@@ -88,12 +92,13 @@ async def _matches_from_first_analyzed_incoming(
     session,
     request_supplier_id: uuid.UUID,
     exclude_id: uuid.UUID | None = None,
+    before_dt=None,
 ) -> dict[str, str]:
     """Offer values from the first analyzed incoming message (initial supplier response)."""
     prior = await EmailMessageDAO.get_incoming_before(
         session,
         request_supplier_id,
-        before_dt=None,
+        before_dt=before_dt,
         exclude_id=exclude_id,
     )
     for msg in prior:
@@ -116,9 +121,61 @@ async def _matches_from_first_analyzed_incoming(
     return {}
 
 
+def _matches_dict_from_analysis_raw(raw: dict) -> dict[str, RequirementMatch]:
+    """Parse stored analysis matches into a requirement-keyed map."""
+    result: dict[str, RequirementMatch] = {}
+    matches = raw.get("matches") or []
+    if not isinstance(matches, list):
+        return result
+    for item in matches:
+        if not isinstance(item, dict):
+            continue
+        req = str(item.get("requirement") or "").strip()
+        if not req:
+            continue
+        try:
+            result[req] = RequirementMatch(**item)
+        except (ValueError, TypeError):
+            continue
+    return result
+
+
+async def _prior_matches_from_latest_analyzed_incoming(
+    session,
+    request_supplier_id: uuid.UUID,
+    exclude_id: uuid.UUID | None = None,
+    before_dt=None,
+) -> dict[str, RequirementMatch]:
+    """Full match state from the most recent prior analyzed incoming message."""
+    prior = await EmailMessageDAO.get_incoming_before(
+        session,
+        request_supplier_id,
+        before_dt=before_dt,
+        exclude_id=exclude_id,
+    )
+    for msg in reversed(prior):
+        analysis = msg.analysis
+        if not analysis or analysis.status != TZAnalysisRunStatus.ACTIVE.value:
+            continue
+        raw = analysis.raw_llm_response or {}
+        matches = _matches_dict_from_analysis_raw(raw)
+        if matches:
+            return matches
+    return {}
+
+
 async def _load_email_analysis_context(
     message_id: uuid.UUID,
-) -> tuple[str, str, list[Path] | None, dict[str, str]] | None:
+) -> (
+    tuple[
+        str,
+        str,
+        list[Path] | None,
+        dict[str, str],
+        dict[str, RequirementMatch],
+    ]
+    | None
+):
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
 
@@ -155,12 +212,20 @@ async def _load_email_analysis_context(
             session,
             message.request_supplier_id,
             exclude_id=message.id,
+            before_dt=message.received_at,
+        )
+        prior_matches = await _prior_matches_from_latest_analyzed_incoming(
+            session,
+            message.request_supplier_id,
+            exclude_id=message.id,
+            before_dt=message.received_at,
         )
         return (
             requirements,
             message.raw_body or "",
             paths or None,
             baseline_matches,
+            prior_matches,
         )
 
 
@@ -783,7 +848,13 @@ async def run_email_analysis(self, message_id: str) -> dict:
         )
         return {"error": "not_found", "message_id": message_id}
 
-    requirements, email_body, attachment_paths, baseline_matches = ctx
+    (
+        requirements,
+        email_body,
+        attachment_paths,
+        baseline_matches,
+        prior_matches,
+    ) = ctx
     if not requirements:
         async with db_manager.session() as session:
             row = await ResponseAnalysisDAO.get_by_response_id(session, mid)
@@ -801,6 +872,7 @@ async def run_email_analysis(self, message_id: str) -> dict:
             email_body=email_body,
             attachment_paths=attachment_paths,
             baseline_matches=baseline_matches or None,
+            prior_matches=prior_matches or None,
         )
     except (UnsupportedFileTypeError, OcrNotAvailableError, ValueError) as exc:
         logger.warning(
