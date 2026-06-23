@@ -88,23 +88,72 @@ def _extract_body(msg: email.message.Message) -> str:
     return ""
 
 
+_CONTENT_TYPE_EXT = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+    "application/pdf": ".pdf",
+}
+
+
+def _attachment_filename(part: email.message.Message) -> str | None:
+    filename = part.get_filename()
+    if filename:
+        return _decode_header_value(filename)
+    content_type = part.get_content_type()
+    if content_type.startswith("image/"):
+        ext = _CONTENT_TYPE_EXT.get(content_type, ".png")
+        return f"inline_image{ext}"
+    return None
+
+
+def _ensure_attachment_filename(
+    filename: str, content_type: str | None
+) -> str:
+    path = Path(filename)
+    if path.suffix:
+        return path.name.replace("..", "_") or "attachment.bin"
+    ext = _CONTENT_TYPE_EXT.get(content_type or "", ".bin")
+    stem = path.stem or "attachment"
+    return f"{stem}{ext}".replace("..", "_")
+
+
 def _extract_attachments(msg: email.message.Message) -> list[dict]:
-    attachments = []
+    attachments: list[dict] = []
+    seen: set[tuple[str, int]] = set()
     for part in msg.walk():
-        if "attachment" in part.get("Content-Disposition", ""):
-            filename = part.get_filename()
-            if filename:
-                filename = _decode_header_value(filename)
-            data = part.get_payload(decode=True)
-            attachments.append(
-                {
-                    "filename": filename,
-                    "content_type": part.get_content_type(),
-                    "size": len(data) if data else 0,
-                    "path": None,
-                    "data": data,
-                }
-            )
+        content_disposition = (part.get("Content-Disposition") or "").lower()
+        content_type = part.get_content_type()
+        data = part.get_payload(decode=True)
+        if not data:
+            continue
+
+        is_attachment = "attachment" in content_disposition
+        is_inline_image = content_type.startswith("image/") and (
+            "inline" in content_disposition or part.get("Content-ID")
+        )
+        if not is_attachment and not is_inline_image:
+            continue
+
+        filename = _attachment_filename(part)
+        if not filename:
+            continue
+        filename = _ensure_attachment_filename(filename, content_type)
+        dedupe_key = (filename, len(data))
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+
+        attachments.append(
+            {
+                "filename": filename,
+                "content_type": content_type,
+                "size": len(data),
+                "path": None,
+                "data": data,
+            }
+        )
     return attachments
 
 
@@ -716,12 +765,16 @@ async def poll_imap(self) -> dict:
                                 ]
                             else:
                                 for att in raw_attachments:
-                                    filename = (
+                                    raw_filename = (
                                         att.get("filename") or "attachment.bin"
                                     )
-                                    safe_filename = Path(
-                                        str(filename)
-                                    ).name.replace("..", "_")
+                                    content_type = att.get("content_type")
+                                    safe_filename = (
+                                        _ensure_attachment_filename(
+                                            str(raw_filename),
+                                            content_type,
+                                        )
+                                    )
                                     data: bytes | None = att.get("data")
                                     if data:
                                         unique_filename = f"{uuid.uuid4().hex}_{safe_filename}"

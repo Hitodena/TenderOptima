@@ -1,6 +1,6 @@
 <template>
 	<div>
-	<div class="relative flex overflow-hidden mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 h-[calc(100dvh-5rem)]">
+	<div class="relative flex overflow-y-hidden min-h-0 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 h-[calc(100dvh-5rem)]">
 
 		<div class="shrink-0 border-r border-default flex flex-col"
 			:class="[isMobile && selectedRsId ? 'hidden' : 'flex', 'w-full md:w-64 lg:w-72']">
@@ -94,8 +94,8 @@
 			</div>
 
 			<template v-if="mainTab === 'comparison'">
-				<div class="flex-1 flex flex-col min-h-0">
-					<div class="flex-1 overflow-auto px-3 md:px-5 py-4 min-h-0">
+				<div class="flex-1 flex flex-col min-h-0 min-w-0">
+					<div class="flex-1 overflow-x-auto overflow-y-auto px-3 md:px-5 py-4 min-h-0 min-w-0">
 						<div v-if="loadingComparison" class="space-y-3">
 							<USkeleton v-for="i in 6" :key="i" class="h-10 w-full rounded-lg" />
 						</div>
@@ -109,7 +109,7 @@
 							<UIcon name="i-lucide-users" class="w-10 h-10 opacity-20" />
 							<p class="text-sm">Нет проанализированных ответов</p>
 						</div>
-						<div v-else class="max-w-full overflow-x-auto rounded-xl border border-default">
+						<div v-else class="min-w-0 overflow-x-auto rounded-xl border border-default">
 							<table class="w-max min-w-full text-sm">
 								<thead>
 									<tr class="border-b border-default bg-elevated/50">
@@ -172,20 +172,34 @@
 										</td>
 										<td v-for="supplier in comparison.suppliers" :key="`compliance-${supplier.rs_id}`"
 											class="px-3 py-3 align-middle">
-											<div class="flex items-center gap-2">
-												<UIcon
-													:name="complianceForSupplier(supplier).passed
-														? 'i-lucide-circle-check'
-														: 'i-lucide-circle-x'"
-													class="w-5 h-5 shrink-0"
-													:class="complianceForSupplier(supplier).passed
-														? 'text-success'
-														: 'text-error'"
-												/>
-												<span class="text-xs font-medium">
-													{{ complianceForSupplier(supplier).percent }}%
-												</span>
-											</div>
+											<UIcon
+												:name="complianceForSupplier(supplier).passed
+													? 'i-lucide-circle-check'
+													: 'i-lucide-circle-x'"
+												class="w-5 h-5 shrink-0"
+												:class="complianceForSupplier(supplier).passed
+													? 'text-success'
+													: 'text-error'"
+											/>
+										</td>
+									</tr>
+									<tr class="border-t border-default/50 bg-elevated/20">
+										<td
+											class="sticky left-0 z-10 bg-elevated/95 px-3 py-3 text-xs font-semibold align-middle">
+											Составить письмо
+										</td>
+										<td v-for="supplier in comparison.suppliers" :key="`letter-${supplier.rs_id}`"
+											class="px-3 py-3 align-middle">
+											<UButton
+												v-if="supplierHasLetterMismatches(supplier)"
+												size="xs"
+												variant="outline"
+												leading-icon="i-lucide-mail"
+												@click="openLetterModal(supplier)"
+											>
+												Составить письмо
+											</UButton>
+											<span v-else class="text-xs text-muted">—</span>
 										</td>
 									</tr>
 									<tr class="border-t border-default/50 bg-elevated/20">
@@ -198,7 +212,7 @@
 											<UButton
 												size="xs"
 												variant="outline"
-												leading-icon="i-lucide-mail"
+												leading-icon="i-lucide-sparkles"
 												@click="openImproveModal(supplier)"
 											>
 												Улучшить условия
@@ -303,7 +317,11 @@
 
 									<div v-if="msg.attachments?.length" class="flex flex-wrap gap-2 mt-2">
 										<button v-for="att in msg.attachments" :key="att.filename" type="button"
-											class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-default hover:bg-elevated transition-colors text-xs cursor-pointer"
+											class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-default transition-colors text-xs"
+											:class="att.path
+												? 'hover:bg-elevated cursor-pointer'
+												: 'opacity-50 cursor-not-allowed'"
+											:disabled="!att.path"
 											@click="downloadAttachment(att)">
 											<UIcon :name="fileIcon(att.content_type)"
 												class="w-3.5 h-3.5 text-primary" />
@@ -394,8 +412,8 @@
 										<div class="flex-1 min-w-0">
 											<p class="text-[11px] text-muted">Предложение</p>
 											<p class="text-xs"
-												:class="m.offer_value ? 'text-default' : 'text-muted italic'">
-												{{ m.offer_value ?? 'Не указано' }}
+												:class="m.offer_value ? 'text-default' : 'text-muted'">
+												{{ m.offer_value ?? '—' }}
 											</p>
 											<p v-if="matchOfferChanged(m)" class="text-[10px] text-muted mt-0.5">
 												<span class="line-through">{{ previousMatchValues[m.requirement]
@@ -444,6 +462,17 @@
 							Запустить анализ
 						</UButton>
 					</div>
+					<div v-if="threadLetterMismatches.length" class="pt-1">
+						<UButton
+							block
+							size="sm"
+							variant="outline"
+							leading-icon="i-lucide-mail"
+							@click="openThreadLetterModal"
+						>
+							Составить письмо
+						</UButton>
+					</div>
 				</div>
 			</div>
 		</div>
@@ -454,6 +483,13 @@
 		v-model:open="improveModalOpen"
 		:request-id="id"
 		:supplier="modalSupplier"
+	/>
+	<ResponseMismatchLetterModal
+		v-if="letterModalSupplier"
+		v-model:open="letterModalOpen"
+		:request-id="id"
+		:supplier="letterModalSupplier"
+		:initial-body="letterModalBody"
 	/>
 	<WinnerNotificationModal
 		v-if="modalSupplier"
@@ -479,7 +515,14 @@ import type {
 import { getOfferValueTrend } from '#shared/utils/offerValue'
 import { TZAnalysisRunStatus } from '#shared/types'
 import ImproveConditionsModal from '~/components/ImproveConditionsModal.vue'
+import ResponseMismatchLetterModal from '~/components/ResponseMismatchLetterModal.vue'
 import WinnerNotificationModal from '~/components/WinnerNotificationModal.vue'
+import {
+	buildComparisonSupplierLetterBody,
+	buildEmailMismatchLetterBody,
+	filterNonMatching,
+	supplierHasMismatches,
+} from '#shared/utils/mismatchLetter'
 import { useRunStatusPolling } from '~/composables/useRunStatusPolling'
 import { useIntervalFn } from '@vueuse/core'
 
@@ -729,12 +772,74 @@ const loadingComparison = ref(false)
 const exportingComparison = ref(false)
 
 const improveModalOpen = ref(false)
+const letterModalOpen = ref(false)
 const winnerModalOpen = ref(false)
 const modalSupplier = ref<ComparisonSupplier | null>(null)
+const letterModalSupplier = ref<ComparisonSupplier | null>(null)
+const letterModalBody = ref('')
 
 function openImproveModal(supplier: ComparisonSupplier) {
 	modalSupplier.value = supplier
 	improveModalOpen.value = true
+}
+
+function openLetterModal(supplier: ComparisonSupplier) {
+	letterModalSupplier.value = supplier
+	letterModalBody.value = buildComparisonSupplierLetterBody(
+		supplier,
+		comparison.value?.requirements ?? [],
+	)
+	letterModalOpen.value = true
+}
+
+function openThreadLetterModal() {
+	const thread = selectedThread.value
+	const supplier = selectedThreadAsComparisonSupplier.value
+	if (!thread || !supplier) return
+	letterModalSupplier.value = supplier
+	letterModalBody.value = buildEmailMismatchLetterBody(
+		thread.supplier.company_name,
+		threadLetterMismatches.value,
+	)
+	letterModalOpen.value = true
+}
+
+const threadLetterMismatches = computed(() =>
+	filterNonMatching(requirementMatches.value),
+)
+
+const selectedThreadAsComparisonSupplier = computed((): ComparisonSupplier | null => {
+	const thread = selectedThread.value
+	if (!thread) return null
+	const reqs = comparison.value?.requirements
+		?? requirementMatches.value.map((item) => item.requirement)
+	const values: Record<string, string | null> = {}
+	const statuses: Record<string, string | null> = {}
+	for (const item of requirementMatches.value) {
+		values[item.requirement] = item.offer_value
+		statuses[item.requirement] = item.status
+	}
+	for (const req of reqs) {
+		if (!(req in values)) {
+			values[req] = null
+			statuses[req] = 'not_found'
+		}
+	}
+	return {
+		rs_id: thread.rs_id,
+		company_name: thread.supplier.company_name,
+		main_email: thread.supplier.main_email,
+		values,
+		previous_values: previousMatchValues.value,
+		statuses,
+	}
+})
+
+function supplierHasLetterMismatches(supplier: ComparisonSupplier) {
+	return supplierHasMismatches(
+		supplier,
+		comparison.value?.requirements ?? [],
+	)
 }
 
 function openWinnerModal(supplier: ComparisonSupplier) {
@@ -744,15 +849,11 @@ function openWinnerModal(supplier: ComparisonSupplier) {
 
 function complianceForSupplier(supplier: ComparisonSupplier) {
 	const requirements = comparison.value?.requirements ?? []
-	const total = requirements.length
-	if (total === 0) return { percent: 0, passed: false }
-	let matched = 0
-	for (const req of requirements) {
-		const status = supplier.statuses[req]
-		if (status === 'met' || status === 'partial') matched += 1
-	}
-	const percent = Math.round((matched / total) * 100)
-	return { percent, passed: percent >= 60 }
+	if (requirements.length === 0) return { passed: false }
+	const passed = requirements.every(
+		(req) => supplier.statuses[req] === 'met',
+	)
+	return { passed }
 }
 
 function applyEmailAnalysis(data: EmailAnalysisResponse) {
@@ -971,12 +1072,19 @@ async function commitMatchEdit(idx: number) {
 }
 
 async function downloadAttachment(att: Attachment) {
-	if (!att.path) return
+	if (!att.path) {
+		toast.add({
+			title: 'Файл недоступен для скачивания',
+			color: 'warning',
+		})
+		return
+	}
 	try {
-		const blob = await get<Blob>(
+		const res = await $axios.get(
 			`/requests/attachments/serve?attachment_path=${encodeURIComponent(att.path)}`,
 			{ responseType: 'blob' },
 		)
+		const blob = res.data as Blob
 		const url = URL.createObjectURL(blob)
 		const a = document.createElement('a')
 		a.href = url

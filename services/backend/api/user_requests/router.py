@@ -1,3 +1,4 @@
+import mimetypes
 import uuid
 from pathlib import Path
 from typing import Annotated
@@ -369,10 +370,13 @@ async def serve_attachment(
     await get_request_or_404(request_id, session, current_user)
 
     filename = candidate.name
+    media_type = (
+        mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    )
     return FileResponse(
         path=str(candidate),
         filename=filename,
-        media_type="application/octet-stream",
+        media_type=media_type,
     )
 
 

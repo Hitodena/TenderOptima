@@ -54,9 +54,11 @@
 									v-if="rowsRef[node.rowIndex]"
 									v-model="rowsRef[node.rowIndex]!.text"
 									class="w-full whitespace-pre-wrap min-h-10"
+									:ui="{ base: 'resize-none field-sizing-content' }"
 									size="md"
 									:rows="1"
 									:maxrows="20"
+									:autoresize-delay="50"
 									:placeholder="node.isHeading ? 'Название раздела (необязательно)' : undefined"
 									:readonly="readonly"
 									autoresize
@@ -137,9 +139,11 @@
 								v-if="rowsRef[node.rowIndex]"
 								v-model="rowsRef[node.rowIndex]!.text"
 								class="w-full whitespace-pre-wrap min-h-10"
+								:ui="{ base: 'resize-none field-sizing-content' }"
 								size="md"
 								:rows="1"
 								:maxrows="20"
+								:autoresize-delay="50"
 								:readonly="readonly"
 								autoresize
 							/>

@@ -206,11 +206,56 @@ _KP_ATOMIC_RULES = """\
 оставь с пустым text. Сохраняй нумерацию документа, когда она есть."""
 
 _TECH_EQUIVALENTS = """\
-- Производительность = Production capacity = kg/h = кг/час
+- Производительность = Production capacity = kg/h = кг/час = kg per hour
 - Мощность = Power = kW = кВт
 - Размеры = Dimensions = mm = мм = габариты
-- Материал = Material = AISI 304 = нержавеющая сталь = stainless steel
-- Гарантия = Warranty = guarantee period"""
+- Материал = Material = AISI 304 = AISI 316 = нержавеющая сталь = stainless steel
+- Гарантия = Warranty = guarantee period
+- Сыроизготовитель = Cheese vat = cheese maker = vat
+- Паровой плавитель = Steam melter = batch steam cooker = melter
+- Экструдер-дозатор = Extruder doser = twin-screw extruder = extruder
+- Дренажный туннель = Draining tunnel = drainage tunnel = acidification tunnel
+- Формовочная машина = Moulding machine = molding machine = forming machine
+- Стретчинг-машина = Stretching machine = stretcher = pasta filata stretcher
+- Теплоизоляция = Insulation = thermal insulation
+- Рассол = Brine = salting bath = brine system
+- Уплотнение = Seal = gasket = mechanical seal
+- Моющая головка = CIP spray head = cleaning head = spray ball
+- СИП / CIP = Clean-in-place = SIP station = washing station
+- Пастеризация = Pasteurization = HTST
+- Охлаждение = Cooling = chiller = cooling system
+- Конвейер = Conveyor = belt conveyor = transport
+- Ёмкость = Tank = vessel = vat
+- Датчик = Sensor = transmitter = probe
+- ПЛК / автоматика = PLC = automation = control panel = SCADA
+- Мешалка = Agitator = mixer = stirrer
+- Люк = Manhole = hatch
+- Штуцер = Nozzle = connection = DN = flange
+- Кислотность = Acidity = °T = titratable acidity
+- Сухие вещества = Dry matter = solids content = TS
+- Сырное зерно = Cheese curd = curd = grain
+- Сыворотка = Whey
+- Упаковочная машина = Packaging machine = packing line = bagger
+- Полиэтилен = Polyethylene = PE film = roll
+- Пуансон = Punch = forming punch = mould
+- Опора = Support = adjustable feet = leg
+- Кожух = Guard = protective cover = casing"""
+
+_KP_DIGEST_EXAMPLE_JSON = """\
+{
+  "sections": {
+    "cheese_vat": {
+      "title": "Сыроизготовитель",
+      "summary": "Три сыроизготовителя объёмом 8000 л с мешалкой и нагревом",
+      "facts": [
+        {
+          "ru_text": "Объём сыроизготовителя: 8000 л",
+          "src_quote": "Cheese vat capacity: 8,000 liters"
+        }
+      ]
+    }
+  }
+}"""
 
 
 def _format_rules() -> str:
@@ -535,4 +580,220 @@ def build_heading_names_prompt(
 Ключи должны точно совпадать с переданными. Не добавляй лишних ключей."""
 
     user = "Heading-узлы с пустым text:\n" + "\n".join(lines)
+    return system, user
+
+
+def build_kp_normalize_prompt(
+    chunk: str,
+    *,
+    chunk_idx: int,
+    total_chunks: int,
+    rolling_context: str | None = None,
+) -> tuple[str, str]:
+    """Build prompt to extract KP offerings as Russian digest from a chunk."""
+    system = f"""\
+Ты — эксперт по анализу коммерческих предложений на оборудование. \
+Извлеки из фрагмента КП ВСЕ предложения поставщика и нормализуй их \
+на РУССКОМ языке для последующего сравнения с ТЗ.
+
+КП может быть на английском, итальянском или другом языке — переводи \
+технические факты на русский, сохраняя числа, единицы измерения и \
+стандарты (AISI, DN, °C, бар, кг/ч и т.д.).
+
+## Что извлекать
+
+- Технические характеристики оборудования (мощность, производительность, \
+размеры, материалы, температуры, давления)
+- Комплектацию, количество единиц, модели
+- Условия поставки, гарантии, сроки
+- Автоматику, датчики, управление
+- Инженерные подключения (пар, вода, дренаж)
+- Коммерческие условия, если указаны в фрагменте
+
+## Правила
+
+1. Группируй факты по тематическим разделам оборудования/темам
+2. Ключ раздела — латиница snake_case (cheese_vat, steam_melter, \
+draining_tunnel, packaging, automation, utilities и т.п.)
+3. Каждый факт — атомарное предложение на русском в ru_text
+4. src_quote — дословная цитата из КП на исходном языке (EN/IT)
+5. Не пропускай табличные данные и спецификации
+6. Не включай рекламный текст компании без технического содержания
+
+## Словарь эквивалентов RU/EN
+
+{_TECH_EQUIVALENTS}
+
+## Формат ответа
+
+Верни ТОЛЬКО JSON:
+{_KP_DIGEST_EXAMPLE_JSON}
+
+Если во фрагменте нет технического содержания — верни {{"sections": {{}}}}."""
+
+    parts: list[str] = []
+    if rolling_context:
+        parts.append(rolling_context)
+        parts.append(
+            "Продолжи извлечение. Не повторяй уже извлечённые факты; "
+            "добавляй только новые из текущего фрагмента."
+        )
+    elif chunk_idx == 0:
+        parts.append(
+            "Первый фрагмент КП. Извлекай все технические предложения "
+            "поставщика."
+        )
+    parts.append(
+        f"Фрагмент {chunk_idx + 1} из {total_chunks}.\n"
+        f"### КП (исходный текст):\n{chunk}"
+    )
+    return system, "\n\n".join(parts)
+
+
+def build_section_mapping_prompt(
+    tz_sections: list[tuple[str, str, int]],
+    kp_sections: list[tuple[str, str]],
+) -> tuple[str, str]:
+    """Build prompt to map TZ sections to KP digest sections."""
+    tz_lines = "\n".join(
+        f"- {key}: {title} ({count} требований)"
+        for key, title, count in tz_sections
+    )
+    kp_lines = "\n".join(f"- {key}: {title}" for key, title in kp_sections)
+
+    system = """\
+Ты — эксперт по сопоставлению технических документов. Сопоставь разделы \
+ТЗ с разделами нормализованного КП.
+
+Правила:
+1. Каждый раздел ТЗ должен быть сопоставлен с одним или несколькими \
+разделами КП, где вероятнее всего есть ответы
+2. Если прямого аналога нет — выбери ближайший по смыслу раздел КП \
+(utilities, general, automation и т.п.)
+3. Разделы про инженерные среды (пар, вода, дренаж) → utilities
+4. Общие требования (описание, схемы, гарантия) → general или ближайший
+5. Не оставляй раздел ТЗ без сопоставления
+
+Верни ТОЛЬКО JSON:
+{
+  "mappings": [
+    {
+      "tz_section": "20",
+      "kp_sections": ["cheese_vat", "utilities"]
+    }
+  ]
+}"""
+
+    user = (
+        f"### Разделы ТЗ:\n{tz_lines}\n\n"
+        f"### Разделы КП (нормализованный digest):\n{kp_lines}"
+    )
+    return system, user
+
+
+def _compliance_item_schema() -> str:
+    return """\
+{
+  "items": [
+    {
+      "requirement": "X.Y.Z. текст требования из ТЗ",
+      "requirement_ref": "ТЗ, п. X.Y.Z: «...»",
+      "offer_value": "ответ поставщика на русском или null",
+      "offer_ref": "КП: «цитата из src_quote на EN/IT» или null",
+      "explanation": "обоснование",
+      "status": "met|partial|missing|not_found"
+    }
+  ]
+}"""
+
+
+def build_compliance_prompt(
+    tz_batch: list[str],
+    kp_section_text: str,
+    *,
+    tz_section_key: str,
+    tz_section_title: str,
+    batch_idx: int,
+    total_batches: int,
+) -> tuple[str, str]:
+    """Build per-section monolingual compliance prompt (forced verdict)."""
+    tz_list = "\n".join(f"{i + 1}. {req}" for i, req in enumerate(tz_batch))
+
+    system = f"""\
+Ты — специалист по анализу соответствия тендерных предложений. \
+Сравни требования ТЗ (раздел {tz_section_key}: {tz_section_title}) \
+с предложением поставщика из нормализованного КП.
+
+Батч {batch_idx + 1} из {total_batches}.
+
+## Статусы (ОБЯЗАТЕЛЬНО для КАЖДОГО требования из списка)
+
+- "met"        — КП явно закрывает требование
+- "partial"    — КП упоминает тему, но неполно или с оговорками
+- "missing"    — в КП есть ответ, но он не соответствует требованию
+- "not_found"  — в КП нет информации по требованию (offer_value = null)
+
+## Правила
+
+1. Верни РОВНО одну запись items на КАЖДОЕ требование из списка — \
+не пропускай ни одного
+2. Поле requirement — точная формулировка из списка ТЗ
+3. offer_value — конкретное предложение на русском из digest КП; \
+для not_found — null
+4. offer_ref — цитата src_quote из КП на исходном языке; для not_found — null
+5. Числовые диапазоны: значение в диапазоне → met; «≥600» при «≥400» → met
+6. Технические эквиваленты:
+{_TECH_EQUIVALENTS}
+7. requirement_ref формат: «ТЗ, п. X.Y: «цитата»»
+8. explanation обязателен для partial, missing, not_found; для met — кратко
+
+Верни ТОЛЬКО JSON:
+{_compliance_item_schema()}"""
+
+    user = (
+        f"### Требования ТЗ (раздел {tz_section_key}):\n{tz_list}\n\n"
+        f"### Предложение поставщика (нормализованный КП):\n{kp_section_text}"
+    )
+    return system, user
+
+
+def build_recall_sweep_prompt(
+    tz_batch: list[str],
+    digest_text: str,
+    *,
+    batch_idx: int,
+    total_batches: int,
+) -> tuple[str, str]:
+    """Build recall sweep prompt for still-unmatched requirements."""
+    tz_list = "\n".join(f"{i + 1}. {req}" for i, req in enumerate(tz_batch))
+
+    system = f"""\
+Ты — специалист по поиску соответствий в тендерных документах. \
+Для каждого требования ТЗ найди ответ в ПОЛНОМ digest КП.
+
+Батч {batch_idx + 1} из {total_batches}. Это повторный проход для \
+требований, не найденных ранее — ищи внимательно по всему digest.
+
+## Статусы (ОБЯЗАТЕЛЬНО для КАЖДОГО требования)
+
+- "met"        — найден явный ответ
+- "partial"    — найден частичный ответ
+- "missing"    — найден ответ, но не соответствует
+- "not_found"  — информации нет (offer_value = null)
+
+## Правила
+
+1. Верни РОВНО одну запись на каждое требование
+2. Ищи по всему digest, включая общие разделы
+3. Используй технические эквиваленты:
+{_TECH_EQUIVALENTS}
+4. Если нашёл соответствие — обязательно заполни offer_value и offer_ref
+
+Верни ТОЛЬКО JSON:
+{_compliance_item_schema()}"""
+
+    user = (
+        f"### Требования для повторного поиска:\n{tz_list}\n\n"
+        f"### Полный digest КП:\n{digest_text}"
+    )
     return system, user

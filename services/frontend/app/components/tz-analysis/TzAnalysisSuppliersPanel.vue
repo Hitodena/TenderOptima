@@ -72,7 +72,10 @@
 					{{ getTzSupplierStatusLabel(supplier.status ?? TZAnalysisSupplierStatus.PENDING) }}
 				</UBadge>
 
-				<div v-if="supplier.kp_filenames.length" class="space-y-1">
+				<div
+					v-if="supplier.kp_filenames.length && !hideKpFiles && supplier.status !== TZAnalysisSupplierStatus.PROCESSING"
+					class="space-y-1"
+				>
 					<button
 						v-for="filename in supplier.kp_filenames"
 						:key="`${supplier.id}-${filename}`"
@@ -149,10 +152,12 @@ const props = withDefaults(defineProps<{
 	suppliers: TZAnalysisSupplierItem[]
 	fileAccept: string
 	readonly?: boolean
+	hideKpFiles?: boolean
 	selectedSupplierId?: string | null
 	compact?: boolean
 }>(), {
 	readonly: false,
+	hideKpFiles: false,
 	selectedSupplierId: null,
 	compact: false,
 })

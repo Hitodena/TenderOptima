@@ -157,22 +157,30 @@
 								</div>
 							</template>
 
-							<UButton
+							<div
 								v-if="!isTzConfirmed && !isCompleted"
-								color="warning"
-								variant="solid"
-								size="lg"
-								block
-								class="mb-4"
-								leading-icon="i-lucide-check"
-								:loading="confirmingTz"
-								:disabled="!requirementsRowsNonempty(editableRequirementsTz)"
-								@click="confirmTzRequirements"
+								class="sticky top-0 z-10 -mx-4 mb-4 px-4 pb-4 border-b border-default bg-default/95 backdrop-blur-sm sm:-mx-6 sm:px-6"
 							>
-								Подтвердить требования
-							</UButton>
+								<UButton
+									color="warning"
+									variant="solid"
+									size="lg"
+									block
+									leading-icon="i-lucide-check"
+									:loading="confirmingTz"
+									:disabled="!requirementsRowsNonempty(editableRequirementsTz)"
+									@click="confirmTzRequirements"
+								>
+									Подтвердить требования
+								</UButton>
+							</div>
 
-							<div class="overflow-y-auto pr-1">
+							<div
+								class="overflow-y-auto pr-1"
+								:class="!isTzConfirmed && !isCompleted
+									? 'max-h-[min(58vh,calc(100dvh-18rem))]'
+									: ''"
+							>
 								<RequirementTreeEditor v-if="editableTzCount > 0" :rows="editableRequirementsTz"
 									:scope-id="isTzConfirmed ? 'tz-results' : 'tz-review'"
 									:readonly="isTzConfirmed || isCompleted" show-heading-hint
@@ -188,18 +196,18 @@
 
 							<div
 								v-if="!isTzConfirmed && !isCompleted"
-								class="mt-4 pt-4 border-t border-default"
+								class="mt-4 pt-4 border-t border-default flex justify-center"
 							>
-								<UButton
-									type="button"
-									variant="outline"
-									size="lg"
-									block
-									leading-icon="i-lucide-plus"
-									@click="addTzRequirement"
-								>
-									Добавить требование
-								</UButton>
+								<UDropdownMenu :items="rootAddMenuItems" :ui="{ content: 'min-w-44' }">
+									<UButton
+										type="button"
+										variant="ghost"
+										color="neutral"
+										size="sm"
+										icon="i-lucide-plus"
+										label="Добавить"
+									/>
+								</UDropdownMenu>
 							</div>
 						</UCard>
 					</template>
@@ -211,6 +219,7 @@
 							<TzAnalysisSuppliersPanel v-if="showSuppliersSidebar && analysis?.id"
 								:analysis-id="analysis.id" :suppliers="suppliers" :file-accept="fileAccept"
 								:readonly="isCompleted || isAnalysisClosed"
+								:hide-kp-files="hasSuppliersProcessing || kpAnalyzing"
 								:selected-supplier-id="selectedSupplierId" compact
 								@select="onSelectSupplier"
 								@open-kp="({ supplierId, filename }) => openKpFile(filename, supplierId)"
@@ -243,7 +252,7 @@
 								</UCard>
 
 								<UCard
-									v-if="selectedSupplier && !hasComparisonResults && !isAnalysisClosed"
+									v-if="selectedSupplier && !hasComparisonResults && !isAnalysisClosed && !hasSuppliersProcessing && !kpAnalyzing"
 									class="shadow-sm"
 								>
 									<template #header>
@@ -596,6 +605,7 @@
 </template>
 
 <script lang="ts" setup>
+import type { DropdownMenuItem } from '@nuxt/ui'
 import type {
 	TZAnalysisItem,
 	TZAnalysisKpStats,
@@ -1192,18 +1202,62 @@ const editableTzCount = computed(() =>
 	countRequirementRows(editableRequirementsTz.value),
 )
 
+function requirementRowsSignature(rows: EditableRequirementRow[]): string {
+	return JSON.stringify(
+		rows.map((row) => ({
+			key: row.key,
+			text: row.text,
+			isHeading: row.isHeading ?? false,
+		})),
+	)
+}
+
 function syncEditableRequirements(data: TZAnalysisSession) {
-	editableRequirementsTz.value = flattenRequirementsToRows(data.requirements_tz)
+	const nextTz = flattenRequirementsToRows(data.requirements_tz)
+	if (requirementRowsSignature(nextTz) !== requirementRowsSignature(editableRequirementsTz.value)) {
+		editableRequirementsTz.value = nextTz
+	}
 	const kpSource = data.requirements_kp ?? {}
 	const filenames = data.kp_filenames?.length
 		? data.kp_filenames
 		: data.kp_filename
 			? [data.kp_filename]
 			: Object.keys(kpSource)
-	editableRequirementsKp.value = Object.fromEntries(
+	const nextKp = Object.fromEntries(
 		filenames.map((name) => [name, flattenRequirementsToRows(kpSource[name])]),
 	)
+	const kpKeys = [...new Set([...Object.keys(editableRequirementsKp.value), ...filenames])]
+	const kpChanged = kpKeys.some((name) => {
+		const prev = editableRequirementsKp.value[name] ?? []
+		const next = nextKp[name] ?? []
+		return requirementRowsSignature(prev) !== requirementRowsSignature(next)
+	})
+	if (kpChanged) {
+		editableRequirementsKp.value = nextKp
+	}
 }
+
+function buildAnalysisPollSignature(data: TZAnalysisSession): string {
+	return JSON.stringify({
+		status: data.status,
+		confirmed: data.confirmed,
+		items: data.items?.length ?? 0,
+		requirementsTz: requirementRowsSignature(
+			flattenRequirementsToRows(data.requirements_tz),
+		),
+		suppliers: (data.suppliers ?? []).map((supplier) => ({
+			id: supplier.id,
+			status: supplier.status,
+			kpCount: supplier.kp_filenames.length,
+			primary: supplier.primary_kp_filename,
+		})),
+		kpStats: Object.keys(data.kp_stats ?? {}).sort().join(','),
+		overrides: Object.keys(data.items_overrides ?? {}).length,
+	})
+}
+
+let lastAnalysisPollSignature = ''
+let lastAppliedItemsCount = 0
 
 function nextTopLevelKey(rows: EditableRequirementRow[]): string {
 	const maxTop = rows.reduce((max, row) => {
@@ -1256,6 +1310,28 @@ function addTzHeadingRequirement(parentKey: string) {
 		},
 	])
 }
+
+function addTzRootHeading() {
+	updateEditableRequirementsTz((rows) => [
+		...rows,
+		{ key: nextTopLevelKey(rows), text: '', isHeading: true },
+	])
+}
+
+const rootAddMenuItems = computed((): DropdownMenuItem[][] => [
+	[
+		{
+			label: 'Требование',
+			icon: 'i-lucide-list-plus',
+			onSelect: () => addTzRequirement(),
+		},
+		{
+			label: 'Заголовок',
+			icon: 'i-lucide-heading',
+			onSelect: () => addTzRootHeading(),
+		},
+	],
+])
 
 function removeTzRequirement(index: number) {
 	updateEditableRequirementsTz((rows) =>
@@ -1515,10 +1591,44 @@ function scrollToLetterSection(section: 'mismatch' | 'partial') {
 	})
 }
 
-function applyAnalysis(data: TZAnalysisSession) {
+type ApplyAnalysisOptions = {
+	fromPoll?: boolean
+}
+
+function applyAnalysis(
+	data: TZAnalysisSession,
+	options: ApplyAnalysisOptions = {},
+) {
+	const fromPoll = options.fromPoll === true
+	const pollSignature = buildAnalysisPollSignature(data)
+
+	if (fromPoll) {
+		if (pollSignature === lastAnalysisPollSignature) return
+		lastAnalysisPollSignature = pollSignature
+	} else {
+		lastAnalysisPollSignature = pollSignature
+	}
+
+	const itemsCount = data.items?.length ?? 0
+	const skipRequirementsSync = fromPoll && (
+		data.confirmed
+		|| data.status === TZAnalysisRunStatus.PROCESSING
+	)
+
 	analysis.value = data
-	itemsOverrides.value = { ...(data.items_overrides ?? {}) }
-	syncEditableRequirements(data)
+
+	if (skipRequirementsSync) {
+		const overrides = data.items_overrides ?? {}
+		for (const [key, value] of Object.entries(overrides)) {
+			if (!itemsOverrides.value[key]) {
+				itemsOverrides.value[key] = value
+			}
+		}
+	} else {
+		itemsOverrides.value = { ...(data.items_overrides ?? {}) }
+		syncEditableRequirements(data)
+	}
+
 	ensureSelectedSupplier()
 	if (data.status === TZAnalysisRunStatus.PROCESSING) {
 		processingPhase.value = inferProcessingPhase(data)
@@ -1531,7 +1641,8 @@ function applyAnalysis(data: TZAnalysisSession) {
 		tzPolling.value = true
 	}
 	if (
-		data.confirmed
+		!fromPoll
+		&& data.confirmed
 		&& !userPickedContentTab.value
 		&& !isAnalysisClosed.value
 	) {
@@ -1543,7 +1654,7 @@ function applyAnalysis(data: TZAnalysisSession) {
 	if (
 		data.status === TZAnalysisRunStatus.ACTIVE
 		&& data.confirmed
-		&& (data.items?.length ?? 0) > 0
+		&& itemsCount > 0
 	) {
 		ensureResultsKpExpanded(
 			collectResultsKpKeys(data).filter((key) => {
@@ -1552,8 +1663,11 @@ function applyAnalysis(data: TZAnalysisSession) {
 				return isKpScopedToSupplier(key, supplier.name)
 			}),
 		)
-		restoreOrInitLetterSelection()
+		if (!fromPoll || itemsCount !== lastAppliedItemsCount) {
+			restoreOrInitLetterSelection()
+		}
 	}
+	lastAppliedItemsCount = itemsCount
 }
 
 async function fetchAnalysis() {
@@ -1574,7 +1688,7 @@ async function fetchAnalysis() {
 useRunStatusPolling(
 	tzPolling,
 	async () => get<TZAnalysisSession>(`/tz-analysis/${id.value}`),
-	(data: TZAnalysisSession) => { applyAnalysis(data) },
+	(data: TZAnalysisSession) => { applyAnalysis(data, { fromPoll: true }) },
 	() => {
 		const title = (analysis.value?.items?.length ?? 0) > 0
 			? 'Сравнение ТЗ и КП завершено'

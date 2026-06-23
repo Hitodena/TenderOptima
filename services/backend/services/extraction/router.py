@@ -21,6 +21,7 @@ class ExtractorRouter:
         ".jpg": ImageExtractor,
         ".jpeg": ImageExtractor,
         ".png": ImageExtractor,
+        ".webp": ImageExtractor,
     }
 
     @classmethod

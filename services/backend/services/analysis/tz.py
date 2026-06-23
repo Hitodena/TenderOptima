@@ -1,5 +1,4 @@
 import asyncio
-import re
 from pathlib import Path
 from typing import Literal
 
@@ -17,9 +16,12 @@ from backend.services.extraction.assembler import TextAssembler
 from backend.services.extraction.router import ExtractorRouter
 from backend.services.llm.client import llm_client
 from backend.services.llm.prompts.tz import (
+    build_compliance_prompt,
     build_heading_names_prompt,
     build_kp_chunk_prompt,
-    build_kp_match_chunk_prompt,
+    build_kp_normalize_prompt,
+    build_recall_sweep_prompt,
+    build_section_mapping_prompt,
     build_tz_chunk_prompt,
 )
 from backend.utils.requirements_struct import (
@@ -41,9 +43,13 @@ _router = ExtractorRouter()
 _assembler = TextAssembler()
 
 _ROLLING_SUMMARY_KEYS = 10
+_ROLLING_DIGEST_SECTIONS = 8
 _LLM_CHUNK_MAX_ATTEMPTS = 3
 _LLM_CHUNK_RETRY_DELAY_SEC = 2.0
-_NUMBERED_REQ_LINE_RE = re.compile(r"^\d+\.\s+(.*)$")
+_COMPLIANCE_BATCH_SIZE = 20
+_RECALL_BATCH_SIZE = 20
+_COMPLIANCE_CONCURRENCY = 4
+_MATCH_DIGEST_MAX_CHARS = 28000
 _STATUS_RANK = {
     TZAnalysisStatus.NOT_FOUND: 0,
     TZAnalysisStatus.MISSING: 1,
@@ -72,6 +78,30 @@ class KPExtractResult(BaseModel):
 
 class HeadingNamesResult(BaseModel):
     headings: dict[str, str] = Field(default_factory=dict)
+
+
+class KPDigestFact(BaseModel):
+    ru_text: str
+    src_quote: str = ""
+
+
+class KPDigestSection(BaseModel):
+    title: str = ""
+    summary: str = ""
+    facts: list[KPDigestFact] = Field(default_factory=list)
+
+
+class KPNormalizeResult(BaseModel):
+    sections: dict[str, KPDigestSection] = Field(default_factory=dict)
+
+
+class SectionMappingEntry(BaseModel):
+    tz_section: str
+    kp_sections: list[str] = Field(default_factory=list)
+
+
+class SectionMappingResult(BaseModel):
+    mappings: list[SectionMappingEntry] = Field(default_factory=list)
 
 
 def _build_rolling_summary(
@@ -408,45 +438,585 @@ async def extract_kp_requirements(
     )
 
 
-def _parse_numbered_requirement_batch(batch_text: str) -> list[str]:
-    """Restore requirement strings from a numbered batch produced by chunk_text."""
-    requirements: list[str] = []
-    for line in batch_text.splitlines():
-        stripped = line.strip()
-        if not stripped:
-            continue
-        match = _NUMBERED_REQ_LINE_RE.match(stripped)
-        if match:
-            requirements.append(match.group(1).strip())
-            continue
-        if requirements:
-            requirements[-1] = f"{requirements[-1]} {stripped}"
-    return requirements
-
-
-def _batch_tz_requirements(tz_flat: list[str]) -> list[list[str]]:
-    """Split TZ requirements into LLM-sized batches using chunk_text (8000 chars)."""
-    if not tz_flat:
+def _batch_requirements(
+    requirements: list[str],
+    batch_size: int,
+) -> list[list[str]]:
+    """Split requirements into fixed-size batches."""
+    if not requirements:
         return []
-    numbered = "\n".join(
-        f"{index + 1}. {req}" for index, req in enumerate(tz_flat)
+    return [
+        requirements[index : index + batch_size]
+        for index in range(0, len(requirements), batch_size)
+    ]
+
+
+def _normalize_fact_key(text: str) -> str:
+    return " ".join(text.strip().lower().split())
+
+
+def _merge_kp_digests(parts: list[dict]) -> dict:
+    """Merge partial KP digests from chunked normalization."""
+    merged: dict[str, dict] = {}
+    seen_facts: dict[str, set[str]] = {}
+
+    for part in parts:
+        if not part:
+            continue
+        for key, section in part.items():
+            key_str = str(key)
+            if key_str not in merged:
+                merged[key_str] = {
+                    "title": "",
+                    "summary": "",
+                    "facts": [],
+                }
+                seen_facts[key_str] = set()
+
+            title = str(section.get("title") or "").strip()
+            summary = str(section.get("summary") or "").strip()
+            if title and not merged[key_str]["title"]:
+                merged[key_str]["title"] = title
+            if summary and not merged[key_str]["summary"]:
+                merged[key_str]["summary"] = summary
+            elif summary and summary not in merged[key_str]["summary"]:
+                merged[key_str]["summary"] = (
+                    f"{merged[key_str]['summary']}; {summary}"
+                ).strip("; ")
+
+            for fact in section.get("facts") or []:
+                if not isinstance(fact, dict):
+                    continue
+                ru_text = str(fact.get("ru_text") or "").strip()
+                if not ru_text:
+                    continue
+                norm = _normalize_fact_key(ru_text)
+                if norm in seen_facts[key_str]:
+                    continue
+                seen_facts[key_str].add(norm)
+                merged[key_str]["facts"].append(
+                    {
+                        "ru_text": ru_text,
+                        "src_quote": str(fact.get("src_quote") or "").strip(),
+                    },
+                )
+
+    return merged
+
+
+def _build_digest_rolling_context(
+    digest: dict,
+    *,
+    max_sections: int = _ROLLING_DIGEST_SECTIONS,
+) -> str | None:
+    if not digest:
+        return None
+    keys = sorted(digest.keys())
+    recent = keys[-max_sections:]
+    lines = []
+    for key in recent:
+        section = digest[key]
+        title = str(section.get("title") or key)
+        fact_count = len(section.get("facts") or [])
+        lines.append(f"- {key}: {title} ({fact_count} фактов)")
+    return (
+        f"Уже извлечены разделы КП из предыдущих фрагментов "
+        f"({len(digest)} разделов, {sum(len(v.get('facts') or []) for v in digest.values())} фактов).\n"
+        f"Последние разделы (НЕ повторять факты):\n"
+        + "\n".join(lines)
+        + "\nИзвлекай только НОВЫЕ факты из текущего фрагмента."
     )
-    batches: list[list[str]] = []
-    for batch in chunk_text(numbered):
-        parsed = _parse_numbered_requirement_batch(batch)
-        if parsed:
-            batches.append(parsed)
-    return batches
+
+
+def _format_digest_section(section: dict) -> str:
+    parts: list[str] = []
+    title = str(section.get("title") or "").strip()
+    summary = str(section.get("summary") or "").strip()
+    if title:
+        parts.append(f"## {title}")
+    if summary:
+        parts.append(summary)
+    for index, fact in enumerate(section.get("facts") or [], start=1):
+        if not isinstance(fact, dict):
+            continue
+        ru_text = str(fact.get("ru_text") or "").strip()
+        src_quote = str(fact.get("src_quote") or "").strip()
+        if not ru_text:
+            continue
+        line = f"{index}. {ru_text}"
+        if src_quote:
+            line += f" [источник: «{src_quote}»]"
+        parts.append(line)
+    return "\n".join(parts)
+
+
+def _format_full_digest(digest: dict) -> str:
+    blocks: list[str] = []
+    for key in sorted(digest.keys()):
+        section = digest[key]
+        text = _format_digest_section(section)
+        if text.strip():
+            blocks.append(f"### Раздел {key}\n{text}")
+    return "\n\n".join(blocks)
+
+
+def _compact_digest_for_matching(
+    digest: dict,
+    *,
+    section_keys: list[str] | None = None,
+    max_chars: int = _MATCH_DIGEST_MAX_CHARS,
+) -> str:
+    """Build a compact RU digest for compliance/recall (one LLM context)."""
+    lines: list[str] = []
+    keys = section_keys if section_keys else sorted(digest.keys())
+    for key in keys:
+        section = digest.get(key)
+        if not section:
+            continue
+        title = str(section.get("title") or key).strip()
+        summary = str(section.get("summary") or "").strip()
+        header = f"[{key}] {title}"
+        if summary and summary != title:
+            header = f"{header}: {summary}"
+        lines.append(header)
+        for fact in section.get("facts") or []:
+            if not isinstance(fact, dict):
+                continue
+            ru_text = str(fact.get("ru_text") or "").strip()
+            if not ru_text:
+                continue
+            src_quote = str(fact.get("src_quote") or "").strip()
+            line = f"- {ru_text}"
+            if src_quote:
+                line += f" | «{src_quote[:120]}»"
+            lines.append(line)
+
+    text = "\n".join(lines)
+    if len(text) <= max_chars:
+        return text
+    return text[: max_chars - 20].rstrip() + "\n...[digest обрезан]"
+
+
+def _digest_to_hierarchy(digest: dict) -> dict:
+    """Convert KP digest to RequirementsHierarchy for storage/display."""
+    hierarchy: dict = {}
+    for index, key in enumerate(sorted(digest.keys()), start=1):
+        section = digest[key]
+        title = str(section.get("title") or key).strip()
+        summary = str(section.get("summary") or "").strip()
+        parent_text = title
+        if summary and summary != title:
+            parent_text = f"{title}: {summary}" if title else summary
+
+        children: dict = {}
+        for fact_index, fact in enumerate(section.get("facts") or [], start=1):
+            if not isinstance(fact, dict):
+                continue
+            ru_text = str(fact.get("ru_text") or "").strip()
+            if not ru_text:
+                continue
+            child_key = f"{index}.{fact_index}"
+            children[child_key] = {"text": ru_text, "children": {}}
+
+        hierarchy[str(index)] = {"text": parent_text, "children": children}
+
+    return normalize_tz_requirements(hierarchy)
+
+
+def _group_tz_by_section(tz_flat: list[str]) -> dict[str, list[str]]:
+    """Group flat TZ requirements by top-level section key."""
+    groups: dict[str, list[str]] = {}
+    for requirement in tz_flat:
+        req_key = requirement_key_from_flat(requirement)
+        section = req_key.split(".")[0] if req_key else "other"
+        groups.setdefault(section, []).append(requirement)
+    return groups
+
+
+def _tz_section_title(
+    tz_hierarchy: dict,
+    section_key: str,
+    requirements: list[str],
+) -> str:
+    node = tz_hierarchy.get(section_key)
+    if isinstance(node, dict):
+        text = str(node.get("text") or "").strip()
+        if text:
+            return text[:120]
+    if requirements:
+        sample = requirements[0].split(". ", 1)
+        body = sample[1] if len(sample) > 1 else sample[0]
+        return body[:120]
+    return f"Раздел {section_key}"
+
+
+def _collect_kp_section_text(
+    digest: dict,
+    section_keys: list[str],
+) -> str:
+    blocks: list[str] = []
+    for key in section_keys:
+        section = digest.get(key)
+        if not section:
+            continue
+        text = _format_digest_section(section)
+        if text.strip():
+            blocks.append(f"### {key}\n{text}")
+    if not blocks and digest:
+        blocks.append(_format_full_digest(digest))
+    return "\n\n".join(blocks)
+
+
+async def _llm_call_with_retry(
+    system: str,
+    user: str,
+    result_model: type[BaseModel],
+    *,
+    analysis_id: str,
+    user_id: str,
+    stage: str,
+    context: dict | None = None,
+) -> BaseModel:
+    last_exc: Exception | None = None
+    log_ctx = context or {}
+    for attempt in range(1, _LLM_CHUNK_MAX_ATTEMPTS + 1):
+        try:
+            raw = await llm_client.complete(system, user)
+            return result_model(**raw)
+        except (ValidationError, ValueError, TypeError) as exc:
+            last_exc = exc
+            logger.warning(
+                "Staged analysis LLM attempt failed",
+                analysis_id=analysis_id,
+                user_id=user_id,
+                stage=stage,
+                attempt=attempt,
+                max_attempts=_LLM_CHUNK_MAX_ATTEMPTS,
+                error=str(exc),
+                **log_ctx,
+            )
+            if attempt >= _LLM_CHUNK_MAX_ATTEMPTS:
+                break
+            await asyncio.sleep(_LLM_CHUNK_RETRY_DELAY_SEC)
+
+    assert last_exc is not None
+    raise last_exc
+
+
+async def _llm_normalize_kp_chunk(
+    chunk: str,
+    rolling_context: str | None,
+    chunk_idx: int,
+    total_chunks: int,
+    *,
+    analysis_id: str,
+    user_id: str,
+) -> dict:
+    system, user = build_kp_normalize_prompt(
+        chunk,
+        chunk_idx=chunk_idx,
+        total_chunks=total_chunks,
+        rolling_context=rolling_context,
+    )
+    parsed = await _llm_call_with_retry(
+        system,
+        user,
+        KPNormalizeResult,
+        analysis_id=analysis_id,
+        user_id=user_id,
+        stage="kp_normalize",
+        context={"chunk": chunk_idx + 1, "total": total_chunks},
+    )
+    return {
+        key: section.model_dump() for key, section in parsed.sections.items()
+    }
+
+
+async def _normalize_kp_to_digest(
+    kp_text: str,
+    *,
+    analysis_id: str,
+    user_id: str,
+    kp_name: str,
+) -> dict:
+    """Stage 1: extract KP offerings as Russian structured digest."""
+    cleaned = clean_text(kp_text)
+    chunks = chunk_text(cleaned)
+    if not chunks:
+        logger.warning(
+            "KP normalization skipped",
+            analysis_id=analysis_id,
+            user_id=user_id,
+            kp_name=kp_name,
+            reason="empty_text",
+        )
+        return {}
+
+    logger.info(
+        "KP normalization started",
+        analysis_id=analysis_id,
+        user_id=user_id,
+        kp_name=kp_name,
+        text_chars=len(cleaned),
+        chunks=len(chunks),
+    )
+
+    partials: list[dict] = []
+    rolling_ctx: str | None = None
+    running_digest: dict = {}
+
+    for index, chunk in enumerate(chunks):
+        logger.info(
+            "KP normalize chunk processing",
+            analysis_id=analysis_id,
+            user_id=user_id,
+            kp_name=kp_name,
+            chunk=index + 1,
+            total=len(chunks),
+            chunk_chars=len(chunk),
+        )
+        partial = await _llm_normalize_kp_chunk(
+            chunk,
+            rolling_ctx,
+            index,
+            len(chunks),
+            analysis_id=analysis_id,
+            user_id=user_id,
+        )
+        partials.append(partial)
+        running_digest = _merge_kp_digests([running_digest, partial])
+        rolling_ctx = _build_digest_rolling_context(running_digest)
+        logger.info(
+            "KP normalize chunk done",
+            analysis_id=analysis_id,
+            user_id=user_id,
+            kp_name=kp_name,
+            chunk=index + 1,
+            total=len(chunks),
+            sections=len(running_digest),
+            facts=sum(
+                len(section.get("facts") or [])
+                for section in running_digest.values()
+            ),
+        )
+
+    digest = _merge_kp_digests(partials)
+    logger.info(
+        "KP normalization finished",
+        analysis_id=analysis_id,
+        user_id=user_id,
+        kp_name=kp_name,
+        sections=len(digest),
+        facts=sum(
+            len(section.get("facts") or []) for section in digest.values()
+        ),
+    )
+    return digest
+
+
+async def _llm_map_sections(
+    tz_sections: list[tuple[str, str, int]],
+    kp_sections: list[tuple[str, str]],
+    *,
+    analysis_id: str,
+    user_id: str,
+    kp_name: str,
+) -> dict[str, list[str]]:
+    """Stage 3: map TZ sections to KP digest sections."""
+    if not kp_sections:
+        return {key: [] for key, _, _ in tz_sections}
+
+    system, user = build_section_mapping_prompt(tz_sections, kp_sections)
+    try:
+        parsed = await _llm_call_with_retry(
+            system,
+            user,
+            SectionMappingResult,
+            analysis_id=analysis_id,
+            user_id=user_id,
+            stage="section_mapping",
+            context={"kp_name": kp_name},
+        )
+        mapping = {
+            entry.tz_section: entry.kp_sections for entry in parsed.mappings
+        }
+    except Exception as exc:
+        logger.warning(
+            "Section mapping failed, using fallback",
+            analysis_id=analysis_id,
+            user_id=user_id,
+            kp_name=kp_name,
+            error=str(exc),
+        )
+        mapping = {}
+
+    kp_keys = [key for key, _ in kp_sections]
+    fallback_key = "general" if "general" in kp_keys else kp_keys[0]
+    result: dict[str, list[str]] = {}
+    for tz_key, _, _ in tz_sections:
+        mapped = mapping.get(tz_key) or []
+        cleaned = [key for key in mapped if key in kp_keys]
+        if not cleaned:
+            cleaned = kp_keys if len(kp_keys) <= 3 else [fallback_key]
+        result[tz_key] = cleaned
+    return result
+
+
+async def _llm_compliance_batch(
+    tz_batch: list[str],
+    kp_section_text: str,
+    *,
+    tz_section_key: str,
+    tz_section_title: str,
+    batch_idx: int,
+    total_batches: int,
+    analysis_id: str,
+    user_id: str,
+    kp_name: str,
+) -> list[TZAnalysisItem]:
+    """Stage 4: forced compliance verdict for a TZ batch."""
+    if not kp_section_text.strip():
+        return [
+            TZAnalysisItem(
+                requirement=req,
+                requirement_ref=format_tz_requirement_ref(
+                    requirement_key_from_flat(req),
+                    None,
+                    req,
+                ),
+                offer_value=None,
+                offer_ref=None,
+                explanation="В КП не найдена информация по требованию.",
+                status=TZAnalysisStatus.NOT_FOUND,
+                kp_name=kp_name,
+            )
+            for req in tz_batch
+        ]
+
+    system, user = build_compliance_prompt(
+        tz_batch,
+        kp_section_text,
+        tz_section_key=tz_section_key,
+        tz_section_title=tz_section_title,
+        batch_idx=batch_idx,
+        total_batches=total_batches,
+    )
+    parsed = await _llm_call_with_retry(
+        system,
+        user,
+        TZAnalysisResult,
+        analysis_id=analysis_id,
+        user_id=user_id,
+        stage="compliance",
+        context={
+            "kp_name": kp_name,
+            "tz_section": tz_section_key,
+            "batch": batch_idx + 1,
+        },
+    )
+    by_requirement = {
+        requirement_key_from_flat(item.requirement)
+        or item.requirement.strip(): item.model_copy(
+            update={"kp_name": kp_name},
+        )
+        for item in parsed.items
+    }
+    items: list[TZAnalysisItem] = []
+    for req in tz_batch:
+        req_key = requirement_key_from_flat(req) or req.strip()
+        item = by_requirement.get(req_key) or by_requirement.get(req.strip())
+        if item is None:
+            item = TZAnalysisItem(
+                requirement=req,
+                requirement_ref=format_tz_requirement_ref(
+                    requirement_key_from_flat(req),
+                    None,
+                    req,
+                ),
+                offer_value=None,
+                offer_ref=None,
+                explanation="В КП не найдена информация по требованию.",
+                status=TZAnalysisStatus.NOT_FOUND,
+                kp_name=kp_name,
+            )
+        elif item.requirement.strip() != req.strip():
+            item = item.model_copy(update={"requirement": req})
+        items.append(item)
+    return _ensure_item_refs(items)
+
+
+async def _llm_recall_batch(
+    tz_batch: list[str],
+    digest_text: str,
+    *,
+    batch_idx: int,
+    total_batches: int,
+    analysis_id: str,
+    user_id: str,
+    kp_name: str,
+) -> list[TZAnalysisItem]:
+    """Stage 5: recall sweep for still-unmatched requirements."""
+    system, user = build_recall_sweep_prompt(
+        tz_batch,
+        digest_text,
+        batch_idx=batch_idx,
+        total_batches=total_batches,
+    )
+    parsed = await _llm_call_with_retry(
+        system,
+        user,
+        TZAnalysisResult,
+        analysis_id=analysis_id,
+        user_id=user_id,
+        stage="recall_sweep",
+        context={"kp_name": kp_name, "batch": batch_idx + 1},
+    )
+    by_requirement = {
+        requirement_key_from_flat(item.requirement)
+        or item.requirement.strip(): item.model_copy(
+            update={"kp_name": kp_name},
+        )
+        for item in parsed.items
+    }
+    items: list[TZAnalysisItem] = []
+    for req in tz_batch:
+        req_key = requirement_key_from_flat(req) or req.strip()
+        item = by_requirement.get(req_key) or by_requirement.get(req.strip())
+        if item is None:
+            continue
+        if item.requirement.strip() != req.strip():
+            item = item.model_copy(update={"requirement": req})
+        items.append(item)
+    return _ensure_item_refs(items)
 
 
 def _status_rank(status: TZAnalysisStatus) -> int:
     return _STATUS_RANK.get(status, 0)
 
 
-def _should_keep_searching(item: TZAnalysisItem | None) -> bool:
-    if item is None:
-        return True
-    return item.status != TZAnalysisStatus.MET
+def _summarize_found(found: dict[str, TZAnalysisItem]) -> dict[str, int]:
+    """Return match counters for progress logging."""
+    return {
+        "found_total": len(found),
+        "met": sum(
+            1 for item in found.values() if item.status == TZAnalysisStatus.MET
+        ),
+        "partial": sum(
+            1
+            for item in found.values()
+            if item.status == TZAnalysisStatus.PARTIAL
+        ),
+        "missing": sum(
+            1
+            for item in found.values()
+            if item.status == TZAnalysisStatus.MISSING
+        ),
+        "not_found": sum(
+            1
+            for item in found.values()
+            if item.status == TZAnalysisStatus.NOT_FOUND
+        ),
+    }
 
 
 def _merge_match_item(
@@ -499,59 +1069,259 @@ def _ensure_item_refs(items: list[TZAnalysisItem]) -> list[TZAnalysisItem]:
     return updated
 
 
-async def _llm_match_kp_chunk(
-    tz_batch: list[str],
-    kp_chunk: str,
+def _needs_recall(item: TZAnalysisItem | None) -> bool:
+    if item is None:
+        return True
+    return item.status == TZAnalysisStatus.NOT_FOUND
+
+
+async def _run_staged_kp_analysis(
+    kp_text: str,
+    tz_flat: list[str],
+    tz_hierarchy: dict,
     kp_name: str,
     *,
-    already_found: list[str],
-    kp_chunk_idx: int,
-    total_kp_chunks: int,
-    tz_batch_idx: int,
-    total_tz_batches: int,
     analysis_id: str,
     user_id: str,
-) -> list[TZAnalysisItem]:
-    system, user = build_kp_match_chunk_prompt(
-        tz_batch,
-        kp_chunk,
-        kp_name,
-        already_found=already_found,
-        kp_chunk_idx=kp_chunk_idx,
-        total_kp_chunks=total_kp_chunks,
-        tz_batch_idx=tz_batch_idx,
-        total_tz_batches=total_tz_batches,
+) -> tuple[list[TZAnalysisItem], dict]:
+    """Run full staged KP analysis pipeline."""
+    logger.info(
+        "Staged KP analysis started",
+        analysis_id=analysis_id,
+        user_id=user_id,
+        kp_name=kp_name,
+        tz_requirements=len(tz_flat),
     )
-    last_exc: Exception | None = None
-    for attempt in range(1, _LLM_CHUNK_MAX_ATTEMPTS + 1):
-        try:
-            raw = await llm_client.complete(system, user)
-            result = TZAnalysisResult(**raw)
-            items = [
-                item.model_copy(update={"kp_name": kp_name})
-                for item in result.items
-                if item.status != TZAnalysisStatus.NOT_FOUND
-            ]
-            return _ensure_item_refs(items)
-        except (ValidationError, ValueError, TypeError) as exc:
-            last_exc = exc
-            logger.warning(
-                "KP match chunk LLM attempt failed",
+    digest = await _normalize_kp_to_digest(
+        kp_text,
+        analysis_id=analysis_id,
+        user_id=user_id,
+        kp_name=kp_name,
+    )
+    if not digest:
+        logger.warning(
+            "Staged KP analysis: empty digest",
+            analysis_id=analysis_id,
+            user_id=user_id,
+            kp_name=kp_name,
+        )
+        return (
+            _build_not_found_items(tz_flat, {}, kp_name=kp_name),
+            {},
+        )
+
+    tz_groups = _group_tz_by_section(tz_flat)
+    tz_sections = [
+        (
+            section_key,
+            _tz_section_title(tz_hierarchy, section_key, reqs),
+            len(reqs),
+        )
+        for section_key, reqs in sorted(tz_groups.items())
+    ]
+    kp_sections = [
+        (key, str(section.get("title") or key))
+        for key, section in sorted(digest.items())
+    ]
+
+    section_map = await _llm_map_sections(
+        tz_sections,
+        kp_sections,
+        analysis_id=analysis_id,
+        user_id=user_id,
+        kp_name=kp_name,
+    )
+    logger.info(
+        "Section mapping finished",
+        analysis_id=analysis_id,
+        user_id=user_id,
+        kp_name=kp_name,
+        tz_sections=len(tz_groups),
+        kp_sections=len(digest),
+    )
+
+    found: dict[str, TZAnalysisItem] = {}
+    total_compliance_batches = sum(
+        len(_batch_requirements(reqs, _COMPLIANCE_BATCH_SIZE))
+        for reqs in tz_groups.values()
+    )
+    logger.info(
+        "Staged compliance started",
+        analysis_id=analysis_id,
+        user_id=user_id,
+        kp_name=kp_name,
+        tz_sections=len(tz_groups),
+        kp_sections=len(digest),
+        requirements=len(tz_flat),
+        compliance_batches=total_compliance_batches,
+    )
+
+    compliance_jobs: list[tuple[str, str, list[str], str, int, int]] = []
+    for section_key, requirements in sorted(tz_groups.items()):
+        kp_keys = section_map.get(section_key, [])
+        kp_text_block = _compact_digest_for_matching(
+            digest,
+            section_keys=kp_keys or None,
+            max_chars=_MATCH_DIGEST_MAX_CHARS,
+        )
+        if not kp_text_block.strip():
+            kp_text_block = _compact_digest_for_matching(digest)
+        section_title = _tz_section_title(
+            tz_hierarchy,
+            section_key,
+            requirements,
+        )
+        batches = _batch_requirements(requirements, _COMPLIANCE_BATCH_SIZE)
+        for batch_idx, tz_batch in enumerate(batches):
+            compliance_jobs.append(
+                (
+                    section_key,
+                    section_title,
+                    tz_batch,
+                    kp_text_block,
+                    batch_idx,
+                    len(batches),
+                ),
+            )
+
+    sem = asyncio.Semaphore(_COMPLIANCE_CONCURRENCY)
+
+    async def _run_compliance_job(
+        job: tuple[str, str, list[str], str, int, int],
+        step: int,
+    ) -> list[TZAnalysisItem]:
+        (
+            section_key,
+            section_title,
+            tz_batch,
+            kp_text_block,
+            batch_idx,
+            section_batches,
+        ) = job
+        async with sem:
+            logger.info(
+                "Compliance batch processing",
                 analysis_id=analysis_id,
                 user_id=user_id,
                 kp_name=kp_name,
-                kp_chunk=kp_chunk_idx + 1,
-                tz_batch=tz_batch_idx + 1,
-                attempt=attempt,
-                max_attempts=_LLM_CHUNK_MAX_ATTEMPTS,
-                error=str(exc),
+                step=step,
+                total=total_compliance_batches,
+                tz_section=section_key,
+                section_title=section_title[:80],
+                section_batch=batch_idx + 1,
+                section_batches=section_batches,
+                requirements=len(tz_batch),
             )
-            if attempt >= _LLM_CHUNK_MAX_ATTEMPTS:
-                break
-            await asyncio.sleep(_LLM_CHUNK_RETRY_DELAY_SEC)
+            items = await _llm_compliance_batch(
+                tz_batch,
+                kp_text_block,
+                tz_section_key=section_key,
+                tz_section_title=section_title,
+                batch_idx=batch_idx,
+                total_batches=section_batches,
+                analysis_id=analysis_id,
+                user_id=user_id,
+                kp_name=kp_name,
+            )
+            logger.info(
+                "Compliance batch done",
+                analysis_id=analysis_id,
+                user_id=user_id,
+                kp_name=kp_name,
+                step=step,
+                total=total_compliance_batches,
+                tz_section=section_key,
+                batch_met=sum(
+                    1 for item in items if item.status == TZAnalysisStatus.MET
+                ),
+                batch_items=len(items),
+            )
+            return items
 
-    assert last_exc is not None
-    raise last_exc
+    compliance_results = await asyncio.gather(
+        *[
+            _run_compliance_job(job, step)
+            for step, job in enumerate(compliance_jobs, start=1)
+        ],
+    )
+    for items in compliance_results:
+        for item in items:
+            _merge_match_item(found, item, kp_name=kp_name)
+
+    logger.info(
+        "Staged compliance finished",
+        analysis_id=analysis_id,
+        user_id=user_id,
+        kp_name=kp_name,
+        **_summarize_found(found),
+    )
+
+    recall_candidates = [
+        req
+        for req in tz_flat
+        if _needs_recall(found.get(requirement_key_from_flat(req) or ""))
+    ]
+    if recall_candidates:
+        compact_digest = _compact_digest_for_matching(digest)
+        recall_batches = _batch_requirements(
+            recall_candidates,
+            _RECALL_BATCH_SIZE,
+        )
+        logger.info(
+            "Recall sweep started",
+            analysis_id=analysis_id,
+            user_id=user_id,
+            kp_name=kp_name,
+            candidates=len(recall_candidates),
+            batches=len(recall_batches),
+            digest_chars=len(compact_digest),
+        )
+        for batch_idx, tz_batch in enumerate(recall_batches):
+            logger.info(
+                "Recall batch processing",
+                analysis_id=analysis_id,
+                user_id=user_id,
+                kp_name=kp_name,
+                batch=batch_idx + 1,
+                total=len(recall_batches),
+                requirements=len(tz_batch),
+            )
+            items = await _llm_recall_batch(
+                tz_batch,
+                compact_digest,
+                batch_idx=batch_idx,
+                total_batches=len(recall_batches),
+                analysis_id=analysis_id,
+                user_id=user_id,
+                kp_name=kp_name,
+            )
+            for item in items:
+                _merge_match_item(found, item, kp_name=kp_name)
+            logger.info(
+                "Recall batch done",
+                analysis_id=analysis_id,
+                user_id=user_id,
+                kp_name=kp_name,
+                batch=batch_idx + 1,
+                total=len(recall_batches),
+                **_summarize_found(found),
+            )
+
+    items = _build_not_found_items(tz_flat, found, kp_name=kp_name)
+    hierarchy = _digest_to_hierarchy(digest)
+    logger.info(
+        "Staged KP analysis finished",
+        analysis_id=analysis_id,
+        user_id=user_id,
+        kp_name=kp_name,
+        matched=sum(
+            1 for item in items if item.status != TZAnalysisStatus.NOT_FOUND
+        ),
+        not_found=sum(
+            1 for item in items if item.status == TZAnalysisStatus.NOT_FOUND
+        ),
+    )
+    return items, hierarchy
 
 
 def _build_not_found_items(
@@ -585,165 +1355,45 @@ def _build_not_found_items(
     return _ensure_item_refs(items)
 
 
-def _matches_to_kp_hierarchy(items: list[TZAnalysisItem]) -> dict:
-    """Build diagnostic KP hierarchy from direct match results."""
-    partial: dict = {}
-    for item in items:
-        if not item.offer_value or not str(item.offer_value).strip():
-            continue
-        req_key = requirement_key_from_flat(item.requirement)
-        offer_key = key_from_reference(item.offer_ref) or req_key
-        if not offer_key:
-            continue
-        partial[offer_key] = {
-            "text": str(item.offer_value).strip(),
-            "children": {},
-        }
-    return normalize_tz_requirements(partial)
-
-
-async def _match_kp_text_against_tz(
-    kp_text: str,
-    tz_flat: list[str],
-    kp_name: str,
-    *,
-    analysis_id: str,
-    user_id: str,
-    found: dict[str, TZAnalysisItem] | None = None,
-) -> dict[str, TZAnalysisItem]:
-    """Search KP text chunks for TZ requirement matches."""
-    cleaned = clean_text(kp_text)
-    kp_chunks = chunk_text(cleaned)
-    if not kp_chunks:
-        logger.warning(
-            "KP match skipped",
-            analysis_id=analysis_id,
-            user_id=user_id,
-            kp_name=kp_name,
-            reason="empty_text",
-        )
-        return found or {}
-
-    tz_batches = _batch_tz_requirements(tz_flat)
-    if not tz_batches:
-        return found or {}
-
-    matches = dict(found or {})
-    total_kp_chunks = len(kp_chunks)
-    total_tz_batches = len(tz_batches)
-
-    logger.info(
-        "KP direct match started",
-        analysis_id=analysis_id,
-        user_id=user_id,
-        kp_name=kp_name,
-        tz_items=len(tz_flat),
-        kp_chunks=total_kp_chunks,
-        tz_batches=total_tz_batches,
-    )
-
-    for kp_idx, kp_chunk in enumerate(kp_chunks):
-        already_found = [
-            item.requirement
-            for key, item in sorted(matches.items())
-            if not _should_keep_searching(item)
-        ]
-
-        logger.info(
-            "KP match chunk processing",
-            analysis_id=analysis_id,
-            user_id=user_id,
-            kp_name=kp_name,
-            kp_chunk=kp_idx + 1,
-            total_kp_chunks=total_kp_chunks,
-            chunk_chars=len(kp_chunk),
-        )
-
-        for tz_idx, tz_batch in enumerate(tz_batches):
-            pending = [
-                req
-                for req in tz_batch
-                if _should_keep_searching(
-                    matches.get(requirement_key_from_flat(req) or "")
-                )
-            ]
-            if not pending:
-                continue
-
-            items = await _llm_match_kp_chunk(
-                pending,
-                kp_chunk,
-                kp_name,
-                already_found=already_found,
-                kp_chunk_idx=kp_idx,
-                total_kp_chunks=total_kp_chunks,
-                tz_batch_idx=tz_idx,
-                total_tz_batches=total_tz_batches,
-                analysis_id=analysis_id,
-                user_id=user_id,
-            )
-            for item in items:
-                _merge_match_item(matches, item, kp_name=kp_name)
-
-        logger.info(
-            "KP match chunk done",
-            analysis_id=analysis_id,
-            user_id=user_id,
-            kp_name=kp_name,
-            kp_chunk=kp_idx + 1,
-            total_kp_chunks=total_kp_chunks,
-            matched=len(matches),
-        )
-
-    logger.info(
-        "KP direct match finished",
-        analysis_id=analysis_id,
-        user_id=user_id,
-        kp_name=kp_name,
-        matched=len(matches),
-        tz_items=len(tz_flat),
-    )
-    return matches
-
-
 async def _match_kp_paths_against_tz(
     kp_paths: list[Path],
     tz_flat: list[str],
+    tz_hierarchy: dict,
     kp_name: str,
     *,
     analysis_id: str,
     user_id: str,
 ) -> tuple[list[TZAnalysisItem], dict]:
-    """Match one or more KP files against TZ and return items + hierarchy."""
-    found: dict[str, TZAnalysisItem] = {}
+    """Match one or more KP files against TZ using staged pipeline."""
+    combined_text_parts: list[str] = []
     for kp_path in kp_paths:
         logger.info(
-            "KP file match started",
+            "KP file read started",
             analysis_id=analysis_id,
             user_id=user_id,
             kp_name=kp_name,
             path=str(kp_path),
         )
         raw_text = _assembler.assemble(_router.get(kp_path).extract(kp_path))
-        found = await _match_kp_text_against_tz(
-            raw_text,
-            tz_flat,
-            kp_name,
-            analysis_id=analysis_id,
-            user_id=user_id,
-            found=found,
-        )
+        combined_text_parts.append(raw_text)
         logger.info(
-            "KP file match finished",
+            "KP file read finished",
             analysis_id=analysis_id,
             user_id=user_id,
             kp_name=kp_name,
             path=str(kp_path),
-            matched=len(found),
+            chars=len(raw_text),
         )
 
-    items = _build_not_found_items(tz_flat, found, kp_name=kp_name)
-    return items, _matches_to_kp_hierarchy(items)
+    combined_text = "\n\n".join(combined_text_parts)
+    return await _run_staged_kp_analysis(
+        combined_text,
+        tz_flat,
+        tz_hierarchy,
+        kp_name,
+        analysis_id=analysis_id,
+        user_id=user_id,
+    )
 
 
 async def extract_tz_from_file(
@@ -801,6 +1451,7 @@ async def analyze_kp_files(
         items, hierarchy = await _match_kp_paths_against_tz(
             [kp_path],
             tz_flat,
+            tz_hierarchy,
             kp_name,
             analysis_id=analysis_id,
             user_id=user_id,
@@ -858,6 +1509,7 @@ async def analyze_supplier_kps(
         items, hierarchy = await _match_kp_paths_against_tz(
             kp_paths,
             tz_flat,
+            tz_hierarchy,
             display_name,
             analysis_id=analysis_id,
             user_id=user_id,
