@@ -48,20 +48,29 @@ def _requirements_list(request: Request) -> list[str]:
 
 def _match_maps_from_analysis(
     raw: dict | None,
-) -> tuple[dict[str, str | None], dict[str, str | None]]:
+) -> tuple[
+    dict[str, str | None],
+    dict[str, str | None],
+    dict[str, str | None],
+    dict[str, str | None],
+]:
     if not raw:
-        return {}, {}
+        return {}, {}, {}, {}
     try:
         result = EmailAnalysisResult(**raw)
     except Exception:
-        return {}, {}
+        return {}, {}, {}, {}
     values: dict[str, str | None] = {}
     statuses: dict[str, str | None] = {}
+    explanations: dict[str, str | None] = {}
+    corrected_from: dict[str, str | None] = {}
     for match in result.matches:
         req = match.requirement.strip()
         values[req] = match.offer_value
         statuses[req] = match.status.value
-    return values, statuses
+        explanations[req] = match.explanation
+        corrected_from[req] = match.corrected_from
+    return values, statuses, explanations, corrected_from
 
 
 async def _latest_analyzed_incoming(session, rs_id: uuid.UUID):
@@ -97,11 +106,20 @@ async def _build_comparison(
             req: None for req in requirements
         }
         statuses: dict[str, str | None] = {req: None for req in requirements}
+        explanations: dict[str, str | None] = {
+            req: None for req in requirements
+        }
+        corrected_from: dict[str, str | None] = {
+            req: None for req in requirements
+        }
         if analyzed and analyzed.analysis:
             analysis = analyzed.analysis
-            match_values, match_statuses = _match_maps_from_analysis(
-                analysis.raw_llm_response
-            )
+            (
+                match_values,
+                match_statuses,
+                match_explanations,
+                match_corrected,
+            ) = _match_maps_from_analysis(analysis.raw_llm_response)
             prev = analysis.previous_parameters
             prev_map = prev if isinstance(prev, dict) else {}
             for req in requirements:
@@ -109,6 +127,10 @@ async def _build_comparison(
                     values[req] = match_values[req]
                 if req in match_statuses:
                     statuses[req] = match_statuses[req]
+                if req in match_explanations:
+                    explanations[req] = match_explanations[req]
+                if req in match_corrected:
+                    corrected_from[req] = match_corrected[req]
                 if req in prev_map and prev_map[req] is not None:
                     previous_values[req] = str(prev_map[req])
         suppliers_rows.append(
@@ -118,6 +140,8 @@ async def _build_comparison(
                 main_email=rs.supplier.main_email,
                 values=values,
                 previous_values=previous_values,
+                explanations=explanations,
+                corrected_from=corrected_from,
                 statuses=statuses,
             )
         )

@@ -3,14 +3,6 @@ import type { ComparisonSupplier, RequirementMatch } from '#shared/types'
 export const LETTER_MISMATCH_HEADER = 'Несоответствующие параметры:'
 export const LETTER_PARTIAL_HEADER = 'Требуют уточнения/дополнения:'
 
-export function formatMismatchLetterDate(): string {
-	return new Intl.DateTimeFormat('ru-RU', {
-		day: 'numeric',
-		month: 'long',
-		year: 'numeric',
-	}).format(new Date())
-}
-
 export function mismatchReason(match: RequirementMatch): string {
 	if (match.explanation?.trim()) return match.explanation.trim()
 	if (match.status === 'missing') {
@@ -90,10 +82,6 @@ export function buildEmailMismatchLetterBody(
 	lines.push(
 		'',
 		`Просим предоставить дополненное/уточненное предложение не позже ${deadline}.`,
-		'',
-		'С уважением,',
-		'',
-		formatMismatchLetterDate(),
 	)
 	return lines.join('\n')
 }

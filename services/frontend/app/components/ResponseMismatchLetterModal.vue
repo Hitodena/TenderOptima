@@ -2,20 +2,38 @@
 	<UModal
 		v-model:open="isOpen"
 		:title="`Составить письмо — ${supplier.company_name}`"
-		:ui="{ content: 'max-w-5xl' }"
+		:ui="EMAIL_LETTER_MODAL_UI"
 	>
 		<template #body>
-			<div class="flex flex-col md:flex-row gap-4 min-h-96">
+			<div class="flex flex-col md:flex-row gap-4 min-h-[min(70vh,40rem)]">
 				<div class="flex-1 min-w-0 space-y-4">
-					<UFormField label="Email">
-						<UInput :model-value="supplier.main_email" readonly class="w-full" />
-					</UFormField>
+					<SupplierLetterReadonlyEmail :email="supplier.main_email" />
 					<UFormField label="Тема">
 						<UInput v-model="subject" class="w-full" />
 					</UFormField>
 					<UFormField label="Сообщение">
-						<UTextarea v-model="body" :rows="14" class="w-full" autoresize />
+						<UTextarea v-model="body" :rows="20" class="w-full" autoresize />
 					</UFormField>
+					<div>
+						<p class="text-sm font-semibold mb-1">Вложения</p>
+						<p class="text-xs text-muted mb-2">(договор, спецификация и др.)</p>
+						<UFileUpload
+							:model-value="filesToUpload"
+							multiple
+							accept=".pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp"
+							:interactive="false"
+							layout="list"
+							class="w-full min-h-20"
+							@update:model-value="onFilesUpdate"
+						>
+							<template #actions="{ open }">
+								<UButton type="button" variant="outline" size="sm" @click="open()">
+									<UIcon name="i-lucide-paperclip" class="w-4 h-4" />
+									Добавить файлы
+								</UButton>
+							</template>
+						</UFileUpload>
+					</div>
 					<UAlert v-if="error" color="error" variant="soft" :description="error" />
 					<div class="flex justify-end gap-2 pt-2">
 						<UButton variant="outline" color="neutral" @click="close">
@@ -40,8 +58,10 @@
 </template>
 
 <script lang="ts" setup>
-import type { ComparisonSupplier, EmailTemplate } from '#shared/types'
+import type { Attachment, ComparisonSupplier, EmailTemplate } from '#shared/types'
+import { EMAIL_LETTER_MODAL_UI } from '#shared/constants/emailModal'
 import EmailTemplateSidebar from '~/components/EmailTemplateSidebar.vue'
+import SupplierLetterReadonlyEmail from '~/components/SupplierLetterReadonlyEmail.vue'
 
 const props = defineProps<{
 	requestId: string
@@ -56,12 +76,18 @@ const toast = useToast()
 
 const subject = ref('Уточнение коммерческого предложения')
 const body = ref('')
+const filesToUpload = ref<File[]>([])
 const sending = ref(false)
 const error = ref('')
+
+function onFilesUpdate(newFiles: File[] | null | undefined) {
+	filesToUpload.value = newFiles ?? []
+}
 
 function resetForm() {
 	subject.value = 'Уточнение коммерческого предложения'
 	body.value = props.initialBody
+	filesToUpload.value = []
 	error.value = ''
 }
 
@@ -81,11 +107,27 @@ async function send() {
 	sending.value = true
 	error.value = ''
 	try {
+		let attachmentPaths: string[] | undefined
+		if (filesToUpload.value.length > 0) {
+			const uploadFormData = new FormData()
+			for (const file of filesToUpload.value) {
+				uploadFormData.append('files', file)
+			}
+			const uploaded = await post<Attachment[]>(
+				`/requests/${props.requestId}/attachments`,
+				uploadFormData,
+			)
+			attachmentPaths = uploaded
+				.map((a) => a.path)
+				.filter((p): p is string => Boolean(p))
+		}
+
 		await post(
 			`/requests/${props.requestId}/suppliers/${props.supplier.rs_id}/improvement-request`,
 			{
 				subject: subject.value.trim(),
 				body: body.value.trim(),
+				attachment_paths: attachmentPaths ?? null,
 			},
 		)
 		toast.add({

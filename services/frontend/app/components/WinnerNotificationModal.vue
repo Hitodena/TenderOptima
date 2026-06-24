@@ -2,64 +2,59 @@
 	<UModal
 		v-model:open="isOpen"
 		title="Отправить уведомление победителю"
-		:ui="{ content: 'max-w-5xl' }"
+		:ui="EMAIL_LETTER_MODAL_UI"
 	>
 		<template #body>
-			<div class="flex flex-col md:flex-row gap-4 min-h-96">
-				<div class="flex-1 min-w-0 space-y-4">
-					<div class="rounded-lg border border-success/30 bg-success/5 p-4">
-						<p class="text-xs font-medium text-success mb-1">
-							Выбранный победитель:
-						</p>
-						<p class="text-sm font-semibold">{{ supplier.company_name }}</p>
-						<p class="text-xs text-success mt-1">
-							Email: {{ supplier.main_email }}
-						</p>
-					</div>
-					<UFormField label="Тема письма">
-						<UInput v-model="subject" class="w-full" />
-					</UFormField>
-					<UFormField label="Текст письма">
-						<UTextarea v-model="body" :rows="10" class="w-full" autoresize />
-					</UFormField>
-					<div>
-						<p class="text-sm font-semibold mb-1">Вложения</p>
-						<p class="text-xs text-muted mb-2">(договор, спецификация и др.)</p>
-						<UFileUpload
-							:model-value="filesToUpload"
-							multiple
-							accept=".pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp"
-							:interactive="false"
-							layout="list"
-							class="w-full min-h-20"
-							@update:model-value="filesToUpload = $event"
-						>
-							<template #actions="{ open }">
-								<UButton type="button" variant="outline" size="sm" @click="open()">
-									<UIcon name="i-lucide-paperclip" class="w-4 h-4" />
-									Добавить файлы
-								</UButton>
-							</template>
-						</UFileUpload>
-					</div>
-					<UAlert v-if="error" color="error" variant="soft" :description="error" />
-					<div class="flex justify-end gap-2 pt-2">
-						<UButton variant="outline" color="neutral" @click="close">
-							Отменить
-						</UButton>
-						<UButton
-							color="success"
-							leading-icon="i-lucide-send"
-							:loading="sending"
-							:disabled="!subject.trim() || !body.trim()"
-							@click="send"
-						>
-							Отправить уведомление
-						</UButton>
-					</div>
+			<div class="space-y-4">
+				<div class="rounded-lg border border-success/30 bg-success/5 p-4">
+					<p class="text-xs font-medium text-success mb-1">
+						Выбранный победитель:
+					</p>
+					<p class="text-sm font-semibold">{{ supplier.company_name }}</p>
+					<p class="text-xs text-success mt-1">
+						Email: {{ supplier.main_email }}
+					</p>
 				</div>
-				<div class="w-full md:w-72 shrink-0 min-h-64 md:min-h-0">
-					<EmailTemplateSidebar @select="applyTemplate" />
+				<UFormField label="Тема письма">
+					<UInput v-model="subject" class="w-full" />
+				</UFormField>
+				<UFormField label="Текст письма">
+					<UTextarea v-model="body" :rows="18" class="w-full" autoresize />
+				</UFormField>
+				<div>
+					<p class="text-sm font-semibold mb-1">Вложения</p>
+					<p class="text-xs text-muted mb-2">(договор, спецификация и др.)</p>
+					<UFileUpload
+						:model-value="filesToUpload"
+						multiple
+						accept=".pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp"
+						:interactive="false"
+						layout="list"
+						class="w-full min-h-20"
+						@update:model-value="onFilesUpdate"
+					>
+						<template #actions="{ open }">
+							<UButton type="button" variant="outline" size="sm" @click="open()">
+								<UIcon name="i-lucide-paperclip" class="w-4 h-4" />
+								Добавить файлы
+							</UButton>
+						</template>
+					</UFileUpload>
+				</div>
+				<UAlert v-if="error" color="error" variant="soft" :description="error" />
+				<div class="flex justify-end gap-2 pt-2">
+					<UButton variant="outline" color="neutral" @click="close">
+						Отменить
+					</UButton>
+					<UButton
+						color="success"
+						leading-icon="i-lucide-send"
+						:loading="sending"
+						:disabled="!subject.trim() || !body.trim()"
+						@click="send"
+					>
+						Отправить уведомление
+					</UButton>
 				</div>
 			</div>
 		</template>
@@ -67,8 +62,8 @@
 </template>
 
 <script lang="ts" setup>
-import type { Attachment, ComparisonSupplier, EmailTemplate } from '#shared/types'
-import EmailTemplateSidebar from '~/components/EmailTemplateSidebar.vue'
+import type { Attachment, ComparisonSupplier } from '#shared/types'
+import { EMAIL_LETTER_MODAL_UI } from '#shared/constants/emailModal'
 
 const props = defineProps<{
 	requestId: string
@@ -90,29 +85,23 @@ function defaultSubject() {
 	return 'Поздравляем! Ваше предложение признано лучшим'
 }
 
-function defaultBody(companyName: string) {
-	return `Уважаемый ${companyName}!
+function defaultBody() {
+	return `Добрый день.
 
 Поздравляем! Ваше коммерческое предложение признано лучшим в рамках проведённого тендера.
 
-Мы готовы заключить с вами договор на поставку товаров/услуг на условиях, указанных в вашем предложении.
+Мы готовы заключить с вами договор на поставку товаров/услуг на условиях, указанных в вашем предложении.`
+}
 
-С уважением.`
+function onFilesUpdate(newFiles: File[] | null | undefined) {
+	filesToUpload.value = newFiles ?? []
 }
 
 function resetForm() {
 	subject.value = defaultSubject()
-	body.value = defaultBody(props.supplier.company_name)
+	body.value = defaultBody()
 	filesToUpload.value = []
 	error.value = ''
-}
-
-function applyTemplate(template: EmailTemplate) {
-	subject.value = template.subject
-	body.value = template.body.replace(
-		/\{company_name\}/g,
-		props.supplier.company_name,
-	)
 }
 
 function close() {
@@ -163,7 +152,11 @@ async function send() {
 	}
 }
 
-watch(isOpen, (open) => {
-	if (open) resetForm()
-})
+watch(
+	() => [isOpen.value, props.supplier.rs_id] as const,
+	([open]) => {
+		if (open) resetForm()
+	},
+	{ immediate: true },
+)
 </script>

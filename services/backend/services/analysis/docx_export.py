@@ -166,8 +166,6 @@ def build_clarification_docx(
         f"не позже {deadline}."
     )
     doc.add_paragraph()
-    doc.add_paragraph("С уважением,")
-    doc.add_paragraph()
     doc.add_paragraph(format_ru_date())
 
     buffer = io.BytesIO()
@@ -249,8 +247,6 @@ def build_clarification_preview(
             "",
             f"Просим предоставить дополненное/уточненное предложение "
             f"не позже {deadline}.",
-            "",
-            "С уважением,",
             "",
             format_ru_date(),
         ]

@@ -5,7 +5,7 @@
         " :description="step === 'params'
             ? 'Заполните описание и укажите дополнительные параметры'
             : 'Проверьте и отредактируйте письмо перед отправкой'
-            " :ui="{ content: 'max-w-5xl' }">
+            " :ui="EMAIL_LETTER_MODAL_UI">
         <template #body>
             <div v-if="step === 'params'" class="flex flex-col max-h-[min(80vh,42rem)]">
                 <div class="flex-1 min-h-0 overflow-y-auto space-y-6 pr-1">
@@ -156,6 +156,7 @@ import type {
     UserResponse,
     UserUpdate,
 } from "#shared/types"
+import { EMAIL_LETTER_MODAL_UI } from "#shared/constants/emailModal"
 import { getApiErrorDetail } from "#shared/utils/apiError"
 
 const props = defineProps<{
@@ -217,7 +218,7 @@ function getSupplierWord(count: number): string {
 
 const uploadDescription = computed(() => {
     const sizeMb = Math.round(MAX_UPLOAD_SIZE / 1024 / 1024)
-    return `Добавьте до ${MAX_UPLOAD_FILES} файлов (PDF, DOC/DOCX, XLS/XLSX, TXT, JPG/PNG/WEBP). Максимум ${MAX_UPLOAD_FILES} файла, до ${sizeMb} МБ каждый`
+    return `Добавьте до ${MAX_UPLOAD_FILES} файлов (PDF, DOCX, XLS/XLSX, TXT, JPG/PNG/WEBP). Максимум ${MAX_UPLOAD_FILES} файла, до ${sizeMb} МБ каждый`
 })
 
 function loadFromRequest() {

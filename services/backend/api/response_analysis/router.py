@@ -13,7 +13,11 @@ from backend.api.response_analysis.schemas import (
 )
 from backend.db.dao import ResponseAnalysisDAO
 from backend.db.models import EmailMessage, Request, RequestSupplier, User
-from backend.enums import EmailMessageDirection, TZAnalysisRunStatus
+from backend.enums import (
+    EmailMessageDirection,
+    TZAnalysisRunStatus,
+    TZAnalysisStatus,
+)
 from backend.schemas.analysis import EmailAnalysisResult
 from backend.services.analysis.email_queue import (
     queue_email_analysis,
@@ -216,7 +220,17 @@ async def patch_response_analysis(
             req = patch_match.requirement.strip()
             if req not in by_req:
                 continue
-            by_req[req]["offer_value"] = patch_match.offer_value
+            entry = by_req[req]
+            old_value = entry.get("offer_value")
+            new_value = patch_match.offer_value
+            if new_value == old_value:
+                continue
+            if old_value is not None and str(old_value).strip():
+                entry["corrected_from"] = str(old_value)
+            entry["offer_value"] = new_value
+            if new_value is not None and str(new_value).strip():
+                entry["status"] = TZAnalysisStatus.MET.value
+                entry["explanation"] = None
         data["matches"] = list(by_req.values())
     await ResponseAnalysisDAO.update_fields(
         session, row.id, raw_llm_response=data

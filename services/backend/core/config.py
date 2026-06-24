@@ -7,7 +7,7 @@ from backend import ENV_FILE
 
 ALLOWED_CONTENT_TYPES: set[str] = {
     "application/pdf",
-    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/vnd.ms-excel",
     "image/jpeg",
     "image/png",

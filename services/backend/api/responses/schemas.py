@@ -180,6 +180,8 @@ class ComparisonSupplier(BaseModel):
     main_email: str
     values: dict[str, str | None]
     previous_values: dict[str, str | None]
+    explanations: dict[str, str | None] = {}
+    corrected_from: dict[str, str | None] = {}
     statuses: dict[str, str | None]
 
 

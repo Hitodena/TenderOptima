@@ -52,7 +52,9 @@ services:
       target: base
     image: tenderoptima/migrate:latest
     container_name: tenderoptima_migrate
-    command: alembic -c backend/alembic.ini upgrade head
+    command: >
+      sh -c "alembic -c backend/alembic.ini upgrade head
+      && python -m backend.scripts.basic_email_templates"
     env_file:
       - ./services/backend/.env
     depends_on:

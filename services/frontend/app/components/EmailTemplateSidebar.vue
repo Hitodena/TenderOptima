@@ -75,7 +75,7 @@
 		<UModal
 			v-model:open="formOpen"
 			:title="formMode === 'create' ? 'Новый шаблон' : 'Редактировать шаблон'"
-			:ui="{ content: 'max-w-3xl' }"
+			:ui="EMAIL_LETTER_MODAL_UI"
 		>
 			<template #body>
 				<div class="space-y-4">
@@ -88,7 +88,7 @@
 					<UFormField label="Текст письма">
 						<UTextarea
 							v-model="formBody"
-							:rows="12"
+							:rows="16"
 							class="w-full"
 							autoresize
 							placeholder="Текст письма. Можно использовать {company_name} для подстановки названия компании."
@@ -110,6 +110,7 @@
 
 <script lang="ts" setup>
 import type { EmailTemplate } from '#shared/types'
+import { EMAIL_LETTER_MODAL_UI } from '#shared/constants/emailModal'
 
 const emit = defineEmits<{
 	select: [template: EmailTemplate]

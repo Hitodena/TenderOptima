@@ -65,6 +65,7 @@ class RequirementMatch(BaseModel):
     offer_value: str | None = None
     explanation: str | None = None
     status: TZAnalysisStatus
+    corrected_from: str | None = None
 
 
 class EmailAnalysisResult(BaseModel):

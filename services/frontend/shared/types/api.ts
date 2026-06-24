@@ -231,9 +231,11 @@ export interface ThreadSummary {
 	rs_id: string;
 	supplier: Supplier;
 	last_message: {
+		id: string;
 		body: string | null;
 		received_at: string | null;
 		direction: 'incoming' | 'outgoing';
+		subject?: string | null;
 	} | null;
 	message_count: number;
 	unread: boolean;
@@ -280,6 +282,7 @@ export interface RequirementMatch {
 	offer_value: string | null;
 	explanation: string | null;
 	status: TZAnalysisStatus;
+	corrected_from?: string | null;
 }
 
 export interface EmailAnalysisResponse {
@@ -296,6 +299,8 @@ export interface ComparisonSupplier {
 	main_email: string;
 	values: Record<string, string | null>;
 	previous_values: Record<string, string | null>;
+	explanations?: Record<string, string | null>;
+	corrected_from?: Record<string, string | null>;
 	statuses: Record<string, string | null>;
 }
 

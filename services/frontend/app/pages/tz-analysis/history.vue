@@ -49,10 +49,6 @@
 									<span v-else-if="item.status === TZAnalysisRunStatus.DRAFT" class="truncate">
 										Файлы не загружены
 									</span>
-									<UBadge v-if="item.status === TZAnalysisRunStatus.ACTIVE" color="primary"
-										variant="subtle" size="sm">
-										{{ item.match_score }}%
-									</UBadge>
 									<span class="flex items-center gap-1 shrink-0">
 										<UIcon name="i-lucide-calendar" class="w-3 h-3" />
 										{{ formatDate(item.created_at) }}

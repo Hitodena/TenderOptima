@@ -219,7 +219,7 @@
 							<TzAnalysisSuppliersPanel v-if="showSuppliersSidebar && analysis?.id"
 								:analysis-id="analysis.id" :suppliers="suppliers" :file-accept="fileAccept"
 								:readonly="isCompleted || isAnalysisClosed"
-								:hide-kp-files="hasSuppliersProcessing || kpAnalyzing"
+								:hide-kp-files="isKpProcessing"
 								:selected-supplier-id="selectedSupplierId" compact
 								@select="onSelectSupplier"
 								@open-kp="({ supplierId, filename }) => openKpFile(filename, supplierId)"
@@ -235,7 +235,7 @@
 								</div>
 								<template v-else>
 								<UCard
-									v-if="hasSuppliersProcessing && isTzConfirmed"
+									v-if="showKpProcessingBanner"
 									class="shadow-sm"
 								>
 									<div class="flex flex-col gap-1 py-4 text-muted">
@@ -252,7 +252,7 @@
 								</UCard>
 
 								<UCard
-									v-if="selectedSupplier && !hasComparisonResults && !isAnalysisClosed && !hasSuppliersProcessing && !kpAnalyzing"
+									v-if="showSupplierKpFilesCard"
 									class="shadow-sm"
 								>
 									<template #header>
@@ -285,7 +285,7 @@
 										description="Анализ завершён без сравнения с КП. Этот раздел недоступен." />
 								</template>
 
-								<template v-else-if="isTzConfirmed && !hasComparisonResults && !isCompleted">
+								<template v-else-if="isTzConfirmed && !hasComparisonResults && !isCompleted && !isKpProcessing">
 									<div class="flex flex-wrap items-center gap-2">
 										<UButton color="warning" variant="solid" :loading="kpAnalyzing"
 											:disabled="!canRunKpAnalysis" @click="runKpAnalysis">
@@ -302,7 +302,7 @@
 										description="Сравнение с КП не выполнялось. Анализ завершён — запуск сравнения недоступен." />
 								</template>
 
-								<template v-else-if="hasComparisonResults">
+								<template v-else-if="showComparisonResultsCard">
 									<div
 										v-if="hasPendingSuppliers && !isCompleted"
 										class="flex flex-wrap items-center gap-2"
@@ -476,10 +476,10 @@
 
 		<UModal v-model:open="showLetterModal" title="Письмо поставщику"
 			description="Письмо формируется по основному КП. Снимите галочки у пунктов, которые не нужно включать."
-			:ui="{ content: 'sm:max-w-4xl' }">
+			:ui="EMAIL_LETTER_MODAL_UI">
 			<template #body>
 				<div class="grid grid-cols-1 md:grid-cols-[15rem_minmax(0,1fr)] gap-5 min-h-0">
-					<aside class="flex flex-col gap-4 min-h-0 md:max-h-[62vh]">
+					<aside class="flex flex-col gap-4 min-h-0 md:max-h-[72vh]">
 						<div class="space-y-3 shrink-0">
 							<p v-if="selectedSupplier" class="text-xs text-muted">
 									Поставщик:
@@ -569,13 +569,13 @@
 							</div>
 						</aside>
 
-						<div ref="letterDocumentRef" class="relative min-h-[58vh]">
+						<div ref="letterDocumentRef" class="relative min-h-[72vh]">
 							<UTextarea
 								v-if="tzSelectedIndices.length > 0"
 								ref="letterTextareaRef"
 								v-model="letterEditorText"
 								class="w-full"
-								:ui="{ base: 'h-[58vh] resize-none overflow-y-auto font-[inherit] leading-relaxed' }"
+								:ui="{ base: 'h-[72vh] resize-none overflow-y-auto font-[inherit] leading-relaxed' }"
 								size="md"
 								:rows="20"
 								@update:model-value="onLetterEditorInput"
@@ -642,6 +642,7 @@ import {
 	type EditableRequirementRow,
 } from '#shared/utils/requirementsStruct'
 import { getApiErrorDetail, isSubscriptionApiError } from '#shared/utils/apiError'
+import { EMAIL_LETTER_MODAL_UI } from '#shared/constants/emailModal'
 import {
 	canStartModule2Work,
 	module2WorkBlockMessage,
@@ -665,7 +666,7 @@ const toast = useToast()
 function openSubscriptionProfile(): void {
 	void navigateTo(subscriptionProfilePath())
 }
-const { formatDate, formatLetterDate } = useFormatDate()
+const { formatDate } = useFormatDate()
 const { public: publicConfig } = useRuntimeConfig()
 
 const MAX_UPLOAD_SIZE = publicConfig.maxTzUploadSize as number
@@ -805,6 +806,12 @@ const hasSuppliersProcessing = computed(() =>
 		(supplier) => supplier.status === TZAnalysisSupplierStatus.PROCESSING,
 	),
 )
+const isKpProcessing = computed(() =>
+	hasSuppliersProcessing.value || kpAnalyzing.value,
+)
+const showKpProcessingBanner = computed(() =>
+	isKpProcessing.value && isTzConfirmed.value,
+)
 const kpAnalysisStarted = computed(() =>
 	hasSuppliersProcessing.value
 	|| suppliers.value.some(
@@ -922,19 +929,9 @@ const visibleContentTabItems = computed(() => {
 const showSuppliersSidebar = computed(() =>
 	isTzConfirmed.value && !isAnalysisClosed.value,
 )
-const selectedSupplierStats = computed(() => {
-	const primary = selectedSupplierPrimaryKp.value
-	const stats = primary ? analysis.value?.kp_stats?.[primary] : null
-	if (stats) return stats
-	const items = visibleKpItemGroups.value.flatMap((group) => group.items)
-	return {
-		match_score: 0,
-		met_count: items.filter((item) => item.status === 'met').length,
-		partial_count: items.filter((item) => item.status === 'partial').length,
-		missing_count: items.filter((item) => item.status === 'missing').length,
-		not_found_count: items.filter((item) => item.status === 'not_found').length,
-	}
-})
+const selectedSupplierStats = computed(() =>
+	computeStatsFromItems(itemsForSupplier(selectedSupplier.value)),
+)
 
 const visibleKpItemGroups = computed(() => {
 	if (suppliers.value.length === 0) {
@@ -1144,6 +1141,37 @@ async function setPrimaryKp(scopedKpFilename: string | null) {
 	}
 }
 
+function allItemViewsWithOverrides(): TZItemView[] {
+	if (!analysis.value) return []
+	return applyItemOverrides(analysis.value.items)
+		.map((item, index) => ({ ...item, _index: index }))
+}
+
+function itemsForSupplier(
+	supplier: TZAnalysisSupplierItem | null,
+): TZItemView[] {
+	const items = allItemViewsWithOverrides()
+	if (!supplier) return items
+	return items.filter((item) =>
+		isKpScopedToSupplier(getItemKpKey(item), supplier.name),
+	)
+}
+
+function computeStatsFromItems(items: TZAnalysisItem[]): TZAnalysisKpStats {
+	const met = items.filter((item) => item.status === 'met').length
+	const partial = items.filter((item) => item.status === 'partial').length
+	const missing = items.filter((item) => item.status === 'missing').length
+	const not_found = items.filter((item) => item.status === 'not_found').length
+	const total = items.length
+	return {
+		match_score: total === 0 ? 0 : Math.round((met + 0.5 * partial) / total * 100),
+		met_count: met,
+		partial_count: partial,
+		missing_count: missing,
+		not_found_count: not_found,
+	}
+}
+
 function getItemKpKey(item: TZAnalysisItem): string {
 	const filenames = displayKpFilenames.value
 	return item.kp_name || filenames[0] || '_default'
@@ -1163,7 +1191,11 @@ function belongsToPrimaryKp(item: TZAnalysisItem): boolean {
 }
 
 function getKpStats(kpKey: string): TZAnalysisKpStats | null {
-	return analysis.value?.kp_stats?.[kpKey] ?? null
+	const items = allItemViewsWithOverrides().filter(
+		(item) => getItemKpKey(item) === kpKey,
+	)
+	if (items.length === 0) return null
+	return computeStatsFromItems(items)
 }
 
 function selectPrimaryKpLetterItems(kpFilename: string | null | undefined) {
@@ -1200,6 +1232,19 @@ function collectResultsKpKeys(data: TZAnalysisSession): string[] {
 
 const editableTzCount = computed(() =>
 	countRequirementRows(editableRequirementsTz.value),
+)
+const hasTzRequirements = computed(() => editableTzCount.value > 0)
+const showSupplierKpFilesCard = computed(() =>
+	Boolean(selectedSupplier.value)
+	&& !isAnalysisClosed.value
+	&& isTzConfirmed.value
+	&& hasTzRequirements.value
+	&& (isKpProcessing.value || !hasComparisonResults.value),
+)
+const showComparisonResultsCard = computed(() =>
+	hasComparisonResults.value
+	&& !isKpProcessing.value
+	&& visibleKpItemGroups.value.length > 0,
 )
 
 function requirementRowsSignature(rows: EditableRequirementRow[]): string {
@@ -1469,11 +1514,7 @@ function buildDraftLetterParagraphs(): string[] {
 	const deadline = docxDeadline.value.trim() || '7 дней'
 	lines.push(
 		'',
-		`Просим предоставить дополненное/уточненное предложение не позже ${deadline}.`,
-		'',
-		'С уважением,',
-		'',
-		formatLetterDate(),
+		`${LETTER_DEADLINE_PREFIX}${deadline}.`,
 	)
 	return lines
 }
@@ -1518,13 +1559,7 @@ function currentLetterParagraphs(): string[] {
 
 function letterClosingText(): string {
 	const deadline = docxDeadline.value.trim() || '7 дней'
-	return [
-		`${LETTER_DEADLINE_PREFIX}${deadline}.`,
-		'',
-		'С уважением,',
-		'',
-		formatLetterDate(),
-	].join('\n\n')
+	return `${LETTER_DEADLINE_PREFIX}${deadline}.`
 }
 
 function patchLetterClosingInEditor() {
@@ -2014,17 +2049,26 @@ function isTzSelectable(status: TZAnalysisStatus) {
 async function updateItemStatus(index: number, status: TZAnalysisStatus) {
 	if (!analysis.value?.id || overrideSaving.value) return
 	overrideSaving.value = true
+	const prevOverrides = { ...itemsOverrides.value }
+	const overrideKey = String(index)
 	const nextOverrides = {
 		...itemsOverrides.value,
-		[String(index)]: { status },
+		[overrideKey]: { status },
 	}
+	itemsOverrides.value = nextOverrides
 	try {
-		const updated = await patch<TZAnalysisSession>(
+		await patch<TZAnalysisSession>(
 			`/tz-analysis/${analysis.value.id}/items-overrides`,
 			{ overrides: nextOverrides },
 		)
-		applyAnalysis(updated)
+		if (analysis.value) {
+			analysis.value = {
+				...analysis.value,
+				items_overrides: { ...nextOverrides },
+			}
+		}
 	} catch (e: unknown) {
+		itemsOverrides.value = prevOverrides
 		const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
 		toast.add({
 			title: typeof detail === 'string' ? detail : 'Не удалось сохранить статус',

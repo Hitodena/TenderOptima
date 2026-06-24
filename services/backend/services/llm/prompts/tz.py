@@ -205,42 +205,6 @@ _KP_ATOMIC_RULES = """\
 узлы с ключами «исходныйКлюч/1», «исходныйКлюч/2». Родительский узел \
 оставь с пустым text. Сохраняй нумерацию документа, когда она есть."""
 
-_TECH_EQUIVALENTS = """\
-- Производительность = Production capacity = kg/h = кг/час = kg per hour
-- Мощность = Power = kW = кВт
-- Размеры = Dimensions = mm = мм = габариты
-- Материал = Material = AISI 304 = AISI 316 = нержавеющая сталь = stainless steel
-- Гарантия = Warranty = guarantee period
-- Сыроизготовитель = Cheese vat = cheese maker = vat
-- Паровой плавитель = Steam melter = batch steam cooker = melter
-- Экструдер-дозатор = Extruder doser = twin-screw extruder = extruder
-- Дренажный туннель = Draining tunnel = drainage tunnel = acidification tunnel
-- Формовочная машина = Moulding machine = molding machine = forming machine
-- Стретчинг-машина = Stretching machine = stretcher = pasta filata stretcher
-- Теплоизоляция = Insulation = thermal insulation
-- Рассол = Brine = salting bath = brine system
-- Уплотнение = Seal = gasket = mechanical seal
-- Моющая головка = CIP spray head = cleaning head = spray ball
-- СИП / CIP = Clean-in-place = SIP station = washing station
-- Пастеризация = Pasteurization = HTST
-- Охлаждение = Cooling = chiller = cooling system
-- Конвейер = Conveyor = belt conveyor = transport
-- Ёмкость = Tank = vessel = vat
-- Датчик = Sensor = transmitter = probe
-- ПЛК / автоматика = PLC = automation = control panel = SCADA
-- Мешалка = Agitator = mixer = stirrer
-- Люк = Manhole = hatch
-- Штуцер = Nozzle = connection = DN = flange
-- Кислотность = Acidity = °T = titratable acidity
-- Сухие вещества = Dry matter = solids content = TS
-- Сырное зерно = Cheese curd = curd = grain
-- Сыворотка = Whey
-- Упаковочная машина = Packaging machine = packing line = bagger
-- Полиэтилен = Polyethylene = PE film = roll
-- Пуансон = Punch = forming punch = mould
-- Опора = Support = adjustable feet = leg
-- Кожух = Guard = protective cover = casing"""
-
 _KP_DIGEST_EXAMPLE_JSON = """\
 {
   "sections": {
@@ -470,25 +434,19 @@ def build_kp_match_chunk_prompt(
     kp_chunk: str,
     kp_name: str,
     *,
-    already_found: list[str],
     kp_chunk_idx: int,
     total_kp_chunks: int,
     tz_batch_idx: int,
     total_tz_batches: int,
 ) -> tuple[str, str]:
     tz_list = "\n".join(f"{i + 1}. {req}" for i, req in enumerate(tz_batch))
-    found_list = (
-        "\n".join(f"- {req}" for req in already_found)
-        if already_found
-        else "Пока ничего не найдено в предыдущих фрагментах КП."
-    )
 
-    system = f"""\
+    system = """\
 Ты — специалист по анализу тендерных предложений. В текущем фрагменте КП \
 найди ответы поставщика на требования заказчика из списка ТЗ.
 
-Фрагмент КП {kp_chunk_idx + 1} из {total_kp_chunks}. \
-Батч требований ТЗ {tz_batch_idx + 1} из {total_tz_batches}.
+КП может быть на любом языке. Сопоставляй по смыслу, числам, единицам \
+измерения и техническим параметрам — не требуй дословного совпадения формулировок.
 
 ## Статусы
 
@@ -498,60 +456,54 @@ def build_kp_match_chunk_prompt(
 
 ## Правила
 
-1. Ищи только в ТЕКУЩЕМ фрагменте КП — это исходный текст документа, \
-не сжатая выжимка
+1. Ищи только в ТЕКУЩЕМ фрагменте КП — это исходный текст документа
 2. Возвращай item ТОЛЬКО если во фрагменте есть явная информация по \
 требованию ТЗ
 3. НЕ возвращай status "not_found" — если во фрагменте нет ответа, \
 просто пропусти требование
-4. НЕ повторяй требования из списка «Уже найденные» — они закрыты \
-предыдущими фрагментами
-5. Ищи предложения поставщика (товар, характеристики, срок, цена), \
+4. Ищи предложения поставщика (товар, характеристики, срок, цена), \
 не процедурный текст
-6. Технические эквиваленты RU/EN:
-{_TECH_EQUIVALENTS}
-7. Числовые диапазоны: значение в диапазоне → met; «≥600» при «≥400» → met
-8. requirement_ref ОБЯЗАТЕЛЕН. Формат: «ТЗ, п. X.Y.Z: «цитата из ТЗ»». \
+5. Числовые диапазоны: значение в диапазоне → met; «≥600» при «≥400» → met
+6. requirement_ref ОБЯЗАТЕЛЕН. Формат: «ТЗ, п. X.Y.Z: «цитата из ТЗ»». \
 НЕ указывай номер страницы — только пункт документа.
-9. offer_ref ОБЯЗАТЕЛЕН, когда offer_value не null. \
+7. offer_ref ОБЯЗАТЕЛЕН, когда offer_value не null. \
 Формат: «КП, п. Y: «цитата из КП»» или «КП: «цитата»», если пункт неизвестен.
-10. Поле requirement ОБЯЗАТЕЛЬНО начинается с номера пункта и точки с пробелом: \
+8. Поле requirement ОБЯЗАТЕЛЬНО начинается с номера пункта и точки с пробелом: \
 «X. текст», «X.Y. текст» или «X.Y.Z. текст». Номер бери из списка ТЗ.
-11. requirement и requirement_ref описывают одно и то же требование.
-12. НЕ используй цепочки глубже 3 уровней в п.
+9. requirement и requirement_ref описывают одно и то же требование.
+10. НЕ используй цепочки глубже 3 уровней в п.
 
 Пример корректного item:
-{{
+{
   "requirement": "33.1.1. Производительность: не менее 1200 кг/час",
   "requirement_ref": "ТЗ, п. 33.1.1: «Производительность: не менее 1200 кг/час»",
-  "offer_value": "1200 кг/ч",
-  "offer_ref": "КП, п. 5: «1200 кг/ч»",
+  "offer_value": "1200 kg/h",
+  "offer_ref": "КП, п. 5: «1200 kg/h»",
   "explanation": "Производительность совпадает",
   "status": "met"
-}}
+}
 
 Верни ТОЛЬКО JSON:
-{{
+{
   "items": [
-    {{
+    {
       "requirement": "X.Y. цитата из ТЗ с ведущим номером пункта",
       "requirement_ref": "ТЗ, п. X.Y: «...»",
       "offer_value": "цитата из КП",
       "offer_ref": "КП, п. Y: «...»",
       "explanation": "обоснование",
       "status": "met|partial|missing"
-    }}
+    }
   ]
-}}
+}
 
-Если во фрагменте нет новых совпадений — верни {{"items": []}}."""
+Если во фрагменте нет совпадений — верни {"items": []}."""
 
     user = (
-        f"### Уже найденные требования (не повторять):\n{found_list}\n\n"
-        f"### Требования из ТЗ (батч {tz_batch_idx + 1}/"
-        f"{total_tz_batches}):\n{tz_list}\n\n"
-        f"### Фрагмент КП ({kp_name}, "
-        f"{kp_chunk_idx + 1}/{total_kp_chunks}):\n{kp_chunk}"
+        f"Фрагмент КП {kp_chunk_idx + 1} из {total_kp_chunks}. "
+        f"Батч требований ТЗ {tz_batch_idx + 1} из {total_tz_batches}.\n\n"
+        f"### Требования из ТЗ:\n{tz_list}\n\n"
+        f"### Фрагмент КП ({kp_name}):\n{kp_chunk}"
     )
     return system, user
 
@@ -619,10 +571,6 @@ draining_tunnel, packaging, automation, utilities и т.п.)
 4. src_quote — дословная цитата из КП на исходном языке (EN/IT)
 5. Не пропускай табличные данные и спецификации
 6. Не включай рекламный текст компании без технического содержания
-
-## Словарь эквивалентов RU/EN
-
-{_TECH_EQUIVALENTS}
 
 ## Формат ответа
 
@@ -742,10 +690,8 @@ def build_compliance_prompt(
 для not_found — null
 4. offer_ref — цитата src_quote из КП на исходном языке; для not_found — null
 5. Числовые диапазоны: значение в диапазоне → met; «≥600» при «≥400» → met
-6. Технические эквиваленты:
-{_TECH_EQUIVALENTS}
-7. requirement_ref формат: «ТЗ, п. X.Y: «цитата»»
-8. explanation обязателен для partial, missing, not_found; для met — кратко
+6. requirement_ref формат: «ТЗ, п. X.Y: «цитата»»
+7. explanation обязателен для partial, missing, not_found; для met — кратко
 
 Верни ТОЛЬКО JSON:
 {_compliance_item_schema()}"""
@@ -759,7 +705,7 @@ def build_compliance_prompt(
 
 def build_recall_sweep_prompt(
     tz_batch: list[str],
-    digest_text: str,
+    kp_text: str,
     *,
     batch_idx: int,
     total_batches: int,
@@ -769,10 +715,10 @@ def build_recall_sweep_prompt(
 
     system = f"""\
 Ты — специалист по поиску соответствий в тендерных документах. \
-Для каждого требования ТЗ найди ответ в ПОЛНОМ digest КП.
+Для каждого требования ТЗ найди ответ в тексте КП.
 
-Батч {batch_idx + 1} из {total_batches}. Это повторный проход для \
-требований, не найденных ранее — ищи внимательно по всему digest.
+Это повторный проход для требований, не найденных в отдельных фрагментах — \
+ищи внимательно по всему тексту КП.
 
 ## Статусы (ОБЯЗАТЕЛЬНО для КАЖДОГО требования)
 
@@ -784,16 +730,16 @@ def build_recall_sweep_prompt(
 ## Правила
 
 1. Верни РОВНО одну запись на каждое требование
-2. Ищи по всему digest, включая общие разделы
-3. Используй технические эквиваленты:
-{_TECH_EQUIVALENTS}
+2. Ищи по всему тексту КП, включая таблицы и спецификации
+3. КП может быть на любом языке — сопоставляй по смыслу и числам
 4. Если нашёл соответствие — обязательно заполни offer_value и offer_ref
 
 Верни ТОЛЬКО JSON:
 {_compliance_item_schema()}"""
 
     user = (
+        f"Батч {batch_idx + 1} из {total_batches}.\n\n"
         f"### Требования для повторного поиска:\n{tz_list}\n\n"
-        f"### Полный digest КП:\n{digest_text}"
+        f"### Текст КП:\n{kp_text}"
     )
     return system, user
