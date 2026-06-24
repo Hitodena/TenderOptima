@@ -47,6 +47,7 @@ from backend.utils.user_email_credentials import (
     SmtpCredentials,
     resolve_imap_credentials,
     resolve_smtp_credentials,
+    smtp_connection,
 )
 
 config = get_config()
@@ -203,18 +204,8 @@ def _send_mime(
     recipient: str,
     smtp_creds: SmtpCredentials,
 ) -> None:
-    smtp = smtplib.SMTP(smtp_creds.host, smtp_creds.port)
-    try:
-        smtp.ehlo()
-        smtp.starttls()
-        smtp.ehlo()
-        smtp.login(smtp_creds.user, smtp_creds.password)
+    with smtp_connection(smtp_creds) as smtp:
         smtp.sendmail(smtp_creds.user, recipient, msg.as_string())
-    finally:
-        try:
-            smtp.quit()
-        except Exception:
-            pass
 
 
 async def _mark_rs_status(
@@ -467,101 +458,102 @@ async def send_emails(self, request_id: str) -> dict:
     attachment_data = _prepare_attachments(request.attachment_paths)
 
     try:
-        smtp = smtplib.SMTP(smtp_creds.host, smtp_creds.port)
-        smtp.ehlo()
-        smtp.starttls()
-        smtp.ehlo()
-        smtp.login(smtp_creds.user, smtp_creds.password)
+        with smtp_connection(smtp_creds) as smtp:
+            for rs in pending:
+                supplier = rs.supplier
+                recipient = rs.sent_to_email or supplier.main_email
+
+                if not recipient:
+                    logger.warning(
+                        "Supplier has no email, skipping",
+                        supplier_id=str(supplier.id),
+                        domain=supplier.domain,
+                    )
+                    results.append(
+                        SendResult(
+                            rs.id,
+                            RequestSupplierStatus.FAILED,
+                            None,
+                            None,
+                            None,
+                            None,
+                        )
+                    )
+                    failed += 1
+                    continue
+
+                user = rs.request.user
+                rs_tracking_id = generate_tid()
+                plain_body = build_request_email_body(request, user)
+                outbound_subject = build_outbound_subject(
+                    request,
+                    rs_tracking_id,
+                )
+
+                if attachment_data:
+                    msg = MIMEMultipart()
+                    msg.attach(MIMEText(plain_body, "plain", "utf-8"))
+                    for att in attachment_data:
+                        part = MIMEBase("application", "octet-stream")
+                        part.set_payload(att["data"])
+                        encoders.encode_base64(part)
+                        part.add_header(
+                            "Content-Disposition",
+                            f'attachment; filename="{att["filename"]}"',
+                        )
+                        msg.attach(part)
+                else:
+                    msg = MIMEText(plain_body, "plain", "utf-8")
+                msg["From"] = (
+                    f"{user.company_name or 'TenderOptima'} <{smtp_creds.user}>"
+                )
+                msg["To"] = recipient
+                msg["Subject"] = outbound_subject
+                outbound_message_id = make_message_id(smtp_creds.user)
+                msg["Message-ID"] = outbound_message_id
+
+                try:
+                    smtp.sendmail(
+                        smtp_creds.user,
+                        recipient,
+                        msg.as_string(),
+                    )
+                    results.append(
+                        SendResult(
+                            rs.id,
+                            RequestSupplierStatus.SENT,
+                            outbound_message_id,
+                            rs_tracking_id,
+                            msg["Subject"],
+                            plain_body,
+                        )
+                    )
+                    sent += 1
+                    logger.info(
+                        "Email sent",
+                        domain=supplier.domain,
+                        recipient=recipient,
+                    )
+                except smtplib.SMTPException as exc:
+                    logger.error(
+                        "Failed to send email",
+                        domain=supplier.domain,
+                        error=str(exc),
+                    )
+                    results.append(
+                        SendResult(
+                            rs.id,
+                            RequestSupplierStatus.FAILED,
+                            None,
+                            None,
+                            None,
+                            None,
+                        )
+                    )
+                    failed += 1
     except smtplib.SMTPException as exc:
         logger.exception("SMTP connection failed", error=str(exc))
         raise self.retry(exc=exc) from exc  # noqa: B904
-
-    try:
-        for rs in pending:
-            supplier = rs.supplier
-            recipient = rs.sent_to_email or supplier.main_email
-
-            if not recipient:
-                logger.warning(
-                    "Supplier has no email, skipping",
-                    supplier_id=str(supplier.id),
-                    domain=supplier.domain,
-                )
-                results.append(
-                    SendResult(
-                        rs.id,
-                        RequestSupplierStatus.FAILED,
-                        None,
-                        None,
-                        None,
-                        None,
-                    )
-                )
-                failed += 1
-                continue
-
-            user = rs.request.user
-            rs_tracking_id = generate_tid()
-            plain_body = build_request_email_body(request, user)
-            outbound_subject = build_outbound_subject(request, rs_tracking_id)
-
-            if attachment_data:
-                msg = MIMEMultipart()
-                msg.attach(MIMEText(plain_body, "plain", "utf-8"))
-                for att in attachment_data:
-                    part = MIMEBase("application", "octet-stream")
-                    part.set_payload(att["data"])
-                    encoders.encode_base64(part)
-                    part.add_header(
-                        "Content-Disposition",
-                        f'attachment; filename="{att["filename"]}"',
-                    )
-                    msg.attach(part)
-            else:
-                msg = MIMEText(plain_body, "plain", "utf-8")
-            msg["From"] = (
-                f"{user.company_name or 'TenderOptima'} <{smtp_creds.user}>"
-            )
-            msg["To"] = recipient
-            msg["Subject"] = outbound_subject
-            outbound_message_id = make_message_id(smtp_creds.user)
-            msg["Message-ID"] = outbound_message_id
-
-            try:
-                smtp.sendmail(smtp_creds.user, recipient, msg.as_string())
-                results.append(
-                    SendResult(
-                        rs.id,
-                        RequestSupplierStatus.SENT,
-                        outbound_message_id,
-                        rs_tracking_id,
-                        msg["Subject"],
-                        plain_body,
-                    )
-                )
-                sent += 1
-                logger.info(
-                    "Email sent", domain=supplier.domain, recipient=recipient
-                )
-            except smtplib.SMTPException as exc:
-                logger.error(
-                    "Failed to send email",
-                    domain=supplier.domain,
-                    error=str(exc),
-                )
-                results.append(
-                    SendResult(
-                        rs.id,
-                        RequestSupplierStatus.FAILED,
-                        None,
-                        None,
-                        None,
-                        None,
-                    )
-                )
-                failed += 1
-    finally:
-        smtp.quit()
 
     async with db_manager.session() as session:
         for result in results:
