@@ -14,29 +14,34 @@
 				<UTabs :items="tabs" class="w-full" :ui="{ list: 'mb-4' }">
 
 					<template #login>
-						<UForm :schema="loginSchema" :state="loginForm" @submit="handleLogin" class="space-y-4">
+						<UForm :schema="loginSchema" :state="loginForm" class="space-y-4" @submit="handleLogin">
 
 							<UFormField label="Email" name="email" required>
-								<UInput v-model="loginForm.email" type="email" placeholder="you@company.com"
+								<UInput
+v-model="loginForm.email" type="email" placeholder="you@company.com"
 									icon="i-lucide-mail" class="w-full" autocomplete="email" />
 							</UFormField>
 
 							<UFormField label="Пароль" name="password" required>
-								<UInput v-model="loginForm.password" :type="showLoginPassword ? 'text' : 'password'"
+								<UInput
+v-model="loginForm.password" :type="showLoginPassword ? 'text' : 'password'"
 									placeholder="••••••••" icon="i-lucide-lock" class="w-full"
 									autocomplete="current-password" @keydown.enter="handleLogin">
 									<template #trailing>
-										<button type="button"
+										<button
+type="button"
 											class="flex items-center text-muted hover:text-default cursor-pointer transition-colors"
 											@click="showLoginPassword = !showLoginPassword">
-											<UIcon :name="showLoginPassword ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+											<UIcon
+:name="showLoginPassword ? 'i-lucide-eye-off' : 'i-lucide-eye'"
 												class="w-4 h-4" />
 										</button>
 									</template>
 								</UInput>
 							</UFormField>
 
-							<UAlert v-if="loginError" color="error" variant="soft" icon="i-lucide-circle-alert"
+							<UAlert
+v-if="loginError" color="error" variant="soft" icon="i-lucide-circle-alert"
 								:description="loginError" />
 
 							<UButton type="submit" class="w-full justify-center" size="lg" :loading="loginLoading">
@@ -47,36 +52,43 @@
 					</template>
 
 					<template #register>
-						<UForm :schema="registerSchema" :state="registerForm" @submit="handleRegister"
-							class="space-y-4">
+						<UForm
+:schema="registerSchema" :state="registerForm" class="space-y-4"
+							@submit="handleRegister">
 
 							<UFormField label="Email" name="email" required>
-								<UInput v-model="registerForm.email" type="email" placeholder="you@company.com"
+								<UInput
+v-model="registerForm.email" type="email" placeholder="you@company.com"
 									icon="i-lucide-mail" class="w-full" autocomplete="email" />
 							</UFormField>
 
 							<div class="grid grid-cols-2 gap-3">
 								<UFormField label="Полное имя" name="full_name" required>
-									<UInput v-model="registerForm.full_name" placeholder="Иван Иванов"
+									<UInput
+v-model="registerForm.full_name" placeholder="Иван Иванов"
 										icon="i-lucide-user" class="w-full" autocomplete="name" />
 								</UFormField>
 
 								<UFormField label="Компания" name="company_name">
-									<UInput v-model="registerForm.company_name" placeholder="ООО Ромашка"
+									<UInput
+v-model="registerForm.company_name" placeholder="ООО Ромашка"
 										icon="i-lucide-building-2" class="w-full" autocomplete="organization" />
 								</UFormField>
 							</div>
 
 							<UFormField label="Пароль" name="password" required hint="Минимум 8 символов">
-								<UInput v-model="registerForm.password"
+								<UInput
+v-model="registerForm.password"
 									:type="showRegisterPassword ? 'text' : 'password'" placeholder="••••••••"
 									icon="i-lucide-lock" class="w-full" autocomplete="new-password"
 									@keydown.enter="handleRegister">
 									<template #trailing>
-										<button type="button"
+										<button
+type="button"
 											class="flex items-center text-muted hover:text-default cursor-pointer transition-colors"
 											@click="showRegisterPassword = !showRegisterPassword">
-											<UIcon :name="showRegisterPassword ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+											<UIcon
+:name="showRegisterPassword ? 'i-lucide-eye-off' : 'i-lucide-eye'"
 												class="w-4 h-4" />
 										</button>
 									</template>
@@ -89,12 +101,14 @@
 										<template #label>
 											<span class="text-sm">
 												Я принимаю
-												<ULink to="#"
+												<ULink
+to="#"
 													class="text-primary underline underline-offset-2 hover:opacity-80">
 													условия использования
 												</ULink>
 												и
-												<ULink to="#"
+												<ULink
+to="#"
 													class="text-primary underline underline-offset-2 hover:opacity-80">
 													политику конфиденциальности
 												</ULink>
@@ -114,10 +128,12 @@
 								</UFormField>
 							</div>
 
-							<UAlert v-if="registerError" color="error" variant="soft" icon="i-lucide-circle-alert"
+							<UAlert
+v-if="registerError" color="error" variant="soft" icon="i-lucide-circle-alert"
 								:description="registerError" />
 
-							<UButton type="submit" class="w-full justify-center" size="lg" :loading="registerLoading"
+							<UButton
+type="submit" class="w-full justify-center" size="lg" :loading="registerLoading"
 								:disabled="!registerForm.agree_terms">
 								Создать аккаунт
 							</UButton>

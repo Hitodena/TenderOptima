@@ -3,20 +3,24 @@
 		<UContainer class="max-w-7xl py-0">
 			<div class="relative flex overflow-y-hidden min-h-0 w-full h-[calc(100dvh-5rem)]">
 
-			<div class="shrink-0 border-r border-default flex flex-col"
+			<div
+class="shrink-0 border-r border-default flex flex-col"
 				:class="[isMobile && selectedRsId ? 'hidden' : 'flex', 'w-full md:w-64 lg:w-72']">
 
 				<div class="px-4 py-3 border-b border-default flex items-center justify-between gap-2">
-					<UButton variant="ghost" color="neutral" size="xs" leading-icon="i-lucide-arrow-left"
+					<UButton
+variant="ghost" color="neutral" size="xs" leading-icon="i-lucide-arrow-left"
 						to="/requests/history">
 						К запросам
 					</UButton>
-					<UButton variant="ghost" color="neutral" size="xs" icon="i-lucide-refresh-cw"
+					<UButton
+variant="ghost" color="neutral" size="xs" icon="i-lucide-refresh-cw"
 						:loading="refreshingAll" title="Обновить анализ по всем поставщикам" @click="refreshAll" />
 				</div>
 
 				<div class="px-3 py-2 border-b border-default space-y-2">
-					<UInput v-model="threadSearch" placeholder="Поиск..." icon="i-lucide-search" size="sm"
+					<UInput
+v-model="threadSearch" placeholder="Поиск..." icon="i-lucide-search" size="sm"
 						class="w-full" />
 					<USelect v-model="threadSort" :items="threadSortOptions" size="sm" class="w-full" />
 				</div>
@@ -26,7 +30,8 @@
 						<USkeleton v-for="i in 5" :key="i" class="h-16 w-full rounded-xl" />
 					</div>
 
-					<div v-else-if="sortedThreads.length === 0"
+					<div
+v-else-if="sortedThreads.length === 0"
 						class="flex flex-col items-center justify-center py-12 gap-2 px-4">
 						<UIcon name="i-lucide-mail-open" class="w-8 h-8 text-muted opacity-40" />
 						<p class="text-sm text-muted text-center">
@@ -34,7 +39,8 @@
 						</p>
 					</div>
 
-					<button v-for="thread in sortedThreads" :key="thread.rs_id" type="button"
+					<button
+v-for="thread in sortedThreads" :key="thread.rs_id" type="button"
 						class="w-full text-left px-4 py-4 border-b border-default/50 hover:bg-elevated/50 transition-colors cursor-pointer"
 						:class="selectedRsId === thread.rs_id ? 'bg-elevated border-l-2 border-l-primary' : ''"
 						@click="selectThread(thread.rs_id)">
@@ -71,20 +77,24 @@
 				</div>
 			</div>
 
-			<div class="flex-1 flex flex-col min-w-0"
+			<div
+class="flex-1 flex flex-col min-w-0"
 				:class="isMobile && !selectedRsId && mainTab !== 'comparison' ? 'hidden' : 'flex'">
 
 				<div class="px-3 md:px-5 py-2 border-b border-default flex items-center gap-2 shrink-0">
-					<UButton v-if="isMobile && selectedRsId && mainTab === 'thread'" variant="ghost" size="sm"
+					<UButton
+v-if="isMobile && selectedRsId && mainTab === 'thread'" variant="ghost" size="sm"
 						icon="i-lucide-arrow-left" class="mr-1 shrink-0" @click="selectedRsId = null" />
 					<div class="flex gap-1 p-0.5 bg-elevated rounded-lg">
-						<button type="button" class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
+						<button
+type="button" class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
 							:class="mainTab === 'thread'
 								? 'bg-default text-default shadow-sm'
 								: 'text-muted hover:text-default'" @click="mainTab = 'thread'">
 							Переписка
 						</button>
-						<button type="button" class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
+						<button
+type="button" class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
 							:class="mainTab === 'comparison'
 								? 'bg-default text-default shadow-sm'
 								: 'text-muted hover:text-default'" @click="mainTab = 'comparison'">
@@ -99,12 +109,14 @@
 							<div v-if="loadingComparison" class="space-y-3">
 								<USkeleton v-for="i in 6" :key="i" class="h-10 w-full rounded-lg" />
 							</div>
-							<div v-else-if="!comparison?.requirements.length"
+							<div
+v-else-if="!comparison?.requirements.length"
 								class="flex flex-col items-center justify-center py-16 gap-2 text-muted">
 								<UIcon name="i-lucide-table" class="w-10 h-10 opacity-20" />
 								<p class="text-sm">Нет требований для сравнения</p>
 							</div>
-							<div v-else-if="comparison.suppliers.length === 0"
+							<div
+v-else-if="comparison.suppliers.length === 0"
 								class="flex flex-col items-center justify-center py-16 gap-2 text-muted">
 								<UIcon name="i-lucide-users" class="w-10 h-10 opacity-20" />
 								<p class="text-sm">Нет проанализированных ответов</p>
@@ -117,7 +129,8 @@
 												class="sticky left-0 z-10 bg-elevated/95 px-3 py-2.5 text-left text-xs font-semibold min-w-40 max-w-56 wrap-break-word whitespace-normal align-top">
 												Требование
 											</th>
-											<th v-for="supplier in comparison.suppliers" :key="supplier.rs_id"
+											<th
+v-for="supplier in comparison.suppliers" :key="supplier.rs_id"
 												class="px-3 py-2.5 text-left text-xs font-semibold min-w-36 max-w-52 wrap-break-word whitespace-normal align-top">
 												<p class="wrap-break-word whitespace-normal">{{ supplier.company_name }}</p>
 												<p class="text-[10px] text-muted font-normal wrap-break-word whitespace-normal">
@@ -127,20 +140,23 @@
 										</tr>
 									</thead>
 									<tbody>
-										<tr v-for="req in comparison.requirements" :key="req"
+										<tr
+v-for="req in comparison.requirements" :key="req"
 											class="border-b border-default/50 last:border-0">
 											<td
 												class="sticky left-0 z-10 bg-default px-3 py-2.5 text-xs font-medium align-top wrap-break-word whitespace-normal max-w-56">
 												{{ req }}
 											</td>
-											<td v-for="supplier in comparison.suppliers" :key="supplier.rs_id"
+											<td
+v-for="supplier in comparison.suppliers" :key="supplier.rs_id"
 												class="px-3 py-2.5 align-top wrap-break-word whitespace-normal max-w-52">
 												<div class="flex items-start gap-2">
 													<div class="flex-1 min-w-0 space-y-1">
 														<p class="text-xs wrap-break-word whitespace-normal">
 															{{ comparisonDisplayValue(supplier, req) }}
 														</p>
-														<p v-if="comparisonUserCorrected(supplier, req)"
+														<p
+v-if="comparisonUserCorrected(supplier, req)"
 															class="text-[10px] text-muted wrap-break-word whitespace-normal">
 															<span class="line-through">{{
 																supplier.corrected_from?.[req]
@@ -149,7 +165,8 @@
 															<span class="text-primary/80">(изменено
 																пользователем)</span>
 														</p>
-														<p v-else-if="getOfferValueTrend(supplier.values[req], supplier.previous_values?.[req])"
+														<p
+v-else-if="getOfferValueTrend(supplier.values[req], supplier.previous_values?.[req])"
 															class="text-[10px] text-muted line-through wrap-break-word whitespace-normal">
 															{{ supplier.previous_values?.[req] }}
 														</p>
@@ -162,9 +179,11 @@
 																variant="subtle" size="sm">
 																{{ comparisonStatusLabel(supplier.statuses[req]!) }}
 															</UBadge>
-															<UTooltip v-if="comparisonExplanationTooltip(supplier, req)"
+															<UTooltip
+v-if="comparisonExplanationTooltip(supplier, req)"
 																:text="supplier.explanations?.[req] || ''">
-																<UIcon name="i-lucide-info"
+																<UIcon
+name="i-lucide-info"
 																	class="w-3.5 h-3.5 text-muted cursor-help shrink-0" />
 															</UTooltip>
 														</div>
@@ -187,9 +206,11 @@
 												class="sticky left-0 z-10 bg-elevated/95 px-3 py-3 text-xs font-semibold align-middle">
 												Проверка соответствия
 											</td>
-											<td v-for="supplier in comparison.suppliers"
+											<td
+v-for="supplier in comparison.suppliers"
 												:key="`compliance-${supplier.rs_id}`" class="px-3 py-3 align-middle">
-												<UIcon :name="complianceForSupplier(supplier).passed
+												<UIcon
+:name="complianceForSupplier(supplier).passed
 													? 'i-lucide-circle-check'
 													: 'i-lucide-circle-x'" class="w-5 h-5 shrink-0" :class="complianceForSupplier(supplier).passed
 														? 'text-success'
@@ -201,9 +222,11 @@
 												class="sticky left-0 z-10 bg-elevated/95 px-3 py-3 text-xs font-semibold align-middle">
 												Запросить отсутствующие параметры
 											</td>
-											<td v-for="supplier in comparison.suppliers"
+											<td
+v-for="supplier in comparison.suppliers"
 												:key="`letter-${supplier.rs_id}`" class="px-3 py-3 align-middle">
-												<UButton v-if="supplierHasLetterMismatches(supplier)" size="xs"
+												<UButton
+v-if="supplierHasLetterMismatches(supplier)" size="xs"
 													variant="outline" leading-icon="i-lucide-mail"
 													@click="openLetterModal(supplier)">
 													Запрос
@@ -216,9 +239,11 @@
 												class="sticky left-0 z-10 bg-elevated/95 px-3 py-3 text-xs font-semibold align-middle">
 												Улучшить условия
 											</td>
-											<td v-for="supplier in comparison.suppliers"
+											<td
+v-for="supplier in comparison.suppliers"
 												:key="`improve-${supplier.rs_id}`" class="px-3 py-3 align-middle">
-												<UButton size="xs" variant="outline" leading-icon="i-lucide-sparkles"
+												<UButton
+size="xs" variant="outline" leading-icon="i-lucide-sparkles"
 													@click="openImproveModal(supplier)">
 													Улучшить условия
 												</UButton>
@@ -229,9 +254,11 @@
 												class="sticky left-0 z-10 bg-elevated/95 px-3 py-3 text-xs font-semibold align-middle">
 												Выбрать победителем
 											</td>
-											<td v-for="supplier in comparison.suppliers"
+											<td
+v-for="supplier in comparison.suppliers"
 												:key="`winner-${supplier.rs_id}`" class="px-3 py-3 align-middle">
-												<UButton size="xs" color="success" variant="soft"
+												<UButton
+size="xs" color="success" variant="soft"
 													leading-icon="i-lucide-trophy" @click="openWinnerModal(supplier)">
 													Выбрать победителем
 												</UButton>
@@ -241,9 +268,11 @@
 								</table>
 							</div>
 						</div>
-						<div v-if="comparison?.requirements.length && comparison?.suppliers.length"
+						<div
+v-if="comparison?.requirements.length && comparison?.suppliers.length"
 							class="shrink-0 border-t border-default px-3 md:px-5 py-3 flex justify-end">
-							<UButton size="sm" variant="outline" leading-icon="i-lucide-download"
+							<UButton
+size="sm" variant="outline" leading-icon="i-lucide-download"
 								:loading="exportingComparison" @click="exportComparisonXlsx">
 								Экспорт XLSX
 							</UButton>
@@ -263,13 +292,15 @@
 								<p class="font-semibold truncate text-sm md:text-base">
 									{{ selectedThread?.supplier.company_name }}
 								</p>
-								<p v-if="selectedThread?.supplier.main_email"
+								<p
+v-if="selectedThread?.supplier.main_email"
 									class="text-[11px] md:text-xs text-muted truncate">
 									{{ selectedThread.supplier.main_email }}
 								</p>
 							</div>
 							<div class="flex items-center gap-1.5 shrink-0">
-								<UButton v-if="!showParamsPanel" size="xs" variant="ghost" color="neutral"
+								<UButton
+v-if="!showParamsPanel" size="xs" variant="ghost" color="neutral"
 									icon="i-lucide-cpu" :disabled="!latestIncomingId"
 									:class="latestIncomingId ? '' : 'opacity-40'" @click="showParamsPanel = true" />
 							</div>
@@ -281,10 +312,12 @@
 							</div>
 
 							<template v-else-if="messages.length">
-								<div v-for="msg in messages" :key="msg.id" class="flex gap-2 md:gap-3"
+								<div
+v-for="msg in messages" :key="msg.id" class="flex gap-2 md:gap-3"
 									:class="msg.direction === 'outgoing' ? 'flex-row-reverse' : ''">
 
-									<div class="w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center shrink-0 mt-1"
+									<div
+class="w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center shrink-0 mt-1"
 										:class="msg.direction === 'incoming' ? 'bg-primary/10' : 'bg-elevated'">
 										<UIcon
 											:name="msg.direction === 'incoming' ? 'i-lucide-building-2' : 'i-lucide-user'"
@@ -293,7 +326,8 @@
 									</div>
 
 									<div class="flex-1 min-w-0 max-w-[85%] md:max-w-[75%]">
-										<div class="flex items-center gap-2 mb-1"
+										<div
+class="flex items-center gap-2 mb-1"
 											:class="msg.direction === 'outgoing' ? 'flex-row-reverse' : ''">
 											<span class="text-xs font-medium">
 												{{ msg.direction === 'incoming'
@@ -305,10 +339,12 @@
 											</span>
 										</div>
 
-										<div class="rounded-xl px-3.5 py-2.5 text-sm shadow-sm" :class="msg.direction === 'incoming'
+										<div
+class="rounded-xl px-3.5 py-2.5 text-sm shadow-sm" :class="msg.direction === 'incoming'
 											? 'bg-elevated border border-default/60 rounded-tl-md'
 											: 'bg-primary/10 rounded-tr-md'">
-											<p v-if="msg.subject"
+											<p
+v-if="msg.subject"
 												class="text-[10px] text-muted mb-1.5 font-medium tracking-tight">
 												{{ msg.subject }}
 											</p>
@@ -317,12 +353,14 @@
 										</div>
 
 										<div v-if="msg.attachments?.length" class="flex flex-wrap gap-2 mt-2">
-											<button v-for="att in msg.attachments" :key="att.filename" type="button"
+											<button
+v-for="att in msg.attachments" :key="att.filename" type="button"
 												class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-default transition-colors text-xs"
 												:class="att.path
 													? 'hover:bg-elevated cursor-pointer'
 													: 'opacity-50 cursor-not-allowed'" :disabled="!att.path" @click="downloadAttachment(att)">
-												<UIcon :name="fileIcon(att.content_type)"
+												<UIcon
+:name="fileIcon(att.content_type)"
 													class="w-3.5 h-3.5 text-primary" />
 												<span class="truncate max-w-28 md:max-w-36">{{ att.filename }}</span>
 												<span v-if="att.size" class="text-muted shrink-0">{{
@@ -341,35 +379,41 @@
 
 						<div class="border-t border-default px-3 md:px-5 py-4 shrink-0">
 							<p class="text-xs text-muted font-medium mb-2">Ответить на письмо</p>
-							<UTextarea v-model="replyBody" placeholder="Текст сообщения..." :rows="isMobile ? 3 : 4"
+							<UTextarea
+v-model="replyBody" placeholder="Текст сообщения..." :rows="isMobile ? 3 : 4"
 								class="w-full mb-3" />
 							<div class="flex items-center justify-between gap-2">
 								<p class="text-xs text-muted hidden md:block">Ответ придёт поставщику на его email</p>
-								<UButton leading-icon="i-lucide-send" :loading="sendingReply"
+								<UButton
+leading-icon="i-lucide-send" :loading="sendingReply"
 									:disabled="!replyBody.trim()" class="w-full md:w-auto" @click="sendReply">
 									Отправить ответ
 								</UButton>
 							</div>
-							<UAlert v-if="replyError" color="error" variant="soft" icon="i-lucide-circle-alert"
+							<UAlert
+v-if="replyError" color="error" variant="soft" icon="i-lucide-circle-alert"
 								:description="replyError" class="mt-2" />
 						</div>
 					</template>
 				</template>
 			</div>
 
-			<div v-if="showParamsPanel && mainTab === 'thread'" class="shrink-0 border-l border-default flex flex-col"
+			<div
+v-if="showParamsPanel && mainTab === 'thread'" class="shrink-0 border-l border-default flex flex-col"
 				:class="isMobile
 					? 'absolute inset-0 z-20 w-full bg-default'
 					: 'w-64 md:w-72'">
 
 				<div class="px-4 py-3 border-b border-default flex items-center justify-between gap-2">
 					<div class="flex items-center gap-2 min-w-0">
-						<UButton v-if="isMobile" variant="ghost" color="neutral" size="xs" icon="i-lucide-arrow-left"
+						<UButton
+v-if="isMobile" variant="ghost" color="neutral" size="xs" icon="i-lucide-arrow-left"
 							@click="showParamsPanel = false" />
 						<p class="text-sm font-semibold truncate">Соответствие требованиям</p>
 					</div>
 					<div class="flex items-center gap-1 shrink-0">
-						<UButton v-if="!isMobile" size="xs" variant="ghost" color="neutral" icon="i-lucide-x"
+						<UButton
+v-if="!isMobile" size="xs" variant="ghost" color="neutral" icon="i-lucide-x"
 							@click="showParamsPanel = false" />
 					</div>
 				</div>
@@ -388,13 +432,16 @@
 							AI анализирует ответ...
 						</div>
 						<div v-if="requirementMatches.length" class="space-y-2">
-							<div v-for="(m, idx) in requirementMatches" :key="idx"
+							<div
+v-for="(m, idx) in requirementMatches" :key="idx"
 								class="rounded-lg border border-default/60 p-2 space-y-1.5">
 								<div class="flex items-start gap-2">
-									<UIcon :name="matchStatusIcon(m.status)" class="w-4 h-4 shrink-0 mt-0.5"
+									<UIcon
+:name="matchStatusIcon(m.status)" class="w-4 h-4 shrink-0 mt-0.5"
 										:class="matchStatusClass(m.status)" />
 									<UTooltip v-if="matchExplanationTooltip(m)" :text="m.explanation || ''">
-										<UIcon name="i-lucide-info"
+										<UIcon
+name="i-lucide-info"
 											class="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted cursor-help" />
 									</UTooltip>
 									<p class="text-xs font-medium flex-1">{{ m.requirement }}</p>
@@ -403,9 +450,11 @@
 									<template v-if="editingMatchIdx === idx">
 										<UTextarea v-model="editingMatchValue" size="xs" :rows="2" class="w-full" />
 										<div class="flex gap-1">
-											<UButton size="xs" variant="ghost" color="primary" icon="i-lucide-check"
+											<UButton
+size="xs" variant="ghost" color="primary" icon="i-lucide-check"
 												:loading="savingParams" @click="commitMatchEdit(idx)" />
-											<UButton size="xs" variant="ghost" color="neutral" icon="i-lucide-x"
+											<UButton
+size="xs" variant="ghost" color="neutral" icon="i-lucide-x"
 												@click="editingMatchIdx = null" />
 										</div>
 									</template>
@@ -413,7 +462,8 @@
 										<div class="flex items-start gap-1">
 											<div class="flex-1 min-w-0">
 												<p class="text-[11px] text-muted">Предложение</p>
-												<p class="text-xs"
+												<p
+class="text-xs"
 													:class="m.status === 'not_found' || !m.offer_value?.trim()
 														? 'text-muted'
 														: 'text-default'">
@@ -424,14 +474,16 @@
 													→ {{ m.offer_value }}
 													<span class="text-primary/80">(изменено пользователем)</span>
 												</p>
-												<p v-else-if="matchOfferChanged(m)"
+												<p
+v-else-if="matchOfferChanged(m)"
 													class="text-[10px] text-muted mt-0.5">
 													<span class="line-through">{{ previousMatchValues[m.requirement]
 													}}</span>
 													→ {{ m.offer_value }}
 												</p>
 											</div>
-											<button type="button"
+											<button
+type="button"
 												class="shrink-0 w-5 h-5 flex items-center justify-center rounded text-muted hover:text-primary hover:bg-elevated transition-colors cursor-pointer mt-3"
 												@click="startMatchEdit(idx, m.offer_value)">
 												<UIcon name="i-lucide-pencil" class="w-3 h-3" />
@@ -441,7 +493,8 @@
 								</div>
 							</div>
 						</div>
-						<div v-else-if="analysisNotReady && !extracting && !analysisPolling"
+						<div
+v-else-if="analysisNotReady && !extracting && !analysisPolling"
 							class="flex flex-col items-center justify-center py-8 gap-3 text-muted">
 							<UIcon name="i-lucide-loader" class="w-7 h-7 animate-spin opacity-50" />
 							<p class="text-xs text-center">
@@ -451,7 +504,8 @@
 								Запустить вручную
 							</UButton>
 						</div>
-						<div v-else-if="!extracting && !analysisPolling"
+						<div
+v-else-if="!extracting && !analysisPolling"
 							class="flex flex-col items-center justify-center py-8 gap-2 text-muted">
 							<UIcon name="i-lucide-file-x" class="w-7 h-7 opacity-20" />
 							<p class="text-xs text-center">Данные не извлечены</p>
@@ -460,7 +514,8 @@
 							</UButton>
 						</div>
 						<div v-if="threadLetterMismatches.length" class="pt-1">
-							<UButton block size="sm" variant="outline" leading-icon="i-lucide-mail"
+							<UButton
+block size="sm" variant="outline" leading-icon="i-lucide-mail"
 								@click="openThreadLetterModal">
 								Запрос
 							</UButton>
@@ -471,9 +526,11 @@
 			</div>
 		</UContainer>
 
-		<ImproveConditionsModal v-if="modalSupplier" v-model:open="improveModalOpen" :request-id="id"
+		<ImproveConditionsModal
+v-if="modalSupplier" v-model:open="improveModalOpen" :request-id="id"
 			:supplier="modalSupplier" />
-		<ResponseMismatchLetterModal v-if="letterModalSupplier" v-model:open="letterModalOpen" :request-id="id"
+		<ResponseMismatchLetterModal
+v-if="letterModalSupplier" v-model:open="letterModalOpen" :request-id="id"
 			:supplier="letterModalSupplier" :initial-body="letterModalBody" />
 		<WinnerNotificationModal
 			v-if="winnerModalSupplier"

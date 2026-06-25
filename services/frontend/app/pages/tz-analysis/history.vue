@@ -9,9 +9,11 @@
 					</p>
 				</div>
 				<div class="flex items-center gap-3 shrink-0">
-					<UInput v-model="search" placeholder="Поиск по анализам..." icon="i-lucide-search"
+					<UInput
+v-model="search" placeholder="Поиск по анализам..." icon="i-lucide-search"
 						class="w-full sm:w-56" size="lg" />
-					<UButton to="/tz-analysis" variant="outline" color="neutral" leading-icon="i-lucide-scan-search"
+					<UButton
+to="/tz-analysis" variant="outline" color="neutral" leading-icon="i-lucide-scan-search"
 						size="lg" class="shrink-0">
 						Новый анализ
 					</UButton>
@@ -26,7 +28,8 @@
 
 			<template v-else-if="visibleHistory.length">
 				<div class="space-y-2">
-					<UCard v-for="item in visibleHistory" :key="item.id"
+					<UCard
+v-for="item in visibleHistory" :key="item.id"
 						class="group cursor-pointer hover:shadow-md transition-all hover:-translate-y-px"
 						@click="openAnalysis(item)">
 						<div class="flex items-center gap-4">
@@ -37,7 +40,8 @@
 								<div class="flex items-center gap-2 mb-0.5">
 									<p class="font-semibold truncate">{{ item.title || item.tz_filename || 'Анализ ТЗ'
 										}}</p>
-									<UBadge :color="getTzRunStatusColor(item.status)" variant="subtle" size="sm"
+									<UBadge
+:color="getTzRunStatusColor(item.status)" variant="subtle" size="sm"
 										class="shrink-0">
 										{{ getTzRunStatusLabel(item.status) }}
 									</UBadge>
@@ -57,16 +61,19 @@
 							</div>
 							<div class="flex items-center gap-1 shrink-0">
 								<template v-if="canComplete(item.status)">
-									<UButton :color="confirmCompleteId === item.id ? 'warning' : 'neutral'"
+									<UButton
+:color="confirmCompleteId === item.id ? 'warning' : 'neutral'"
 										variant="ghost" size="md"
 										:leading-icon="confirmCompleteId === item.id ? 'i-lucide-check' : 'i-lucide-archive'"
 										:label="confirmCompleteId === item.id ? 'Подтвердить' : 'Завершить'"
 										:loading="completingId === item.id" class="opacity-0 group-hover:opacity-100"
 										:class="confirmCompleteId === item.id ? 'opacity-100' : ''"
 										@click.stop="handleCompleteClick(item.id)" />
-									<UIcon v-if="confirmCompleteId !== item.id" name="i-lucide-chevron-right"
+									<UIcon
+v-if="confirmCompleteId !== item.id" name="i-lucide-chevron-right"
 										class="w-4 h-4 text-muted" />
-									<UButton v-if="confirmCompleteId === item.id" color="neutral" variant="ghost"
+									<UButton
+v-if="confirmCompleteId === item.id" color="neutral" variant="ghost"
 										size="xs" icon="i-lucide-x" @click.stop="confirmCompleteId = null" />
 								</template>
 								<UIcon v-else name="i-lucide-chevron-right" class="w-4 h-4 text-muted" />

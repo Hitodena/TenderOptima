@@ -1,4 +1,3 @@
-import type { Ref } from 'vue';
 import type { RequestResponse, RequestSupplierResponse } from '#shared/types';
 import { RequestStatus } from '#shared/types';
 import { useIntervalFn } from '@vueuse/core';

@@ -119,6 +119,7 @@ const props = withDefaults(defineProps<{
 	editable?: boolean
 	isOverridden?: boolean
 }>(), {
+	defaultKpFilename: null,
 	editable: false,
 	isOverridden: false,
 })

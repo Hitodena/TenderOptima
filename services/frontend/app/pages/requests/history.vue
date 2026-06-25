@@ -22,7 +22,8 @@
 
 			<template v-else-if="filteredHistory.length">
 				<div class="space-y-2">
-					<UCard v-for="req in visibleHistory" :key="req.id"
+					<UCard
+v-for="req in visibleHistory" :key="req.id"
 						class="group cursor-pointer hover:shadow-md transition-all hover:-translate-y-px"
 						@click="navigateTo(`/requests/${req.id}`)">
 						<div class="flex items-center gap-4">
@@ -33,7 +34,8 @@
 							<div class="flex-1 min-w-0">
 								<div class="flex items-center gap-2 mb-0.5">
 									<p class="font-semibold truncate">{{ req.query }}</p>
-									<UBadge :color="getRequestStatusColor(req.status)" variant="subtle" size="sm"
+									<UBadge
+:color="getRequestStatusColor(req.status)" variant="subtle" size="sm"
 										class="shrink-0">
 										{{ getRequestStatusLabel(req.status) }}
 									</UBadge>
@@ -52,15 +54,18 @@
 							</div>
 							<div class="flex items-center gap-1 shrink-0">
 								<template v-if="req.status !== RequestStatus.CLOSED">
-									<UButton :color="confirmCloseId === req.id ? 'warning' : 'neutral'" variant="ghost" size="md"
+									<UButton
+:color="confirmCloseId === req.id ? 'warning' : 'neutral'" variant="ghost" size="md"
 										:leading-icon="confirmCloseId === req.id ? 'i-lucide-check' : 'i-lucide-lock'"
 										:label="confirmCloseId === req.id ? 'Подтвердить' : 'Завершить'"
 										:loading="closingId === req.id" class="opacity-0 group-hover:opacity-100"
 										:class="confirmCloseId === req.id ? 'opacity-100' : ''"
 										@click.stop="handleCloseClick(req.id)" />
-									<UIcon v-if="confirmCloseId !== req.id" name="i-lucide-chevron-right"
+									<UIcon
+v-if="confirmCloseId !== req.id" name="i-lucide-chevron-right"
 										class="w-4 h-4 text-muted" />
-									<UButton v-if="confirmCloseId === req.id" color="neutral" variant="ghost" size="xs"
+									<UButton
+v-if="confirmCloseId === req.id" color="neutral" variant="ghost" size="xs"
 										icon="i-lucide-x" @click.stop="confirmCloseId = null" />
 								</template>
 								<UIcon v-else name="i-lucide-chevron-right" class="w-4 h-4 text-muted" />

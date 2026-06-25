@@ -1,12 +1,12 @@
 <template>
 	<UModal v-model:open="isOpen" :ui="EMAIL_LETTER_MODAL_UI">
-		<template #header="{ close }">
+		<template #header="{ close: closeModal }">
 			<div class="flex items-start justify-between gap-3 w-full">
 				<p class="text-lg font-semibold text-highlighted min-w-0 truncate">
 					Запрос на улучшение условий — {{ supplier.company_name }}
 				</p>
 				<div class="flex items-center gap-2 shrink-0">
-					<UButton variant="outline" color="neutral" @click="close">
+					<UButton variant="outline" color="neutral" @click="closeModal">
 						Отмена
 					</UButton>
 					<UButton

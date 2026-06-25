@@ -7,7 +7,8 @@
 		class="h-20 border-b border-default"
 	>
 		<template #left>
-			<ULink to="/"
+			<ULink
+to="/"
 				class="flex items-center gap-2 font-bold text-2xl text-highlighted hover:opacity-80 transition-opacity">
 				<UIcon name="i-lucide-package-search" class="w-8 h-8 text-primary" />
 				TenderOptima
@@ -43,7 +44,8 @@
 		<template #right>
 			<div class="flex items-center gap-2">
 				<UColorModeButton />
-				<UButton v-if="!auth.isAuthenticated.value" to="/auth" color="neutral" variant="outline"
+				<UButton
+v-if="!auth.isAuthenticated.value" to="/auth" color="neutral" variant="outline"
 					leading-icon="i-lucide-log-in" label="Войти" size="lg" />
 				<UDropdownMenu v-else :items="userMenuItems" :ui="{ content: 'w-48' }">
 					<UButton color="neutral" variant="ghost" trailing-icon="i-lucide-chevron-down" size="lg">

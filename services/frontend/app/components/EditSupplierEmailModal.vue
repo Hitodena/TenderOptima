@@ -8,16 +8,19 @@
 				</p>
 
 				<div class="space-y-2 max-h-60 overflow-y-auto">
-					<UButton v-for="email in allEmails" :key="email"
+					<UButton
+v-for="email in allEmails" :key="email"
 						:color="email === selectedEmail ? 'success' : 'neutral'"
 						:variant="email === selectedEmail ? 'outline' : 'outline'"
 						class="w-full justify-start font-normal" @click="selectedEmail = email">
 						<template #leading>
-							<UIcon :name="email === selectedEmail ? 'i-lucide-circle-check' : 'i-lucide-circle'"
+							<UIcon
+:name="email === selectedEmail ? 'i-lucide-circle-check' : 'i-lucide-circle'"
 								class="w-4 h-4" />
 						</template>
 						{{ email }}
-						<UBadge v-if="email === supplier.main_email" color="success" variant="subtle" size="sm"
+						<UBadge
+v-if="email === supplier.main_email" color="success" variant="subtle" size="sm"
 							class="ml-auto">
 							Текущий
 						</UBadge>
@@ -28,7 +31,7 @@
 
 				<div class="flex justify-end gap-2 pt-2">
 					<UButton color="neutral" variant="ghost" @click="close">Отмена</UButton>
-					<UButton @click="handleSave" :loading="loading" :disabled="!hasChanges">Сохранить</UButton>
+					<UButton :loading="loading" :disabled="!hasChanges" @click="handleSave">Сохранить</UButton>
 				</div>
 			</div>
 		</template>

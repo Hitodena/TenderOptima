@@ -1,4 +1,3 @@
-import type { Ref } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 
 const POLL_INTERVAL_MS = 3_000

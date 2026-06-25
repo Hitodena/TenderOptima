@@ -1,7 +1,7 @@
 <template>
 	<UModal v-model:open="isOpen" title="Добавить поставщика" :ui="{ content: 'max-w-md' }">
 		<template #body>
-			<UForm :schema="schema" :state="form" @submit="handleAdd" class="space-y-4">
+			<UForm :schema="schema" :state="form" class="space-y-4" @submit="handleAdd">
 				<UFormField label="Название компании" name="company_name" required>
 					<UInput
 						v-model="form.company_name"

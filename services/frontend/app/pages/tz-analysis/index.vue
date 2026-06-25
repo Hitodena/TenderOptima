@@ -10,14 +10,15 @@
 				</div>
 
 				<div class="flex justify-end mb-4">
-					<UButton to="/tz-analysis/history" size="lg" variant="outline" color="neutral"
+					<UButton
+to="/tz-analysis/history" size="lg" variant="outline" color="neutral"
 						leading-icon="i-lucide-history">
 						История анализов
 					</UButton>
 				</div>
 
 				<UCard class="shadow-sm mb-4">
-					<UForm :schema="schema" :state="form" @submit="handleCreate" class="space-y-5">
+					<UForm :schema="schema" :state="form" class="space-y-5" @submit="handleCreate">
 						<UAlert
 							v-if="module2BlockReason"
 							color="warning"

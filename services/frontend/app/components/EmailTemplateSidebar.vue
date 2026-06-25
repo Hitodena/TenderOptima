@@ -26,7 +26,8 @@
 			<div v-if="loading && !templates.length" class="space-y-2">
 				<USkeleton v-for="i in 3" :key="i" class="h-20 w-full rounded-lg" />
 			</div>
-			<div v-else-if="!templates.length"
+			<div
+v-else-if="!templates.length"
 				class="text-xs text-muted text-center py-6">
 				Нет шаблонов
 			</div>

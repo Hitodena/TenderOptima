@@ -9,16 +9,18 @@
 				</div>
 
 				<div class="flex justify-end mb-4">
-					<UButton to="/requests/history" size="lg" variant="outline" color="neutral"
+					<UButton
+to="/requests/history" size="lg" variant="outline" color="neutral"
 						leading-icon="i-lucide-history">
 						История запросов
 					</UButton>
 				</div>
 
 				<UCard class="shadow-sm mb-4">
-					<UForm :schema="schema" :state="form" @submit="handleSearch" class="space-y-5">
+					<UForm :schema="schema" :state="form" class="space-y-5" @submit="handleSearch">
 						<UFormField label="Что ищете?" name="query" required>
-							<UInput v-model="form.query" placeholder="Промышленные насосы, картонные коробки..."
+							<UInput
+v-model="form.query" placeholder="Промышленные насосы, картонные коробки..."
 								icon="i-lucide-search" size="lg" class="w-full">
 								<template #trailing>
 									<SearchQueryRulesHint />
@@ -27,7 +29,8 @@
 						</UFormField>
 
 						<UFormField label="Регион поиска" name="delivery_region" required>
-							<UInput v-model="form.delivery_region" placeholder="Республика Беларусь"
+							<UInput
+v-model="form.delivery_region" placeholder="Республика Беларусь"
 								icon="i-lucide-map-pin" size="lg" class="w-full" />
 						</UFormField>
 

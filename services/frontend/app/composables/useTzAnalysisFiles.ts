@@ -1,4 +1,3 @@
-import type { Ref } from 'vue'
 
 const MIME_BY_EXT: Record<string, string> = {
 	pdf: 'application/pdf',

@@ -11,7 +11,8 @@
 		<template v-else-if="analysis">
 			<div class="flex items-start justify-between mb-6 gap-4 flex-wrap">
 				<div class="min-w-0">
-					<UButton to="/tz-analysis/history" variant="ghost" color="neutral" size="sm"
+					<UButton
+to="/tz-analysis/history" variant="ghost" color="neutral" size="sm"
 						leading-icon="i-lucide-arrow-left" class="-ml-1 mb-2">
 						К анализам
 					</UButton>
@@ -26,11 +27,13 @@
 							<UIcon name="i-lucide-calendar" class="w-3.5 h-3.5" />
 							{{ formatDate(analysis.created_at) }}
 						</span>
-						<span v-if="analysis.tz_filename || displayKpFilenames.length"
+						<span
+v-if="analysis.tz_filename || displayKpFilenames.length"
 							class="flex items-center gap-1 min-w-0 flex-wrap">
 							<UIcon name="i-lucide-files" class="w-3.5 h-3.5 shrink-0" />
 							<template v-if="analysis.tz_filename">
-								<button type="button" class="truncate max-w-full text-primary hover:underline text-left"
+								<button
+type="button" class="truncate max-w-full text-primary hover:underline text-left"
 									@click="openTzFile()">
 									{{ analysis.tz_filename }}
 								</button>
@@ -42,12 +45,14 @@
 			</div>
 
 			<template v-if="isDraft">
-				<UAlert color="info" variant="soft" icon="i-lucide-info" class="mb-6"
+				<UAlert
+color="info" variant="soft" icon="i-lucide-info" class="mb-6"
 					description="Загрузите техническое задание и запустите анализ. После извлечения требований вы сможете проверить их и загрузить коммерческие предложения." />
 
 				<UCard class="shadow-sm">
 					<UFormField label="Техническое задание" required>
-						<UFileUpload :model-value="tzFile" :accept="fileAccept" :interactive="true"
+						<UFileUpload
+:model-value="tzFile" :accept="fileAccept" :interactive="true"
 							:description="uploadDescription" layout="list" class="w-full min-h-32" position="inside"
 							@update:model-value="onTzFileChange">
 							<template #actions="{ open }">
@@ -98,7 +103,8 @@
 			</template>
 
 			<template v-else-if="analysis.status === TZAnalysisRunStatus.FAILED">
-				<UAlert color="error" variant="soft" icon="i-lucide-circle-alert"
+				<UAlert
+color="error" variant="soft" icon="i-lucide-circle-alert"
 					description="Не удалось выполнить анализ. Создайте новый анализ и попробуйте снова." />
 			</template>
 
@@ -129,7 +135,8 @@
 					@update:model-value="onUserTabPick"
 				>
 					<template #tz>
-						<div v-if="isTzReviewPhase && !isAnalysisClosed"
+						<div
+v-if="isTzReviewPhase && !isAnalysisClosed"
 							class="mb-6 rounded-xl border border-warning/25 bg-warning/10 p-4 sm:p-5">
 							<div class="flex gap-3 min-w-0">
 								<UIcon name="i-lucide-info" class="w-5 h-5 shrink-0 text-warning mt-0.5" />
@@ -181,7 +188,8 @@
 									? 'max-h-[min(58vh,calc(100dvh-18rem))]'
 									: ''"
 							>
-								<RequirementTreeEditor v-if="editableTzCount > 0" :rows="editableRequirementsTz"
+								<RequirementTreeEditor
+v-if="editableTzCount > 0" :rows="editableRequirementsTz"
 									:scope-id="isTzConfirmed ? 'tz-results' : 'tz-review'"
 									:readonly="isTzConfirmed || isCompleted" show-heading-hint
 									@remove="removeTzRequirement"
@@ -213,10 +221,12 @@
 					</template>
 
 					<template #kp>
-						<div class="grid grid-cols-1 gap-6" :class="showSuppliersSidebar
+						<div
+class="grid grid-cols-1 gap-6" :class="showSuppliersSidebar
 							? 'xl:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)]'
 							: ''">
-							<TzAnalysisSuppliersPanel v-if="showSuppliersSidebar && analysis?.id"
+							<TzAnalysisSuppliersPanel
+v-if="showSuppliersSidebar && analysis?.id"
 								:analysis-id="analysis.id" :suppliers="suppliers" :file-accept="fileAccept"
 								:readonly="isCompleted || isAnalysisClosed"
 								:hide-kp-files="isKpProcessing"
@@ -281,13 +291,15 @@
 								</UCard>
 
 								<template v-if="isAnalysisClosed">
-									<UAlert color="neutral" variant="soft" icon="i-lucide-lock"
+									<UAlert
+color="neutral" variant="soft" icon="i-lucide-lock"
 										description="Анализ завершён без сравнения с КП. Этот раздел недоступен." />
 								</template>
 
 								<template v-else-if="isTzConfirmed && !hasComparisonResults && !isCompleted && !isKpProcessing">
 									<div class="flex flex-wrap items-center gap-2">
-										<UButton color="warning" variant="solid" :loading="kpAnalyzing"
+										<UButton
+color="warning" variant="solid" :loading="kpAnalyzing"
 											:disabled="!canRunKpAnalysis" @click="runKpAnalysis">
 											Запустить анализ КП
 										</UButton>
@@ -298,7 +310,8 @@
 								</template>
 
 								<template v-else-if="isCompleted && !hasComparisonResults">
-									<UAlert color="neutral" variant="soft" icon="i-lucide-archive"
+									<UAlert
+color="neutral" variant="soft" icon="i-lucide-archive"
 										description="Сравнение с КП не выполнялось. Анализ завершён — запуск сравнения недоступен." />
 								</template>
 
@@ -385,11 +398,13 @@
 												<div class="flex flex-wrap items-center justify-between gap-3 w-full">
 													<p class="font-semibold text-sm">Соответствия и несоответствия</p>
 													<div class="flex flex-wrap items-center gap-2">
-														<UButton size="sm" variant="outline" leading-icon="i-lucide-download"
+														<UButton
+size="sm" variant="outline" leading-icon="i-lucide-download"
 															@click="exportTzXlsx">
 															Экспорт XLSX
 														</UButton>
-														<UButton size="sm" leading-icon="i-lucide-file-text"
+														<UButton
+size="sm" leading-icon="i-lucide-file-text"
 															:disabled="!hasLetterIssues" @click="openLetterModal">
 															Письмо поставщику
 														</UButton>
@@ -405,7 +420,8 @@
 														/>
 													</UFormField>
 													<UFormField label="Фильтр" class="mb-0">
-														<USelect v-model="tzStatusFilter" :items="tzFilterOptions" size="sm"
+														<USelect
+v-model="tzStatusFilter" :items="tzFilterOptions" size="sm"
 															class="min-w-40" />
 													</UFormField>
 												</div>
@@ -413,18 +429,22 @@
 										</template>
 
 										<div class="min-h-[55vh] max-h-[85vh] overflow-y-auto pr-1 space-y-8">
-											<section v-for="group in visibleKpItemGroups"
+											<section
+v-for="group in visibleKpItemGroups"
 												:key="`results-kp-${group.id}`" class="space-y-4">
-												<button type="button" class="sticky top-0 z-10 -mx-1 px-1 py-2 w-full text-left
+												<button
+type="button" class="sticky top-0 z-10 -mx-1 px-1 py-2 w-full text-left
 														bg-default/95 backdrop-blur-sm border-b border-default" :aria-expanded="isResultsKpExpanded(group.id)"
 													@click.stop="toggleResultsKpExpand(group.id)">
 													<div class="flex flex-wrap items-center gap-2">
-														<UIcon :name="isResultsKpExpanded(group.id)
+														<UIcon
+:name="isResultsKpExpanded(group.id)
 															? 'i-lucide-chevron-down'
 															: 'i-lucide-chevron-right'" class="w-4 h-4 shrink-0 text-muted" />
 														<p class="text-sm font-semibold text-highlighted">{{ group.label
 															}}</p>
-														<UBadge v-if="analysis.kp_filename === group.key"
+														<UBadge
+v-if="analysis.kp_filename === group.key"
 															color="primary" variant="subtle" size="xs">
 															Основное
 														</UBadge>
@@ -457,7 +477,8 @@
 												</div>
 											</section>
 
-											<p v-if="visibleKpItemGroups.length === 0"
+											<p
+v-if="visibleKpItemGroups.length === 0"
 												class="text-sm text-muted text-center py-8">
 												<template v-if="tzRequirementSearch.trim() || tzStatusFilter !== 'all'">
 													Ничего не найдено по заданным фильтрам
@@ -493,7 +514,8 @@
 						<UButton variant="outline" color="neutral" @click="close">
 							Закрыть
 						</UButton>
-						<UButton leading-icon="i-lucide-download" :loading="docxGenerating"
+						<UButton
+leading-icon="i-lucide-download" :loading="docxGenerating"
 							:disabled="!hasLetterIssues || !letterEditorText.trim()" @click="generateDocx">
 							Скачать DOCX
 						</UButton>
@@ -521,7 +543,8 @@
 						</p>
 						<p v-else-if="primaryKpLabel" class="text-xs text-muted">
 							Основное КП:
-							<button v-if="analysis?.kp_filename" type="button"
+							<button
+v-if="analysis?.kp_filename" type="button"
 								class="text-primary hover:underline font-medium"
 								@click="openKpFile(analysis.kp_filename)">
 								{{ primaryKpLabel }}
@@ -535,7 +558,8 @@
 							<p class="text-xs font-semibold uppercase tracking-wide text-muted px-0.5">
 								Разделы письма
 							</p>
-							<UButton v-for="tab in letterPreviewTabs" :key="tab.value" type="button" block
+							<UButton
+v-for="tab in letterPreviewTabs" :key="tab.value" type="button" block
 								:variant="letterPreviewTab === tab.value ? 'soft' : 'ghost'"
 								:color="letterPreviewTab === tab.value ? tab.color : 'neutral'" size="sm"
 								class="justify-start text-left whitespace-normal h-auto py-2"
@@ -577,7 +601,6 @@ import type {
 	UserResponse,
 } from '#shared/types'
 import {
-	getTzItemStatusColor,
 	getTzRunStatusColor,
 	getTzRunStatusLabel,
 	TZAnalysisRunStatus,
@@ -1964,7 +1987,7 @@ function openLetterModal() {
 		})
 		return
 	}
-	const { mismatch, not_found, partial } = letterItemsByTab.value
+	const { mismatch, not_found } = letterItemsByTab.value
 	if (mismatch.length > 0) letterPreviewTab.value = 'mismatch'
 	else if (not_found.length > 0) letterPreviewTab.value = 'not_found'
 	else letterPreviewTab.value = 'partial'

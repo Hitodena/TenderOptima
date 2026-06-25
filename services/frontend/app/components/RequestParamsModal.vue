@@ -1,6 +1,6 @@
 <template>
     <UModal v-model:open="isOpen" :ui="EMAIL_LETTER_MODAL_UI">
-        <template #header="{ close }">
+        <template #header>
             <div class="flex items-start justify-between gap-3 w-full">
                 <div class="min-w-0">
                     <p class="text-lg font-semibold text-highlighted">
@@ -49,14 +49,16 @@
             <div v-if="step === 'params'" class="flex flex-col max-h-[min(80vh,42rem)]">
                 <div class="flex-1 min-h-0 overflow-y-auto space-y-6 pr-1">
                     <UFormField label="Тема письма" :required="false">
-                        <UInput v-model="form.emailSubject" placeholder="Запрос коммерческого предложения — ..."
+                        <UInput
+v-model="form.emailSubject" placeholder="Запрос коммерческого предложения — ..."
                             class="w-full" size="lg" :class="errors.emailSubject ? 'ring-2 ring-error rounded-lg' : ''"
                             maxlength="255" />
                         <p v-if="errors.emailSubject" class="text-xs text-error mt-1">{{ errors.emailSubject }}</p>
                     </UFormField>
 
                     <UFormField label="Описание товара/услуги" required>
-                        <UTextarea v-model="form.description"
+                        <UTextarea
+v-model="form.description"
                             placeholder="Опишите детально товар или услугу, технические характеристики, объёмы..."
                             :rows="6" class="w-full" size="lg"
                             :class="errors.description ? 'ring-2 ring-error rounded-lg' : ''" />
@@ -74,10 +76,12 @@
 
                         <div>
                             <div class="space-y-2 max-h-80 overflow-y-auto">
-                                <div v-for="(label, idx) in form.labels" :key="idx"
+                                <div
+v-for="(label, idx) in form.labels" :key="idx"
                                     class="flex items-center gap-2 py-1 px-2 rounded-lg hover:bg-elevated/50 transition-colors">
                                     <span class="text-sm flex-1 truncate">{{ label }}</span>
-                                    <button type="button"
+                                    <button
+type="button"
                                         class="w-8 h-8 flex items-center justify-center rounded text-muted hover:text-error hover:bg-elevated transition-colors shrink-0"
                                         @click="removeLabel(idx)">
                                         <UIcon name="i-lucide-x" class="w-4 h-4" />
@@ -86,9 +90,11 @@
                             </div>
 
                             <div class="flex gap-2 mt-3 items-center px-2">
-                                <UInput v-model="form.newLabel" placeholder="Требование (цена, сроки, условия...)"
+                                <UInput
+v-model="form.newLabel" placeholder="Требование (цена, сроки, условия...)"
                                     class="flex-1" size="lg" @keyup.enter="addLabel" />
-                                <button type="button"
+                                <button
+type="button"
                                     class="w-8 h-8 flex items-center justify-center rounded text-muted hover:text-primary hover:bg-elevated transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                                     :disabled="!form.newLabel.trim()" @click="addLabel">
                                     <UIcon name="i-lucide-plus" class="w-4 h-4" />
@@ -102,7 +108,8 @@
                         <p class="text-xs text-muted mb-3">
                             Добавляется в конце письма. Изменения сохранятся в профиле.
                         </p>
-                        <UTextarea v-model="form.businessInfo"
+                        <UTextarea
+v-model="form.businessInfo"
                             placeholder="С Уважением, специалист отдела закупок, Иван Иванов" :rows="4"
                             class="w-full" />
                     </div>
@@ -110,7 +117,8 @@
                     <div>
                         <p class="text-sm font-semibold mb-1">Вложения</p>
                         <p class="text-xs text-muted mb-2">{{ uploadDescription }}</p>
-                        <UFileUpload :model-value="filesToUpload" multiple
+                        <UFileUpload
+:model-value="filesToUpload" multiple
                             accept=".pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp" :interactive="false"
                             layout="list" class="w-full" @update:model-value="handleFilesUpdate">
                             <template #actions="{ open }">
@@ -123,12 +131,14 @@
                     </div>
                 </div>
 
-                <UAlert v-if="error" color="error" variant="soft" icon="i-lucide-circle-alert" :description="error"
+                <UAlert
+v-if="error" color="error" variant="soft" icon="i-lucide-circle-alert" :description="error"
                     class="mt-4 shrink-0" />
             </div>
 
             <div v-else-if="step === 'confirm'" class="space-y-4">
-                <UAlert v-if="props.supplierCount" color="info" variant="soft" icon="i-lucide-info" class="mb-4"
+                <UAlert
+v-if="props.supplierCount" color="info" variant="soft" icon="i-lucide-info" class="mb-4"
                     :description="`Запрос будет отправлен на ${props.supplierCount} ${getSupplierWord(props.supplierCount)}`" />
 
                 <div class="flex items-center gap-2 text-sm text-muted mb-4">
@@ -144,7 +154,8 @@
 
                 <div>
                     <p class="text-sm font-semibold mb-1">Тело письма</p>
-                    <UTextarea v-model="form.emailMessage" :rows="20" class="w-full font-mono text-sm"
+                    <UTextarea
+v-model="form.emailMessage" :rows="20" class="w-full font-mono text-sm"
                         placeholder="Текст письма загружается..." />
                 </div>
 
@@ -153,7 +164,8 @@
                         Вложения ({{ uploadedAttachments.length }}/2)
                     </p>
                     <div class="space-y-2">
-                        <div v-for="(att, idx) in uploadedAttachments" :key="idx"
+                        <div
+v-for="(att, idx) in uploadedAttachments" :key="idx"
                             class="flex items-center gap-2 text-sm p-2 bg-elevated/50 rounded-lg">
                             <UIcon name="i-lucide-paperclip" class="w-4 h-4 text-primary shrink-0" />
                             <span class="flex-1 truncate">{{ att.filename }}</span>
