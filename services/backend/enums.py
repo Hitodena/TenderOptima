@@ -75,6 +75,7 @@ class TZAnalysisSupplierStatus(StrEnum):
 class SubscriptionPlan(StrEnum):
     """Tariff tier for a user subscription."""
 
+    TEST = "test"
     BASIC = "basic"
     ADVANCED = "advanced"
     CORPORATE = "corporate"

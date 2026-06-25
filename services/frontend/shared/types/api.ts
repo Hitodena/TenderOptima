@@ -22,7 +22,7 @@ export interface UserResponse {
 	subscription?: SubscriptionResponse | null;
 }
 
-export type SubscriptionPlan = 'basic' | 'advanced' | 'corporate';
+export type SubscriptionPlan = 'test' | 'basic' | 'advanced' | 'corporate';
 
 export interface SubscriptionResponse {
 	id: string;

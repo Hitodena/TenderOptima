@@ -14,6 +14,7 @@ from backend.api.auth.schemas import (
 from backend.api.deps import get_current_user, get_session
 from backend.db.dao import SubscriptionDAO, UserDAO
 from backend.db.models import User
+from backend.enums import SubscriptionPlan
 from backend.utils.jwt_utils import create_access_token
 from backend.utils.security import hash_password, verify_password
 from backend.utils.user_utils import build_business_info
@@ -58,7 +59,13 @@ async def register(
     await UserDAO.update_contact_info(
         session, user.id, business_info=business_info
     )
-    await SubscriptionDAO.upsert_for_user(session, user.id)
+    await SubscriptionDAO.upsert_for_user(
+        session,
+        user.id,
+        plan=SubscriptionPlan.TEST.value,
+        module_1_enabled=True,
+        module_2_enabled=True,
+    )
 
     access_token = create_access_token(data={"sub": user.email})
     return TokenResponse(access_token=access_token, token_type="bearer")

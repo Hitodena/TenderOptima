@@ -20,7 +20,7 @@
 				<template #header>
 					<p class="font-semibold">Пользователи</p>
 				</template>
-				<div class="max-h-[28rem] overflow-y-auto divide-y divide-default">
+				<div class="max-h-112 overflow-y-auto divide-y divide-default">
 					<button
 						v-for="item in users"
 						:key="item.id"
@@ -297,6 +297,7 @@ const subscriptionForm = reactive({
 const subscriptionActive = ref<'active' | 'inactive'>('active')
 
 const planOptions = [
+	{ label: 'Тестовый', value: 'test' },
 	{ label: 'Базовый', value: 'basic' },
 	{ label: 'Расширенный', value: 'advanced' },
 	{ label: 'Корпоративный', value: 'corporate' },

@@ -17,6 +17,14 @@ class PlanCatalogEntry:
 
 
 PLAN_CATALOG: dict[str, PlanCatalogEntry] = {
+    SubscriptionPlan.TEST.value: PlanCatalogEntry(
+        max_searches_per_month=5,
+        max_emails_per_month=10,
+        max_kp_processed_per_month=2,
+        price_module_1_monthly=None,
+        price_module_2_monthly=None,
+        price_bundle_monthly=None,
+    ),
     SubscriptionPlan.BASIC.value: PlanCatalogEntry(
         max_searches_per_month=50,
         max_emails_per_month=1000,

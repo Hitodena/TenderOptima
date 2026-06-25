@@ -1,6 +1,7 @@
 import type { SubscriptionResponse } from '#shared/types'
 
 export const PLAN_LABELS: Record<string, string> = {
+	test: 'Тестовый',
 	basic: 'Базовый',
 	advanced: 'Расширенный',
 	corporate: 'Корпоративный',
