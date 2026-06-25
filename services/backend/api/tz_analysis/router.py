@@ -1,5 +1,3 @@
-import csv
-import io
 import tempfile
 import uuid
 from pathlib import Path
@@ -15,8 +13,9 @@ from fastapi import (
     UploadFile,
     status,
 )
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, Response
 from loguru import logger
+from openpyxl import Workbook
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_current_user, get_session
@@ -89,6 +88,7 @@ from backend.utils.tz_storage import (
     save_supplier_kp_files,
     save_tz_only_file,
 )
+from backend.utils.xlsx_export import workbook_to_bytes, write_sheet_rows
 
 router = APIRouter(prefix="/tz-analysis", tags=["TZ Analysis"])
 config = get_config()
@@ -1227,14 +1227,14 @@ async def download_kp_analysis_file(
 
 
 @router.get(
-    "/{analysis_id}/export.csv",
-    summary="Export TZ analysis as CSV",
+    "/{analysis_id}/export.xlsx",
+    summary="Export TZ analysis as XLSX",
 )
-async def export_tz_analysis_csv(
+async def export_tz_analysis_xlsx(
     analysis_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
-) -> StreamingResponse:
+) -> Response:
     row = await TZAnalysisDAO.get_by_id_and_user(
         session, analysis_id, current_user.id
     )
@@ -1257,22 +1257,19 @@ async def export_tz_analysis_csv(
         [TZAnalysisItem(**item) for item in (row.items or [])],
         getattr(row, "items_overrides", None),
     )
-    buffer = io.StringIO()
-    writer = csv.writer(buffer)
-    writer.writerow(
-        [
-            "№",
-            "КП",
-            "Требование",
-            "Ссылка ТЗ",
-            "Предложение",
-            "Ссылка КП",
-            "Статус",
-            "Объяснение",
-        ]
-    )
+    header = [
+        "№",
+        "КП",
+        "Требование",
+        "Ссылка ТЗ",
+        "Предложение",
+        "Ссылка КП",
+        "Статус",
+        "Объяснение",
+    ]
+    rows: list[list[str | int]] = []
     for idx, item in enumerate(items, start=1):
-        writer.writerow(
+        rows.append(
             [
                 idx,
                 item.kp_name or "",
@@ -1285,11 +1282,18 @@ async def export_tz_analysis_csv(
             ]
         )
 
-    buffer.seek(0)
-    filename = f"tz_analysis_{analysis_id}.csv"
-    return StreamingResponse(
-        iter([buffer.getvalue()]),
-        media_type="text/csv; charset=utf-8",
+    wb = Workbook()
+    ws = wb.active
+    if ws is not None:
+        ws.title = "Анализ КП"
+        write_sheet_rows(ws, header, rows)
+
+    filename = f"tz_analysis_{analysis_id}.xlsx"
+    return Response(
+        content=workbook_to_bytes(wb),
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 

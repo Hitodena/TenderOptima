@@ -138,7 +138,7 @@
 												<div class="flex items-start gap-2">
 													<div class="flex-1 min-w-0 space-y-1">
 														<p class="text-xs wrap-break-word whitespace-normal">
-															{{ supplier.values[req] || '—' }}
+															{{ comparisonDisplayValue(supplier, req) }}
 														</p>
 														<p v-if="comparisonUserCorrected(supplier, req)"
 															class="text-[10px] text-muted wrap-break-word whitespace-normal">
@@ -153,8 +153,11 @@
 															class="text-[10px] text-muted line-through wrap-break-word whitespace-normal">
 															{{ supplier.previous_values?.[req] }}
 														</p>
-														<div class="flex items-center gap-1">
-															<UBadge v-if="supplier.statuses[req]"
+														<div
+															v-if="comparisonShowStatusBadge(supplier, req)"
+															class="flex items-center gap-1"
+														>
+															<UBadge
 																:color="comparisonStatusColor(supplier.statuses[req]!)"
 																variant="subtle" size="sm">
 																{{ comparisonStatusLabel(supplier.statuses[req]!) }}
@@ -196,14 +199,14 @@
 										<tr class="border-t border-default/50 bg-elevated/20">
 											<td
 												class="sticky left-0 z-10 bg-elevated/95 px-3 py-3 text-xs font-semibold align-middle">
-												Составить письмо
+												Запросить отсутствующие параметры
 											</td>
 											<td v-for="supplier in comparison.suppliers"
 												:key="`letter-${supplier.rs_id}`" class="px-3 py-3 align-middle">
 												<UButton v-if="supplierHasLetterMismatches(supplier)" size="xs"
 													variant="outline" leading-icon="i-lucide-mail"
 													@click="openLetterModal(supplier)">
-													Составить письмо
+													Запрос
 												</UButton>
 												<span v-else class="text-xs text-muted">—</span>
 											</td>
@@ -241,8 +244,8 @@
 						<div v-if="comparison?.requirements.length && comparison?.suppliers.length"
 							class="shrink-0 border-t border-default px-3 md:px-5 py-3 flex justify-end">
 							<UButton size="sm" variant="outline" leading-icon="i-lucide-download"
-								:loading="exportingComparison" @click="exportComparisonCsv">
-								Экспорт CSV
+								:loading="exportingComparison" @click="exportComparisonXlsx">
+								Экспорт XLSX
 							</UButton>
 						</div>
 					</div>
@@ -411,8 +414,10 @@
 											<div class="flex-1 min-w-0">
 												<p class="text-[11px] text-muted">Предложение</p>
 												<p class="text-xs"
-													:class="m.offer_value ? 'text-default' : 'text-muted'">
-													{{ m.offer_value ?? '—' }}
+													:class="m.status === 'not_found' || !m.offer_value?.trim()
+														? 'text-muted'
+														: 'text-default'">
+													{{ matchDisplayValue(m) }}
 												</p>
 												<p v-if="matchUserCorrected(m)" class="text-[10px] text-muted mt-0.5">
 													<span class="line-through">{{ m.corrected_from }}</span>
@@ -457,7 +462,7 @@
 						<div v-if="threadLetterMismatches.length" class="pt-1">
 							<UButton block size="sm" variant="outline" leading-icon="i-lucide-mail"
 								@click="openThreadLetterModal">
-								Составить письмо
+								Запрос
 							</UButton>
 						</div>
 					</div>
@@ -1018,27 +1023,49 @@ async function fetchComparison() {
 	}
 }
 
-async function exportComparisonCsv() {
+async function exportComparisonXlsx() {
 	exportingComparison.value = true
 	try {
 		const res = await $axios.get(
-			`/requests/${id}/analysis/comparison.csv`,
+			`/requests/${id}/analysis/comparison.xlsx`,
 			{ responseType: 'blob' },
 		)
 		const blob = res.data as Blob
 		const objectUrl = URL.createObjectURL(blob)
 		const a = document.createElement('a')
 		a.href = objectUrl
-		a.download = `request_${id}_comparison.csv`
+		a.download = `request_${id}_comparison.xlsx`
 		document.body.appendChild(a)
 		a.click()
 		a.remove()
 		URL.revokeObjectURL(objectUrl)
 	} catch {
-		toast.add({ title: 'Не удалось экспортировать CSV', color: 'error' })
+		toast.add({ title: 'Не удалось экспортировать XLSX', color: 'error' })
 	} finally {
 		exportingComparison.value = false
 	}
+}
+
+function matchDisplayValue(m: RequirementMatch): string {
+	if (m.status === 'not_found') return '—'
+	return m.offer_value?.trim() || '—'
+}
+
+function comparisonDisplayValue(
+	supplier: ComparisonSupplier,
+	req: string,
+): string {
+	if (supplier.statuses[req] === 'not_found') return '—'
+	const value = supplier.values[req]?.trim()
+	return value || '—'
+}
+
+function comparisonShowStatusBadge(
+	supplier: ComparisonSupplier,
+	req: string,
+): boolean {
+	const status = supplier.statuses[req]
+	return Boolean(status && status !== 'not_found')
 }
 
 function comparisonStatusLabel(status: string) {

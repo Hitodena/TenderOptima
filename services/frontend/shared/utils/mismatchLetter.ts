@@ -1,6 +1,7 @@
 import type { ComparisonSupplier, RequirementMatch } from '#shared/types'
 
-export const LETTER_MISMATCH_HEADER = 'Несоответствующие параметры:'
+export const LETTER_MISMATCH_HEADER = 'Не соответствует:'
+export const LETTER_NOT_FOUND_HEADER = 'Не найдено:'
 export const LETTER_PARTIAL_HEADER = 'Требуют уточнения/дополнения:'
 
 export function mismatchReason(match: RequirementMatch): string {
@@ -35,8 +36,8 @@ export function buildEmailMismatchLetterBody(
 	deadline = '7 дней',
 ): string {
 	const mismatch = matches.filter((item) => item.status === 'missing')
-	const partial = matches.filter((item) => item.status === 'partial')
 	const notFound = matches.filter((item) => item.status === 'not_found')
+	const partial = matches.filter((item) => item.status === 'partial')
 
 	const lines: string[] = [
 		`Уважаемый ${companyName}!`,
@@ -45,37 +46,38 @@ export function buildEmailMismatchLetterBody(
 		'Выявлены следующие замечания и требуемые уточнения:',
 	]
 
+	let itemNum = 1
+
 	if (mismatch.length) {
 		lines.push('', LETTER_MISMATCH_HEADER)
-		for (const [idx, item] of mismatch.entries()) {
-			lines.push(`${idx + 1}. Требование: «${item.requirement}»`)
+		for (const item of mismatch) {
+			lines.push(`${itemNum}. Требование: «${item.requirement}»`)
 			if (item.offer_value) {
 				lines.push(`   Предложено: «${item.offer_value}»`)
 			}
 			lines.push(`   ${mismatchReason(item)}`)
+			itemNum += 1
+		}
+	}
+
+	if (notFound.length) {
+		lines.push('', LETTER_NOT_FOUND_HEADER)
+		for (const item of notFound) {
+			lines.push(`${itemNum}. Требование: «${item.requirement}»`)
+			lines.push(`   ${mismatchReason(item)}`)
+			itemNum += 1
 		}
 	}
 
 	if (partial.length) {
 		lines.push('', LETTER_PARTIAL_HEADER)
-		const start = mismatch.length + 1
-		for (const [offset, item] of partial.entries()) {
-			lines.push(`${start + offset}. Требование: «${item.requirement}»`)
+		for (const item of partial) {
+			lines.push(`${itemNum}. Требование: «${item.requirement}»`)
 			if (item.offer_value) {
 				lines.push(`   Предложено: «${item.offer_value}»`)
 			}
 			lines.push(`   ${mismatchReason(item)}`)
-		}
-	}
-
-	if (notFound.length) {
-		if (!mismatch.length && !partial.length) {
-			lines.push('', LETTER_MISMATCH_HEADER)
-		}
-		const start = mismatch.length + partial.length + 1
-		for (const [offset, item] of notFound.entries()) {
-			lines.push(`${start + offset}. Требование: «${item.requirement}»`)
-			lines.push(`   ${mismatchReason(item)}`)
+			itemNum += 1
 		}
 	}
 

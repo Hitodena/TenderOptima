@@ -386,23 +386,29 @@
 													<p class="font-semibold text-sm">Соответствия и несоответствия</p>
 													<div class="flex flex-wrap items-center gap-2">
 														<UButton size="sm" variant="outline" leading-icon="i-lucide-download"
-															@click="exportTzCsv">
-															Экспорт CSV
+															@click="exportTzXlsx">
+															Экспорт XLSX
 														</UButton>
 														<UButton size="sm" leading-icon="i-lucide-file-text"
-															:disabled="tzSelectedIndices.length === 0" @click="openLetterModal">
+															:disabled="!hasLetterIssues" @click="openLetterModal">
 															Письмо поставщику
 														</UButton>
-														<UBadge v-if="tzSelectedIndices.length > 0" color="neutral"
-															variant="subtle">
-															{{ tzSelectedIndices.length }} в письме
-														</UBadge>
 													</div>
 												</div>
-												<UFormField label="Фильтр" class="mb-0">
-													<USelect v-model="tzStatusFilter" :items="tzFilterOptions" size="sm"
-														class="min-w-40" />
-												</UFormField>
+												<div class="flex flex-wrap items-end gap-3 w-full">
+													<UFormField label="Поиск" class="mb-0 flex-1 min-w-48">
+														<UInput
+															v-model="tzRequirementSearch"
+															placeholder="Поиск по требованиям..."
+															icon="i-lucide-search"
+															size="sm"
+														/>
+													</UFormField>
+													<UFormField label="Фильтр" class="mb-0">
+														<USelect v-model="tzStatusFilter" :items="tzFilterOptions" size="sm"
+															class="min-w-40" />
+													</UFormField>
+												</div>
 											</div>
 										</template>
 
@@ -445,18 +451,18 @@
 														:default-kp-filename="group.filename"
 														:is-item-expanded="isItemExpanded"
 														:toggle-item-expand="toggleItemExpand"
-														:tz-selected-indices="tzSelectedIndices"
-														:belongs-to-primary-kp="belongsToPrimaryKp"
 														:editable="canEditItemStatuses"
 														:is-item-overridden="isItemOverridden"
-														@toggle-select="toggleTzSelect"
 														@status-change="updateItemStatus" />
 												</div>
 											</section>
 
 											<p v-if="visibleKpItemGroups.length === 0"
 												class="text-sm text-muted text-center py-8">
-												<template v-if="selectedSupplier">
+												<template v-if="tzRequirementSearch.trim() || tzStatusFilter !== 'all'">
+													Ничего не найдено по заданным фильтрам
+												</template>
+												<template v-else-if="selectedSupplier">
 													Нет результатов для поставщика «{{ selectedSupplier.name }}»
 												</template>
 												<template v-else>
@@ -474,130 +480,86 @@
 			</template>
 		</template>
 
-		<UModal v-model:open="showLetterModal" title="Письмо поставщику"
-			description="Письмо формируется по основному КП. Снимите галочки у пунктов, которые не нужно включать."
-			:ui="EMAIL_LETTER_MODAL_UI">
-			<template #body>
-				<div class="grid grid-cols-1 md:grid-cols-[15rem_minmax(0,1fr)] gap-5 min-h-0">
-					<aside class="flex flex-col gap-4 min-h-0 md:max-h-[72vh]">
-						<div class="space-y-3 shrink-0">
-							<p v-if="selectedSupplier" class="text-xs text-muted">
-									Поставщик:
-									<span class="text-default font-medium">{{ selectedSupplier.name }}</span>
-									<span v-if="primaryKpLabel"> · КП: </span>
-									<button
-										v-if="selectedSupplierPrimaryKp"
-										type="button"
-										class="text-primary hover:underline font-medium"
-										@click="openKpFile(
-											kpDisplayLabel(selectedSupplierPrimaryKp),
-											selectedSupplier.id,
-										)"
-									>
-										{{ primaryKpLabel }}
-									</button>
-								</p>
-								<p v-else-if="primaryKpLabel" class="text-xs text-muted">
-									Основное КП:
-									<button v-if="analysis?.kp_filename" type="button"
-										class="text-primary hover:underline font-medium"
-										@click="openKpFile(analysis.kp_filename)">
-										{{ primaryKpLabel }}
-									</button>
-									<span v-else class="text-default font-medium">{{ primaryKpLabel }}</span>
-								</p>
-								<UFormField label="Срок ответа">
-									<UInput v-model="docxDeadline" placeholder="7 июня 2026 г." size="md" />
-								</UFormField>
-							</div>
-
-							<div class="border-t border-default shrink-0" />
-
-							<div class="flex flex-col gap-2 shrink-0">
-								<p class="text-xs font-semibold uppercase tracking-wide text-muted px-0.5">
-									Разделы письма
-								</p>
-								<UButton v-for="tab in letterPreviewTabs" :key="tab.value" type="button" block
-									:variant="letterPreviewTab === tab.value ? 'soft' : 'ghost'"
-									:color="letterPreviewTab === tab.value ? tab.color : 'neutral'" size="sm"
-									class="justify-start text-left whitespace-normal h-auto py-2"
-									:disabled="tab.disabled" @click="scrollToLetterSection(
-										tab.value === 'partial' ? 'partial' : 'mismatch',
-									)">
-									{{ tab.label }}
-								</UButton>
-							</div>
-
-							<div class="flex-1 min-h-0 overflow-y-auto space-y-4 pr-0.5">
-								<div v-if="letterModalMismatchItems.length" id="letter-sidebar-mismatch" class="space-y-2">
-									<p class="text-xs font-semibold text-error px-0.5">
-										Не совпадает
-										<span v-if="primaryKpLabel" class="text-muted font-normal">
-											· {{ primaryKpLabel }}
-										</span>
-									</p>
-									<label v-for="item in letterModalMismatchItems" :key="item._index" class="flex items-start gap-2 rounded-lg border border-default/60
-											bg-elevated/30 px-2 py-2 cursor-pointer hover:bg-elevated/50">
-										<UCheckbox :model-value="tzSelectedIndices.includes(item._index)"
-											:color="getTzItemStatusColor(item.status)" class="shrink-0 mt-0.5"
-											@update:model-value="(v) => toggleTzSelect(item._index, v === true)"
-											@click.stop />
-										<span class="text-xs leading-relaxed whitespace-pre-wrap min-w-0">
-											{{ item.requirement }}
-										</span>
-									</label>
-								</div>
-
-								<div v-if="letterModalPartialItems.length" id="letter-sidebar-partial" class="space-y-2">
-									<p class="text-xs font-semibold text-warning px-0.5">
-										Частично совпадает
-										<span v-if="primaryKpLabel" class="text-muted font-normal">
-											· {{ primaryKpLabel }}
-										</span>
-									</p>
-									<label v-for="item in letterModalPartialItems" :key="item._index" class="flex items-start gap-2 rounded-lg border border-default/60
-											bg-elevated/30 px-2 py-2 cursor-pointer hover:bg-elevated/50">
-										<UCheckbox :model-value="tzSelectedIndices.includes(item._index)"
-											:color="getTzItemStatusColor(item.status)" class="shrink-0 mt-0.5"
-											@update:model-value="(v) => toggleTzSelect(item._index, v === true)"
-											@click.stop />
-										<span class="text-xs leading-relaxed whitespace-pre-wrap min-w-0">
-											{{ item.requirement }}
-										</span>
-									</label>
-								</div>
-							</div>
-						</aside>
-
-						<div ref="letterDocumentRef" class="relative min-h-[72vh]">
-							<UTextarea
-								v-if="tzSelectedIndices.length > 0"
-								ref="letterTextareaRef"
-								v-model="letterEditorText"
-								class="w-full"
-								:ui="{ base: 'h-[72vh] resize-none overflow-y-auto font-[inherit] leading-relaxed' }"
-								size="md"
-								:rows="20"
-								@update:model-value="onLetterEditorInput"
-							/>
-							<p v-else class="text-sm text-muted text-center py-10 rounded-xl border border-default bg-elevated/30">
-								Выберите пункты для формирования письма
-							</p>
-						</div>
+		<UModal v-model:open="showLetterModal" :ui="EMAIL_LETTER_MODAL_UI">
+			<template #header="{ close }">
+				<div class="flex items-start justify-between gap-3 w-full">
+					<div class="min-w-0">
+						<p class="text-lg font-semibold text-highlighted">Письмо поставщику</p>
+						<p class="text-sm text-muted mt-0.5">
+							Письмо формируется по основному КП и включает все несоответствия.
+						</p>
 					</div>
+					<div class="flex items-center gap-2 shrink-0">
+						<UButton variant="outline" color="neutral" @click="close">
+							Закрыть
+						</UButton>
+						<UButton leading-icon="i-lucide-download" :loading="docxGenerating"
+							:disabled="!hasLetterIssues || !letterEditorText.trim()" @click="generateDocx">
+							Скачать DOCX
+						</UButton>
+					</div>
+				</div>
 			</template>
-			<template #footer>
-				<div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 w-full">
-					<UButton variant="outline" color="neutral" @click="showLetterModal = false">
-						Закрыть
-					</UButton>
-					<UButton leading-icon="i-lucide-download" :loading="docxGenerating"
-						:disabled="tzSelectedIndices.length === 0 || !letterEditorText.trim()" @click="generateDocx">
-						Скачать DOCX
-						<span v-if="tzSelectedIndices.length > 0" class="ml-1 opacity-80">
-							({{ tzSelectedIndices.length }})
-						</span>
-					</UButton>
+			<template #body>
+				<div class="grid grid-cols-1 md:grid-cols-[12rem_minmax(0,1fr)] gap-4 min-h-0">
+					<aside class="flex flex-col gap-3 shrink-0">
+						<p v-if="selectedSupplier" class="text-xs text-muted">
+							Поставщик:
+							<span class="text-default font-medium">{{ selectedSupplier.name }}</span>
+							<span v-if="primaryKpLabel"> · КП: </span>
+							<button
+								v-if="selectedSupplierPrimaryKp"
+								type="button"
+								class="text-primary hover:underline font-medium"
+								@click="openKpFile(
+									kpDisplayLabel(selectedSupplierPrimaryKp),
+									selectedSupplier.id,
+								)"
+							>
+								{{ primaryKpLabel }}
+							</button>
+						</p>
+						<p v-else-if="primaryKpLabel" class="text-xs text-muted">
+							Основное КП:
+							<button v-if="analysis?.kp_filename" type="button"
+								class="text-primary hover:underline font-medium"
+								@click="openKpFile(analysis.kp_filename)">
+								{{ primaryKpLabel }}
+							</button>
+							<span v-else class="text-default font-medium">{{ primaryKpLabel }}</span>
+						</p>
+						<UFormField label="Срок ответа">
+							<UInput v-model="docxDeadline" placeholder="7 июня 2026 г." size="md" />
+						</UFormField>
+						<div class="flex flex-col gap-1.5">
+							<p class="text-xs font-semibold uppercase tracking-wide text-muted px-0.5">
+								Разделы письма
+							</p>
+							<UButton v-for="tab in letterPreviewTabs" :key="tab.value" type="button" block
+								:variant="letterPreviewTab === tab.value ? 'soft' : 'ghost'"
+								:color="letterPreviewTab === tab.value ? tab.color : 'neutral'" size="sm"
+								class="justify-start text-left whitespace-normal h-auto py-2"
+								:disabled="tab.disabled" @click="scrollToLetterSection(tab.value)">
+								{{ tab.label }}
+							</UButton>
+						</div>
+					</aside>
+
+					<div ref="letterDocumentRef" class="relative min-h-[min(72vh,40rem)]">
+						<UTextarea
+							v-if="hasLetterIssues"
+							ref="letterTextareaRef"
+							v-model="letterEditorText"
+							class="w-full"
+							:ui="{ base: 'h-[min(72vh,40rem)] resize-none overflow-y-auto font-[inherit] leading-relaxed' }"
+							size="md"
+							:rows="20"
+							@update:model-value="onLetterEditorInput"
+						/>
+						<p v-else class="text-sm text-muted text-center py-10 rounded-xl border border-default bg-elevated/30">
+							Нет несоответствий для формирования письма
+						</p>
+					</div>
 				</div>
 			</template>
 		</UModal>
@@ -710,10 +672,10 @@ const tzAnalyzing = ref(false)
 const kpAnalyzing = ref(false)
 const confirmingTz = ref(false)
 const tzPolling = ref(false)
-const tzSelectedIndices = ref<number[]>([])
 const tzStatusFilter = ref('all')
+const tzRequirementSearch = ref('')
 const showLetterModal = ref(false)
-const letterPreviewTab = ref('mismatch')
+const letterPreviewTab = ref<'mismatch' | 'not_found' | 'partial'>('mismatch')
 const processingPhase = ref<'tz' | 'kp'>('tz')
 const itemsOverrides = ref<Record<string, { status: TZAnalysisStatus }>>({})
 const primaryKpSaving = ref(false)
@@ -726,7 +688,8 @@ const letterEditorDirty = ref(false)
 const letterDocumentRef = ref<HTMLElement | null>(null)
 const letterTextareaRef = ref<{ $el?: HTMLElement } | null>(null)
 
-const LETTER_MISMATCH_HEADER = 'Несоответствующие параметры:'
+const LETTER_MISMATCH_HEADER = 'Не соответствует:'
+const LETTER_NOT_FOUND_HEADER = 'Не найдено:'
 const LETTER_PARTIAL_HEADER = 'Требуют уточнения/дополнения:'
 const LETTER_DEADLINE_PREFIX =
 	'Просим предоставить дополненное/уточненное предложение не позже '
@@ -970,52 +933,17 @@ const letterItemsView = computed((): TZItemView[] => {
 		.map((item, index) => ({ ...item, _index: index }))
 })
 
-function letterSelectionStorageKey() {
-	const analysisId = analysis.value?.id
-	const supplierId = displayedSupplierId.value
-	if (!analysisId || !supplierId) return null
-	return `tz-letter-selection:${analysisId}:${supplierId}`
+function isTzSelectable(status: TZAnalysisStatus) {
+	return status === 'partial' || status === 'missing' || status === 'not_found'
 }
 
-function saveLetterSelection() {
-	if (!import.meta.client) return
-	const key = letterSelectionStorageKey()
-	if (!key) return
-	sessionStorage.setItem(key, JSON.stringify(tzSelectedIndices.value))
-}
+const tzSelectedIndices = computed(() =>
+	letterItemsView.value
+		.filter((item) => belongsToPrimaryKp(item) && isTzSelectable(item.status))
+		.map((item) => item._index),
+)
 
-function loadLetterSelection(): number[] | null {
-	if (!import.meta.client) return null
-	const key = letterSelectionStorageKey()
-	if (!key) return null
-	try {
-		const raw = sessionStorage.getItem(key)
-		if (!raw) return null
-		const parsed = JSON.parse(raw)
-		return Array.isArray(parsed)
-			? parsed.filter((value): value is number => typeof value === 'number')
-			: null
-	} catch {
-		return null
-	}
-}
-
-function restoreOrInitLetterSelection() {
-	const selectable = new Set(
-		letterItemsView.value
-			.filter((item) => belongsToPrimaryKp(item) && isTzSelectable(item.status))
-			.map((item) => item._index),
-	)
-	const saved = loadLetterSelection()
-	if (saved?.length) {
-		const restored = saved.filter((index) => selectable.has(index))
-		if (restored.length) {
-			tzSelectedIndices.value = restored
-			return
-		}
-	}
-	selectPrimaryKpLetterItems(selectedSupplierPrimaryKp.value)
-}
+const hasLetterIssues = computed(() => tzSelectedIndices.value.length > 0)
 
 function letterMismatchReason(item: TZAnalysisItem) {
 	if (item.status === 'not_found') {
@@ -1024,12 +952,33 @@ function letterMismatchReason(item: TZAnalysisItem) {
 	return `Причина отклонения: ${item.explanation}`
 }
 
+function itemMatchesRequirementSearch(
+	item: TZAnalysisItem,
+	query: string,
+): boolean {
+	const q = query.trim().toLowerCase()
+	if (!q) return true
+	const haystack = [
+		item.requirement,
+		item.requirement_ref,
+		item.offer_value,
+		item.offer_ref,
+		item.explanation,
+	]
+		.filter(Boolean)
+		.join(' ')
+		.toLowerCase()
+	return haystack.includes(q)
+}
+
 const filteredTzItems = computed((): TZItemView[] => {
 	if (!analysis.value) return []
+	const query = tzRequirementSearch.value
 	return applyItemOverrides(analysis.value.items)
 		.map((item, index) => ({ ...item, _index: index }))
 		.filter((item) =>
-			tzStatusFilter.value === 'all' || item.status === tzStatusFilter.value,
+			(tzStatusFilter.value === 'all' || item.status === tzStatusFilter.value)
+			&& itemMatchesRequirementSearch(item, query),
 		)
 })
 
@@ -1196,14 +1145,6 @@ function getKpStats(kpKey: string): TZAnalysisKpStats | null {
 	)
 	if (items.length === 0) return null
 	return computeStatsFromItems(items)
-}
-
-function selectPrimaryKpLetterItems(kpFilename: string | null | undefined) {
-	if (!analysis.value || !kpFilename) return
-	tzSelectedIndices.value = letterItemsView.value
-		.filter((item) => getItemKpKey(item) === kpFilename && isTzSelectable(item.status))
-		.map((item) => item._index)
-	saveLetterSelection()
 }
 
 function collectResultsKpKeys(data: TZAnalysisSession): string[] {
@@ -1417,55 +1358,42 @@ async function refreshAnalysis() {
 
 const selectedLetterItems = computed((): TZItemView[] =>
 	letterItemsView.value.filter((item) =>
-		tzSelectedIndices.value.includes(item._index) && isTzSelectable(item.status),
-	),
-)
-
-const letterModalMismatchItems = computed((): TZItemView[] =>
-	letterItemsView.value.filter((item) =>
-		belongsToPrimaryKp(item)
-		&& (item.status === 'missing' || item.status === 'not_found'),
-	),
-)
-
-const letterModalPartialItems = computed((): TZItemView[] =>
-	letterItemsView.value.filter((item) =>
-		belongsToPrimaryKp(item) && item.status === 'partial',
+		tzSelectedIndices.value.includes(item._index),
 	),
 )
 
 const letterItemsByTab = computed(() => ({
-	mismatch: selectedLetterItems.value.filter((item) =>
-		item.status === 'missing' || item.status === 'not_found',
-	),
+	mismatch: selectedLetterItems.value.filter((item) => item.status === 'missing'),
+	not_found: selectedLetterItems.value.filter((item) => item.status === 'not_found'),
 	partial: selectedLetterItems.value.filter((item) => item.status === 'partial'),
 }))
 
 const letterPreviewTabs = computed(() => {
-	const mismatchSelected = letterItemsByTab.value.mismatch.length
-	const partialSelected = letterItemsByTab.value.partial.length
+	const { mismatch, not_found, partial } = letterItemsByTab.value
 	return [
 		{
-			label: mismatchSelected
-				? `Не совпадает (${mismatchSelected})`
-				: 'Не совпадает',
-			value: 'mismatch',
+			label: mismatch.length ? `Не соответствует (${mismatch.length})` : 'Не соответствует',
+			value: 'mismatch' as const,
 			color: 'error' as const,
-			disabled: letterModalMismatchItems.value.length === 0,
+			disabled: mismatch.length === 0,
 		},
 		{
-			label: partialSelected
-				? `Частично совпадает (${partialSelected})`
-				: 'Частично совпадает',
-			value: 'partial',
+			label: not_found.length ? `Не найдено (${not_found.length})` : 'Не найдено',
+			value: 'not_found' as const,
+			color: 'neutral' as const,
+			disabled: not_found.length === 0,
+		},
+		{
+			label: partial.length ? `Частично (${partial.length})` : 'Частично',
+			value: 'partial' as const,
 			color: 'warning' as const,
-			disabled: letterModalPartialItems.value.length === 0,
+			disabled: partial.length === 0,
 		},
 	]
 })
 
 function buildDraftLetterParagraphs(): string[] {
-	const { mismatch, partial } = letterItemsByTab.value
+	const { mismatch, not_found, partial } = letterItemsByTab.value
 	const lines: string[] = [
 		'О несоответствии предложения техническим требованиям',
 		'',
@@ -1473,10 +1401,12 @@ function buildDraftLetterParagraphs(): string[] {
 		'Выявлены следующие замечания и требуемые уточнения:',
 	]
 
+	let itemNum = 1
+
 	if (mismatch.length) {
 		lines.push('', LETTER_MISMATCH_HEADER)
-		for (const [idx, item] of mismatch.entries()) {
-			lines.push(`${idx + 1}. По пункту:`)
+		for (const item of mismatch) {
+			lines.push(`${itemNum}. По пункту:`)
 			lines.push(
 				`Требование: "${item.requirement}"`
 				+ (item.requirement_ref ? ` (${item.requirement_ref})` : ''),
@@ -1488,15 +1418,27 @@ function buildDraftLetterParagraphs(): string[] {
 				)
 			}
 			lines.push(letterMismatchReason(item))
+			itemNum += 1
+		}
+	}
+
+	if (not_found.length) {
+		lines.push('', LETTER_NOT_FOUND_HEADER)
+		for (const item of not_found) {
+			lines.push(`${itemNum}. По пункту:`)
+			lines.push(
+				`Требование: "${item.requirement}"`
+				+ (item.requirement_ref ? ` (${item.requirement_ref})` : ''),
+			)
+			lines.push(letterMismatchReason(item))
+			itemNum += 1
 		}
 	}
 
 	if (partial.length) {
 		lines.push('', LETTER_PARTIAL_HEADER)
-		const start = mismatch.length + 1
-		for (const [offset, item] of partial.entries()) {
-			const n = start + offset
-			lines.push(`${n}. Пункт:`)
+		for (const item of partial) {
+			lines.push(`${itemNum}. Пункт:`)
 			lines.push(
 				`Требуется: "${item.requirement}"`
 				+ (item.requirement_ref ? ` (${item.requirement_ref})` : ''),
@@ -1508,6 +1450,7 @@ function buildDraftLetterParagraphs(): string[] {
 				)
 			}
 			lines.push(`Необходимо: ${item.explanation}`)
+			itemNum += 1
 		}
 	}
 
@@ -1602,13 +1545,16 @@ function onLetterEditorInput() {
 	letterEditorDirty.value = true
 }
 
-function scrollToLetterSection(section: 'mismatch' | 'partial') {
+function scrollToLetterSection(section: 'mismatch' | 'not_found' | 'partial') {
 	const tab = letterPreviewTabs.value.find((t) => t.value === section)
 	if (tab?.disabled) return
 	letterPreviewTab.value = section
-	const header = section === 'mismatch'
-		? LETTER_MISMATCH_HEADER
-		: LETTER_PARTIAL_HEADER
+	const headerBySection = {
+		mismatch: LETTER_MISMATCH_HEADER,
+		not_found: LETTER_NOT_FOUND_HEADER,
+		partial: LETTER_PARTIAL_HEADER,
+	} as const
+	const header = headerBySection[section]
 	nextTick(() => {
 		const textarea = getLetterTextarea()
 		if (textarea) {
@@ -1618,11 +1564,8 @@ function scrollToLetterSection(section: 'mismatch' | 'partial') {
 				textarea.setSelectionRange(idx, idx + header.length)
 				const lineCount = letterEditorText.value.slice(0, idx).split('\n').length
 				textarea.scrollTop = Math.max(0, (lineCount - 2) * 22)
-				return
 			}
 		}
-		document.getElementById(`letter-sidebar-${section}`)
-			?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
 	})
 }
 
@@ -1699,7 +1642,7 @@ function applyAnalysis(
 			}),
 		)
 		if (!fromPoll || itemsCount !== lastAppliedItemsCount) {
-			restoreOrInitLetterSelection()
+			scheduleLetterPreview()
 		}
 	}
 	lastAppliedItemsCount = itemsCount
@@ -1763,8 +1706,7 @@ function scheduleLetterPreview() {
 }
 
 watch(displayedSupplierId, () => {
-	restoreOrInitLetterSelection()
-	scheduleLetterPreview()
+	if (showLetterModal.value) scheduleLetterPreview()
 })
 
 function deferKpPanelRender() {
@@ -1817,12 +1759,12 @@ watch(showLetterModal, (open) => {
 		letterEditorDirty.value = false
 		return
 	}
-	const { mismatch, partial } = letterItemsByTab.value
+	const { mismatch, not_found, partial } = letterItemsByTab.value
 	if (mismatch.length > 0) letterPreviewTab.value = 'mismatch'
+	else if (not_found.length > 0) letterPreviewTab.value = 'not_found'
 	else if (partial.length > 0) letterPreviewTab.value = 'partial'
 	letterEditorDirty.value = false
 	syncLetterEditor(true)
-	scheduleLetterPreview()
 })
 
 watch(docxDeadline, () => {
@@ -1834,23 +1776,10 @@ watch(
 	[tzSelectedIndices, itemsOverrides],
 	() => {
 		if (!showLetterModal.value) return
-		saveLetterSelection()
 		scheduleLetterPreview()
 	},
 	{ deep: true },
 )
-
-watch(tzSelectedIndices, () => {
-	if (!showLetterModal.value) return
-	const { mismatch, partial } = letterItemsByTab.value
-	const onMismatch = letterPreviewTab.value === 'mismatch'
-	if (onMismatch && mismatch.length === 0 && partial.length > 0) {
-		letterPreviewTab.value = 'partial'
-	}
-	if (!onMismatch && partial.length === 0 && mismatch.length > 0) {
-		letterPreviewTab.value = 'mismatch'
-	}
-}, { deep: true })
 
 onMounted(async () => {
 	try {
@@ -1896,7 +1825,6 @@ async function runTzAnalysis() {
 			`/tz-analysis/${analysis.value.id}/run`,
 			fd,
 		)
-		tzSelectedIndices.value = []
 		processingPhase.value = 'tz'
 		applyAnalysis(result)
 		if (result.status === TZAnalysisRunStatus.PROCESSING) {
@@ -1991,7 +1919,6 @@ async function runKpAnalysis() {
 			`/tz-analysis/${analysis.value.id}/run-kp`,
 			new FormData(),
 		)
-		tzSelectedIndices.value = []
 		processingPhase.value = 'kp'
 		applyAnalysis(result)
 		if (
@@ -2029,21 +1956,19 @@ async function runKpAnalysis() {
 }
 
 function openLetterModal() {
-	if (tzSelectedIndices.value.length === 0) {
+	if (!hasLetterIssues.value) {
 		toast.add({
-			title: 'Выберите пункты',
-			description: 'Отметьте галочками несоответствия для письма поставщику.',
+			title: 'Нет несоответствий',
+			description: 'Для выбранного КП нет пунктов для письма поставщику.',
 			color: 'warning',
 		})
 		return
 	}
-	const { mismatch } = letterItemsByTab.value
-	letterPreviewTab.value = mismatch.length > 0 ? 'mismatch' : 'partial'
+	const { mismatch, not_found, partial } = letterItemsByTab.value
+	if (mismatch.length > 0) letterPreviewTab.value = 'mismatch'
+	else if (not_found.length > 0) letterPreviewTab.value = 'not_found'
+	else letterPreviewTab.value = 'partial'
 	showLetterModal.value = true
-}
-
-function isTzSelectable(status: TZAnalysisStatus) {
-	return status === 'partial' || status === 'missing' || status === 'not_found'
 }
 
 async function updateItemStatus(index: number, status: TZAnalysisStatus) {
@@ -2079,17 +2004,6 @@ async function updateItemStatus(index: number, status: TZAnalysisStatus) {
 	}
 }
 
-function toggleTzSelect(index: number, checked: boolean) {
-	if (checked) {
-		if (!tzSelectedIndices.value.includes(index)) {
-			tzSelectedIndices.value = [...tzSelectedIndices.value, index]
-		}
-	} else {
-		tzSelectedIndices.value = tzSelectedIndices.value.filter((i) => i !== index)
-	}
-	saveLetterSelection()
-}
-
 async function downloadBlob(url: string, filename: string) {
 	const res = await $axios.get(url, { responseType: 'blob' })
 	const blob = res.data as Blob
@@ -2103,11 +2017,11 @@ async function downloadBlob(url: string, filename: string) {
 	URL.revokeObjectURL(objectUrl)
 }
 
-async function exportTzCsv() {
+async function exportTzXlsx() {
 	if (!analysis.value?.id) return
 	await downloadBlob(
-		`/tz-analysis/${analysis.value.id}/export.csv`,
-		`tz_analysis_${analysis.value.id}.csv`,
+		`/tz-analysis/${analysis.value.id}/export.xlsx`,
+		`tz_analysis_${analysis.value.id}.xlsx`,
 	)
 }
 

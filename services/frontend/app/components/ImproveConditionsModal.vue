@@ -1,15 +1,40 @@
 <template>
-	<UModal v-model:open="isOpen" :title="`Запрос на улучшение условий — ${supplier.company_name}`"
-		:ui="EMAIL_LETTER_MODAL_UI">
+	<UModal v-model:open="isOpen" :ui="EMAIL_LETTER_MODAL_UI">
+		<template #header="{ close }">
+			<div class="flex items-start justify-between gap-3 w-full">
+				<p class="text-lg font-semibold text-highlighted min-w-0 truncate">
+					Запрос на улучшение условий — {{ supplier.company_name }}
+				</p>
+				<div class="flex items-center gap-2 shrink-0">
+					<UButton variant="outline" color="neutral" @click="close">
+						Отмена
+					</UButton>
+					<UButton
+						leading-icon="i-lucide-send"
+						:loading="sending"
+						:disabled="!subject.trim() || !body.trim()"
+						@click="send"
+					>
+						Отправить запрос
+					</UButton>
+				</div>
+			</div>
+		</template>
 		<template #body>
 			<div class="flex flex-col md:flex-row gap-4 min-h-[min(70vh,40rem)]">
-				<div class="flex-1 min-w-0 space-y-4">
+				<div class="flex-1 min-w-0 flex flex-col gap-4 min-h-0">
 					<SupplierLetterReadonlyEmail :email="supplier.main_email" />
 					<UFormField label="Тема">
 						<UInput v-model="subject" class="w-full" />
 					</UFormField>
-					<UFormField label="Сообщение">
-						<UTextarea v-model="body" :rows="18" class="w-full" autoresize />
+					<UFormField label="Сообщение" class="flex-1 min-h-0">
+						<UTextarea
+							v-model="body"
+							:rows="18"
+							class="w-full"
+							:ui="{ base: 'min-h-[min(40vh,24rem)] resize-y' }"
+							autoresize
+						/>
 					</UFormField>
 					<div>
 						<p class="text-sm font-semibold mb-1">Вложения</p>
@@ -20,7 +45,7 @@
 							accept=".pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp"
 							:interactive="false"
 							layout="list"
-							class="w-full min-h-20"
+							class="w-full"
 							@update:model-value="onFilesUpdate"
 						>
 							<template #actions="{ open }">
@@ -32,15 +57,6 @@
 						</UFileUpload>
 					</div>
 					<UAlert v-if="error" color="error" variant="soft" :description="error" />
-					<div class="flex justify-end gap-2 pt-2">
-						<UButton variant="outline" color="neutral" @click="close">
-							Отмена
-						</UButton>
-						<UButton leading-icon="i-lucide-send" :loading="sending"
-							:disabled="!subject.trim() || !body.trim()" @click="send">
-							Отправить запрос
-						</UButton>
-					</div>
 				</div>
 				<div class="w-full md:w-72 shrink-0 min-h-64 md:min-h-0">
 					<EmailTemplateSidebar @select="applyTemplate" />

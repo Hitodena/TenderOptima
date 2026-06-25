@@ -8,21 +8,31 @@
 
 * {
 	scrollbar-width: thin;
-	scrollbar-color: var(--ui-border) transparent;
+	scrollbar-color: var(--ui-text-muted) var(--ui-bg-elevated);
 }
 
 ::-webkit-scrollbar {
-	width: 6px;
-	height: 6px;
+	width: 10px;
+	height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-	background: transparent;
+	background: var(--ui-bg-elevated);
+	border-radius: 100px;
 }
 
 ::-webkit-scrollbar-thumb {
-	background: var(--ui-border);
+	background: color-mix(in oklab, var(--ui-text-muted) 75%, var(--ui-border));
+	border: 2px solid var(--ui-bg-elevated);
 	border-radius: 100px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: var(--ui-text-muted);
+}
+
+::-webkit-scrollbar-corner {
+	background: var(--ui-bg-elevated);
 }
 
 /* Полностью убираем стрелки у number-инпутов во всех браузерах */

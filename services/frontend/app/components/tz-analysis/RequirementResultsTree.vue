@@ -7,12 +7,9 @@
 			:default-kp-filename="defaultKpFilename"
 			:is-item-expanded="isItemExpanded"
 			:toggle-item-expand="toggleItemExpand"
-			:tz-selected-indices="tzSelectedIndices"
-			:belongs-to-primary-kp="belongsToPrimaryKp"
 			:editable="editable"
 			:is-item-overridden="isItemOverridden"
 			@toggle-section="toggleSection"
-			@toggle-select="(index, checked) => emit('toggle-select', index, checked)"
 			@status-change="(index, status) => emit('status-change', index, status)"
 		/>
 
@@ -48,12 +45,9 @@
 					:item="item"
 					:default-kp-filename="defaultKpFilename"
 					:is-expanded="isItemExpanded(item._index)"
-					:is-selected="tzSelectedIndices.includes(item._index)"
-					:show-checkbox="isTzSelectable(item.status) && belongsToPrimaryKp(item)"
 					:editable="editable"
 					:is-overridden="isItemOverridden(item._index)"
 					@toggle-expand="toggleItemExpand(item._index)"
-					@toggle-select="(checked) => emit('toggle-select', item._index, checked)"
 					@status-change="(status) => emit('status-change', item._index, status)"
 				/>
 			</div>
@@ -75,14 +69,11 @@ const props = defineProps<{
 	defaultKpFilename?: string | null
 	isItemExpanded: (index: number) => boolean
 	toggleItemExpand: (index: number) => void
-	tzSelectedIndices: number[]
-	belongsToPrimaryKp: (item: TZAnalysisItem) => boolean
 	editable?: boolean
 	isItemOverridden: (index: number) => boolean
 }>()
 
 const emit = defineEmits<{
-	'toggle-select': [index: number, checked: boolean]
 	'status-change': [index: number, status: TZAnalysisStatus]
 }>()
 
@@ -106,10 +97,6 @@ function toggleSection(key: string) {
 		...sectionExpanded.value,
 		[k]: !isSectionExpanded(key),
 	}
-}
-
-function isTzSelectable(status: TZAnalysisStatus) {
-	return status === 'partial' || status === 'missing' || status === 'not_found'
 }
 
 provide('requirementResultsTree', { isSectionExpanded })

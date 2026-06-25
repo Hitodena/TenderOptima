@@ -1,10 +1,8 @@
-import csv
-import io
 import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,6 +26,10 @@ from backend.db.models import Request, User
 from backend.enums import TZAnalysisRunStatus
 from backend.schemas.analysis import EmailAnalysisResult
 from backend.services.analysis.email_queue import queue_email_analysis
+from backend.utils.xlsx_export import (
+    build_comparison_workbook,
+    workbook_to_bytes,
+)
 
 router = APIRouter(prefix="/requests", tags=["Responses"])
 
@@ -319,43 +321,29 @@ async def get_analysis_comparison(
 
 
 @router.get(
-    "/{request_id}/analysis/comparison.csv",
-    summary="Export supplier comparison as CSV",
+    "/{request_id}/analysis/comparison.xlsx",
+    summary="Export supplier comparison as XLSX",
 )
-async def export_analysis_comparison_csv(
+async def export_analysis_comparison_xlsx(
     request_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
-) -> StreamingResponse:
+) -> Response:
     request = await get_request_or_404(request_id, session, current_user)
     comparison = await _build_comparison(session, request)
 
-    buffer = io.StringIO()
-    writer = csv.writer(buffer)
-    header = ["Требование"] + [
-        f"{s.company_name} ({s.main_email})" for s in comparison.suppliers
-    ]
-    writer.writerow(header)
+    wb = build_comparison_workbook(
+        requirements=comparison.requirements,
+        suppliers=comparison.suppliers,
+        status_labels=STATUS_LABELS,
+    )
 
-    for req in comparison.requirements:
-        row = [req]
-        for supplier in comparison.suppliers:
-            value = supplier.values.get(req)
-            status_key = supplier.statuses.get(req)
-            status_label = (
-                STATUS_LABELS.get(status_key, status_key) if status_key else ""
-            )
-            cell = value or ""
-            if status_label:
-                cell = f"{cell} [{status_label}]" if cell else status_label
-            row.append(cell)
-        writer.writerow(row)
-
-    buffer.seek(0)
-    filename = f"request_{request_id}_comparison.csv"
-    return StreamingResponse(
-        iter([buffer.getvalue()]),
-        media_type="text/csv; charset=utf-8",
+    filename = f"request_{request_id}_comparison.xlsx"
+    return Response(
+        content=workbook_to_bytes(wb),
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 

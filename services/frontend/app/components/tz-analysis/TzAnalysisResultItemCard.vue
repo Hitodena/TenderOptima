@@ -42,14 +42,6 @@
 					class="w-3.5 h-3.5 shrink-0 text-muted"
 					title="Изменено вручную"
 				/>
-				<UCheckbox
-					v-if="showCheckbox"
-					:model-value="isSelected"
-					:color="getTzItemStatusColor(item.status)"
-					class="shrink-0 mt-0.5"
-					@click.stop
-					@update:model-value="(v) => emit('toggle-select', v === true)"
-				/>
 			</div>
 
 			<div
@@ -123,8 +115,6 @@ type TZItemView = TZAnalysisItem & { _index: number }
 const props = withDefaults(defineProps<{
 	item: TZItemView
 	isExpanded: boolean
-	isSelected: boolean
-	showCheckbox: boolean
 	defaultKpFilename?: string | null
 	editable?: boolean
 	isOverridden?: boolean
@@ -135,7 +125,6 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
 	'toggle-expand': []
-	'toggle-select': [checked: boolean]
 	'status-change': [status: TZAnalysisStatus]
 }>()
 

@@ -1,9 +1,29 @@
 <template>
 	<UModal
 		v-model:open="isOpen"
-		title="Отправить уведомление победителю"
 		:ui="EMAIL_LETTER_MODAL_UI"
 	>
+		<template #header="{ close }">
+			<div class="flex items-start justify-between gap-3 w-full">
+				<p class="text-lg font-semibold text-highlighted min-w-0">
+					Отправить уведомление победителю
+				</p>
+				<div class="flex items-center gap-2 shrink-0">
+					<UButton variant="outline" color="neutral" @click="close">
+						Отменить
+					</UButton>
+					<UButton
+						color="success"
+						leading-icon="i-lucide-send"
+						:loading="sending"
+						:disabled="!subject.trim() || !body.trim()"
+						@click="send"
+					>
+						Отправить уведомление
+					</UButton>
+				</div>
+			</div>
+		</template>
 		<template #body>
 			<div class="space-y-4">
 				<div class="rounded-lg border border-success/30 bg-success/5 p-4">
@@ -30,7 +50,7 @@
 						accept=".pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp"
 						:interactive="false"
 						layout="list"
-						class="w-full min-h-20"
+						class="w-full"
 						@update:model-value="onFilesUpdate"
 					>
 						<template #actions="{ open }">
@@ -42,20 +62,6 @@
 					</UFileUpload>
 				</div>
 				<UAlert v-if="error" color="error" variant="soft" :description="error" />
-				<div class="flex justify-end gap-2 pt-2">
-					<UButton variant="outline" color="neutral" @click="close">
-						Отменить
-					</UButton>
-					<UButton
-						color="success"
-						leading-icon="i-lucide-send"
-						:loading="sending"
-						:disabled="!subject.trim() || !body.trim()"
-						@click="send"
-					>
-						Отправить уведомление
-					</UButton>
-				</div>
 			</div>
 		</template>
 	</UModal>

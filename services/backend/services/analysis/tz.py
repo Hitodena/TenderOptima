@@ -1,6 +1,5 @@
 import asyncio
 from pathlib import Path
-from typing import Literal
 
 from loguru import logger
 from pydantic import BaseModel, Field, ValidationError, field_validator
@@ -17,7 +16,6 @@ from backend.services.extraction.router import ExtractorRouter
 from backend.services.llm.client import llm_client
 from backend.services.llm.prompts.tz import (
     build_heading_names_prompt,
-    build_kp_chunk_prompt,
     build_kp_match_chunk_prompt,
     build_kp_normalize_prompt,
     build_recall_sweep_prompt,
@@ -46,6 +44,7 @@ _ROLLING_DIGEST_SECTIONS = 8
 _LLM_CHUNK_MAX_ATTEMPTS = 3
 _LLM_CHUNK_RETRY_DELAY_SEC = 2.0
 _RECALL_BATCH_SIZE = 20
+_RECALL_MIN_NOT_FOUND_RATIO = 0.4
 _CHUNK_MATCH_BATCH_SIZE = 25
 _COMPLIANCE_CONCURRENCY = 4
 _RECALL_KP_MAX_CHARS = 16000
@@ -63,15 +62,6 @@ class TZExtractResult(BaseModel):
     @field_validator("requirements", mode="before")
     @classmethod
     def coerce_requirements(cls, value: object) -> dict:
-        return normalize_tz_requirements(value)
-
-
-class KPExtractResult(BaseModel):
-    offerings: dict = Field(default_factory=dict)
-
-    @field_validator("offerings", mode="before")
-    @classmethod
-    def coerce_offerings(cls, value: object) -> dict:
         return normalize_tz_requirements(value)
 
 
@@ -137,34 +127,23 @@ def _coerce_llm_payload(raw: dict, result_key: str) -> dict:
     return raw
 
 
-async def _llm_extract_chunk(
+async def _llm_extract_tz_chunk(
     chunk: str,
     rolling_context: str | None,
     chunk_idx: int,
     total_chunks: int,
     *,
-    mode: Literal["tz", "kp"],
     analysis_id: str,
     user_id: str,
 ) -> dict:
-    if mode == "tz":
-        system, user = build_tz_chunk_prompt(
-            chunk,
-            rolling_context,
-            chunk_idx,
-            total_chunks,
-        )
-        result_key = "requirements"
-        result_model = TZExtractResult
-    else:
-        system, user = build_kp_chunk_prompt(
-            chunk,
-            rolling_context,
-            chunk_idx,
-            total_chunks,
-        )
-        result_key = "offerings"
-        result_model = KPExtractResult
+    system, user = build_tz_chunk_prompt(
+        chunk,
+        rolling_context,
+        chunk_idx,
+        total_chunks,
+    )
+    result_key = "requirements"
+    result_model = TZExtractResult
 
     last_exc: Exception | None = None
     for attempt in range(1, _LLM_CHUNK_MAX_ATTEMPTS + 1):
@@ -172,13 +151,12 @@ async def _llm_extract_chunk(
             raw = await llm_client.complete(system, user)
             coerced = _coerce_llm_payload(raw, result_key)
             parsed = result_model(**coerced)
-            partial = getattr(parsed, result_key)
+            partial = parsed.requirements
             if not partial:
                 logger.info(
                     "Requirements chunk empty",
                     analysis_id=analysis_id,
                     user_id=user_id,
-                    mode=mode,
                     chunk=chunk_idx + 1,
                     total=total_chunks,
                 )
@@ -189,7 +167,6 @@ async def _llm_extract_chunk(
                 "Requirements chunk LLM attempt failed",
                 analysis_id=analysis_id,
                 user_id=user_id,
-                mode=mode,
                 chunk=chunk_idx + 1,
                 total=total_chunks,
                 attempt=attempt,
@@ -204,10 +181,9 @@ async def _llm_extract_chunk(
     raise last_exc
 
 
-async def _extract_hierarchical(
+async def _extract_tz_hierarchical(
     text: str,
     *,
-    mode: Literal["tz", "kp"],
     analysis_id: str,
     user_id: str,
 ) -> dict:
@@ -218,7 +194,6 @@ async def _extract_hierarchical(
             "Requirements extraction skipped",
             analysis_id=analysis_id,
             user_id=user_id,
-            mode=mode,
             reason="empty_text",
         )
         return {}
@@ -227,7 +202,6 @@ async def _extract_hierarchical(
         "Requirements extraction started",
         analysis_id=analysis_id,
         user_id=user_id,
-        mode=mode,
         text_chars=len(cleaned),
         chunks=len(chunks),
     )
@@ -239,17 +213,15 @@ async def _extract_hierarchical(
             "Requirements chunk processing",
             analysis_id=analysis_id,
             user_id=user_id,
-            mode=mode,
             chunk=index + 1,
             total=len(chunks),
             chunk_chars=len(chunk),
         )
-        partial = await _llm_extract_chunk(
+        partial = await _llm_extract_tz_chunk(
             chunk,
             rolling_ctx,
             index,
             len(chunks),
-            mode=mode,
             analysis_id=analysis_id,
             user_id=user_id,
         )
@@ -259,7 +231,6 @@ async def _extract_hierarchical(
             "Requirements chunk done",
             analysis_id=analysis_id,
             user_id=user_id,
-            mode=mode,
             chunk=index + 1,
             total=len(chunks),
             items=count_requirements(hierarchy),
@@ -267,17 +238,15 @@ async def _extract_hierarchical(
 
     hierarchy = dedupe_hierarchy(hierarchy)
     hierarchy = normalize_tz_requirements(hierarchy)
-    if mode == "tz":
-        hierarchy = await fill_empty_headings(
-            hierarchy,
-            analysis_id=analysis_id,
-            user_id=user_id,
-        )
+    hierarchy = await fill_empty_headings(
+        hierarchy,
+        analysis_id=analysis_id,
+        user_id=user_id,
+    )
     logger.info(
         "Requirements extraction finished",
         analysis_id=analysis_id,
         user_id=user_id,
-        mode=mode,
         items=count_requirements(hierarchy),
     )
     return hierarchy
@@ -406,23 +375,8 @@ async def extract_tz_requirements(
     analysis_id: str,
     user_id: str,
 ) -> dict:
-    return await _extract_hierarchical(
+    return await _extract_tz_hierarchical(
         tz_text,
-        mode="tz",
-        analysis_id=analysis_id,
-        user_id=user_id,
-    )
-
-
-async def extract_kp_requirements(
-    kp_text: str,
-    *,
-    analysis_id: str,
-    user_id: str,
-) -> dict:
-    return await _extract_hierarchical(
-        kp_text,
-        mode="kp",
         analysis_id=analysis_id,
         user_id=user_id,
     )
@@ -1021,6 +975,24 @@ async def _run_recall_sweep(
     """Second pass over still-unmatched requirements using compact KP text."""
     recall_candidates = _remaining_tz_requirements(tz_flat, found)
     if not recall_candidates:
+        return
+
+    total = len(tz_flat)
+    if total == 0:
+        return
+
+    not_found_ratio = len(recall_candidates) / total
+    if not_found_ratio < _RECALL_MIN_NOT_FOUND_RATIO:
+        logger.info(
+            "Recall sweep skipped",
+            analysis_id=analysis_id,
+            user_id=user_id,
+            kp_name=kp_name,
+            candidates=len(recall_candidates),
+            total=total,
+            not_found_ratio=round(not_found_ratio, 3),
+            threshold=_RECALL_MIN_NOT_FOUND_RATIO,
+        )
         return
 
     compact_kp = _compact_kp_text(kp_text)

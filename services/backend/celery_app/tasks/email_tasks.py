@@ -355,6 +355,7 @@ async def send_custom_email(
         return {"status": "error", "reason": "no_recipient"}
 
     user = rs.request.user
+    request = rs.request
     smtp_creds = resolve_smtp_credentials(user, config)
     att_data = _prepare_attachments(attachment_paths)
     if att_data:
@@ -374,12 +375,14 @@ async def send_custom_email(
 
     msg["From"] = f"{user.company_name or 'TenderOptima'} <{smtp_creds.user}>"
     msg["To"] = recipient
-    msg["Subject"] = subject
 
     async with db_manager.session() as session:
         thread = await EmailMessageDAO.get_thread_by_request_supplier_id(
             session, rs_uuid
         )
+
+    resolved_subject = resolve_reply_subject(request, rs.tracking_id, thread)
+    msg["Subject"] = resolved_subject
 
     in_reply_to, references = build_threading_headers(
         thread, rs.smtp_message_id
@@ -412,7 +415,7 @@ async def send_custom_email(
             direction=EmailMessageDirection.OUTGOING,
             message_id=outbound_message_id,
             in_reply_to=in_reply_to,
-            subject=subject,
+            subject=resolved_subject,
             raw_body=body,
             attachments=att_data or None,
             received_at=datetime.now(UTC),
@@ -427,6 +430,7 @@ async def send_custom_email(
         "status": "sent",
         "rs_id": rs_id,
         "message_id": outbound_message_id,
+        "subject": resolved_subject,
     }
 
 

@@ -1,11 +1,50 @@
 <template>
-    <UModal v-model:open="isOpen" :title="step === 'params'
-        ? 'Параметры письма поставщикам'
-        : 'Редактирование письма'
-        " :description="step === 'params'
-            ? 'Заполните описание и укажите дополнительные параметры'
-            : 'Проверьте и отредактируйте письмо перед отправкой'
-            " :ui="EMAIL_LETTER_MODAL_UI">
+    <UModal v-model:open="isOpen" :ui="EMAIL_LETTER_MODAL_UI">
+        <template #header="{ close }">
+            <div class="flex items-start justify-between gap-3 w-full">
+                <div class="min-w-0">
+                    <p class="text-lg font-semibold text-highlighted">
+                        {{ step === 'params'
+                            ? 'Параметры письма поставщикам'
+                            : 'Редактирование письма'
+                        }}
+                    </p>
+                    <p class="text-sm text-muted mt-0.5">
+                        {{ step === 'params'
+                            ? 'Заполните описание и укажите дополнительные параметры'
+                            : 'Проверьте и отредактируйте письмо перед отправкой'
+                        }}
+                    </p>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <template v-if="step === 'params'">
+                        <UButton color="neutral" variant="ghost" @click="close">
+                            Отмена
+                        </UButton>
+                        <UButton
+                            leading-icon="i-lucide-arrow-right"
+                            :loading="loadingMessage"
+                            @click="goToConfirm"
+                        >
+                            Далее
+                        </UButton>
+                    </template>
+                    <template v-else>
+                        <UButton
+                            color="neutral"
+                            variant="ghost"
+                            leading-icon="i-lucide-arrow-left"
+                            @click="step = 'params'"
+                        >
+                            Назад
+                        </UButton>
+                        <UButton leading-icon="i-lucide-send" :loading="loading" @click="handleLaunch">
+                            Запустить рассылку
+                        </UButton>
+                    </template>
+                </div>
+            </div>
+        </template>
         <template #body>
             <div v-if="step === 'params'" class="flex flex-col max-h-[min(80vh,42rem)]">
                 <div class="flex-1 min-h-0 overflow-y-auto space-y-6 pr-1">
@@ -34,7 +73,7 @@
                         </p>
 
                         <div>
-                            <div class="space-y-2 max-h-60 overflow-y-auto">
+                            <div class="space-y-2 max-h-80 overflow-y-auto">
                                 <div v-for="(label, idx) in form.labels" :key="idx"
                                     class="flex items-center gap-2 py-1 px-2 rounded-lg hover:bg-elevated/50 transition-colors">
                                     <span class="text-sm flex-1 truncate">{{ label }}</span>
@@ -67,32 +106,25 @@
                             placeholder="С Уважением, специалист отдела закупок, Иван Иванов" :rows="4"
                             class="w-full" />
                     </div>
-                </div>
 
-                <div
-                    class="shrink-0 sticky bottom-0 z-10 -mx-4 border-t border-default bg-default/95 px-4 pt-3 pb-2 backdrop-blur-sm sm:-mx-6 sm:px-6">
-                    <UFileUpload :model-value="filesToUpload" multiple
-                        accept=".pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp" :interactive="false"
-                        :description="uploadDescription" layout="list" class="w-full min-h-28" position="inside"
-                        @update:model-value="handleFilesUpdate">
-                        <template #actions="{ open }">
-                            <UButton type="button" variant="outline" @click="open()">
-                                <UIcon name="i-lucide-paperclip" class="w-4 h-4 mr-2" />
-                                Выбрать файлы
-                            </UButton>
-                        </template>
-                    </UFileUpload>
+                    <div>
+                        <p class="text-sm font-semibold mb-1">Вложения</p>
+                        <p class="text-xs text-muted mb-2">{{ uploadDescription }}</p>
+                        <UFileUpload :model-value="filesToUpload" multiple
+                            accept=".pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp" :interactive="false"
+                            layout="list" class="w-full" @update:model-value="handleFilesUpdate">
+                            <template #actions="{ open }">
+                                <UButton type="button" variant="outline" size="sm" @click="open()">
+                                    <UIcon name="i-lucide-paperclip" class="w-4 h-4" />
+                                    Выбрать файлы
+                                </UButton>
+                            </template>
+                        </UFileUpload>
+                    </div>
                 </div>
 
                 <UAlert v-if="error" color="error" variant="soft" icon="i-lucide-circle-alert" :description="error"
                     class="mt-4 shrink-0" />
-
-                <div class="flex shrink-0 justify-end gap-2 pt-4">
-                    <UButton color="neutral" variant="ghost" @click="close">Отмена</UButton>
-                    <UButton leading-icon="i-lucide-arrow-right" :loading="loadingMessage" @click="goToConfirm">
-                        Далее
-                    </UButton>
-                </div>
             </div>
 
             <div v-else-if="step === 'confirm'" class="space-y-4">
@@ -133,16 +165,6 @@
                 </div>
 
                 <UAlert v-if="error" color="error" variant="soft" icon="i-lucide-circle-alert" :description="error" />
-
-                <div class="flex justify-between pt-2">
-                    <UButton color="neutral" variant="ghost" leading-icon="i-lucide-arrow-left"
-                        @click="step = 'params'">
-                        Назад
-                    </UButton>
-                    <UButton leading-icon="i-lucide-send" :loading="loading" @click="handleLaunch">
-                        Запустить рассылку
-                    </UButton>
-                </div>
             </div>
         </template>
     </UModal>
@@ -218,7 +240,7 @@ function getSupplierWord(count: number): string {
 
 const uploadDescription = computed(() => {
     const sizeMb = Math.round(MAX_UPLOAD_SIZE / 1024 / 1024)
-    return `Добавьте до ${MAX_UPLOAD_FILES} файлов (PDF, DOCX, XLS/XLSX, TXT, JPG/PNG/WEBP). Максимум ${MAX_UPLOAD_FILES} файла, до ${sizeMb} МБ каждый`
+    return `До ${MAX_UPLOAD_FILES} файлов (PDF, DOCX, XLS/XLSX, TXT, JPG/PNG/WEBP), до ${sizeMb} МБ каждый`
 })
 
 function loadFromRequest() {
@@ -391,7 +413,6 @@ async function handleLaunch() {
     loading.value = true
     error.value = null
     try {
-        // defensive: ensure subject persisted before launch (sends email_message if edited)
         const emailPayload: {
             email_subject: string | null
             email_message?: string

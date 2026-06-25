@@ -24,6 +24,10 @@ _RU_MONTHS_GENITIVE = (
     "декабря",
 )
 
+HEADER_MISMATCH = "Не соответствует:"
+HEADER_NOT_FOUND = "Не найдено:"
+HEADER_PARTIAL = "Требуют уточнения/дополнения:"
+
 
 def format_ru_date(value: date | None = None) -> str:
     """Format date as '17 июня 2026 г.' for letter footers."""
@@ -48,8 +52,9 @@ def build_clarification_docx_from_paragraphs(paragraphs: list[str]) -> bytes:
 
     title = "О несоответствии предложения техническим требованиям"
     bold_headers = {
-        "Несоответствующие параметры:",
-        "Требуют уточнения/дополнения:",
+        HEADER_MISMATCH,
+        HEADER_NOT_FOUND,
+        HEADER_PARTIAL,
     }
 
     for index, text in enumerate(paragraphs):
@@ -69,6 +74,45 @@ def build_clarification_docx_from_paragraphs(paragraphs: list[str]) -> bytes:
     buffer = io.BytesIO()
     doc.save(buffer)
     return buffer.getvalue()
+
+
+def _append_mismatch_items(
+    doc: Document,
+    items: list[TZAnalysisItem],
+    start_num: int,
+) -> int:
+    num = start_num
+    for item in items:
+        doc.add_paragraph(f"{num}. По пункту:")
+        doc.add_paragraph(
+            f'Требование: "{item.requirement}"'
+            + (f" ({item.requirement_ref})" if item.requirement_ref else "")
+        )
+        if item.offer_value:
+            doc.add_paragraph(
+                f'Предложено: "{item.offer_value}"'
+                + (f" ({item.offer_ref})" if item.offer_ref else "")
+            )
+        doc.add_paragraph(_mismatch_reason(item))
+        num += 1
+    return num
+
+
+def _append_not_found_items(
+    doc: Document,
+    items: list[TZAnalysisItem],
+    start_num: int,
+) -> int:
+    num = start_num
+    for item in items:
+        doc.add_paragraph(f"{num}. По пункту:")
+        doc.add_paragraph(
+            f'Требование: "{item.requirement}"'
+            + (f" ({item.requirement_ref})" if item.requirement_ref else "")
+        )
+        doc.add_paragraph(_mismatch_reason(item))
+        num += 1
+    return num
 
 
 def build_clarification_docx(
@@ -107,43 +151,35 @@ def build_clarification_docx(
     ]
 
     mismatches = [
-        it
-        for it in selected
-        if it.status in (TZAnalysisStatus.MISSING, TZAnalysisStatus.NOT_FOUND)
+        it for it in selected if it.status == TZAnalysisStatus.MISSING
+    ]
+    not_found = [
+        it for it in selected if it.status == TZAnalysisStatus.NOT_FOUND
     ]
     clarifications = [
         it for it in selected if it.status == TZAnalysisStatus.PARTIAL
     ]
 
+    item_num = 1
+
     if mismatches:
         doc.add_paragraph()
         p = doc.add_paragraph()
-        p.add_run("Несоответствующие параметры:").bold = True
-        for idx, item in enumerate(mismatches, start=1):
-            doc.add_paragraph(f"{idx}. По пункту:")
-            doc.add_paragraph(
-                f'Требование: "{item.requirement}"'
-                + (
-                    f" ({item.requirement_ref})"
-                    if item.requirement_ref
-                    else ""
-                )
-            )
-            if item.offer_value:
-                doc.add_paragraph(
-                    f'Предложено: "{item.offer_value}"'
-                    + (f" ({item.offer_ref})" if item.offer_ref else "")
-                )
-            doc.add_paragraph(_mismatch_reason(item))
+        p.add_run(HEADER_MISMATCH).bold = True
+        item_num = _append_mismatch_items(doc, mismatches, item_num)
+
+    if not_found:
+        doc.add_paragraph()
+        p = doc.add_paragraph()
+        p.add_run(HEADER_NOT_FOUND).bold = True
+        item_num = _append_not_found_items(doc, not_found, item_num)
 
     if clarifications:
         doc.add_paragraph()
         p = doc.add_paragraph()
-        p.add_run("Требуют уточнения/дополнения:").bold = True
-        start = len(mismatches) + 1
-        for offset, item in enumerate(clarifications):
-            n = start + offset
-            doc.add_paragraph(f"{n}. Пункт:")
+        p.add_run(HEADER_PARTIAL).bold = True
+        for item in clarifications:
+            doc.add_paragraph(f"{item_num}. Пункт:")
             doc.add_paragraph(
                 f'Требуется: "{item.requirement}"'
                 + (
@@ -158,6 +194,7 @@ def build_clarification_docx(
                     + (f" ({item.offer_ref})" if item.offer_ref else "")
                 )
             doc.add_paragraph(f"Необходимо: {item.explanation}")
+            item_num += 1
 
     deadline = deadline_date or "7 дней"
     doc.add_paragraph()
@@ -171,6 +208,45 @@ def build_clarification_docx(
     buffer = io.BytesIO()
     doc.save(buffer)
     return buffer.getvalue()
+
+
+def _append_preview_mismatch_lines(
+    paragraphs: list[str],
+    items: list[TZAnalysisItem],
+    start_num: int,
+) -> int:
+    num = start_num
+    for item in items:
+        paragraphs.append(f"{num}. По пункту:")
+        req = f'Требование: "{item.requirement}"'
+        if item.requirement_ref:
+            req += f" ({item.requirement_ref})"
+        paragraphs.append(req)
+        if item.offer_value:
+            offer = f'Предложено: "{item.offer_value}"'
+            if item.offer_ref:
+                offer += f" ({item.offer_ref})"
+            paragraphs.append(offer)
+        paragraphs.append(_mismatch_reason(item))
+        num += 1
+    return num
+
+
+def _append_preview_not_found_lines(
+    paragraphs: list[str],
+    items: list[TZAnalysisItem],
+    start_num: int,
+) -> int:
+    num = start_num
+    for item in items:
+        paragraphs.append(f"{num}. По пункту:")
+        req = f'Требование: "{item.requirement}"'
+        if item.requirement_ref:
+            req += f" ({item.requirement_ref})"
+        paragraphs.append(req)
+        paragraphs.append(_mismatch_reason(item))
+        num += 1
+    return num
 
 
 def build_clarification_preview(
@@ -192,14 +268,15 @@ def build_clarification_preview(
     ]
 
     mismatches = [
-        it
-        for it in selected
-        if it.status in (TZAnalysisStatus.MISSING, TZAnalysisStatus.NOT_FOUND)
+        it for it in selected if it.status == TZAnalysisStatus.MISSING
+    ]
+    not_found = [
+        it for it in selected if it.status == TZAnalysisStatus.NOT_FOUND
     ]
     clarifications = [
         it for it in selected if it.status == TZAnalysisStatus.PARTIAL
     ]
-    has_issues = bool(mismatches or clarifications)
+    has_issues = bool(mismatches or not_found or clarifications)
 
     paragraphs: list[str] = [
         "О несоответствии предложения техническим требованиям",
@@ -209,27 +286,24 @@ def build_clarification_preview(
         "Выявлены следующие замечания и требуемые уточнения:",
     ]
 
+    item_num = 1
+
     if mismatches:
-        paragraphs.extend(["", "Несоответствующие параметры:"])
-        for idx, item in enumerate(mismatches, start=1):
-            paragraphs.append(f"{idx}. По пункту:")
-            req = f'Требование: "{item.requirement}"'
-            if item.requirement_ref:
-                req += f" ({item.requirement_ref})"
-            paragraphs.append(req)
-            if item.offer_value:
-                offer = f'Предложено: "{item.offer_value}"'
-                if item.offer_ref:
-                    offer += f" ({item.offer_ref})"
-                paragraphs.append(offer)
-            paragraphs.append(_mismatch_reason(item))
+        paragraphs.extend(["", HEADER_MISMATCH])
+        item_num = _append_preview_mismatch_lines(
+            paragraphs, mismatches, item_num
+        )
+
+    if not_found:
+        paragraphs.extend(["", HEADER_NOT_FOUND])
+        item_num = _append_preview_not_found_lines(
+            paragraphs, not_found, item_num
+        )
 
     if clarifications:
-        paragraphs.extend(["", "Требуют уточнения/дополнения:"])
-        start = len(mismatches) + 1
-        for offset, item in enumerate(clarifications):
-            n = start + offset
-            paragraphs.append(f"{n}. Пункт:")
+        paragraphs.extend(["", HEADER_PARTIAL])
+        for item in clarifications:
+            paragraphs.append(f"{item_num}. Пункт:")
             req = f'Требуется: "{item.requirement}"'
             if item.requirement_ref:
                 req += f" ({item.requirement_ref})"
@@ -240,6 +314,7 @@ def build_clarification_preview(
                     offer += f" ({item.offer_ref})"
                 paragraphs.append(offer)
             paragraphs.append(f"Необходимо: {item.explanation}")
+            item_num += 1
 
     deadline = deadline_date or "7 дней"
     paragraphs.extend(
