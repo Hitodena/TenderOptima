@@ -3,13 +3,63 @@
 		v-model:open="isOpen"
 		:ui="EMAIL_LETTER_MODAL_UI"
 	>
-		<template #header="{ close: closeModal }">
-			<div class="flex items-start justify-between gap-3 w-full">
+		<template #header>
+			<div class="min-w-0">
 				<p class="text-lg font-semibold text-highlighted min-w-0">
 					Отправить уведомление победителю
 				</p>
-				<div class="flex items-center gap-2 shrink-0">
-					<UButton variant="outline" color="neutral" @click="closeModal">
+			</div>
+		</template>
+		<template #body>
+			<div class="flex flex-col min-h-[min(70vh,40rem)]">
+				<div class="flex-1 min-h-0 overflow-y-auto pr-1 pb-4 space-y-4">
+					<div class="rounded-lg border border-success/30 bg-success/5 p-4">
+						<p class="text-xs font-medium text-success mb-1">
+							Выбранный победитель:
+						</p>
+						<p class="text-sm font-semibold">{{ supplier.company_name }}</p>
+						<p class="text-xs text-success mt-1">
+							Email: {{ supplier.main_email }}
+						</p>
+					</div>
+					<UFormField label="Тема письма">
+						<UInput v-model="subject" class="w-full" />
+					</UFormField>
+					<UFormField label="Текст письма">
+						<UTextarea v-model="body" :rows="18" class="w-full" autoresize />
+					</UFormField>
+					<div>
+						<p class="text-sm font-semibold mb-1">Вложения</p>
+						<p class="text-xs text-muted mb-2">(договор, спецификация и др.)</p>
+						<UFileUpload
+							:model-value="filesToUpload"
+							multiple
+							accept=".pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp"
+							:interactive="false"
+							layout="list"
+							class="w-full"
+							@update:model-value="onFilesUpdate"
+						>
+							<template #actions="{ open }">
+								<UButton type="button" variant="outline" size="sm" @click="open()">
+									<UIcon name="i-lucide-paperclip" class="w-4 h-4" />
+									Добавить файлы
+								</UButton>
+							</template>
+						</UFileUpload>
+					</div>
+				</div>
+
+				<UAlert
+					v-if="error"
+					color="error"
+					variant="soft"
+					:description="error"
+					class="shrink-0"
+				/>
+
+				<div :class="EMAIL_LETTER_MODAL_FOOTER_CLASS">
+					<UButton color="neutral" variant="ghost" @click="close">
 						Отменить
 					</UButton>
 					<UButton
@@ -24,52 +74,15 @@
 				</div>
 			</div>
 		</template>
-		<template #body>
-			<div class="space-y-4">
-				<div class="rounded-lg border border-success/30 bg-success/5 p-4">
-					<p class="text-xs font-medium text-success mb-1">
-						Выбранный победитель:
-					</p>
-					<p class="text-sm font-semibold">{{ supplier.company_name }}</p>
-					<p class="text-xs text-success mt-1">
-						Email: {{ supplier.main_email }}
-					</p>
-				</div>
-				<UFormField label="Тема письма">
-					<UInput v-model="subject" class="w-full" />
-				</UFormField>
-				<UFormField label="Текст письма">
-					<UTextarea v-model="body" :rows="18" class="w-full" autoresize />
-				</UFormField>
-				<div>
-					<p class="text-sm font-semibold mb-1">Вложения</p>
-					<p class="text-xs text-muted mb-2">(договор, спецификация и др.)</p>
-					<UFileUpload
-						:model-value="filesToUpload"
-						multiple
-						accept=".pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp"
-						:interactive="false"
-						layout="list"
-						class="w-full"
-						@update:model-value="onFilesUpdate"
-					>
-						<template #actions="{ open }">
-							<UButton type="button" variant="outline" size="sm" @click="open()">
-								<UIcon name="i-lucide-paperclip" class="w-4 h-4" />
-								Добавить файлы
-							</UButton>
-						</template>
-					</UFileUpload>
-				</div>
-				<UAlert v-if="error" color="error" variant="soft" :description="error" />
-			</div>
-		</template>
 	</UModal>
 </template>
 
 <script lang="ts" setup>
 import type { Attachment, ComparisonSupplier } from '#shared/types'
-import { EMAIL_LETTER_MODAL_UI } from '#shared/constants/emailModal'
+import {
+	EMAIL_LETTER_MODAL_FOOTER_CLASS,
+	EMAIL_LETTER_MODAL_UI,
+} from '#shared/constants/emailModal'
 
 const props = defineProps<{
 	requestId: string
@@ -77,6 +90,7 @@ const props = defineProps<{
 }>()
 
 const isOpen = defineModel<boolean>('open', { default: false })
+const emit = defineEmits<{ sent: [] }>()
 
 const { post } = useApi()
 const toast = useToast()
@@ -146,6 +160,7 @@ async function send() {
 			color: 'success',
 			icon: 'i-lucide-check',
 		})
+		emit('sent')
 		close()
 	} catch (e: unknown) {
 		const detail = (e as { response?: { data?: { detail?: string } } })

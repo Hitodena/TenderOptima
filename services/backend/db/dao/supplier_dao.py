@@ -304,6 +304,80 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
             raise
 
     @classmethod
+    async def set_winner(
+        cls,
+        session: AsyncSession,
+        request_id: uuid.UUID,
+        rs_id: uuid.UUID,
+    ) -> None:
+        """Mark one supplier as winner and clear winner flag on others."""
+        logger.debug(
+            "Setting winner for request",
+            model=cls.model,
+            request_id=request_id,
+            rs_id=rs_id,
+        )
+        try:
+            stmt = select(cls.model).where(cls.model.request_id == request_id)
+            result = await session.execute(stmt)
+            instances = list(result.scalars().all())
+            for instance in instances:
+                instance.is_winner = instance.id == rs_id
+            await session.flush()
+            await session.commit()
+            logger.info(
+                "Winner set for request",
+                model=cls.model,
+                request_id=request_id,
+                rs_id=rs_id,
+            )
+        except Exception as exc:
+            await session.rollback()
+            logger.exception(
+                "Failed to set winner",
+                error=str(exc),
+                model=cls.model,
+                request_id=request_id,
+                rs_id=rs_id,
+            )
+            raise
+
+    @classmethod
+    async def clear_winner(
+        cls,
+        session: AsyncSession,
+        request_id: uuid.UUID,
+    ) -> None:
+        """Clear winner flag on all suppliers for the request."""
+        logger.debug(
+            "Clearing winner for request",
+            model=cls.model,
+            request_id=request_id,
+        )
+        try:
+            stmt = select(cls.model).where(cls.model.request_id == request_id)
+            result = await session.execute(stmt)
+            instances = list(result.scalars().all())
+            for instance in instances:
+                instance.is_winner = False
+            await session.flush()
+            await session.commit()
+            logger.info(
+                "Winner cleared for request",
+                model=cls.model,
+                request_id=request_id,
+            )
+        except Exception as exc:
+            await session.rollback()
+            logger.exception(
+                "Failed to clear winner",
+                error=str(exc),
+                model=cls.model,
+                request_id=request_id,
+            )
+            raise
+
+    @classmethod
     async def get_enabled_by_request(
         cls, session: AsyncSession, request_id: uuid.UUID
     ) -> list[RequestSupplier]:

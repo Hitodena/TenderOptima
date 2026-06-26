@@ -53,6 +53,7 @@ class RequestSupplier(IDMixinUUID, TimestampMixin, Base):
     sent_status: Mapped[str] = mapped_column(nullable=False)  # aka Enum
 
     is_enabled: Mapped[bool] = mapped_column(default=True)
+    is_winner: Mapped[bool] = mapped_column(default=False)
 
     smtp_message_id: Mapped[str | None] = mapped_column()
 

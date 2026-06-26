@@ -200,7 +200,7 @@ def build_clarification_docx(
     doc.add_paragraph()
     doc.add_paragraph(
         f"Просим предоставить дополненное/уточненное предложение "
-        f"не позже {deadline}."
+        f"не позднее {deadline}."
     )
     doc.add_paragraph()
     doc.add_paragraph(format_ru_date())
@@ -321,7 +321,7 @@ def build_clarification_preview(
         [
             "",
             f"Просим предоставить дополненное/уточненное предложение "
-            f"не позже {deadline}.",
+            f"не позднее {deadline}.",
             "",
             format_ru_date(),
         ]

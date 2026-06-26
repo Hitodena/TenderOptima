@@ -1,53 +1,24 @@
 <template>
     <UModal v-model:open="isOpen" :ui="EMAIL_LETTER_MODAL_UI">
         <template #header>
-            <div class="flex items-start justify-between gap-3 w-full">
-                <div class="min-w-0">
-                    <p class="text-lg font-semibold text-highlighted">
-                        {{ step === 'params'
-                            ? 'Параметры письма поставщикам'
-                            : 'Редактирование письма'
-                        }}
-                    </p>
-                    <p class="text-sm text-muted mt-0.5">
-                        {{ step === 'params'
-                            ? 'Заполните описание и укажите дополнительные параметры'
-                            : 'Проверьте и отредактируйте письмо перед отправкой'
-                        }}
-                    </p>
-                </div>
-                <div class="flex items-center gap-2 shrink-0">
-                    <template v-if="step === 'params'">
-                        <UButton color="neutral" variant="ghost" @click="close">
-                            Отмена
-                        </UButton>
-                        <UButton
-                            leading-icon="i-lucide-arrow-right"
-                            :loading="loadingMessage"
-                            @click="goToConfirm"
-                        >
-                            Далее
-                        </UButton>
-                    </template>
-                    <template v-else>
-                        <UButton
-                            color="neutral"
-                            variant="ghost"
-                            leading-icon="i-lucide-arrow-left"
-                            @click="step = 'params'"
-                        >
-                            Назад
-                        </UButton>
-                        <UButton leading-icon="i-lucide-send" :loading="loading" @click="handleLaunch">
-                            Запустить рассылку
-                        </UButton>
-                    </template>
-                </div>
+            <div class="min-w-0">
+                <p class="text-lg font-semibold text-highlighted">
+                    {{ step === 'params'
+                        ? 'Параметры письма поставщикам'
+                        : 'Редактирование письма'
+                    }}
+                </p>
+                <p class="text-sm text-muted mt-0.5">
+                    {{ step === 'params'
+                        ? 'Заполните описание и укажите дополнительные параметры'
+                        : 'Проверьте и отредактируйте письмо перед отправкой'
+                    }}
+                </p>
             </div>
         </template>
         <template #body>
-            <div v-if="step === 'params'" class="flex flex-col max-h-[min(80vh,42rem)]">
-                <div class="flex-1 min-h-0 overflow-y-auto space-y-6 pr-1">
+            <div v-if="step === 'params'" class="flex flex-col min-h-[min(80vh,42rem)]">
+                <div class="flex-1 min-h-0 overflow-y-auto space-y-6 pr-1 pb-4">
                     <UFormField label="Тема письма" :required="false">
                         <UInput
 v-model="form.emailSubject" placeholder="Запрос коммерческого предложения — ..."
@@ -133,10 +104,27 @@ v-model="form.businessInfo"
 
                 <UAlert
 v-if="error" color="error" variant="soft" icon="i-lucide-circle-alert" :description="error"
-                    class="mt-4 shrink-0" />
+                    class="shrink-0" />
+
+                <div
+                    class="sticky bottom-0 shrink-0 -mx-1 mt-auto border-t border-default bg-default/95
+                        backdrop-blur-sm px-1 pt-3 flex items-center justify-end gap-2"
+                >
+                    <UButton color="neutral" variant="ghost" @click="close">
+                        Отмена
+                    </UButton>
+                    <UButton
+                        leading-icon="i-lucide-arrow-right"
+                        :loading="loadingMessage"
+                        @click="goToConfirm"
+                    >
+                        Далее
+                    </UButton>
+                </div>
             </div>
 
-            <div v-else-if="step === 'confirm'" class="space-y-4">
+            <div v-else-if="step === 'confirm'" class="flex flex-col min-h-[min(80vh,42rem)]">
+                <div class="flex-1 min-h-0 overflow-y-auto space-y-4 pr-1 pb-4">
                 <UAlert
 v-if="props.supplierCount" color="info" variant="soft" icon="i-lucide-info" class="mb-4"
                     :description="`Запрос будет отправлен на ${props.supplierCount} ${getSupplierWord(props.supplierCount)}`" />
@@ -177,6 +165,24 @@ v-for="(att, idx) in uploadedAttachments" :key="idx"
                 </div>
 
                 <UAlert v-if="error" color="error" variant="soft" icon="i-lucide-circle-alert" :description="error" />
+                </div>
+
+                <div
+                    class="sticky bottom-0 shrink-0 -mx-1 mt-auto border-t border-default bg-default/95
+                        backdrop-blur-sm px-1 pt-3 flex items-center justify-end gap-2"
+                >
+                    <UButton
+                        color="neutral"
+                        variant="ghost"
+                        leading-icon="i-lucide-arrow-left"
+                        @click="step = 'params'"
+                    >
+                        Назад
+                    </UButton>
+                    <UButton leading-icon="i-lucide-send" :loading="loading" @click="handleLaunch">
+                        Запустить рассылку
+                    </UButton>
+                </div>
             </div>
         </template>
     </UModal>

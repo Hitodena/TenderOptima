@@ -83,7 +83,7 @@ export function buildEmailMismatchLetterBody(
 
 	lines.push(
 		'',
-		`Просим предоставить дополненное/уточненное предложение не позже ${deadline}.`,
+		`Просим предоставить дополненное/уточненное предложение не позднее ${deadline}.`,
 	)
 	return lines.join('\n')
 }

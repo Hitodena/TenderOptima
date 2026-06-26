@@ -13,9 +13,10 @@
 					@click="emit('toggle-expand')"
 				/>
 				<button type="button" class="flex-1 min-w-0 text-left" @click="emit('toggle-expand')">
-					<p class="text-sm font-medium whitespace-pre-wrap leading-relaxed">
-						{{ item.requirement }}
-					</p>
+					<TzRequirementDualText
+						:requirement="item.requirement"
+						:requirement-ref="item.requirement_ref"
+					/>
 				</button>
 				<USelect
 					v-if="editable"
@@ -52,9 +53,10 @@
 					<p class="text-xs font-semibold uppercase tracking-wide text-muted">
 						Полное требование
 					</p>
-					<p class="text-sm whitespace-pre-wrap leading-relaxed">
-						{{ item.requirement }}
-					</p>
+					<TzRequirementDualText
+						:requirement="item.requirement"
+						:requirement-ref="item.requirement_ref"
+					/>
 					<p v-if="item.requirement_ref" class="text-xs text-muted">
 						<span class="font-medium text-default/70">Ссылка:</span>
 						<button
@@ -109,6 +111,7 @@
 <script lang="ts" setup>
 import type { TZAnalysisItem, TZAnalysisStatus } from '#shared/types'
 import { getTzItemStatusColor, getTzItemStatusLabel } from '#shared/types'
+import TzRequirementDualText from '~/components/tz-analysis/TzRequirementDualText.vue'
 
 type TZItemView = TZAnalysisItem & { _index: number }
 

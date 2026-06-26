@@ -6,7 +6,12 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
-_SUPPLIER_SUBCOLS = ("Предыдущее", "Текущее", "Статус", "Пояснение")
+_SUPPLIER_SUBCOLS = (
+    "Первоначальное\nпредложение",
+    "Последнее\nпредложение",
+    "Статус",
+    "Пояснение",
+)
 _HEADER_FILL = PatternFill("solid", fgColor="E8EEF4")
 _CHANGED_FILL = PatternFill("solid", fgColor="FFF3CD")
 _THIN_BORDER = Border(
@@ -179,12 +184,17 @@ def build_comparison_workbook(
 
     ws.freeze_panes = "B3"
     ws.row_dimensions[1].height = 36
-    ws.row_dimensions[2].height = 24
+    ws.row_dimensions[2].height = 42
     ws.column_dimensions["A"].width = 42
     for col_idx in range(
         2,
         2 + len(suppliers) * cols_per_supplier,
     ):
-        ws.column_dimensions[get_column_letter(col_idx)].width = 18
+        letter = get_column_letter(col_idx)
+        subcol_idx = (col_idx - 2) % cols_per_supplier
+        if subcol_idx in (0, 1):
+            ws.column_dimensions[letter].width = 24
+        else:
+            ws.column_dimensions[letter].width = 16
 
     return wb

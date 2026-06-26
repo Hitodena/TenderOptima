@@ -551,6 +551,33 @@ export function extractRequirementKey(item: {
 	return null
 }
 
+/** Leaf requirement label from confirmed TZ hierarchy: «key. text». */
+export function findRequirementLabelByKey(
+	data: RequirementsHierarchy | null | undefined,
+	key: string | null,
+): string | null {
+	if (!key) return null
+	const hierarchy = normalizeTzRequirements(data)
+	const targetKey = normalizeRequirementKey(key)
+
+	function walk(nodes: RequirementsHierarchy): string | null {
+		for (const nodeKey of Object.keys(nodes).sort(compareVersionKeys)) {
+			const node = normalizeNode(nodes[nodeKey])
+			const nk = normalizeRequirementKey(nodeKey)
+			const hasChildren = Object.keys(node.children).length > 0
+			if (hasChildren) {
+				const found = walk(node.children)
+				if (found) return found
+			} else if (nk === targetKey && node.text.trim()) {
+				return `${nk}. ${node.text.trim()}`
+			}
+		}
+		return null
+	}
+
+	return walk(hierarchy)
+}
+
 export function buildResultTree(
 	hierarchy: RequirementsHierarchy | null | undefined,
 	items: MatchableAnalysisItem[],

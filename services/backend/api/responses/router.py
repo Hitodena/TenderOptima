@@ -140,6 +140,7 @@ async def _build_comparison(
                 rs_id=str(rs.id),
                 company_name=rs.supplier.company_name,
                 main_email=rs.supplier.main_email,
+                is_winner=bool(rs.is_winner),
                 values=values,
                 previous_values=previous_values,
                 explanations=explanations,
@@ -301,9 +302,26 @@ async def post_winner_notification(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> dict:
     """Queue Celery task to send a winner notification in the thread."""
-    return await _queue_custom_supplier_email(
+    result = await _queue_custom_supplier_email(
         request_id, rs_id, payload, session, current_user
     )
+    await RequestSupplierDAO.set_winner(session, request_id, rs_id)
+    return result
+
+
+@router.delete(
+    "/{request_id}/winner",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Clear confirmed winner for the request",
+)
+async def delete_winner(
+    request_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> None:
+    """Allow choosing another winner after clearing the current selection."""
+    await get_request_or_404(request_id, session, current_user)
+    await RequestSupplierDAO.clear_winner(session, request_id)
 
 
 @router.get(

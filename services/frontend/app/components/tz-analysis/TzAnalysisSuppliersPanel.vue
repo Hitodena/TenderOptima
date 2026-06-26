@@ -1,7 +1,8 @@
 <template>
 	<component
 		:is="compact ? 'aside' : 'section'"
-		class="@container rounded-xl border border-default bg-elevated/20 p-4 space-y-4 w-full min-w-0"
+		class="@container rounded-xl border border-default bg-elevated/20 w-full min-w-0"
+		:class="compact ? 'p-2.5 space-y-2.5' : 'p-4 space-y-4'"
 	>
 		<div class="flex items-center justify-between gap-2">
 			<p class="text-sm font-semibold text-highlighted">Поставщики</p>
@@ -9,7 +10,7 @@
 				v-if="!readonly"
 				type="button"
 				variant="outline"
-				size="sm"
+				:size="compact ? 'xs' : 'sm'"
 				leading-icon="i-lucide-plus"
 				:disabled="adding"
 				@click="showAddForm = true"
@@ -32,8 +33,11 @@
 			<div
 				v-for="supplier in suppliers"
 				:key="supplier.id"
-				class="rounded-lg border p-3 space-y-2 transition-colors min-w-0 w-full"
-				:class="supplierCardClass(supplier)"
+				class="rounded-lg border transition-colors min-w-0 w-full"
+				:class="[
+					supplierCardClass(supplier),
+					compact ? 'p-2 space-y-1.5' : 'p-3 space-y-2',
+				]"
 			>
 				<div class="flex items-start justify-between gap-2">
 					<button

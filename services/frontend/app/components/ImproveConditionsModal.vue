@@ -1,12 +1,67 @@
 <template>
 	<UModal v-model:open="isOpen" :ui="EMAIL_LETTER_MODAL_UI">
-		<template #header="{ close: closeModal }">
-			<div class="flex items-start justify-between gap-3 w-full">
+		<template #header>
+			<div class="min-w-0">
 				<p class="text-lg font-semibold text-highlighted min-w-0 truncate">
 					Запрос на улучшение условий — {{ supplier.company_name }}
 				</p>
-				<div class="flex items-center gap-2 shrink-0">
-					<UButton variant="outline" color="neutral" @click="closeModal">
+			</div>
+		</template>
+		<template #body>
+			<div class="flex flex-col min-h-[min(70vh,40rem)]">
+				<div class="flex-1 min-h-0 overflow-y-auto pr-1 pb-4">
+					<div class="flex flex-col md:flex-row gap-4">
+						<div class="flex-1 min-w-0 flex flex-col gap-4">
+							<SupplierLetterReadonlyEmail :email="supplier.main_email" />
+							<UFormField label="Тема">
+								<UInput v-model="subject" class="w-full" />
+							</UFormField>
+							<UFormField label="Сообщение" class="flex-1 min-h-0">
+								<UTextarea
+									v-model="body"
+									:rows="18"
+									class="w-full"
+									:ui="{ base: 'min-h-[min(40vh,24rem)] resize-y' }"
+									autoresize
+								/>
+							</UFormField>
+							<div>
+								<p class="text-sm font-semibold mb-1">Вложения</p>
+								<p class="text-xs text-muted mb-2">(договор, спецификация и др.)</p>
+								<UFileUpload
+									:model-value="filesToUpload"
+									multiple
+									accept=".pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp"
+									:interactive="false"
+									layout="list"
+									class="w-full"
+									@update:model-value="onFilesUpdate"
+								>
+									<template #actions="{ open }">
+										<UButton type="button" variant="outline" size="sm" @click="open()">
+											<UIcon name="i-lucide-paperclip" class="w-4 h-4" />
+											Добавить файлы
+										</UButton>
+									</template>
+								</UFileUpload>
+							</div>
+						</div>
+						<div class="w-full md:w-72 shrink-0 min-h-64 md:min-h-0">
+							<EmailTemplateSidebar @select="applyTemplate" />
+						</div>
+					</div>
+				</div>
+
+				<UAlert
+					v-if="error"
+					color="error"
+					variant="soft"
+					:description="error"
+					class="shrink-0"
+				/>
+
+				<div :class="EMAIL_LETTER_MODAL_FOOTER_CLASS">
+					<UButton color="neutral" variant="ghost" @click="close">
 						Отмена
 					</UButton>
 					<UButton
@@ -20,55 +75,15 @@
 				</div>
 			</div>
 		</template>
-		<template #body>
-			<div class="flex flex-col md:flex-row gap-4 min-h-[min(70vh,40rem)]">
-				<div class="flex-1 min-w-0 flex flex-col gap-4 min-h-0">
-					<SupplierLetterReadonlyEmail :email="supplier.main_email" />
-					<UFormField label="Тема">
-						<UInput v-model="subject" class="w-full" />
-					</UFormField>
-					<UFormField label="Сообщение" class="flex-1 min-h-0">
-						<UTextarea
-							v-model="body"
-							:rows="18"
-							class="w-full"
-							:ui="{ base: 'min-h-[min(40vh,24rem)] resize-y' }"
-							autoresize
-						/>
-					</UFormField>
-					<div>
-						<p class="text-sm font-semibold mb-1">Вложения</p>
-						<p class="text-xs text-muted mb-2">(договор, спецификация и др.)</p>
-						<UFileUpload
-							:model-value="filesToUpload"
-							multiple
-							accept=".pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp"
-							:interactive="false"
-							layout="list"
-							class="w-full"
-							@update:model-value="onFilesUpdate"
-						>
-							<template #actions="{ open }">
-								<UButton type="button" variant="outline" size="sm" @click="open()">
-									<UIcon name="i-lucide-paperclip" class="w-4 h-4" />
-									Добавить файлы
-								</UButton>
-							</template>
-						</UFileUpload>
-					</div>
-					<UAlert v-if="error" color="error" variant="soft" :description="error" />
-				</div>
-				<div class="w-full md:w-72 shrink-0 min-h-64 md:min-h-0">
-					<EmailTemplateSidebar @select="applyTemplate" />
-				</div>
-			</div>
-		</template>
 	</UModal>
 </template>
 
 <script lang="ts" setup>
 import type { Attachment, ComparisonSupplier, EmailTemplate } from '#shared/types'
-import { EMAIL_LETTER_MODAL_UI } from '#shared/constants/emailModal'
+import {
+	EMAIL_LETTER_MODAL_FOOTER_CLASS,
+	EMAIL_LETTER_MODAL_UI,
+} from '#shared/constants/emailModal'
 import EmailTemplateSidebar from '~/components/EmailTemplateSidebar.vue'
 import SupplierLetterReadonlyEmail from '~/components/SupplierLetterReadonlyEmail.vue'
 

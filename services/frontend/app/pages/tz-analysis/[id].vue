@@ -169,7 +169,7 @@ v-if="isTzReviewPhase && !isAnalysisClosed"
 								class="sticky top-0 z-10 -mx-4 mb-4 px-4 pb-4 border-b border-default bg-default/95 backdrop-blur-sm sm:-mx-6 sm:px-6"
 							>
 								<UButton
-									color="warning"
+									color="success"
 									variant="solid"
 									size="lg"
 									block
@@ -222,8 +222,8 @@ v-if="editableTzCount > 0" :rows="editableRequirementsTz"
 
 					<template #kp>
 						<div
-class="grid grid-cols-1 gap-6" :class="showSuppliersSidebar
-							? 'xl:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)]'
+class="grid grid-cols-1 gap-4" :class="showSuppliersSidebar
+							? 'xl:grid-cols-[minmax(11rem,14rem)_minmax(0,1fr)]'
 							: ''">
 							<TzAnalysisSuppliersPanel
 v-if="showSuppliersSidebar && analysis?.id"
@@ -428,7 +428,7 @@ v-model="tzStatusFilter" :items="tzFilterOptions" size="sm"
 											</div>
 										</template>
 
-										<div class="min-h-[55vh] max-h-[85vh] overflow-y-auto pr-1 space-y-8">
+										<div class="min-h-[65vh] max-h-[85vh] overflow-y-auto pr-1 space-y-8">
 											<section
 v-for="group in visibleKpItemGroups"
 												:key="`results-kp-${group.id}`" class="space-y-4">
@@ -516,15 +516,15 @@ v-if="visibleKpItemGroups.length === 0"
 						</UButton>
 						<UButton
 leading-icon="i-lucide-download" :loading="docxGenerating"
-							:disabled="!hasLetterIssues || !letterEditorText.trim()" @click="generateDocx">
+							:disabled="tzSelectedIndices.length === 0 || !letterEditorText.trim()" @click="generateDocx">
 							Скачать DOCX
 						</UButton>
 					</div>
 				</div>
 			</template>
 			<template #body>
-				<div class="grid grid-cols-1 md:grid-cols-[12rem_minmax(0,1fr)] gap-4 min-h-0">
-					<aside class="flex flex-col gap-3 shrink-0">
+				<div class="grid grid-cols-1 md:grid-cols-[15rem_minmax(0,1fr)] gap-4 min-h-0">
+					<aside class="flex flex-col gap-3 shrink-0 min-h-0 md:max-h-[72vh]">
 						<p v-if="selectedSupplier" class="text-xs text-muted">
 							Поставщик:
 							<span class="text-default font-medium">{{ selectedSupplier.name }}</span>
@@ -554,7 +554,7 @@ v-if="analysis?.kp_filename" type="button"
 						<UFormField label="Срок ответа">
 							<UInput v-model="docxDeadline" placeholder="7 июня 2026 г." size="md" />
 						</UFormField>
-						<div class="flex flex-col gap-1.5">
+						<div class="flex flex-col gap-1.5 shrink-0">
 							<p class="text-xs font-semibold uppercase tracking-wide text-muted px-0.5">
 								Разделы письма
 							</p>
@@ -566,6 +566,100 @@ v-for="tab in letterPreviewTabs" :key="tab.value" type="button" block
 								:disabled="tab.disabled" @click="scrollToLetterSection(tab.value)">
 								{{ tab.label }}
 							</UButton>
+						</div>
+						<div class="flex-1 min-h-0 overflow-y-auto space-y-4 pr-0.5">
+							<div
+								v-if="letterModalMismatchItems.length"
+								id="letter-sidebar-mismatch"
+								class="space-y-2"
+							>
+								<p class="text-xs font-semibold text-error px-0.5">
+									Не соответствует
+								</p>
+								<label
+									v-for="item in letterModalMismatchItems"
+									:key="item._index"
+									class="flex items-start gap-2 rounded-lg border border-default/60
+										bg-elevated/30 px-2 py-2 cursor-pointer hover:bg-elevated/50"
+								>
+									<UCheckbox
+										:model-value="tzSelectedIndices.includes(item._index)"
+										:color="getTzItemStatusColor(item.status)"
+										class="shrink-0 mt-0.5"
+										@update:model-value="(v) => toggleTzSelect(item._index, v === true)"
+										@click.stop
+									/>
+									<TzRequirementDualText
+										:requirement="item.requirement"
+										:requirement-ref="item.requirement_ref"
+										mode="letter"
+										compact
+										class="min-w-0"
+									/>
+								</label>
+							</div>
+
+							<div
+								v-if="letterModalNotFoundItems.length"
+								id="letter-sidebar-not-found"
+								class="space-y-2"
+							>
+								<p class="text-xs font-semibold text-neutral px-0.5">
+									Не найдено
+								</p>
+								<label
+									v-for="item in letterModalNotFoundItems"
+									:key="item._index"
+									class="flex items-start gap-2 rounded-lg border border-default/60
+										bg-elevated/30 px-2 py-2 cursor-pointer hover:bg-elevated/50"
+								>
+									<UCheckbox
+										:model-value="tzSelectedIndices.includes(item._index)"
+										:color="getTzItemStatusColor(item.status)"
+										class="shrink-0 mt-0.5"
+										@update:model-value="(v) => toggleTzSelect(item._index, v === true)"
+										@click.stop
+									/>
+									<TzRequirementDualText
+										:requirement="item.requirement"
+										:requirement-ref="item.requirement_ref"
+										mode="letter"
+										compact
+										class="min-w-0"
+									/>
+								</label>
+							</div>
+
+							<div
+								v-if="letterModalPartialItems.length"
+								id="letter-sidebar-partial"
+								class="space-y-2"
+							>
+								<p class="text-xs font-semibold text-warning px-0.5">
+									Частично
+								</p>
+								<label
+									v-for="item in letterModalPartialItems"
+									:key="item._index"
+									class="flex items-start gap-2 rounded-lg border border-default/60
+										bg-elevated/30 px-2 py-2 cursor-pointer hover:bg-elevated/50"
+								>
+									<UCheckbox
+										:model-value="tzSelectedIndices.includes(item._index)"
+										:color="getTzItemStatusColor(item.status)"
+										class="shrink-0 mt-0.5"
+										@update:model-value="(v) => toggleTzSelect(item._index, v === true)"
+										@click.stop
+									/>
+									<TzRequirementDualText
+										:requirement="item.requirement"
+										:requirement-ref="item.requirement_ref"
+										mode="letter"
+										compact
+										class="min-w-0"
+									/>
+								</label>
+							</div>
 						</div>
 					</aside>
 
@@ -601,6 +695,7 @@ import type {
 	UserResponse,
 } from '#shared/types'
 import {
+	getTzItemStatusColor,
 	getTzRunStatusColor,
 	getTzRunStatusLabel,
 	TZAnalysisRunStatus,
@@ -635,6 +730,7 @@ import {
 import { subscriptionProfilePath } from '#shared/utils/subscriptionDisplay'
 import RequirementResultsTree from '~/components/tz-analysis/RequirementResultsTree.vue'
 import RequirementTreeEditor from '~/components/tz-analysis/RequirementTreeEditor.vue'
+import TzRequirementDualText from '~/components/tz-analysis/TzRequirementDualText.vue'
 import TzAnalysisSuppliersPanel from '~/components/tz-analysis/TzAnalysisSuppliersPanel.vue'
 import { useRunStatusPolling } from '~/composables/useRunStatusPolling'
 import { useTzAnalysisFiles } from '~/composables/useTzAnalysisFiles'
@@ -678,6 +774,10 @@ const { openTzFile, openKpFile } = useTzAnalysisFiles(
 	computed(() => analysis.value?.tz_filename),
 )
 provide('tzAnalysisFiles', { openTzFile, openKpFile })
+provide(
+	'tzRequirementsHierarchy',
+	computed(() => analysis.value?.requirements_tz ?? null),
+)
 
 const activeContentTab = ref('tz')
 const kpPanelLoading = ref(false)
@@ -698,6 +798,7 @@ const tzPolling = ref(false)
 const tzStatusFilter = ref('all')
 const tzRequirementSearch = ref('')
 const showLetterModal = ref(false)
+const tzSelectedIndices = ref<number[]>([])
 const letterPreviewTab = ref<'mismatch' | 'not_found' | 'partial'>('mismatch')
 const processingPhase = ref<'tz' | 'kp'>('tz')
 const itemsOverrides = ref<Record<string, { status: TZAnalysisStatus }>>({})
@@ -715,7 +816,7 @@ const LETTER_MISMATCH_HEADER = 'Не соответствует:'
 const LETTER_NOT_FOUND_HEADER = 'Не найдено:'
 const LETTER_PARTIAL_HEADER = 'Требуют уточнения/дополнения:'
 const LETTER_DEADLINE_PREFIX =
-	'Просим предоставить дополненное/уточненное предложение не позже '
+	'Просим предоставить дополненное/уточненное предложение не позднее '
 
 const tzFilterOptions = [
 	{ label: 'Все', value: 'all' },
@@ -960,13 +1061,101 @@ function isTzSelectable(status: TZAnalysisStatus) {
 	return status === 'partial' || status === 'missing' || status === 'not_found'
 }
 
-const tzSelectedIndices = computed(() =>
-	letterItemsView.value
-		.filter((item) => belongsToPrimaryKp(item) && isTzSelectable(item.status))
-		.map((item) => item._index),
+const letterSelectableItems = computed((): TZItemView[] =>
+	letterItemsView.value.filter(
+		(item) => belongsToPrimaryKp(item) && isTzSelectable(item.status),
+	),
 )
 
-const hasLetterIssues = computed(() => tzSelectedIndices.value.length > 0)
+const hasLetterIssues = computed(() => letterSelectableItems.value.length > 0)
+
+const letterModalMismatchItems = computed((): TZItemView[] =>
+	letterItemsView.value.filter(
+		(item) => belongsToPrimaryKp(item) && item.status === 'missing',
+	),
+)
+
+const letterModalNotFoundItems = computed((): TZItemView[] =>
+	letterItemsView.value.filter(
+		(item) => belongsToPrimaryKp(item) && item.status === 'not_found',
+	),
+)
+
+const letterModalPartialItems = computed((): TZItemView[] =>
+	letterItemsView.value.filter(
+		(item) => belongsToPrimaryKp(item) && item.status === 'partial',
+	),
+)
+
+function letterSelectionStorageKey() {
+	const analysisId = analysis.value?.id
+	const supplierId = selectedSupplierId.value
+	const primaryKp = selectedSupplierPrimaryKp.value ?? analysis.value?.kp_filename
+	if (!analysisId) return null
+	return `tz-letter-selection:${analysisId}:${supplierId ?? '_'}:${primaryKp ?? '_'}`
+}
+
+function saveLetterSelection() {
+	if (!import.meta.client) return
+	const key = letterSelectionStorageKey()
+	if (!key) return
+	sessionStorage.setItem(key, JSON.stringify(tzSelectedIndices.value))
+}
+
+function loadLetterSelection(): number[] | null {
+	if (!import.meta.client) return null
+	const key = letterSelectionStorageKey()
+	if (!key) return null
+	try {
+		const raw = sessionStorage.getItem(key)
+		if (!raw) return null
+		const parsed = JSON.parse(raw)
+		return Array.isArray(parsed)
+			? parsed.filter((value): value is number => typeof value === 'number')
+			: null
+	} catch {
+		return null
+	}
+}
+
+function selectPrimaryKpLetterItems(kpFilename: string | null | undefined) {
+	if (!analysis.value) return
+	const target = kpFilename ?? displayKpFilenames.value[0] ?? '_default'
+	tzSelectedIndices.value = letterItemsView.value
+		.filter((item) => getItemKpKey(item) === target && isTzSelectable(item.status))
+		.map((item) => item._index)
+	saveLetterSelection()
+}
+
+function restoreOrInitLetterSelection() {
+	const selectable = new Set(
+		letterSelectableItems.value.map((item) => item._index),
+	)
+	if (selectable.size === 0) {
+		tzSelectedIndices.value = []
+		return
+	}
+	const saved = loadLetterSelection()
+	if (saved?.length) {
+		const restored = saved.filter((index) => selectable.has(index))
+		if (restored.length) {
+			tzSelectedIndices.value = restored
+			return
+		}
+	}
+	selectPrimaryKpLetterItems(selectedSupplierPrimaryKp.value)
+}
+
+function toggleTzSelect(index: number, checked: boolean) {
+	if (checked) {
+		if (!tzSelectedIndices.value.includes(index)) {
+			tzSelectedIndices.value = [...tzSelectedIndices.value, index]
+		}
+	} else {
+		tzSelectedIndices.value = tzSelectedIndices.value.filter((i) => i !== index)
+	}
+	saveLetterSelection()
+}
 
 function letterMismatchReason(item: TZAnalysisItem) {
 	if (item.status === 'not_found') {
@@ -1392,25 +1581,33 @@ const letterItemsByTab = computed(() => ({
 }))
 
 const letterPreviewTabs = computed(() => {
-	const { mismatch, not_found, partial } = letterItemsByTab.value
+	const mismatchSelected = letterItemsByTab.value.mismatch.length
+	const notFoundSelected = letterItemsByTab.value.not_found.length
+	const partialSelected = letterItemsByTab.value.partial.length
 	return [
 		{
-			label: mismatch.length ? `Не соответствует (${mismatch.length})` : 'Не соответствует',
+			label: mismatchSelected
+				? `Не соответствует (${mismatchSelected})`
+				: 'Не соответствует',
 			value: 'mismatch' as const,
 			color: 'error' as const,
-			disabled: mismatch.length === 0,
+			disabled: letterModalMismatchItems.value.length === 0,
 		},
 		{
-			label: not_found.length ? `Не найдено (${not_found.length})` : 'Не найдено',
+			label: notFoundSelected
+				? `Не найдено (${notFoundSelected})`
+				: 'Не найдено',
 			value: 'not_found' as const,
 			color: 'neutral' as const,
-			disabled: not_found.length === 0,
+			disabled: letterModalNotFoundItems.value.length === 0,
 		},
 		{
-			label: partial.length ? `Частично (${partial.length})` : 'Частично',
+			label: partialSelected
+				? `Частично (${partialSelected})`
+				: 'Частично',
 			value: 'partial' as const,
 			color: 'warning' as const,
-			disabled: partial.length === 0,
+			disabled: letterModalPartialItems.value.length === 0,
 		},
 	]
 })
@@ -1665,6 +1862,7 @@ function applyAnalysis(
 			}),
 		)
 		if (!fromPoll || itemsCount !== lastAppliedItemsCount) {
+			restoreOrInitLetterSelection()
 			scheduleLetterPreview()
 		}
 	}
@@ -1728,7 +1926,13 @@ function scheduleLetterPreview() {
 	syncLetterEditor(true)
 }
 
+watch(selectedSupplierId, () => {
+	restoreOrInitLetterSelection()
+	if (showLetterModal.value) scheduleLetterPreview()
+})
+
 watch(displayedSupplierId, () => {
+	restoreOrInitLetterSelection()
 	if (showLetterModal.value) scheduleLetterPreview()
 })
 
@@ -1782,6 +1986,7 @@ watch(showLetterModal, (open) => {
 		letterEditorDirty.value = false
 		return
 	}
+	restoreOrInitLetterSelection()
 	const { mismatch, not_found, partial } = letterItemsByTab.value
 	if (mismatch.length > 0) letterPreviewTab.value = 'mismatch'
 	else if (not_found.length > 0) letterPreviewTab.value = 'not_found'
@@ -1799,10 +2004,26 @@ watch(
 	[tzSelectedIndices, itemsOverrides],
 	() => {
 		if (!showLetterModal.value) return
+		saveLetterSelection()
 		scheduleLetterPreview()
 	},
 	{ deep: true },
 )
+
+watch(tzSelectedIndices, () => {
+	if (!showLetterModal.value) return
+	const { mismatch, not_found, partial } = letterItemsByTab.value
+	if (letterPreviewTab.value === 'mismatch' && mismatch.length === 0) {
+		if (not_found.length > 0) letterPreviewTab.value = 'not_found'
+		else if (partial.length > 0) letterPreviewTab.value = 'partial'
+	} else if (letterPreviewTab.value === 'not_found' && not_found.length === 0) {
+		if (mismatch.length > 0) letterPreviewTab.value = 'mismatch'
+		else if (partial.length > 0) letterPreviewTab.value = 'partial'
+	} else if (letterPreviewTab.value === 'partial' && partial.length === 0) {
+		if (mismatch.length > 0) letterPreviewTab.value = 'mismatch'
+		else if (not_found.length > 0) letterPreviewTab.value = 'not_found'
+	}
+}, { deep: true })
 
 onMounted(async () => {
 	try {
@@ -1987,9 +2208,8 @@ function openLetterModal() {
 		})
 		return
 	}
-	const { mismatch, not_found } = letterItemsByTab.value
-	if (mismatch.length > 0) letterPreviewTab.value = 'mismatch'
-	else if (not_found.length > 0) letterPreviewTab.value = 'not_found'
+	if (letterModalMismatchItems.value.length > 0) letterPreviewTab.value = 'mismatch'
+	else if (letterModalNotFoundItems.value.length > 0) letterPreviewTab.value = 'not_found'
 	else letterPreviewTab.value = 'partial'
 	showLetterModal.value = true
 }

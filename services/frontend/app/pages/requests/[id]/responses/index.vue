@@ -174,18 +174,22 @@ v-else-if="getOfferValueTrend(supplier.values[req], supplier.previous_values?.[r
 															v-if="comparisonShowStatusBadge(supplier, req)"
 															class="flex items-center gap-1"
 														>
+															<UTooltip
+v-if="comparisonExplanationTooltip(supplier, req)"
+																:text="supplier.explanations?.[req] || ''">
+																<UBadge
+																	:color="comparisonStatusColor(supplier.statuses[req]!)"
+																	variant="subtle" size="sm"
+																	class="cursor-help">
+																	{{ comparisonStatusLabel(supplier.statuses[req]!) }}
+																</UBadge>
+															</UTooltip>
 															<UBadge
+v-else
 																:color="comparisonStatusColor(supplier.statuses[req]!)"
 																variant="subtle" size="sm">
 																{{ comparisonStatusLabel(supplier.statuses[req]!) }}
 															</UBadge>
-															<UTooltip
-v-if="comparisonExplanationTooltip(supplier, req)"
-																:text="supplier.explanations?.[req] || ''">
-																<UIcon
-name="i-lucide-info"
-																	class="w-3.5 h-3.5 text-muted cursor-help shrink-0" />
-															</UTooltip>
 														</div>
 													</div>
 													<UIcon
@@ -258,10 +262,38 @@ size="xs" variant="outline" leading-icon="i-lucide-sparkles"
 v-for="supplier in comparison.suppliers"
 												:key="`winner-${supplier.rs_id}`" class="px-3 py-3 align-middle">
 												<UButton
-size="xs" color="success" variant="soft"
-													leading-icon="i-lucide-trophy" @click="openWinnerModal(supplier)">
+													v-if="!hasConfirmedWinner"
+													size="xs"
+													color="success"
+													variant="soft"
+													leading-icon="i-lucide-trophy"
+													@click="openWinnerModal(supplier)"
+												>
 													Выбрать победителем
 												</UButton>
+												<div
+													v-else-if="supplier.is_winner"
+													class="flex flex-col items-start gap-1.5"
+												>
+													<UBadge
+														color="success"
+														variant="subtle"
+														size="sm"
+														class="whitespace-nowrap"
+													>
+														Победитель
+													</UBadge>
+													<UButton
+														size="xs"
+														color="neutral"
+														variant="ghost"
+														leading-icon="i-lucide-x"
+														@click="openClearWinnerConfirm"
+													>
+														Снять выбор
+													</UButton>
+												</div>
+												<span v-else class="text-xs text-muted">—</span>
 											</td>
 										</tr>
 									</tfoot>
@@ -436,14 +468,17 @@ v-if="!isMobile" size="xs" variant="ghost" color="neutral" icon="i-lucide-x"
 v-for="(m, idx) in requirementMatches" :key="idx"
 								class="rounded-lg border border-default/60 p-2 space-y-1.5">
 								<div class="flex items-start gap-2">
-									<UIcon
-:name="matchStatusIcon(m.status)" class="w-4 h-4 shrink-0 mt-0.5"
-										:class="matchStatusClass(m.status)" />
 									<UTooltip v-if="matchExplanationTooltip(m)" :text="m.explanation || ''">
 										<UIcon
-name="i-lucide-info"
-											class="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted cursor-help" />
+											:name="matchStatusIcon(m.status)"
+											class="w-4 h-4 shrink-0 mt-0.5 cursor-help"
+											:class="matchStatusClass(m.status)" />
 									</UTooltip>
+									<UIcon
+v-else
+										:name="matchStatusIcon(m.status)"
+										class="w-4 h-4 shrink-0 mt-0.5"
+										:class="matchStatusClass(m.status)" />
 									<p class="text-xs font-medium flex-1">{{ m.requirement }}</p>
 								</div>
 								<div class="pl-6 space-y-1">
@@ -537,7 +572,36 @@ v-if="letterModalSupplier" v-model:open="letterModalOpen" :request-id="id"
 			v-model:open="winnerModalOpen"
 			:request-id="id"
 			:supplier="winnerModalSupplier"
+			@sent="fetchComparison"
 		/>
+
+		<UModal
+			v-model:open="clearWinnerConfirmOpen"
+			title="Отменить выбор победителя"
+			description="Вы уверены? После этого можно будет выбрать другого поставщика."
+			:ui="{ content: 'max-w-md' }"
+		>
+			<template #footer>
+				<div class="flex justify-end gap-2 w-full">
+					<UButton
+						color="neutral"
+						variant="ghost"
+						:disabled="clearingWinner"
+						@click="clearWinnerConfirmOpen = false"
+					>
+						Отмена
+					</UButton>
+					<UButton
+						color="error"
+						variant="soft"
+						:loading="clearingWinner"
+						@click="confirmClearWinner"
+					>
+						Да, снять выбор
+					</UButton>
+				</div>
+			</template>
+		</UModal>
 	</div>
 </template>
 
@@ -560,7 +624,7 @@ import {
 	filterNonMatching,
 	supplierHasMismatches,
 } from '#shared/utils/mismatchLetter'
-import { getOfferValueTrend } from '#shared/utils/offerValue'
+import { getApiErrorDetail } from '#shared/utils/apiError'
 import { useIntervalFn } from '@vueuse/core'
 import ImproveConditionsModal from '~/components/ImproveConditionsModal.vue'
 import ResponseMismatchLetterModal from '~/components/ResponseMismatchLetterModal.vue'
@@ -571,7 +635,7 @@ definePageMeta({ layout: 'default' })
 
 const route = useRoute()
 const id = route.params.id as string
-const { get, post, patch } = useApi()
+const { get, post, patch, del } = useApi()
 const { $axios } = useNuxtApp()
 const toast = useToast()
 const { formatDateTime, formatDateShort } = useFormatDate()
@@ -812,9 +876,15 @@ const comparison = ref<ComparisonResponse | null>(null)
 const loadingComparison = ref(false)
 const exportingComparison = ref(false)
 
+const hasConfirmedWinner = computed(() =>
+	comparison.value?.suppliers.some((supplier) => supplier.is_winner) ?? false,
+)
+
 const improveModalOpen = ref(false)
 const letterModalOpen = ref(false)
 const winnerModalOpen = ref(false)
+const clearWinnerConfirmOpen = ref(false)
+const clearingWinner = ref(false)
 const modalSupplier = ref<ComparisonSupplier | null>(null)
 const winnerModalSupplier = ref<ComparisonSupplier | null>(null)
 const letterModalSupplier = ref<ComparisonSupplier | null>(null)
@@ -871,6 +941,7 @@ const selectedThreadAsComparisonSupplier = computed((): ComparisonSupplier | nul
 		rs_id: thread.rs_id,
 		company_name: thread.supplier.company_name,
 		main_email: thread.supplier.main_email,
+		is_winner: false,
 		values,
 		previous_values: previousMatchValues.value,
 		statuses,
@@ -887,6 +958,32 @@ function supplierHasLetterMismatches(supplier: ComparisonSupplier) {
 function openWinnerModal(supplier: ComparisonSupplier) {
 	winnerModalSupplier.value = supplier
 	winnerModalOpen.value = true
+}
+
+function openClearWinnerConfirm() {
+	clearWinnerConfirmOpen.value = true
+}
+
+async function confirmClearWinner() {
+	if (clearingWinner.value) return
+	clearingWinner.value = true
+	try {
+		await del(`/requests/${id}/winner`)
+		clearWinnerConfirmOpen.value = false
+		await fetchComparison()
+		toast.add({
+			title: 'Выбор победителя отменён',
+			color: 'success',
+			icon: 'i-lucide-check',
+		})
+	} catch (e: unknown) {
+		toast.add({
+			title: getApiErrorDetail(e) ?? 'Не удалось снять выбор победителя',
+			color: 'error',
+		})
+	} finally {
+		clearingWinner.value = false
+	}
 }
 
 function complianceForSupplier(supplier: ComparisonSupplier) {

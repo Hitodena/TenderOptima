@@ -297,6 +297,7 @@ export interface ComparisonSupplier {
 	rs_id: string;
 	company_name: string;
 	main_email: string;
+	is_winner?: boolean;
 	values: Record<string, string | null>;
 	previous_values: Record<string, string | null>;
 	explanations?: Record<string, string | null>;

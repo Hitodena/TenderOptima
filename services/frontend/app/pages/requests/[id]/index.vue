@@ -13,9 +13,8 @@
 
 			<div class="flex items-start justify-between mb-6 gap-4">
 				<div class="min-w-0">
-					<UButton
-to="/requests/history" variant="ghost" color="neutral" size="sm" leading-icon="i-lucide-arrow-left"
-						class="-ml-1 mb-2">
+					<UButton to="/requests/history" variant="ghost" color="neutral" size="sm"
+						leading-icon="i-lucide-arrow-left" class="-ml-1 mb-2">
 						К запросам
 					</UButton>
 					<div class="flex items-center gap-3 mb-1 flex-wrap">
@@ -42,15 +41,13 @@ to="/requests/history" variant="ghost" color="neutral" size="sm" leading-icon="i
 				</UButton>
 			</div>
 
-			<UAlert
-v-if="actionError" color="error" variant="soft" icon="i-lucide-circle-alert"
+			<UAlert v-if="actionError" color="error" variant="soft" icon="i-lucide-circle-alert"
 				:description="actionError" class="mb-6" />
 
 			<div class="flex items-start justify-between mb-4 gap-4 flex-wrap">
 				<div>
 					<h2 class="text-lg font-semibold">Найденные поставщики</h2>
-					<p
-v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED && request.status !== RequestStatus.CLOSED && request.status !== RequestStatus.SEARCHING"
+					<p v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED && request.status !== RequestStatus.CLOSED && request.status !== RequestStatus.SEARCHING"
 						class="text-sm text-muted mt-0.5">
 						{{
 							suppliers.length
@@ -61,62 +58,55 @@ v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatu
 				</div>
 
 				<div class="flex items-center gap-2 shrink-0">
-					<UButton
-v-if="request.status == RequestStatus.DRAFT" size="lg" variant="outline" color="neutral"
+					<UButton v-if="request.status == RequestStatus.DRAFT" size="lg" variant="outline" color="neutral"
 						leading-icon="i-lucide-search" :loading="searching" @click="runSearch">
 						Поиск поставщиков
 					</UButton>
 
-					<UButton
-v-if="!isTerminalStatus && suppliers.length > 0" size="lg" leading-icon="i-lucide-send"
+					<UButton v-if="!isTerminalStatus && suppliers.length > 0" size="lg" leading-icon="i-lucide-send"
 						:disabled="enabledCount === 0" @click="showParamsModal = true">
 						Отправить запрос поставщикам
 					</UButton>
 
-				<UButton
-					v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED && request.status !== RequestStatus.CLOSED && request.status !== RequestStatus.SEARCHING"
-					size="lg" variant="outline" color="neutral" leading-icon="i-lucide-user-plus"
-					@click="showAddSupplier = true">
-					Добавить поставщика
-				</UButton>
+					<UButton
+						v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED && request.status !== RequestStatus.CLOSED && request.status !== RequestStatus.SEARCHING"
+						size="lg" variant="outline" color="neutral" leading-icon="i-lucide-user-plus"
+						@click="showAddSupplier = true">
+						Добавить поставщика
+					</UButton>
 
-				<UButton
-					v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED && request.status !== RequestStatus.CLOSED && request.status !== RequestStatus.SEARCHING"
-					size="lg" variant="outline" color="neutral" leading-icon="i-lucide-database"
-					@click="showBookmarkModal = true">
-					Из базы поставщиков
-				</UButton>
+					<UButton
+						v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED && request.status !== RequestStatus.CLOSED && request.status !== RequestStatus.SEARCHING"
+						size="lg" variant="outline" color="neutral" leading-icon="i-lucide-database"
+						@click="showBookmarkModal = true">
+						Из базы поставщиков
+					</UButton>
 				</div>
 			</div>
 
 			<div>
-				<div
-v-if="request.status === RequestStatus.QUEUED"
+				<div v-if="request.status === RequestStatus.QUEUED"
 					class="flex items-center gap-3 p-4 rounded-xl bg-warning/10">
 					<UIcon name="i-lucide-clock" class="w-5 h-5 text-warning shrink-0" />
 					<div>
 						<p class="text-sm font-medium">Рассылка в очереди</p>
 						<p class="text-xs text-muted">Письма отправляются в фоновом режиме</p>
 					</div>
-					<UButton
-size="sm" variant="ghost" :to="`/requests/${id}/responses`" class="ml-auto" color="warning"
+					<UButton size="sm" variant="ghost" :to="`/requests/${id}/responses`" class="ml-auto" color="warning"
 						trailing-icon="i-lucide-arrow-right">
 						Смотреть ответы
 					</UButton>
 				</div>
 				<div v-else-if="request.status === RequestStatus.COMPLETED">
-					<UAlert
-color="success" variant="soft" icon="i-lucide-check" class="mb-4"
+					<UAlert color="success" variant="soft" icon="i-lucide-check" class="mb-4"
 						description="Рассылка завершена" />
 				</div>
 				<div v-else-if="request.status === RequestStatus.CLOSED">
-					<UAlert
-color="neutral" variant="soft" icon="i-lucide-lock" class="mb-4"
+					<UAlert color="neutral" variant="soft" icon="i-lucide-lock" class="mb-4"
 						description="Запрос закрыт" />
 				</div>
 				<div v-else-if="request.status === RequestStatus.DRAFT || request.status === RequestStatus.ACTIVE">
-					<UAlert
-color="info" variant="soft" icon="i-lucide-info" class="mb-4"
+					<UAlert color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 						description="Отправляйте запросы только подходящим компаниям. Нерелевантные письма могут негативно влиять на репутацию вашей компании." />
 				</div>
 			</div>
@@ -132,21 +122,18 @@ color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 			</UCard>
 
 			<UCard v-else class="mb-4 mt-4">
-				<UInput
-v-model="supplierSearch" placeholder="Поиск поставщиков..." icon="i-lucide-search"
+				<UInput v-model="supplierSearch" placeholder="Поиск поставщиков..." icon="i-lucide-search"
 					class="w-full sm:w-64 mb-3" size="lg" />
 
 				<div class="border border-default rounded-md overflow-hidden">
 					<div class="max-h-105 overflow-auto">
-						<UTable
-:data="filteredSuppliers" :columns="supplierColumns" :loading="loadingSuppliers"
+						<UTable :data="filteredSuppliers" :columns="supplierColumns" :loading="loadingSuppliers"
 							:meta="{ class: { tr: getRowClass } }" @select="onRowSelect">
 							<template #empty>
 								<div class="flex flex-col items-center justify-center py-12 gap-3">
 									<UIcon name="i-lucide-users" class="w-10 h-10 text-muted" />
 									<p class="text-muted">Поставщики не найдены</p>
-									<UButton
-size="sm" variant="outline" color="primary"
+									<UButton size="sm" variant="outline" color="primary"
 										leading-icon="i-lucide-user-plus" @click="showAddSupplier = true">
 										Добавить поставщика
 									</UButton>
@@ -154,8 +141,7 @@ size="sm" variant="outline" color="primary"
 							</template>
 
 							<template #is_enabled-cell="{ row }">
-								<USwitch
-:model-value="row.original.is_enabled" size="sm"
+								<USwitch :model-value="row.original.is_enabled" size="sm"
 									:disabled="updatingToggle || isTerminalStatus"
 									@update:model-value="(val: any) => handleToggle(row.original, Boolean(val))" />
 							</template>
@@ -168,16 +154,12 @@ size="sm" variant="outline" color="primary"
 									</div>
 									<span class="font-medium truncate max-w-50">{{ row.original.supplier?.company_name
 									}}</span>
-									<SupplierInfoHint
-										v-if="row.original.supplier"
-										:supplier="row.original.supplier"
-									/>
+									<SupplierInfoHint v-if="row.original.supplier" :supplier="row.original.supplier" />
 								</div>
 							</template>
 
 							<template #domain-cell="{ row }">
-								<a
-v-if="row.original.supplier?.domain"
+								<a v-if="row.original.supplier?.domain"
 									:href="toExternalUrl(row.original.supplier.domain)" target="_blank"
 									class="text-primary hover:underline text-sm" @click.stop>
 									{{ formatDomainLabel(row.original.supplier.domain) }}
@@ -187,8 +169,7 @@ v-if="row.original.supplier?.domain"
 
 							<template #email-cell="{ row }">
 								<div class="flex items-center gap-2 min-w-0">
-									<a
-v-if="row.original.supplier.main_email" target="blank"
+									<a v-if="row.original.supplier.main_email" target="blank"
 										:href="`mailto:${row.original.supplier.main_email}`"
 										class="text-sm text-muted hover:text-primary hover:underline truncate max-w-48 block"
 										:title="row.original.supplier.main_email" @click.stop>
@@ -196,16 +177,14 @@ v-if="row.original.supplier.main_email" target="blank"
 									</a>
 									<span v-else class="text-sm text-muted">—</span>
 
-									<UButton
-v-if="!isTerminalStatus && row.original.supplier.extra_emails?.length > 1"
+									<UButton v-if="!isTerminalStatus && row.original.supplier.extra_emails?.length > 1"
 										size="xs" color="neutral" variant="ghost" icon="i-lucide-pencil"
 										@click.stop="openEditEmailModal(row.original.supplier)" />
 								</div>
 							</template>
 
 							<template #status-cell="{ row }">
-								<UBadge
-:color="getSupplierStatusColor(row.original.sent_status)" variant="subtle"
+								<UBadge :color="getSupplierStatusColor(row.original.sent_status)" variant="subtle"
 									size="sm">
 									{{ getSupplierStatusLabel(row.original.sent_status) }}
 								</UBadge>
@@ -214,16 +193,13 @@ v-if="!isTerminalStatus && row.original.supplier.extra_emails?.length > 1"
 							<template #actions-cell="{ row }">
 								<div v-if="!isTerminalStatus" class="flex items-center justify-end gap-1">
 									<template v-if="confirmDeleteSupplierId === row.original.id">
-										<UButton
-size="md" color="error" variant="soft" icon="i-lucide-check"
+										<UButton size="md" color="error" variant="soft" icon="i-lucide-check"
 											:loading="deletingSupplierIds.has(row.original.id)"
 											@click.stop="confirmDeleteSupplier(row.original.id)" />
-										<UButton
-size="md" color="neutral" variant="ghost" icon="i-lucide-x"
+										<UButton size="md" color="neutral" variant="ghost" icon="i-lucide-x"
 											@click.stop="confirmDeleteSupplierId = null" />
 									</template>
-									<UButton
-v-else size="md" color="error" variant="ghost" icon="i-lucide-trash-2"
+									<UButton v-else size="md" color="error" variant="ghost" icon="i-lucide-trash-2"
 										:loading="deletingSupplierIds.has(row.original.id)"
 										@click.stop="confirmDeleteSupplierId = row.original.id" />
 								</div>
@@ -232,21 +208,18 @@ v-else size="md" color="error" variant="ghost" icon="i-lucide-trash-2"
 					</div>
 				</div>
 
-				<div
-v-if="!isTerminalStatus"
+				<div v-if="!isTerminalStatus"
 					class="px-4 py-3 border-t border-default flex items-center justify-between gap-3 flex-wrap">
 					<p class="text-sm text-muted">
 						Выбрано <span class="font-semibold text-highlighted">{{ enabledCount }}</span> из
 						{{ filteredSuppliers.length }}
 					</p>
 					<div class="flex items-center gap-2">
-						<UButton
-size="xs" variant="ghost" color="neutral"
+						<UButton size="xs" variant="ghost" color="neutral"
 							:disabled="updatingToggle || isTerminalStatus || enabledCount === 0" @click="deselectAll">
 							Снять все
 						</UButton>
-						<UButton
-size="xs" variant="ghost" color="primary"
+						<UButton size="xs" variant="ghost" color="primary"
 							:disabled="updatingToggle || isTerminalStatus || enabledCount === suppliers.length"
 							@click="selectAll">
 							Выбрать все
@@ -255,12 +228,11 @@ size="xs" variant="ghost" color="primary"
 				</div>
 			</UCard>
 
-		<RequestParamsModal
-v-model:open="showParamsModal" :request="request" :supplier-count="enabledCount"
-			@launched="onLaunched" />
-		<AddSupplierModal v-model:open="showAddSupplier" :request-id="id" @added="fetchSuppliers" />
-		<EditSupplierEmailModal v-model:open="showEditEmail" :supplier="emailSupplier" @saved="onEmailSaved" />
-		<SupplierBookmarkModal v-model:open="showBookmarkModal" :request-id="id" @added="fetchSuppliers" />
+			<RequestParamsModal v-model:open="showParamsModal" :request="request" :supplier-count="enabledCount"
+				@launched="onLaunched" />
+			<AddSupplierModal v-model:open="showAddSupplier" :request-id="id" @added="fetchSuppliers" />
+			<EditSupplierEmailModal v-model:open="showEditEmail" :supplier="emailSupplier" @saved="onEmailSaved" />
+			<SupplierBookmarkModal v-model:open="showBookmarkModal" :request-id="id" @added="fetchSuppliers" />
 
 		</template>
 
@@ -277,8 +249,6 @@ v-model:open="showParamsModal" :request="request" :supplier-count="enabledCount"
 
 <script lang="ts" setup>
 import type { RequestSupplierResponse, Supplier } from '#shared/types'
-import SupplierBookmarkModal from '~/components/SupplierBookmarkModal.vue'
-import SupplierInfoHint from '~/components/requests/SupplierInfoHint.vue'
 import {
 	getRequestStatusColor,
 	getRequestStatusLabel,
@@ -289,6 +259,8 @@ import {
 } from '#shared/types'
 import { getApiErrorDetail } from '#shared/utils/apiError'
 import type { TableColumn, TableRow } from '@nuxt/ui'
+import SupplierBookmarkModal from '~/components/SupplierBookmarkModal.vue'
+import SupplierInfoHint from '~/components/requests/SupplierInfoHint.vue'
 
 const route = useRoute()
 const id = route.params.id as string

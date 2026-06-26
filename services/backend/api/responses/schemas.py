@@ -178,6 +178,7 @@ class ComparisonSupplier(BaseModel):
     rs_id: str
     company_name: str
     main_email: str
+    is_winner: bool = False
     values: dict[str, str | None]
     previous_values: dict[str, str | None]
     explanations: dict[str, str | None] = {}
