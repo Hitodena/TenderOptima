@@ -1383,7 +1383,6 @@ function collectResultsKpKeys(data: TZAnalysisSession): string[] {
 const editableTzCount = computed(() =>
 	countRequirementRows(editableRequirementsTz.value),
 )
-const hasTzRequirements = computed(() => editableTzCount.value > 0)
 const showComparisonResultsCard = computed(() =>
 	hasComparisonResults.value
 	&& !isKpProcessing.value

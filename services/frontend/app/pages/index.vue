@@ -1,41 +1,50 @@
 <template>
 	<UPage>
-		<UPageHero title="AI-сервис для автоматизации закупок и анализа предложений поставщиков"
+		<UPageHero
+title="AI-сервис для автоматизации закупок и анализа предложений поставщиков"
 			description="Поиск поставщиков, рассылка запросов, входящие ответы и сравнение КП с ТЗ - в одном браузерном интерфейсе. Без ручной сверки таблиц."
 			:links="heroLinks" />
 
-		<UPageSection id="metrics" class="bg-elevated/25" headline="Результаты" title="Измеримый эффект для закупок"
+		<UPageSection
+id="metrics" class="bg-elevated/25" headline="Результаты" title="Измеримый эффект для закупок"
 			description="Конкретные показатели, которые получают команды закупок.">
 			<UPageGrid class="gap-4 sm:grid-cols-2 lg:grid-cols-4">
-				<UPageCard v-for="metric in metrics" :key="metric.label" spotlight :title="metric.value"
+				<UPageCard
+v-for="metric in metrics" :key="metric.label" spotlight :title="metric.value"
 					:description="metric.label" :icon="metric.icon" />
 			</UPageGrid>
 		</UPageSection>
 
-		<UPageSection id="features" title="Всё для работы с поставщиками - в одном инструменте"
+		<UPageSection
+id="features" title="Всё для работы с поставщиками - в одном инструменте"
 			description="TenderOptima автоматизирует поиск, переписку и технический анализ предложений.">
 			<UPageGrid class="gap-4 sm:grid-cols-2 lg:grid-cols-3">
-				<UPageCard v-for="(feature, index) in features" :key="feature.title" spotlight
+				<UPageCard
+v-for="(feature, index) in features" :key="feature.title" spotlight
 					:title="`${String(index + 1).padStart(2, '0')}. ${feature.title}`"
 					:description="feature.description" :icon="feature.icon" />
 			</UPageGrid>
 		</UPageSection>
 
-		<UPageSection id="pain" class="bg-elevated/25" headline="Проблема"
+		<UPageSection
+id="pain" class="bg-elevated/25" headline="Проблема"
 			title="Ручная обработка заявок отнимает время и повышает риски"
 			description="TenderOptima берёт на себя рутину, чтобы команда фокусировалась на решениях.">
 			<UPageGrid class="gap-4 sm:grid-cols-2 lg:grid-cols-3">
-				<UPageCard v-for="pain in painPoints" :key="pain.title" :title="pain.title"
+				<UPageCard
+v-for="pain in painPoints" :key="pain.title" :title="pain.title"
 					:description="pain.description" :icon="pain.icon" />
 			</UPageGrid>
 		</UPageSection>
 
-		<UPageSection id="how-it-works" headline="Процесс" title="Как это работает в браузере"
+		<UPageSection
+id="how-it-works" headline="Процесс" title="Как это работает в браузере"
 			description="Полный цикл от поиска поставщиков до готового сравнения - без установки программ."
 			orientation="horizontal">
 			<div class="space-y-6">
 				<ol class="space-y-4">
-					<li v-for="(step, index) in browserFlowSteps" :key="step.title"
+					<li
+v-for="(step, index) in browserFlowSteps" :key="step.title"
 						class="flex gap-4 rounded-xl border border-default bg-elevated/40 p-4 lg:p-5">
 						<span
 							class="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
@@ -51,7 +60,8 @@
 			</div>
 		</UPageSection>
 
-		<UPageSection id="tz-analysis" class="bg-elevated/25" headline="ТЗ / КП"
+		<UPageSection
+id="tz-analysis" class="bg-elevated/25" headline="ТЗ / КП"
 			title="Анализ требований и сравнение с коммерческими предложениями"
 			description="Система извлекает пункты из технического задания, затем сверяет каждое требование с КП поставщика.">
 			<div class="grid gap-8 lg:grid-cols-2 max-w-6xl mx-auto">
@@ -63,7 +73,8 @@
 						</p>
 					</figcaption>
 					<div class="overflow-hidden rounded-xl border border-default bg-default shadow-sm">
-						<img src="/landing/tz_refs.png" alt="Экран подтверждения требований из технического задания"
+						<img
+src="/landing/tz_refs.png" alt="Экран подтверждения требований из технического задания"
 							class="w-full h-auto" loading="lazy">
 					</div>
 				</figure>
@@ -76,7 +87,8 @@
 						</p>
 					</figcaption>
 					<div class="overflow-hidden rounded-xl border border-default bg-default shadow-sm">
-						<img src="/landing/tz_analyzis.png"
+						<img
+src="/landing/tz_analyzis.png"
 							alt="Экран сравнения коммерческого предложения с требованиями ТЗ" class="w-full h-auto"
 							loading="lazy">
 					</div>
@@ -94,7 +106,8 @@
 			<UPageGrid class="gap-4 sm:grid-cols-2 lg:grid-cols-3">
 				<UCard v-for="item in testimonials" :key="item.name" class="h-full">
 					<div class="flex gap-0.5 mb-3 text-warning" aria-label="5 из 5">
-						<svg v-for="i in 5" :key="i" viewBox="0 0 24 24" class="size-4 shrink-0 fill-current"
+						<svg
+v-for="i in 5" :key="i" viewBox="0 0 24 24" class="size-4 shrink-0 fill-current"
 							aria-hidden="true">
 							<path
 								d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
@@ -115,7 +128,8 @@
 			</UPageGrid>
 		</UPageSection>
 
-		<UPageSection id="requests" title="Ускорьте подготовку дополнительных запросов участникам"
+		<UPageSection
+id="requests" title="Ускорьте подготовку дополнительных запросов участникам"
 			description="Составление текста запросов и рассылка - в несколько кликов." orientation="horizontal" reverse>
 			<div class="flex flex-col gap-4 rounded-xl border border-default bg-elevated p-6 lg:p-8">
 				<div v-for="item in requestHighlights" :key="item" class="flex items-start gap-3 text-muted">
@@ -125,16 +139,19 @@
 			</div>
 		</UPageSection>
 
-		<UPageSection id="subscription" headline="Подписка" title="Оформление доступа"
+		<UPageSection
+id="subscription" headline="Подписка" title="Оформление доступа"
 			description="Прозрачный процесс от регистрации до работы в системе.">
 			<UPageGrid>
-				<UPageCard v-for="(step, index) in subscriptionSteps" :key="index" spotlight :title="step.title"
+				<UPageCard
+v-for="(step, index) in subscriptionSteps" :key="index" spotlight :title="step.title"
 					:description="step.description" :icon="step.icon" />
 			</UPageGrid>
 		</UPageSection>
 
 		<UPageSection id="faq" class="bg-elevated/25" headline="FAQ" title="Частые вопросы">
-			<UAccordion type="multiple" :unmount-on-hide="false" :items="faqAccordionItems"
+			<UAccordion
+type="multiple" :unmount-on-hide="false" :items="faqAccordionItems"
 				class="max-w-3xl mx-auto rounded-xl border border-default bg-default px-4 sm:px-5" :ui="{
 					trigger: 'py-4 text-base font-medium',
 					body: 'text-sm text-muted pb-4 leading-relaxed',
@@ -142,7 +159,8 @@
 				}" />
 		</UPageSection>
 
-		<UPageCTA title="AI + аналитика = лучшие контракты"
+		<UPageCTA
+title="AI + аналитика = лучшие контракты"
 			description="Автоматизируйте закупки уже сегодня. Работает в браузере - без установки." :links="ctaLinks" />
 	</UPage>
 </template>

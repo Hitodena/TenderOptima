@@ -35,6 +35,8 @@ const props = withDefaults(defineProps<{
 }>(), {
 	compact: false,
 	mode: 'results',
+	sourceRef: null,
+	sourceRefValue: null,
 })
 
 const requirementsTz = inject<Ref<RequirementsHierarchy | null | undefined>>(
