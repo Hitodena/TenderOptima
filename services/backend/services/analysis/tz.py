@@ -32,6 +32,7 @@ from backend.utils.requirements_struct import (
     merge_requirement_chunks,
     normalize_tz_requirements,
     requirement_key_from_flat,
+    resolve_letter_tz_fields,
     strip_page_from_ref,
 )
 from backend.utils.text_chunker import chunk_text, clean_text
@@ -654,6 +655,7 @@ async def _llm_recall_batch(
     analysis_id: str,
     user_id: str,
     kp_name: str,
+    tz_hierarchy: dict | None = None,
 ) -> list[TZAnalysisItem]:
     """Recall sweep for still-unmatched requirements."""
     system, user = build_recall_sweep_prompt(
@@ -687,7 +689,7 @@ async def _llm_recall_batch(
         if item.requirement.strip() != req.strip():
             item = item.model_copy(update={"requirement": req})
         items.append(item)
-    return _ensure_item_refs(items)
+    return _ensure_item_refs(items, tz_hierarchy)
 
 
 def _status_rank(status: TZAnalysisStatus) -> int:
@@ -736,17 +738,55 @@ def _merge_match_item(
         found[req_key] = normalized
 
 
-def _ensure_item_refs(items: list[TZAnalysisItem]) -> list[TZAnalysisItem]:
+def _apply_item_tz_ref_fields(
+    item: TZAnalysisItem,
+    hierarchy: dict | None,
+) -> TZAnalysisItem:
+    """Fill ref/ref_value from hierarchy for letter and source references."""
+    req_key = requirement_key_from_flat(item.requirement)
+    ref = item.ref
+    ref_value = item.ref_value
+    if hierarchy and req_key:
+        resolved_ref, resolved_ref_value = resolve_letter_tz_fields(
+            hierarchy,
+            req_key,
+        )
+        ref = ref or resolved_ref
+        ref_value = ref_value or resolved_ref_value
+    return item.model_copy(update={"ref": ref, "ref_value": ref_value})
+
+
+def _ensure_item_refs(
+    items: list[TZAnalysisItem],
+    tz_hierarchy: dict | None = None,
+) -> list[TZAnalysisItem]:
     """Fill missing refs and strip page numbers from LLM output."""
     updated: list[TZAnalysisItem] = []
     for item in items:
+        item = _apply_item_tz_ref_fields(item, tz_hierarchy)
         req_key = requirement_key_from_flat(item.requirement)
+        letter_key = item.ref or req_key
+        letter_text = item.ref_value
+        if not letter_text and req_key:
+            parts = item.requirement.strip().split(". ", 1)
+            letter_text = (
+                parts[1] if len(parts) > 1 else item.requirement.strip()
+            )
+
         requirement_ref = strip_page_from_ref(item.requirement_ref)
-        if not requirement_ref and req_key:
+        if letter_key and letter_text:
+            requirement_ref = format_tz_requirement_ref(
+                letter_key,
+                None,
+                f"{letter_key}. {letter_text}",
+                quote=letter_text,
+            )
+        elif not requirement_ref and req_key:
             requirement_ref = format_tz_requirement_ref(
                 req_key,
                 None,
                 item.requirement,
+                quote=item.ref_value,
             )
 
         offer_ref = strip_page_from_ref(item.offer_ref)
@@ -761,6 +801,8 @@ def _ensure_item_refs(items: list[TZAnalysisItem]) -> list[TZAnalysisItem]:
         updated.append(
             item.model_copy(
                 update={
+                    "ref": item.ref,
+                    "ref_value": item.ref_value,
                     "requirement_ref": requirement_ref,
                     "offer_ref": offer_ref,
                 },
@@ -809,6 +851,7 @@ async def _llm_match_chunk_batch(
     total_tz_batches: int,
     analysis_id: str,
     user_id: str,
+    tz_hierarchy: dict | None = None,
 ) -> list[TZAnalysisItem]:
     """Match a TZ batch against a raw KP chunk."""
     if not tz_batch or not kp_chunk.strip():
@@ -852,7 +895,7 @@ async def _llm_match_chunk_batch(
         if item.requirement.strip() != req.strip():
             item = item.model_copy(update={"requirement": req})
         items.append(item)
-    return _ensure_item_refs(items)
+    return _ensure_item_refs(items, tz_hierarchy)
 
 
 async def _run_direct_chunk_matching(
@@ -862,6 +905,7 @@ async def _run_direct_chunk_matching(
     *,
     analysis_id: str,
     user_id: str,
+    tz_hierarchy: dict | None = None,
 ) -> dict[str, TZAnalysisItem]:
     """Match TZ requirements against raw KP chunks."""
     cleaned = clean_text(kp_text)
@@ -925,6 +969,7 @@ async def _run_direct_chunk_matching(
                     total_tz_batches=batch_count,
                     analysis_id=analysis_id,
                     user_id=user_id,
+                    tz_hierarchy=tz_hierarchy,
                 )
 
         batch_results = await asyncio.gather(
@@ -971,6 +1016,7 @@ async def _run_recall_sweep(
     kp_name: str,
     analysis_id: str,
     user_id: str,
+    tz_hierarchy: dict | None = None,
 ) -> None:
     """Second pass over still-unmatched requirements using compact KP text."""
     recall_candidates = _remaining_tz_requirements(tz_flat, found)
@@ -1025,6 +1071,7 @@ async def _run_recall_sweep(
             analysis_id=analysis_id,
             user_id=user_id,
             kp_name=kp_name,
+            tz_hierarchy=tz_hierarchy,
         )
         for item in items:
             _merge_match_item(found, item, kp_name=kp_name)
@@ -1042,7 +1089,7 @@ async def _run_recall_sweep(
 async def _run_staged_kp_analysis(
     kp_text: str,
     tz_flat: list[str],
-    _tz_hierarchy: dict,
+    tz_hierarchy: dict,
     kp_name: str,
     *,
     analysis_id: str,
@@ -1063,6 +1110,7 @@ async def _run_staged_kp_analysis(
         kp_name,
         analysis_id=analysis_id,
         user_id=user_id,
+        tz_hierarchy=tz_hierarchy,
     )
     await _run_recall_sweep(
         tz_flat,
@@ -1071,9 +1119,15 @@ async def _run_staged_kp_analysis(
         kp_name=kp_name,
         analysis_id=analysis_id,
         user_id=user_id,
+        tz_hierarchy=tz_hierarchy,
     )
 
-    items = _build_not_found_items(tz_flat, found, kp_name=kp_name)
+    items = _build_not_found_items(
+        tz_flat,
+        found,
+        kp_name=kp_name,
+        tz_hierarchy=tz_hierarchy,
+    )
 
     digest = await _normalize_kp_to_digest(
         kp_text,
@@ -1103,6 +1157,7 @@ def _build_not_found_items(
     found: dict[str, TZAnalysisItem],
     *,
     kp_name: str,
+    tz_hierarchy: dict | None = None,
 ) -> list[TZAnalysisItem]:
     """Append not_found rows for TZ requirements missing from *found*."""
     items: list[TZAnalysisItem] = []
@@ -1126,7 +1181,7 @@ def _build_not_found_items(
                 kp_name=kp_name,
             ),
         )
-    return _ensure_item_refs(items)
+    return _ensure_item_refs(items, tz_hierarchy)
 
 
 async def _match_kp_paths_against_tz(

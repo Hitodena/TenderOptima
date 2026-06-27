@@ -16,6 +16,8 @@
 					<TzRequirementDualText
 						:requirement="item.requirement"
 						:requirement-ref="item.requirement_ref"
+						:source-ref="item.ref"
+						:source-ref-value="item.ref_value"
 					/>
 				</button>
 				<USelect
@@ -56,18 +58,20 @@
 					<TzRequirementDualText
 						:requirement="item.requirement"
 						:requirement-ref="item.requirement_ref"
+						:source-ref="item.ref"
+						:source-ref-value="item.ref_value"
 					/>
-					<p v-if="item.requirement_ref" class="text-xs text-muted">
+					<p v-if="tzSourceRef" class="text-xs text-muted">
 						<span class="font-medium text-default/70">Ссылка:</span>
 						<button
 							v-if="analysisFiles"
 							type="button"
-							class="ml-1 text-primary hover:underline text-left"
+							class="ml-1 text-primary hover:underline text-left whitespace-pre-wrap"
 							@click.stop="analysisFiles.openTzFile()"
 						>
-							{{ item.requirement_ref }}
+							{{ tzSourceRef }}
 						</button>
-						<span v-else class="ml-1">{{ item.requirement_ref }}</span>
+						<span v-else class="ml-1 whitespace-pre-wrap">{{ tzSourceRef }}</span>
 					</p>
 				</div>
 
@@ -111,6 +115,8 @@
 <script lang="ts" setup>
 import type { TZAnalysisItem, TZAnalysisStatus } from '#shared/types'
 import { getTzItemStatusColor, getTzItemStatusLabel } from '#shared/types'
+import type { RequirementsHierarchy } from '#shared/utils/requirementsStruct'
+import { formatTzSourceRefLink } from '#shared/utils/tzRequirementDisplay'
 import TzRequirementDualText from '~/components/tz-analysis/TzRequirementDualText.vue'
 
 type TZItemView = TZAnalysisItem & { _index: number }
@@ -143,6 +149,15 @@ const analysisFiles = inject<{
 	openTzFile: () => Promise<void>
 	openKpFile: (displayName: string) => Promise<void>
 } | null>('tzAnalysisFiles', null)
+
+const requirementsTz = inject<Ref<RequirementsHierarchy | null | undefined>>(
+	'tzRequirementsHierarchy',
+	ref(null),
+)
+
+const tzSourceRef = computed(() =>
+	formatTzSourceRefLink(props.item, requirementsTz.value),
+)
 
 const itemKpFilename = computed(() =>
 	props.item.kp_name || props.defaultKpFilename || null,

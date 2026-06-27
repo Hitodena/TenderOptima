@@ -7,6 +7,10 @@ from docx.styles.style import ParagraphStyle
 
 from backend.enums import TZAnalysisStatus
 from backend.schemas.analysis import TZAnalysisItem
+from backend.utils.requirements_struct import (
+    format_tz_requirement_ref,
+    requirement_key_from_flat,
+)
 
 _RU_MONTHS_GENITIVE = (
     "",
@@ -40,6 +44,31 @@ def _mismatch_reason(item: TZAnalysisItem) -> str:
     if item.status == TZAnalysisStatus.NOT_FOUND:
         return f"Параметр не найден: {item.explanation}"
     return f"Причина отклонения: {item.explanation}"
+
+
+def _letter_tz_key(item: TZAnalysisItem) -> str | None:
+    if item.ref:
+        return item.ref
+    return requirement_key_from_flat(item.requirement)
+
+
+def _letter_tz_requirement_text(item: TZAnalysisItem) -> str:
+    if item.ref_value:
+        key = _letter_tz_key(item)
+        if key:
+            return f"{key}. {item.ref_value}"
+        return item.ref_value
+    return item.requirement
+
+
+def _letter_tz_requirement_ref(item: TZAnalysisItem) -> str | None:
+    key = _letter_tz_key(item)
+    text = item.ref_value
+    if key and text:
+        return format_tz_requirement_ref(
+            key, None, f"{key}. {text}", quote=text
+        )
+    return item.requirement_ref
 
 
 def build_clarification_docx_from_paragraphs(paragraphs: list[str]) -> bytes:
@@ -85,8 +114,12 @@ def _append_mismatch_items(
     for item in items:
         doc.add_paragraph(f"{num}. По пункту:")
         doc.add_paragraph(
-            f'Требование: "{item.requirement}"'
-            + (f" ({item.requirement_ref})" if item.requirement_ref else "")
+            f'Требование: "{_letter_tz_requirement_text(item)}"'
+            + (
+                f" ({ref})"
+                if (ref := _letter_tz_requirement_ref(item))
+                else ""
+            )
         )
         if item.offer_value:
             doc.add_paragraph(
@@ -107,8 +140,12 @@ def _append_not_found_items(
     for item in items:
         doc.add_paragraph(f"{num}. По пункту:")
         doc.add_paragraph(
-            f'Требование: "{item.requirement}"'
-            + (f" ({item.requirement_ref})" if item.requirement_ref else "")
+            f'Требование: "{_letter_tz_requirement_text(item)}"'
+            + (
+                f" ({ref})"
+                if (ref := _letter_tz_requirement_ref(item))
+                else ""
+            )
         )
         doc.add_paragraph(_mismatch_reason(item))
         num += 1
@@ -181,10 +218,10 @@ def build_clarification_docx(
         for item in clarifications:
             doc.add_paragraph(f"{item_num}. Пункт:")
             doc.add_paragraph(
-                f'Требуется: "{item.requirement}"'
+                f'Требуется: "{_letter_tz_requirement_text(item)}"'
                 + (
-                    f" ({item.requirement_ref})"
-                    if item.requirement_ref
+                    f" ({ref})"
+                    if (ref := _letter_tz_requirement_ref(item))
                     else ""
                 )
             )
@@ -218,9 +255,9 @@ def _append_preview_mismatch_lines(
     num = start_num
     for item in items:
         paragraphs.append(f"{num}. По пункту:")
-        req = f'Требование: "{item.requirement}"'
-        if item.requirement_ref:
-            req += f" ({item.requirement_ref})"
+        req = f'Требование: "{_letter_tz_requirement_text(item)}"'
+        if ref := _letter_tz_requirement_ref(item):
+            req += f" ({ref})"
         paragraphs.append(req)
         if item.offer_value:
             offer = f'Предложено: "{item.offer_value}"'
@@ -240,9 +277,9 @@ def _append_preview_not_found_lines(
     num = start_num
     for item in items:
         paragraphs.append(f"{num}. По пункту:")
-        req = f'Требование: "{item.requirement}"'
-        if item.requirement_ref:
-            req += f" ({item.requirement_ref})"
+        req = f'Требование: "{_letter_tz_requirement_text(item)}"'
+        if ref := _letter_tz_requirement_ref(item):
+            req += f" ({ref})"
         paragraphs.append(req)
         paragraphs.append(_mismatch_reason(item))
         num += 1
@@ -304,9 +341,9 @@ def build_clarification_preview(
         paragraphs.extend(["", HEADER_PARTIAL])
         for item in clarifications:
             paragraphs.append(f"{item_num}. Пункт:")
-            req = f'Требуется: "{item.requirement}"'
-            if item.requirement_ref:
-                req += f" ({item.requirement_ref})"
+            req = f'Требуется: "{_letter_tz_requirement_text(item)}"'
+            if ref := _letter_tz_requirement_ref(item):
+                req += f" ({ref})"
             paragraphs.append(req)
             if item.offer_value:
                 offer = f'Предложено: "{item.offer_value}"'

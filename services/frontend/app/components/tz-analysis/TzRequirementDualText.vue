@@ -27,6 +27,8 @@ import {
 const props = withDefaults(defineProps<{
 	requirement: string
 	requirementRef: string | null
+	sourceRef?: string | null
+	sourceRefValue?: string | null
 	compact?: boolean
 	/** results: numbered line from our TZ first; letter: quote from source TZ first */
 	mode?: 'results' | 'letter'
@@ -45,6 +47,8 @@ const display = computed(() =>
 		{
 			requirement: props.requirement,
 			requirement_ref: props.requirementRef,
+			ref: props.sourceRef,
+			ref_value: props.sourceRefValue,
 		},
 		requirementsTz.value,
 	),

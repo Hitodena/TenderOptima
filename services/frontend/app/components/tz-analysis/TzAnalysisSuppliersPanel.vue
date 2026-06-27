@@ -2,7 +2,10 @@
 	<component
 		:is="compact ? 'aside' : 'section'"
 		class="@container rounded-xl border border-default bg-elevated/20 w-full min-w-0"
-		:class="compact ? 'p-2.5 space-y-2.5' : 'p-4 space-y-4'"
+		:class="[
+			rail ? 'p-3.5 space-y-4' : compact ? 'p-2.5 space-y-2.5' : 'p-4 space-y-4',
+			rail ? 'shadow-sm' : '',
+		]"
 	>
 		<div class="flex items-center justify-between gap-2">
 			<p class="text-sm font-semibold text-highlighted">Поставщики</p>
@@ -36,7 +39,7 @@
 				class="rounded-lg border transition-colors min-w-0 w-full"
 				:class="[
 					supplierCardClass(supplier),
-					compact ? 'p-2 space-y-1.5' : 'p-3 space-y-2',
+					rail ? 'p-3 space-y-2' : compact ? 'p-2 space-y-1.5' : 'p-3 space-y-2',
 				]"
 			>
 				<div class="flex items-start justify-between gap-2">
@@ -77,19 +80,32 @@
 				</UBadge>
 
 				<div
-					v-if="supplier.kp_filenames.length && !hideKpFiles && supplier.status !== TZAnalysisSupplierStatus.PROCESSING"
-					class="space-y-1"
+					v-if="supplier.kp_filenames.length && showKpFilesInCard(supplier)"
+					class="space-y-1.5"
 				>
 					<button
 						v-for="filename in supplier.kp_filenames"
 						:key="`${supplier.id}-${filename}`"
 						type="button"
-						class="block text-xs text-primary hover:underline truncate max-w-full text-left"
+						class="flex items-center gap-1.5 text-xs text-primary hover:underline truncate max-w-full text-left cursor-pointer"
 						@click="emit('open-kp', { supplierId: supplier.id, filename })"
 					>
-						{{ filename }}
+						<UIcon name="i-lucide-file-spreadsheet" class="w-3.5 h-3.5 shrink-0" />
+						<span class="truncate">{{ filename }}</span>
 					</button>
 				</div>
+			</div>
+		</div>
+
+		<div
+			v-if="$slots['after-suppliers'] || $slots.actions"
+			class="space-y-4 border-t border-default/60 pt-4"
+		>
+			<div v-if="$slots['after-suppliers']" class="space-y-4">
+				<slot name="after-suppliers" />
+			</div>
+			<div v-if="$slots.actions" class="pt-1">
+				<slot name="actions" />
 			</div>
 		</div>
 
@@ -159,11 +175,13 @@ const props = withDefaults(defineProps<{
 	hideKpFiles?: boolean
 	selectedSupplierId?: string | null
 	compact?: boolean
+	rail?: boolean
 }>(), {
 	readonly: false,
 	hideKpFiles: false,
 	selectedSupplierId: null,
 	compact: false,
+	rail: false,
 })
 
 const emit = defineEmits<{
@@ -186,6 +204,12 @@ const deletingId = ref<string | null>(null)
 const canAddSupplier = computed(() =>
 	newSupplierName.value.trim().length > 0 && newSupplierFiles.value.length > 0,
 )
+
+function showKpFilesInCard(supplier: TZAnalysisSupplierItem) {
+	if (props.hideKpFiles || props.rail) return false
+	return supplier.status !== TZAnalysisSupplierStatus.PROCESSING
+		&& supplier.kp_filenames.length > 0
+}
 
 function supplierCardClass(supplier: TZAnalysisSupplierItem) {
 	if (supplier.status === TZAnalysisSupplierStatus.PROCESSING) {

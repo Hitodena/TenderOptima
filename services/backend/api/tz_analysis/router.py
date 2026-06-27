@@ -15,7 +15,6 @@ from fastapi import (
 )
 from fastapi.responses import FileResponse, Response
 from loguru import logger
-from openpyxl import Workbook
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_current_user, get_session
@@ -88,7 +87,10 @@ from backend.utils.tz_storage import (
     save_supplier_kp_files,
     save_tz_only_file,
 )
-from backend.utils.xlsx_export import workbook_to_bytes, write_sheet_rows
+from backend.utils.xlsx_export import (
+    build_tz_analysis_workbook,
+    workbook_to_bytes,
+)
 
 router = APIRouter(prefix="/tz-analysis", tags=["TZ Analysis"])
 config = get_config()
@@ -1257,36 +1259,7 @@ async def export_tz_analysis_xlsx(
         [TZAnalysisItem(**item) for item in (row.items or [])],
         getattr(row, "items_overrides", None),
     )
-    header = [
-        "№",
-        "КП",
-        "Требование",
-        "Ссылка ТЗ",
-        "Предложение",
-        "Ссылка КП",
-        "Статус",
-        "Объяснение",
-    ]
-    rows: list[list[str | int]] = []
-    for idx, item in enumerate(items, start=1):
-        rows.append(
-            [
-                idx,
-                item.kp_name or "",
-                item.requirement,
-                item.requirement_ref or "",
-                item.offer_value or "",
-                item.offer_ref or "",
-                STATUS_LABELS.get(item.status, item.status.value),
-                item.explanation,
-            ]
-        )
-
-    wb = Workbook()
-    ws = wb.active
-    if ws is not None:
-        ws.title = "Анализ КП"
-        write_sheet_rows(ws, header, rows)
+    wb = build_tz_analysis_workbook(items, STATUS_LABELS)
 
     filename = f"tz_analysis_{analysis_id}.xlsx"
     return Response(

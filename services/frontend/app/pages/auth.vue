@@ -11,7 +11,7 @@
 			</div>
 
 			<UCard class="shadow-lg">
-				<UTabs :items="tabs" class="w-full" :ui="{ list: 'mb-4' }">
+				<UTabs v-model="activeTab" :items="tabs" class="w-full" :ui="{ list: 'mb-4' }">
 
 					<template #login>
 						<UForm :schema="loginSchema" :state="loginForm" class="space-y-4" @submit="handleLogin">
@@ -163,9 +163,14 @@ onMounted(() => {
 	}
 })
 
+const route = useRoute()
+const activeTab = ref(
+	route.query.tab === 'register' ? 'register' : 'login',
+)
+
 const tabs = [
-	{ label: 'Войти', slot: 'login', icon: 'i-lucide-log-in' },
-	{ label: 'Регистрация', slot: 'register', icon: 'i-lucide-user-plus' },
+	{ label: 'Войти', slot: 'login', icon: 'i-lucide-log-in', value: 'login' },
+	{ label: 'Регистрация', slot: 'register', icon: 'i-lucide-user-plus', value: 'register' },
 ]
 
 const loginSchema = z.object({

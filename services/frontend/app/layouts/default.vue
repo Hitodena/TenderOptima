@@ -97,6 +97,7 @@ const subscriptionBadge = computed(() => subscriptionNavBadge(user.value?.subscr
 const landingNavItems = computed<NavigationMenuItem[]>(() => [
 	{ label: 'Возможности', to: '/#features' },
 	{ label: 'Как работает', to: '/#how-it-works' },
+	{ label: 'Анализ ТЗ / КП', to: '/#tz-analysis' },
 	{ label: 'Этапы', to: '/#stages' },
 	{ label: 'Подписка', to: '/#subscription' },
 ])

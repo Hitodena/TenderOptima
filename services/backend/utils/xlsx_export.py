@@ -1,10 +1,18 @@
 import io
+import math
 from typing import Any, Protocol
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
+
+from backend.enums import TZAnalysisStatus
+from backend.schemas.analysis import TZAnalysisItem
+from backend.services.analysis.docx_export import (
+    _letter_tz_requirement_ref,
+    _letter_tz_requirement_text,
+)
 
 _SUPPLIER_SUBCOLS = (
     "Первоначальное\nпредложение",
@@ -22,6 +30,33 @@ _THIN_BORDER = Border(
 )
 _HEADER_FONT = Font(bold=True)
 _STRIKE_FONT = Font(strike=True, color="666666")
+_ALT_ROW_FILL = PatternFill("solid", fgColor="F8FAFC")
+_TZ_STATUS_FILLS = {
+    TZAnalysisStatus.MET: PatternFill("solid", fgColor="E8F5E9"),
+    TZAnalysisStatus.PARTIAL: PatternFill("solid", fgColor="FFF8E1"),
+    TZAnalysisStatus.MISSING: PatternFill("solid", fgColor="FFEBEE"),
+    TZAnalysisStatus.NOT_FOUND: PatternFill("solid", fgColor="F1F3F5"),
+}
+_TZ_HEADER = (
+    "№",
+    "КП",
+    "Требование ТЗ",
+    "Ссылка ТЗ",
+    "Предложение КП",
+    "Ссылка КП",
+    "Статус",
+    "Объяснение",
+)
+_TZ_COL_WIDTHS: dict[int, tuple[float, float]] = {
+    1: (6, 8),
+    2: (14, 28),
+    3: (24, 52),
+    4: (18, 40),
+    5: (24, 52),
+    6: (18, 40),
+    7: (14, 22),
+    8: (20, 48),
+}
 
 
 class ComparisonSupplierLike(Protocol):
@@ -96,6 +131,117 @@ def _style_data_cell(
         cell.fill = _CHANGED_FILL
     if strike:
         cell.font = _STRIKE_FONT
+
+
+def _cell_line_count(value: Any, col_width: float) -> int:
+    if value is None:
+        return 1
+    text = str(value)
+    explicit = text.count("\n") + 1
+    chars_per_line = max(int(col_width * 1.05), 1)
+    wrapped = max(
+        (math.ceil(len(line) / chars_per_line) for line in text.split("\n")),
+        default=1,
+    )
+    return max(explicit, wrapped)
+
+
+def _auto_fit_columns(
+    ws: Worksheet,
+    *,
+    col_specs: dict[int, tuple[float, float]],
+    padding: float = 2.0,
+) -> None:
+    """Set column widths from content length with per-column min/max caps."""
+    for col_idx in range(1, ws.max_column + 1):
+        min_w, max_w = col_specs.get(col_idx, (10.0, 40.0))
+        max_len = 0.0
+        for row_idx in range(1, ws.max_row + 1):
+            value = ws.cell(row=row_idx, column=col_idx).value
+            if value is None:
+                continue
+            for line in str(value).split("\n"):
+                max_len = max(max_len, float(len(line)))
+        width = min(max_w, max(min_w, max_len * 1.05 + padding))
+        ws.column_dimensions[get_column_letter(col_idx)].width = width
+
+
+def _auto_fit_row_heights(
+    ws: Worksheet,
+    *,
+    start_row: int = 2,
+    line_height: float = 15.0,
+    min_height: float = 18.0,
+    max_height: float = 120.0,
+) -> None:
+    """Adjust row heights for wrapped multi-line cell content."""
+    for row_idx in range(start_row, ws.max_row + 1):
+        max_lines = 1
+        for col_idx in range(1, ws.max_column + 1):
+            cell = ws.cell(row=row_idx, column=col_idx)
+            letter = get_column_letter(col_idx)
+            col_width = ws.column_dimensions[letter].width or 10.0
+            max_lines = max(max_lines, _cell_line_count(cell.value, col_width))
+        ws.row_dimensions[row_idx].height = min(
+            max_height,
+            max(min_height, max_lines * line_height),
+        )
+
+
+def build_tz_analysis_workbook(
+    items: list[TZAnalysisItem],
+    status_labels: dict[TZAnalysisStatus, str],
+) -> Workbook:
+    """Build a styled worksheet for TZ/KP analysis export."""
+    wb = Workbook()
+    ws = wb.active
+    if ws is None:
+        return wb
+    ws.title = "Анализ КП"
+
+    for col_idx, title in enumerate(_TZ_HEADER, start=1):
+        cell = ws.cell(row=1, column=col_idx, value=title)
+        _style_header_cell(cell)
+
+    for row_idx, item in enumerate(items, start=2):
+        status_label = status_labels.get(item.status, item.status.value)
+        values: list[Any] = [
+            row_idx - 1,
+            item.kp_name or "",
+            _letter_tz_requirement_text(item),
+            _letter_tz_requirement_ref(item) or (item.requirement_ref or ""),
+            item.offer_value or "",
+            item.offer_ref or "",
+            status_label,
+            item.explanation,
+        ]
+        alt_row = (row_idx - 2) % 2 == 1
+        status_fill = _TZ_STATUS_FILLS.get(item.status)
+
+        for col_idx, value in enumerate(values, start=1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=value)
+            _style_data_cell(cell)
+            if alt_row and col_idx != 7:
+                cell.fill = _ALT_ROW_FILL
+            if col_idx == 7 and status_fill is not None:
+                cell.fill = status_fill
+                cell.alignment = Alignment(
+                    horizontal="center",
+                    vertical="center",
+                    wrap_text=True,
+                )
+            if col_idx == 1:
+                cell.alignment = Alignment(
+                    horizontal="center",
+                    vertical="top",
+                    wrap_text=True,
+                )
+
+    ws.freeze_panes = "A2"
+    ws.row_dimensions[1].height = 32
+    _auto_fit_columns(ws, col_specs=_TZ_COL_WIDTHS)
+    _auto_fit_row_heights(ws, start_row=2)
+    return wb
 
 
 def build_comparison_workbook(

@@ -1,16 +1,27 @@
 from __future__ import annotations
 
 import re
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 
 class RequirementNode(TypedDict):
     text: str
     children: dict[str, RequirementNode]
+    ref_value: NotRequired[str]
+    ref: NotRequired[str]
 
 
 def _empty_node() -> RequirementNode:
     return {"text": "", "children": {}}
+
+
+def parent_requirement_key(key: str) -> str | None:
+    """Return parent key for a dotted requirement key."""
+    normalized = key.replace("/", ".").strip()
+    segments = normalized.split(".")
+    if len(segments) <= 1:
+        return None
+    return ".".join(segments[:-1])
 
 
 def _node_children(node: RequirementNode) -> dict[str, RequirementNode]:
@@ -36,10 +47,17 @@ def _normalize_node(node: object) -> RequirementNode:
     if isinstance(children_raw, dict):
         for key, child in children_raw.items():
             children[str(key)] = _normalize_node(child)
-    return {
+    result: RequirementNode = {
         "text": str(node.get("text") or "").strip(),
         "children": children,
     }
+    ref_value = str(node.get("ref_value") or "").strip()
+    if ref_value:
+        result["ref_value"] = ref_value
+    ref = str(node.get("ref") or "").strip().replace("/", ".")
+    if ref:
+        result["ref"] = ref
+    return result
 
 
 def _normalize_for_dedupe(text: str) -> str:
@@ -64,7 +82,18 @@ def _merge_node(
             merged_children[key_str] = child
 
     text = str(incoming["text"] or existing["text"] or "").strip()
-    return {"text": text, "children": merged_children}
+    ref_value = str(
+        incoming.get("ref_value") or existing.get("ref_value") or ""
+    ).strip()
+    if not ref_value and text:
+        ref_value = text
+    ref = str(incoming.get("ref") or existing.get("ref") or "").strip()
+    merged: RequirementNode = {"text": text, "children": merged_children}
+    if ref_value:
+        merged["ref_value"] = ref_value
+    if ref:
+        merged["ref"] = ref.replace("/", ".")
+    return merged
 
 
 def _canonicalize_hierarchy(
@@ -112,6 +141,126 @@ def _canonicalize_hierarchy(
     return result
 
 
+def find_node_by_key(
+    hierarchy: dict[str, RequirementNode],
+    key: str,
+) -> RequirementNode | None:
+    """Locate a node by dotted key in a normalized hierarchy."""
+    normalized = key.replace("/", ".").strip()
+    segments = normalized.split(".")
+    top = segments[0]
+    if top not in hierarchy:
+        return None
+    current = _normalize_node(hierarchy[top])
+    if len(segments) == 1:
+        return current
+    for index in range(1, len(segments)):
+        path = ".".join(segments[: index + 1])
+        children = _node_children(current)
+        if path not in children:
+            return None
+        current = _normalize_node(children[path])
+    return current
+
+
+def _is_split_parent(node: RequirementNode) -> bool:
+    """True when a node groups atomically split leaf requirements."""
+    children = _node_children(node)
+    if not children:
+        return False
+    text = node["text"].strip()
+    ref_value = str(node.get("ref_value") or "").strip()
+    return bool(ref_value) or not text
+
+
+def enrich_hierarchy_refs(
+    hierarchy: dict[str, RequirementNode],
+) -> dict[str, RequirementNode]:
+    """Fill ref/ref_value on nodes and propagate parent refs to split leaves."""
+
+    def enrich_nodes(
+        nodes: dict[str, RequirementNode],
+    ) -> dict[str, RequirementNode]:
+        result: dict[str, RequirementNode] = {}
+        for key in sorted(nodes.keys(), key=_version_sort_key):
+            node = _normalize_node(nodes[key])
+            key_str = str(key)
+            text = node["text"].strip()
+            ref_value = str(node.get("ref_value") or "").strip()
+            children = enrich_nodes(_node_children(node))
+
+            if not ref_value and text:
+                ref_value = text
+
+            enriched: RequirementNode = {"text": text, "children": children}
+            if ref_value:
+                enriched["ref_value"] = ref_value
+            explicit_ref = str(node.get("ref") or "").strip().replace("/", ".")
+            if explicit_ref:
+                enriched["ref"] = explicit_ref
+
+            if _is_split_parent(enriched):
+                parent_ref_value = str(
+                    enriched.get("ref_value") or enriched["text"]
+                ).strip()
+                if parent_ref_value:
+                    enriched["ref_value"] = parent_ref_value
+                for child in children.values():
+                    child_ref = str(child.get("ref") or "").strip()
+                    if not child_ref:
+                        child["ref"] = key_str
+                    if parent_ref_value:
+                        child["ref_value"] = parent_ref_value
+
+            result[key_str] = enriched
+        return result
+
+    return enrich_nodes(hierarchy)
+
+
+def resolve_letter_tz_fields(
+    hierarchy: dict[str, RequirementNode],
+    leaf_key: str,
+) -> tuple[str | None, str | None]:
+    """Return (original TZ key, original TZ text) for letter generation."""
+    node = find_node_by_key(hierarchy, leaf_key)
+    if node is None:
+        return None, None
+
+    explicit_ref = str(node.get("ref") or "").strip() or None
+    explicit_ref_value = str(node.get("ref_value") or "").strip() or None
+
+    if explicit_ref:
+        parent = find_node_by_key(hierarchy, explicit_ref)
+        ref_value = explicit_ref_value
+        if parent is not None:
+            parent_ref_value = (
+                str(parent.get("ref_value") or parent["text"] or "").strip()
+                or None
+            )
+            if parent_ref_value:
+                ref_value = parent_ref_value
+        if not ref_value and parent is not None:
+            ref_value = (
+                str(parent.get("ref_value") or parent["text"] or "").strip()
+                or None
+            )
+        return explicit_ref, ref_value
+
+    parent_key = parent_requirement_key(leaf_key)
+    if parent_key:
+        parent = find_node_by_key(hierarchy, parent_key)
+        if parent is not None and _is_split_parent(parent):
+            ref_value = (
+                str(parent.get("ref_value") or parent["text"] or "").strip()
+                or None
+            )
+            return parent_key, ref_value
+
+    ref_value = explicit_ref_value or node["text"].strip() or None
+    return leaf_key, ref_value
+
+
 def normalize_tz_requirements(data: object) -> dict[str, RequirementNode]:
     """Coerce stored TZ requirements to a hierarchical dict."""
     if not isinstance(data, dict):
@@ -119,7 +268,8 @@ def normalize_tz_requirements(data: object) -> dict[str, RequirementNode]:
     normalized = {
         str(key): _normalize_node(value) for key, value in data.items()
     }
-    return _canonicalize_hierarchy(normalized)
+    canonical = _canonicalize_hierarchy(normalized)
+    return enrich_hierarchy_refs(canonical)
 
 
 def normalize_requirements_kp(
@@ -154,7 +304,14 @@ def _prune_hierarchy(
         children = _prune_hierarchy(_node_children(normalized))
         text = normalized["text"].strip()
         if text or children:
-            result[str(key)] = {"text": text, "children": children}
+            node: RequirementNode = {"text": text, "children": children}
+            ref_value = str(normalized.get("ref_value") or "").strip()
+            if ref_value:
+                node["ref_value"] = ref_value
+            ref = str(normalized.get("ref") or "").strip()
+            if ref:
+                node["ref"] = ref.replace("/", ".")
+            result[str(key)] = node
     return result
 
 
@@ -212,10 +369,17 @@ def merge_requirement_chunks(
             if key_str in result:
                 result[key_str] = _merge_node(result[key_str], normalized)
             else:
-                result[key_str] = {
+                merged: RequirementNode = {
                     "text": str(normalized.get("text") or "").strip(),
                     "children": dict(normalized.get("children") or {}),
                 }
+                ref_value = str(normalized.get("ref_value") or "").strip()
+                if ref_value:
+                    merged["ref_value"] = ref_value
+                ref = str(normalized.get("ref") or "").strip()
+                if ref:
+                    merged["ref"] = ref.replace("/", ".")
+                result[key_str] = merged
     return result
 
 
@@ -241,7 +405,14 @@ def dedupe_hierarchy(
                     kept_norms.add(norm)
 
             if text or children:
-                result[str(key)] = {"text": text, "children": children}
+                out: RequirementNode = {"text": text, "children": children}
+                ref_value = str(node.get("ref_value") or "").strip()
+                if ref_value:
+                    out["ref_value"] = ref_value
+                ref = str(node.get("ref") or "").strip()
+                if ref:
+                    out["ref"] = ref.replace("/", ".")
+                result[str(key)] = out
         return result
 
     return walk(pruned)
@@ -324,13 +495,18 @@ def format_tz_requirement_ref(
     key: str | None,
     page: int | None,
     requirement: str,
+    *,
+    quote: str | None = None,
 ) -> str:
     """Build a TZ source reference with page and пункт when possible."""
-    quote = _quote_from_flat(requirement)
+    if quote is not None:
+        ref_quote = " ".join(quote.strip().split())
+    else:
+        ref_quote = _quote_from_flat(requirement)
     key_part = f"п. {key}" if key else "п. ?"
     if page is not None:
-        return f"ТЗ, стр. {page}, {key_part}: «{quote}»"
-    return f"ТЗ, {key_part}: «{quote}»"
+        return f"ТЗ, стр. {page}, {key_part}: «{ref_quote}»"
+    return f"ТЗ, {key_part}: «{ref_quote}»"
 
 
 def format_kp_offer_ref(

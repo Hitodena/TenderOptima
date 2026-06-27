@@ -147,6 +147,9 @@ export interface RequestResponse {
 	email_message: string | null;
 	email_subject: string | null;
 	attachment_paths: string[] | null;
+	supplier_messages_total?: number;
+	supplier_messages_incoming?: number;
+	supplier_messages_unread?: number;
 }
 
 export interface RequestSupplierResponse {
@@ -366,6 +369,8 @@ export interface SupplierBookmarkItemCreate {
 export interface RequirementNode {
 	text: string;
 	children: Record<string, RequirementNode>;
+	ref_value?: string;
+	ref?: string;
 }
 
 export type RequirementsHierarchy = Record<string, RequirementNode>;
@@ -373,6 +378,8 @@ export type RequirementsHierarchy = Record<string, RequirementNode>;
 export interface TZAnalysisItem {
 	requirement: string;
 	requirement_ref: string | null;
+	ref?: string | null;
+	ref_value?: string | null;
 	offer_value: string | null;
 	offer_ref: string | null;
 	explanation: string;

@@ -222,20 +222,12 @@ v-if="editableTzCount > 0" :rows="editableRequirementsTz"
 
 					<template #kp>
 						<div
-class="grid grid-cols-1 gap-4" :class="showSuppliersSidebar
-							? 'xl:grid-cols-[minmax(11rem,14rem)_minmax(0,1fr)]'
-							: ''">
-							<TzAnalysisSuppliersPanel
-v-if="showSuppliersSidebar && analysis?.id"
-								:analysis-id="analysis.id" :suppliers="suppliers" :file-accept="fileAccept"
-								:readonly="isCompleted || isAnalysisClosed"
-								:hide-kp-files="isKpProcessing"
-								:selected-supplier-id="selectedSupplierId" compact
-								@select="onSelectSupplier"
-								@open-kp="({ supplierId, filename }) => openKpFile(filename, supplierId)"
-								@updated="refreshAnalysis" />
-
-							<div class="min-w-0 space-y-6">
+							class="grid grid-cols-1 gap-4 items-start"
+							:class="showSuppliersSidebar
+								? 'xl:grid-cols-[minmax(0,1fr)_minmax(15rem,19rem)]'
+								: ''"
+						>
+							<div class="min-w-0 space-y-4 order-2 xl:order-1">
 								<div
 									v-if="kpPanelLoading || supplierResultsLoading"
 									class="flex flex-col items-center justify-center gap-3 min-h-[40vh] text-muted rounded-xl border border-default/60 bg-elevated/20"
@@ -259,35 +251,6 @@ v-if="showSuppliersSidebar && analysis?.id"
 											Ожидайте до 2 часов. Страница обновится автоматически.
 										</p>
 									</div>
-								</UCard>
-
-								<UCard
-									v-if="showSupplierKpFilesCard"
-									class="shadow-sm"
-								>
-									<template #header>
-										<p class="font-semibold text-sm">
-											КП — {{ selectedSupplier.name }}
-										</p>
-									</template>
-									<div
-										v-if="selectedSupplier.kp_filenames.length"
-										class="space-y-2"
-									>
-										<button
-											v-for="filename in selectedSupplier.kp_filenames"
-											:key="`${selectedSupplier.id}-${filename}`"
-											type="button"
-											class="flex items-center gap-2 text-sm text-primary hover:underline text-left"
-											@click="openKpFile(filename, selectedSupplier.id)"
-										>
-											<UIcon name="i-lucide-file-spreadsheet" class="w-4 h-4 shrink-0" />
-											<span class="truncate">{{ filename }}</span>
-										</button>
-									</div>
-									<p v-else class="text-sm text-muted">
-										Нет загруженных файлов КП
-									</p>
 								</UCard>
 
 								<template v-if="isAnalysisClosed">
@@ -331,65 +294,26 @@ color="neutral" variant="soft" icon="i-lucide-archive"
 										</UButton>
 									</div>
 
-									<div class="flex flex-wrap items-end justify-between gap-4">
-										<div class="space-y-2">
-											<p
-												v-if="selectedSupplier"
-												class="text-sm text-muted"
-											>
-												Поставщик:
-												<span class="font-medium text-default">
-													{{ selectedSupplier.name }}
-												</span>
-											</p>
-											<UFormField
-												v-if="selectedSupplier?.kp_filenames.length"
-												label="Основное КП"
-												class="mb-0"
-											>
-												<USelect
-													v-if="hasMultipleSelectedSupplierKps"
-													:model-value="selectedSupplierPrimaryKp ?? undefined"
-													:items="selectedSupplierKpOptions"
-													:loading="primaryKpSaving"
-													size="sm"
-													class="min-w-56"
-													@update:model-value="setPrimaryKp"
-												/>
-												<button
-													v-else-if="selectedSupplierPrimaryKpLabel && selectedSupplier"
-													type="button"
-													class="text-sm text-primary hover:underline text-left"
-													@click="openKpFile(
-														selectedSupplierPrimaryKpLabel,
-														selectedSupplier.id,
-													)"
-												>
-													{{ selectedSupplierPrimaryKpLabel }}
-												</button>
-											</UFormField>
-										</div>
-										<div class="flex flex-wrap items-center gap-2">
-											<UBadge color="primary" variant="subtle" size="lg">
-												{{ selectedSupplierStats.match_score }}% соответствия
-												<span
-													v-if="hasMultipleSelectedSupplierKps"
-													class="opacity-80"
-												>· основное КП</span>
-											</UBadge>
-											<UBadge color="success" variant="subtle">
-												{{ selectedSupplierStats.met_count }} ок
-											</UBadge>
-											<UBadge color="warning" variant="subtle">
-												{{ selectedSupplierStats.partial_count }} частично
-											</UBadge>
-											<UBadge color="error" variant="subtle">
-												{{ selectedSupplierStats.missing_count }} нет
-											</UBadge>
-											<UBadge color="neutral" variant="subtle">
-												{{ selectedSupplierStats.not_found_count }} не найдено
-											</UBadge>
-										</div>
+									<div class="flex flex-wrap items-center gap-2">
+										<UBadge color="primary" variant="subtle" size="lg">
+											{{ selectedSupplierStats.match_score }}% соответствия
+											<span
+												v-if="hasMultipleSelectedSupplierKps"
+												class="opacity-80"
+											>· основное КП</span>
+										</UBadge>
+										<UBadge color="success" variant="subtle">
+											{{ selectedSupplierStats.met_count }} ок
+										</UBadge>
+										<UBadge color="warning" variant="subtle">
+											{{ selectedSupplierStats.partial_count }} частично
+										</UBadge>
+										<UBadge color="error" variant="subtle">
+											{{ selectedSupplierStats.missing_count }} нет
+										</UBadge>
+										<UBadge color="neutral" variant="subtle">
+											{{ selectedSupplierStats.not_found_count }} не найдено
+										</UBadge>
 									</div>
 
 									<UCard class="shadow-sm w-full">
@@ -397,18 +321,11 @@ color="neutral" variant="soft" icon="i-lucide-archive"
 											<div class="flex flex-col gap-3 w-full">
 												<div class="flex flex-wrap items-center justify-between gap-3 w-full">
 													<p class="font-semibold text-sm">Соответствия и несоответствия</p>
-													<div class="flex flex-wrap items-center gap-2">
-														<UButton
-size="sm" variant="outline" leading-icon="i-lucide-download"
-															@click="exportTzXlsx">
-															Экспорт XLSX
-														</UButton>
-														<UButton
+													<UButton
 size="sm" leading-icon="i-lucide-file-text"
-															:disabled="!hasLetterIssues" @click="openLetterModal">
-															Письмо поставщику
-														</UButton>
-													</div>
+														:disabled="!hasLetterIssues" @click="openLetterModal">
+														Письмо поставщику
+													</UButton>
 												</div>
 												<div class="flex flex-wrap items-end gap-3 w-full">
 													<UFormField label="Поиск" class="mb-0 flex-1 min-w-48">
@@ -428,7 +345,7 @@ v-model="tzStatusFilter" :items="tzFilterOptions" size="sm"
 											</div>
 										</template>
 
-										<div class="min-h-[65vh] max-h-[85vh] overflow-y-auto pr-1 space-y-8">
+										<div class="min-h-[min(70vh,calc(100dvh-14rem))] max-h-[min(85vh,calc(100dvh-10rem))] overflow-y-auto pr-1 space-y-8">
 											<section
 v-for="group in visibleKpItemGroups"
 												:key="`results-kp-${group.id}`" class="space-y-4">
@@ -487,13 +404,81 @@ v-if="visibleKpItemGroups.length === 0"
 													Нет результатов для поставщика «{{ selectedSupplier.name }}»
 												</template>
 												<template v-else>
-													Выберите поставщика в списке слева
+													Выберите поставщика в панели справа
 												</template>
 											</p>
 										</div>
 									</UCard>
 								</template>
 								</template>
+							</div>
+
+							<div
+								v-if="showSuppliersSidebar && analysis?.id"
+								class="order-1 xl:order-2 min-w-0 xl:sticky xl:top-4 xl:self-start xl:max-h-[calc(100dvh-6rem)] xl:overflow-y-auto"
+							>
+								<TzAnalysisSuppliersPanel
+									:analysis-id="analysis.id"
+									:suppliers="suppliers"
+									:file-accept="fileAccept"
+									:readonly="isCompleted || isAnalysisClosed"
+									:hide-kp-files="false"
+									:selected-supplier-id="selectedSupplierId"
+									compact
+									rail
+									@select="onSelectSupplier"
+									@open-kp="({ supplierId, filename }) => openKpFile(filename, supplierId)"
+									@updated="refreshAnalysis"
+								>
+									<template v-if="selectedSupplier?.kp_filenames.length" #after-suppliers>
+										<div class="space-y-4">
+											<div class="space-y-2">
+												<p class="text-xs font-semibold text-muted uppercase tracking-wide">
+													Файлы КП
+												</p>
+												<div class="space-y-2">
+													<button
+														v-for="filename in selectedSupplier.kp_filenames"
+														:key="`${selectedSupplier.id}-${filename}`"
+														type="button"
+														class="flex items-center gap-2 w-full rounded-lg border border-default/60 bg-default/50 px-3 py-2.5 text-sm text-primary hover:bg-elevated/60 transition-colors text-left cursor-pointer"
+														@click="openKpFile(filename, selectedSupplier.id)"
+													>
+														<UIcon name="i-lucide-file-spreadsheet" class="w-4 h-4 shrink-0" />
+														<span class="truncate">{{ filename }}</span>
+													</button>
+												</div>
+											</div>
+
+											<UFormField
+												v-if="hasMultipleSelectedSupplierKps"
+												label="Основное КП для сравнения"
+												class="mb-0"
+											>
+												<USelect
+													:model-value="selectedSupplierPrimaryKp ?? undefined"
+													:items="selectedSupplierKpOptions"
+													:loading="primaryKpSaving"
+													size="sm"
+													class="w-full"
+													@update:model-value="setPrimaryKp"
+												/>
+											</UFormField>
+										</div>
+									</template>
+									<template v-if="showComparisonResultsCard" #actions>
+										<UButton
+											block
+											size="md"
+											variant="outline"
+											leading-icon="i-lucide-download"
+											class="mt-1"
+											@click="exportTzXlsx"
+										>
+											Экспорт XLSX
+										</UButton>
+									</template>
+								</TzAnalysisSuppliersPanel>
 							</div>
 						</div>
 					</template>
@@ -592,6 +577,8 @@ v-for="tab in letterPreviewTabs" :key="tab.value" type="button" block
 									<TzRequirementDualText
 										:requirement="item.requirement"
 										:requirement-ref="item.requirement_ref"
+										:source-ref="item.ref"
+										:source-ref-value="item.ref_value"
 										mode="letter"
 										compact
 										class="min-w-0"
@@ -623,6 +610,8 @@ v-for="tab in letterPreviewTabs" :key="tab.value" type="button" block
 									<TzRequirementDualText
 										:requirement="item.requirement"
 										:requirement-ref="item.requirement_ref"
+										:source-ref="item.ref"
+										:source-ref-value="item.ref_value"
 										mode="letter"
 										compact
 										class="min-w-0"
@@ -654,6 +643,8 @@ v-for="tab in letterPreviewTabs" :key="tab.value" type="button" block
 									<TzRequirementDualText
 										:requirement="item.requirement"
 										:requirement-ref="item.requirement_ref"
+										:source-ref="item.ref"
+										:source-ref-value="item.ref_value"
 										mode="letter"
 										compact
 										class="min-w-0"
@@ -721,6 +712,10 @@ import {
 	rowsToHierarchy,
 	type EditableRequirementRow,
 } from '#shared/utils/requirementsStruct'
+import {
+	formatLetterRequirementLine,
+	formatLetterRequirementRef,
+} from '#shared/utils/tzRequirementDisplay'
 import { getApiErrorDetail, isSubscriptionApiError } from '#shared/utils/apiError'
 import { EMAIL_LETTER_MODAL_UI } from '#shared/constants/emailModal'
 import {
@@ -1173,6 +1168,8 @@ function itemMatchesRequirementSearch(
 	const haystack = [
 		item.requirement,
 		item.requirement_ref,
+		item.ref,
+		item.ref_value,
 		item.offer_value,
 		item.offer_ref,
 		item.explanation,
@@ -1387,13 +1384,6 @@ const editableTzCount = computed(() =>
 	countRequirementRows(editableRequirementsTz.value),
 )
 const hasTzRequirements = computed(() => editableTzCount.value > 0)
-const showSupplierKpFilesCard = computed(() =>
-	Boolean(selectedSupplier.value)
-	&& !isAnalysisClosed.value
-	&& isTzConfirmed.value
-	&& hasTzRequirements.value
-	&& (isKpProcessing.value || !hasComparisonResults.value),
-)
 const showComparisonResultsCard = computed(() =>
 	hasComparisonResults.value
 	&& !isKpProcessing.value
@@ -1614,6 +1604,7 @@ const letterPreviewTabs = computed(() => {
 
 function buildDraftLetterParagraphs(): string[] {
 	const { mismatch, not_found, partial } = letterItemsByTab.value
+	const requirementsTz = analysis.value?.requirements_tz
 	const lines: string[] = [
 		'О несоответствии предложения техническим требованиям',
 		'',
@@ -1626,10 +1617,12 @@ function buildDraftLetterParagraphs(): string[] {
 	if (mismatch.length) {
 		lines.push('', LETTER_MISMATCH_HEADER)
 		for (const item of mismatch) {
+			const requirementLine = formatLetterRequirementLine(item, requirementsTz)
+			const requirementRef = formatLetterRequirementRef(item, requirementsTz)
 			lines.push(`${itemNum}. По пункту:`)
 			lines.push(
-				`Требование: "${item.requirement}"`
-				+ (item.requirement_ref ? ` (${item.requirement_ref})` : ''),
+				`Требование: "${requirementLine}"`
+				+ (requirementRef ? ` (${requirementRef})` : ''),
 			)
 			if (item.offer_value) {
 				lines.push(
@@ -1645,10 +1638,12 @@ function buildDraftLetterParagraphs(): string[] {
 	if (not_found.length) {
 		lines.push('', LETTER_NOT_FOUND_HEADER)
 		for (const item of not_found) {
+			const requirementLine = formatLetterRequirementLine(item, requirementsTz)
+			const requirementRef = formatLetterRequirementRef(item, requirementsTz)
 			lines.push(`${itemNum}. По пункту:`)
 			lines.push(
-				`Требование: "${item.requirement}"`
-				+ (item.requirement_ref ? ` (${item.requirement_ref})` : ''),
+				`Требование: "${requirementLine}"`
+				+ (requirementRef ? ` (${requirementRef})` : ''),
 			)
 			lines.push(letterMismatchReason(item))
 			itemNum += 1
@@ -1658,10 +1653,12 @@ function buildDraftLetterParagraphs(): string[] {
 	if (partial.length) {
 		lines.push('', LETTER_PARTIAL_HEADER)
 		for (const item of partial) {
+			const requirementLine = formatLetterRequirementLine(item, requirementsTz)
+			const requirementRef = formatLetterRequirementRef(item, requirementsTz)
 			lines.push(`${itemNum}. Пункт:`)
 			lines.push(
-				`Требуется: "${item.requirement}"`
-				+ (item.requirement_ref ? ` (${item.requirement_ref})` : ''),
+				`Требуется: "${requirementLine}"`
+				+ (requirementRef ? ` (${requirementRef})` : ''),
 			)
 			if (item.offer_value) {
 				lines.push(

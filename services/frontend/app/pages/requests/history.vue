@@ -25,11 +25,14 @@
 					<UCard
 v-for="req in visibleHistory" :key="req.id"
 						class="group cursor-pointer hover:shadow-md transition-all hover:-translate-y-px"
-						@click="navigateTo(`/requests/${req.id}`)">
+						@click="openRequest(req)">
 						<div class="flex items-center gap-4">
 							<div
-								class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+								class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 relative">
 								<UIcon name="i-lucide-package-search" class="w-5 h-5 text-primary" />
+								<span
+v-if="hasUnreadMessages(req)"
+									class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-success ring-2 ring-default" />
 							</div>
 							<div class="flex-1 min-w-0">
 								<div class="flex items-center gap-2 mb-0.5">
@@ -40,7 +43,7 @@ v-for="req in visibleHistory" :key="req.id"
 										{{ getRequestStatusLabel(req.status) }}
 									</UBadge>
 								</div>
-								<p class="text-xs text-muted flex items-center gap-2">
+								<p class="text-xs text-muted flex items-center gap-2 flex-wrap">
 									<span class="flex items-center gap-1">
 										<UIcon name="i-lucide-map-pin" class="w-3 h-3" />
 										{{ req.delivery_region }}
@@ -50,6 +53,14 @@ v-for="req in visibleHistory" :key="req.id"
 										<UIcon name="i-lucide-calendar" class="w-3 h-3" />
 										{{ formatDate(req.created_at) }}
 									</span>
+									<template v-if="showMessageStats(req)">
+										<span>·</span>
+										<span class="flex items-center gap-1 text-success">
+											<UIcon name="i-lucide-inbox" class="w-3 h-3" />
+											Входящие: {{ req.supplier_messages_incoming ?? 0 }} / Всего:
+											{{ req.supplier_messages_total ?? 0 }}
+										</span>
+									</template>
 								</p>
 							</div>
 							<div class="flex items-center gap-1 shrink-0">
@@ -102,6 +113,29 @@ import { getRequestStatusColor, getRequestStatusLabel, RequestStatus } from '#sh
 
 const { post, get } = useApi()
 const { formatDate } = useFormatDate()
+
+function showMessageStats(req: RequestResponse): boolean {
+	return (
+		req.status === RequestStatus.QUEUED
+		|| req.status === RequestStatus.COMPLETED
+		|| req.status === RequestStatus.CLOSED
+		|| (req.supplier_messages_total ?? 0) > 0
+	)
+}
+
+function hasUnreadMessages(req: RequestResponse): boolean {
+	return (req.supplier_messages_unread ?? 0) > 0
+}
+
+function openRequest(req: RequestResponse) {
+	const isTerminal =
+		req.status === RequestStatus.COMPLETED || req.status === RequestStatus.CLOSED
+	if (isTerminal) {
+		navigateTo(`/requests/${req.id}/responses`)
+		return
+	}
+	navigateTo(`/requests/${req.id}`)
+}
 
 const PAGE_SIZE = 10
 
