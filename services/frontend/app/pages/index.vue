@@ -1,40 +1,29 @@
 <template>
 	<div class="landing-page">
 		<!-- Hero -->
-		<section class="landing-hero py-[var(--landing-section-py)] px-4 sm:px-6 lg:px-8">
+		<section class="landing-hero py-(--landing-section-py) px-4 sm:px-6 lg:px-8">
 			<div class="landing-hero-shape landing-hero-shape-1" aria-hidden="true" />
 			<div class="landing-hero-shape landing-hero-shape-2" aria-hidden="true" />
-			<div
-				ref="heroReveal"
-				class="reveal is-visible relative z-10 mx-auto max-w-5xl text-center"
-			>
+			<div ref="heroReveal" class="reveal is-visible relative z-10 mx-auto max-w-5xl text-center">
 
 				<p class="landing-hero-eyebrow mb-4 text-sm font-semibold uppercase tracking-widest">
 					TenderOptima
 				</p>
-				<h1 class="landing-hero-title mb-6 text-3xl font-bold leading-tight tracking-tight sm:text-4xl lg:text-5xl">
+				<h1
+					class="landing-hero-title mb-6 text-3xl font-bold leading-tight tracking-tight sm:text-4xl lg:text-5xl">
 					AI-сервис для автоматизации закупок и анализа предложений поставщиков
 				</h1>
 				<p class="landing-hero-subtitle mx-auto mb-10 max-w-3xl text-lg leading-relaxed sm:text-xl">
-					Поиск поставщиков, рассылка запросов, входящие ответы и сравнение КП с ТЗ - в одном браузерном интерфейсе. Без ручной сверки таблиц.
+					Поиск поставщиков, рассылка запросов, входящие ответы и сравнение КП с ТЗ - в одном браузерном
+					интерфейсе. Без ручной сверки таблиц.
 				</p>
 				<div class="flex flex-col items-center justify-center gap-3 sm:flex-row">
-					<UButton
-						:to="registerPath"
-						size="xl"
-						leading-icon="i-lucide-user-plus"
-						class="cursor-pointer landing-cta-shadow"
-					>
+					<UButton :to="registerPath" size="xl" leading-icon="i-lucide-user-plus"
+						class="cursor-pointer landing-cta-shadow">
 						Регистрация
 					</UButton>
-					<UButton
-						to="#how-it-works"
-						size="xl"
-						color="neutral"
-						variant="outline"
-						trailing-icon="i-lucide-arrow-right"
-						class="cursor-pointer landing-hero-secondary-btn"
-					>
+					<UButton to="#tz-analysis" size="xl" color="neutral" variant="outline"
+						trailing-icon="i-lucide-arrow-right" class="cursor-pointer landing-hero-secondary-btn">
 						Как это работает
 					</UButton>
 				</div>
@@ -42,11 +31,8 @@
 		</section>
 
 		<!-- Metrics -->
-		<section
-			id="metrics"
-			ref="metricsReveal"
-			class="landing-metrics-band reveal py-[var(--landing-section-py)] px-4 sm:px-6 lg:px-8"
-		>
+		<section id="metrics" ref="metricsReveal"
+			class="landing-metrics-band reveal py-(--landing-section-py) px-4 sm:px-6 lg:px-8">
 			<div class="mx-auto max-w-6xl">
 				<div class="mb-12 text-center">
 					<p class="landing-section-headline mb-2">
@@ -61,12 +47,9 @@
 				</div>
 
 				<div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-					<div
-						v-for="(metric, index) in metrics"
-						:key="metric.label"
+					<div v-for="(metric, index) in metrics" :key="metric.label"
 						class="landing-metric-card reveal rounded-2xl p-6 text-center backdrop-blur-sm"
-						:class="[`stagger-${index + 1}`, { 'is-visible': metricsVisible }]"
-					>
+						:class="[`stagger-${index + 1}`, { 'is-visible': metricsVisible }]">
 						<UIcon :name="metric.icon" class="landing-metric-icon mx-auto mb-4 size-8" />
 						<p class="landing-metric-value mb-2">
 							{{ metricCounters[index]?.display || metric.value }}
@@ -80,11 +63,8 @@
 		</section>
 
 		<!-- Features -->
-		<section
-			id="features"
-			ref="featuresReveal"
-			class="reveal bg-default py-[var(--landing-section-py)] px-4 sm:px-6 lg:px-8"
-		>
+		<section id="features" ref="featuresReveal"
+			class="reveal bg-default py-(--landing-section-py) px-4 sm:px-6 lg:px-8">
 			<div class="mx-auto max-w-6xl">
 				<div class="mb-12 text-center">
 					<h2 class="landing-section-title mb-4">
@@ -96,12 +76,9 @@
 				</div>
 
 				<div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-					<article
-						v-for="(feature, index) in features"
-						:key="feature.title"
+					<article v-for="(feature, index) in features" :key="feature.title"
 						class="landing-card landing-card-feature reveal cursor-pointer"
-						:class="[`stagger-${(index % 6) + 1}`, { 'is-visible': featuresVisible }]"
-					>
+						:class="[`stagger-${(index % 6) + 1}`, { 'is-visible': featuresVisible }]">
 						<div class="mb-4 flex items-start justify-between gap-3">
 							<div class="flex size-11 items-center justify-center rounded-xl bg-primary/10">
 								<UIcon :name="feature.icon" class="size-5 text-primary" />
@@ -121,7 +98,7 @@
 			</div>
 		</section>
 
-		<!-- Pain points -->
+		<!-- Pain points
 		<section
 			id="pain"
 			ref="painReveal"
@@ -159,130 +136,14 @@
 					</article>
 				</div>
 			</div>
-		</section>
-
-		<!-- How it works -->
-		<section
-			id="how-it-works"
-			ref="howItWorksReveal"
-			class="reveal py-[var(--landing-section-py)] px-4 sm:px-6 lg:px-8"
-		>
-			<div class="mx-auto max-w-3xl">
-				<div class="mb-12 text-center">
-					<p class="landing-section-headline mb-2">
-						Процесс
-					</p>
-					<h2 class="landing-section-title mb-4">
-						Как это работает в браузере
-					</h2>
-					<p class="landing-section-description mx-auto">
-						Полный цикл от поиска поставщиков до готового сравнения - без установки программ.
-					</p>
-				</div>
-
-				<ol class="landing-steps">
-					<li
-						v-for="(step, index) in browserFlowSteps"
-						:key="step.title"
-					>
-						<button
-							type="button"
-							class="landing-step"
-							:class="{
-								'is-visible': isProcessStepVisible(index),
-								'is-active': processVisibleCount === index + 1,
-								'is-selected': selectedProcessStep === index,
-							}"
-							:aria-expanded="selectedProcessStep === index"
-							:aria-controls="`process-step-panel-${index}`"
-							@click="selectedProcessStep = index"
-						>
-							<span class="landing-step-number">{{ index + 1 }}</span>
-							<div class="landing-step-content min-w-0 space-y-1">
-								<p class="font-semibold text-highlighted">{{ step.title }}</p>
-								<p
-									:id="`process-step-panel-${index}`"
-									class="text-sm leading-relaxed text-muted"
-								>
-									{{ step.description }}
-								</p>
-							</div>
-							<UIcon
-								name="i-lucide-chevron-right"
-								class="landing-step-chevron size-5"
-							/>
-						</button>
-					</li>
-				</ol>
-			</div>
-		</section>
+		</section> -->
 
 		<!-- TZ / KP analysis -->
-		<section
-			id="tz-analysis"
-			ref="tzReveal"
-			class="reveal bg-elevated/25 py-[var(--landing-section-py)] px-4 sm:px-6 lg:px-8"
-		>
-			<div class="mx-auto max-w-6xl">
-				<div class="mb-12 text-center">
-					<p class="landing-section-headline mb-2">
-						ТЗ / КП
-					</p>
-					<h2 class="landing-section-title mb-4">
-						Анализ требований и сравнение с коммерческими предложениями
-					</h2>
-					<p class="landing-section-description mx-auto">
-						Система извлекает пункты из технического задания, затем сверяет каждое требование с КП поставщика.
-					</p>
-				</div>
-
-				<div class="grid gap-8 lg:grid-cols-2">
-					<figure
-						v-for="(screenshot, index) in tzScreenshots"
-						:key="screenshot.title"
-						class="reveal space-y-3"
-						:class="[`stagger-${index + 1}`, { 'is-visible': tzVisible }]"
-					>
-						<figcaption class="space-y-1">
-							<p class="font-semibold text-highlighted">{{ screenshot.title }}</p>
-							<p class="text-sm text-muted">{{ screenshot.description }}</p>
-						</figcaption>
-						<div class="landing-browser-frame">
-							<div class="landing-browser-chrome">
-								<span class="landing-browser-dot" />
-								<span class="landing-browser-dot" />
-								<span class="landing-browser-dot" />
-								<span class="landing-browser-url">app.tenderoptima.by</span>
-							</div>
-							<img
-								:src="screenshot.src"
-								:alt="screenshot.alt"
-								class="w-full h-auto"
-								loading="lazy"
-							>
-						</div>
-					</figure>
-				</div>
-
-				<div class="mt-10 flex justify-center">
-					<UButton
-						:to="registerPath"
-						size="lg"
-						leading-icon="i-lucide-user-plus"
-						class="cursor-pointer"
-					>
-						Регистрация
-					</UButton>
-				</div>
-			</div>
-		</section>
+		<HowItWorksBrand section-id="tz-analysis" />
 
 		<!-- Testimonials -->
-		<section
-			id="testimonials"
-			ref="testimonialsReveal"
-			class="reveal py-[var(--landing-section-py)] px-4 sm:px-6 lg:px-8"
-		>
+		<section id="testimonials" ref="testimonialsReveal"
+			class="reveal py-(--landing-section-py) px-4 sm:px-6 lg:px-8">
 			<div class="mx-auto max-w-6xl">
 				<div class="mb-12 text-center">
 					<p class="landing-section-headline mb-2">
@@ -294,28 +155,22 @@
 				</div>
 
 				<div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-					<article
-						v-for="(item, index) in testimonials"
-						:key="item.name"
+					<article v-for="(item, index) in testimonials" :key="item.name"
 						class="landing-card landing-card-testimonial reveal cursor-pointer"
-						:class="[`stagger-${index + 1}`, { 'is-visible': testimonialsVisible }]"
-					>
+						:class="[`stagger-${index + 1}`, { 'is-visible': testimonialsVisible }]">
 						<div class="mb-3 flex gap-0.5 text-warning" aria-label="5 из 5">
-							<svg
-								v-for="i in 5"
-								:key="i"
-								viewBox="0 0 24 24"
-								class="size-4 shrink-0 fill-current"
-								aria-hidden="true"
-							>
-								<path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+							<svg v-for="i in 5" :key="i" viewBox="0 0 24 24" class="size-4 shrink-0 fill-current"
+								aria-hidden="true">
+								<path
+									d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
 							</svg>
 						</div>
 						<p class="mb-5 text-sm leading-relaxed text-default">
 							«{{ item.quote }}»
 						</p>
 						<div class="flex items-center gap-3">
-							<div class="flex size-10 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+							<div
+								class="flex size-10 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
 								{{ item.initials }}
 							</div>
 							<div>
@@ -329,11 +184,8 @@
 		</section>
 
 		<!-- Requests -->
-		<section
-			id="requests"
-			ref="requestsReveal"
-			class="reveal bg-elevated/25 py-[var(--landing-section-py)] px-4 sm:px-6 lg:px-8"
-		>
+		<section id="requests" ref="requestsReveal"
+			class="reveal bg-elevated/25 py-(--landing-section-py) px-4 sm:px-6 lg:px-8">
 			<div class="mx-auto grid max-w-6xl items-center gap-10 lg:grid-cols-2">
 				<div :class="{ 'is-visible': requestsVisible }" class="reveal">
 					<h2 class="landing-section-title mb-4">
@@ -345,12 +197,9 @@
 				</div>
 
 				<div class="landing-card p-6 lg:p-8">
-					<div
-						v-for="(item, index) in requestHighlights"
-						:key="item"
+					<div v-for="(item, index) in requestHighlights" :key="item"
 						class="reveal flex items-start gap-3 py-3 text-muted first:pt-0 last:pb-0"
-						:class="[`stagger-${index + 1}`, { 'is-visible': requestsVisible }]"
-					>
+						:class="[`stagger-${index + 1}`, { 'is-visible': requestsVisible }]">
 						<UIcon name="i-lucide-check-circle" class="mt-0.5 size-5 shrink-0 text-primary" />
 						<span class="leading-relaxed">{{ item }}</span>
 					</div>
@@ -359,11 +208,8 @@
 		</section>
 
 		<!-- Subscription -->
-		<section
-			id="subscription"
-			ref="subscriptionReveal"
-			class="reveal py-[var(--landing-section-py)] px-4 sm:px-6 lg:px-8"
-		>
+		<section id="subscription" ref="subscriptionReveal"
+			class="reveal py-(--landing-section-py) px-4 sm:px-6 lg:px-8">
 			<div class="mx-auto max-w-6xl">
 				<div class="mb-12 text-center">
 					<p class="landing-section-headline mb-2">
@@ -378,16 +224,13 @@
 				</div>
 
 				<div class="landing-subscription-grid">
-					<article
-						v-for="(step, index) in subscriptionSteps"
-						:key="step.title"
-						class="landing-card landing-subscription-step cursor-pointer"
-						:class="{
+					<article v-for="(step, index) in subscriptionSteps" :key="step.title"
+						class="landing-card landing-subscription-step cursor-pointer" :class="{
 							'is-visible': isSubscriptionStepVisible(index),
 							'is-active': subscriptionVisibleCount === index + 1,
-						}"
-					>
-						<div class="landing-subscription-icon mb-4 flex size-11 items-center justify-center rounded-xl bg-primary/10">
+						}">
+						<div
+							class="landing-subscription-icon mb-4 flex size-11 items-center justify-center rounded-xl bg-primary/10">
 							<UIcon :name="step.icon" class="size-5 text-primary" />
 						</div>
 						<h3 class="mb-2 font-semibold text-highlighted">{{ step.title }}</h3>
@@ -398,11 +241,8 @@
 		</section>
 
 		<!-- FAQ -->
-		<section
-			id="faq"
-			ref="faqReveal"
-			class="reveal bg-elevated/25 py-[var(--landing-section-py)] px-4 sm:px-6 lg:px-8"
-		>
+		<section id="faq" ref="faqReveal"
+			class="reveal bg-elevated/25 py-(--landing-section-py) px-4 sm:px-6 lg:px-8">
 			<div class="mx-auto max-w-3xl">
 				<div class="mb-10 text-center">
 					<p class="landing-section-headline mb-2">
@@ -413,43 +253,26 @@
 					</h2>
 				</div>
 
-				<UAccordion
-					type="multiple"
-					:unmount-on-hide="false"
-					:items="faqAccordionItems"
-					class="rounded-xl border border-default bg-default px-4 sm:px-5"
-					:ui="{
+				<UAccordion type="multiple" :unmount-on-hide="false" :items="faqAccordionItems"
+					class="rounded-xl border border-default bg-default px-4 sm:px-5" :ui="{
 						trigger: 'py-4 text-base font-medium cursor-pointer',
 						body: 'text-sm text-muted pb-4 leading-relaxed',
 						content: 'overflow-hidden',
-					}"
-				/>
+					}" />
 			</div>
 		</section>
 
 		<!-- CTA -->
-		<section
-			ref="ctaReveal"
-			class="landing-cta-band reveal py-[var(--landing-section-py)] px-4 sm:px-6 lg:px-8"
-		>
-			<div
-				class="mx-auto max-w-3xl text-center"
-				:class="{ 'is-visible': ctaVisible }"
-			>
+		<section ref="ctaReveal" class="landing-cta-band reveal py-(--landing-section-py) px-4 sm:px-6 lg:px-8">
+			<div class="mx-auto max-w-3xl text-center" :class="{ 'is-visible': ctaVisible }">
 				<h2 class="landing-cta-title mb-4 text-3xl font-bold sm:text-4xl">
 					AI + аналитика = лучшие контракты
 				</h2>
 				<p class="landing-cta-description mb-8 text-lg">
 					Автоматизируйте закупки уже сегодня. Работает в браузере - без установки.
 				</p>
-				<UButton
-					:to="registerPath"
-					size="xl"
-					color="neutral"
-					variant="solid"
-					leading-icon="i-lucide-user-plus"
-					class="cursor-pointer landing-cta-button"
-				>
+				<UButton :to="registerPath" size="xl" color="neutral" variant="solid" leading-icon="i-lucide-user-plus"
+					class="cursor-pointer landing-cta-button">
 					Регистрация
 				</UButton>
 			</div>
@@ -459,6 +282,11 @@
 
 <script setup lang="ts">
 import type { AccordionItem } from '@nuxt/ui'
+
+import HowItWorksBrand from '~/components/landing/HowItWorksBrand.vue'
+import { useCountUp } from '~/composables/useCountUp'
+import { useScrollReveal } from '~/composables/useScrollReveal'
+import { useSequentialSteps } from '~/composables/useSequentialSteps'
 
 definePageMeta({
 	layout: 'default',
@@ -485,20 +313,6 @@ onMounted(() => {
 const { target: metricsReveal, isVisible: metricsVisible } = useScrollReveal()
 const { target: featuresReveal, isVisible: featuresVisible } = useScrollReveal()
 const { target: painReveal, isVisible: painVisible } = useScrollReveal()
-const { target: howItWorksReveal, isVisible: howItWorksVisible } = useScrollReveal()
-const {
-	visibleCount: processVisibleCount,
-	isStepVisible: isProcessStepVisible,
-} = useSequentialSteps(5, howItWorksVisible)
-
-const selectedProcessStep = ref(0)
-
-watch(processVisibleCount, (count) => {
-	if (count > 0) {
-		selectedProcessStep.value = count - 1
-	}
-})
-const { target: tzReveal, isVisible: tzVisible } = useScrollReveal()
 const { target: testimonialsReveal, isVisible: testimonialsVisible } = useScrollReveal()
 const { target: requestsReveal, isVisible: requestsVisible } = useScrollReveal()
 const { target: subscriptionReveal, isVisible: subscriptionVisible } = useScrollReveal()
@@ -607,44 +421,6 @@ const painPoints = [
 		title: 'Сложно масштабировать команду',
 		description: 'Та же команда закрывает больше запросов без найма новых сотрудников.',
 		icon: 'i-lucide-users',
-	},
-]
-
-const browserFlowSteps = [
-	{
-		title: 'Создайте поиск поставщиков',
-		description: 'Укажите товар и регион. Система найдёт компании и сохранит запрос в истории.',
-	},
-	{
-		title: 'Выберите поставщиков и отправьте запрос',
-		description: 'Включите нужных участников, настройте письмо и запустите рассылку.',
-	},
-	{
-		title: 'Обработайте входящие ответы',
-		description: 'Переписка, сравнение по требованиям и запрос недостающих параметров.',
-	},
-	{
-		title: 'Отправка запросов на улучшение условий в один клик',
-		description: 'Сформируйте текст дополнительного запроса по шаблону и отправьте участникам без ручной подготовки каждого письма.',
-	},
-	{
-		title: 'Определите победителя и экспорт результата',
-		description: 'Сравните предложения, выберите победителя и экспортируйте итог в XLSX или DOCX.',
-	},
-]
-
-const tzScreenshots = [
-	{
-		title: 'Требования из ТЗ',
-		description: 'Проверка и редактирование извлечённых пунктов перед загрузкой КП.',
-		src: '/landing/tz_refs.png',
-		alt: 'Экран подтверждения требований из технического задания',
-	},
-	{
-		title: 'Сравнение с КП',
-		description: 'Таблица соответствий по каждому пункту, фильтры и экспорт результата.',
-		src: '/landing/tz_analyzis.png',
-		alt: 'Экран сравнения коммерческого предложения с требованиями ТЗ',
 	},
 ]
 
