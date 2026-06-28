@@ -49,7 +49,7 @@ id="metrics" ref="metricsReveal"
 					</p>
 				</div>
 
-				<div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+				<div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
 					<div
 v-for="(metric, index) in metrics" :key="metric.label"
 						class="landing-metric-card reveal rounded-2xl p-6 text-center backdrop-blur-sm"
@@ -276,14 +276,6 @@ const metrics = [
 		suffix: '%',
 		label: 'Снижение закупочных рисков за счёт системной проверки',
 		icon: 'i-lucide-shield-check',
-	},
-	{
-		value: '0',
-		numericValue: 0,
-		prefix: '',
-		suffix: '',
-		label: 'Установок - всё работает в браузере',
-		icon: 'i-lucide-globe',
 	},
 ]
 
