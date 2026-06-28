@@ -18,11 +18,13 @@
 					интерфейсе. Без ручной сверки таблиц.
 				</p>
 				<div class="flex flex-col items-center justify-center gap-3 sm:flex-row">
-					<UButton :to="registerPath" size="xl" leading-icon="i-lucide-user-plus"
+					<UButton
+:to="registerPath" size="xl" leading-icon="i-lucide-user-plus"
 						class="cursor-pointer landing-cta-shadow">
 						Регистрация
 					</UButton>
-					<UButton to="#tz-analysis" size="xl" color="neutral" variant="outline"
+					<UButton
+to="#tz-analysis" size="xl" color="neutral" variant="outline"
 						trailing-icon="i-lucide-arrow-right" class="cursor-pointer landing-hero-secondary-btn">
 						Как это работает
 					</UButton>
@@ -31,7 +33,8 @@
 		</section>
 
 		<!-- Metrics -->
-		<section id="metrics" ref="metricsReveal"
+		<section
+id="metrics" ref="metricsReveal"
 			class="landing-metrics-band reveal py-(--landing-section-py) px-4 sm:px-6 lg:px-8">
 			<div class="mx-auto max-w-6xl">
 				<div class="mb-12 text-center">
@@ -47,7 +50,8 @@
 				</div>
 
 				<div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-					<div v-for="(metric, index) in metrics" :key="metric.label"
+					<div
+v-for="(metric, index) in metrics" :key="metric.label"
 						class="landing-metric-card reveal rounded-2xl p-6 text-center backdrop-blur-sm"
 						:class="[`stagger-${index + 1}`, { 'is-visible': metricsVisible }]">
 						<UIcon :name="metric.icon" class="landing-metric-icon mx-auto mb-4 size-8" />
@@ -63,7 +67,8 @@
 		</section>
 
 		<!-- Features -->
-		<section id="features" ref="featuresReveal"
+		<section
+id="features" ref="featuresReveal"
 			class="reveal bg-default py-(--landing-section-py) px-4 sm:px-6 lg:px-8">
 			<div class="mx-auto max-w-6xl">
 				<div class="mb-12 text-center">
@@ -76,7 +81,8 @@
 				</div>
 
 				<div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-					<article v-for="(feature, index) in features" :key="feature.title"
+					<article
+v-for="(feature, index) in features" :key="feature.title"
 						class="landing-card landing-card-feature reveal cursor-pointer"
 						:class="[`stagger-${(index % 6) + 1}`, { 'is-visible': featuresVisible }]">
 						<div class="mb-4 flex items-start justify-between gap-3">
@@ -98,51 +104,12 @@
 			</div>
 		</section>
 
-		<!-- Pain points
-		<section
-			id="pain"
-			ref="painReveal"
-			class="reveal bg-elevated/25 py-[var(--landing-section-py)] px-4 sm:px-6 lg:px-8"
-		>
-			<div class="mx-auto max-w-6xl">
-				<div class="mb-12 text-center">
-					<p class="landing-section-headline mb-2">
-						Проблема
-					</p>
-					<h2 class="landing-section-title mb-4">
-						Ручная обработка заявок отнимает время и повышает риски
-					</h2>
-					<p class="landing-section-description mx-auto">
-						TenderOptima берёт на себя рутину, чтобы команда фокусировалась на решениях.
-					</p>
-				</div>
-
-				<div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-					<article
-						v-for="(pain, index) in painPoints"
-						:key="pain.title"
-						class="landing-card landing-card-pain reveal cursor-pointer"
-						:class="[`stagger-${index + 1}`, { 'is-visible': painVisible }]"
-					>
-						<div class="mb-4 flex size-11 items-center justify-center rounded-xl bg-error/10">
-							<UIcon :name="pain.icon" class="size-5 text-error" />
-						</div>
-						<h3 class="mb-2 text-lg font-semibold text-highlighted">
-							{{ pain.title }}
-						</h3>
-						<p class="text-sm leading-relaxed text-muted">
-							{{ pain.description }}
-						</p>
-					</article>
-				</div>
-			</div>
-		</section> -->
-
 		<!-- TZ / KP analysis -->
 		<HowItWorksBrand section-id="tz-analysis" />
 
 		<!-- Requests -->
-		<section id="requests" ref="requestsReveal"
+		<section
+id="requests" ref="requestsReveal"
 			class="reveal bg-elevated/25 py-(--landing-section-py) px-4 sm:px-6 lg:px-8">
 			<div class="mx-auto grid max-w-6xl items-center gap-10 lg:grid-cols-2">
 				<div :class="{ 'is-visible': requestsVisible }" class="reveal">
@@ -155,7 +122,8 @@
 				</div>
 
 				<div class="landing-card p-6 lg:p-8">
-					<div v-for="(item, index) in requestHighlights" :key="item"
+					<div
+v-for="(item, index) in requestHighlights" :key="item"
 						class="reveal flex items-start gap-3 py-3 text-muted first:pt-0 last:pb-0"
 						:class="[`stagger-${index + 1}`, { 'is-visible': requestsVisible }]">
 						<UIcon name="i-lucide-check-circle" class="mt-0.5 size-5 shrink-0 text-primary" />
@@ -166,7 +134,8 @@
 		</section>
 
 		<!-- Subscription -->
-		<section id="subscription" ref="subscriptionReveal"
+		<section
+id="subscription" ref="subscriptionReveal"
 			class="reveal py-(--landing-section-py) px-4 sm:px-6 lg:px-8">
 			<div class="mx-auto max-w-6xl">
 				<div class="mb-12 text-center">
@@ -182,7 +151,8 @@
 				</div>
 
 				<div class="landing-subscription-grid">
-					<article v-for="(step, index) in subscriptionSteps" :key="step.title"
+					<article
+v-for="(step, index) in subscriptionSteps" :key="step.title"
 						class="landing-card landing-subscription-step cursor-pointer" :class="{
 							'is-visible': isSubscriptionStepVisible(index),
 							'is-active': subscriptionVisibleCount === index + 1,
@@ -199,7 +169,8 @@
 		</section>
 
 		<!-- FAQ -->
-		<section id="faq" ref="faqReveal"
+		<section
+id="faq" ref="faqReveal"
 			class="reveal bg-elevated/25 py-(--landing-section-py) px-4 sm:px-6 lg:px-8">
 			<div class="mx-auto max-w-3xl">
 				<div class="mb-10 text-center">
@@ -211,7 +182,8 @@
 					</h2>
 				</div>
 
-				<UAccordion type="multiple" :unmount-on-hide="false" :items="faqAccordionItems"
+				<UAccordion
+type="multiple" :unmount-on-hide="false" :items="faqAccordionItems"
 					class="rounded-xl border border-default bg-default px-4 sm:px-5" :ui="{
 						trigger: 'py-4 text-base font-medium cursor-pointer',
 						body: 'text-sm text-muted pb-4 leading-relaxed',
@@ -229,7 +201,8 @@
 				<p class="landing-cta-description mb-8 text-lg">
 					Автоматизируйте закупки уже сегодня. Работает в браузере - без установки.
 				</p>
-				<UButton :to="registerPath" size="xl" color="neutral" variant="solid" leading-icon="i-lucide-user-plus"
+				<UButton
+:to="registerPath" size="xl" color="neutral" variant="solid" leading-icon="i-lucide-user-plus"
 					class="cursor-pointer landing-cta-button">
 					Регистрация
 				</UButton>
@@ -270,7 +243,6 @@ onMounted(() => {
 
 const { target: metricsReveal, isVisible: metricsVisible } = useScrollReveal()
 const { target: featuresReveal, isVisible: featuresVisible } = useScrollReveal()
-const { target: painReveal, isVisible: painVisible } = useScrollReveal()
 const { target: requestsReveal, isVisible: requestsVisible } = useScrollReveal()
 const { target: subscriptionReveal, isVisible: subscriptionVisible } = useScrollReveal()
 const {
@@ -360,24 +332,6 @@ const features = [
 		title: 'Меньше рутины',
 		description: 'Специалисты занимаются стратегией, а не ручной сверкой таблиц.',
 		icon: 'i-lucide-sparkles',
-	},
-]
-
-const painPoints = [
-	{
-		title: 'Часы на ручную сверку',
-		description: 'Десятки страниц ТЗ и КП обрабатываются автоматически за минуты.',
-		icon: 'i-lucide-clock',
-	},
-	{
-		title: 'Риск пропустить несоответствие',
-		description: 'ИИ проверяет каждый параметр и подсвечивает расхождения.',
-		icon: 'i-lucide-circle-alert',
-	},
-	{
-		title: 'Сложно масштабировать команду',
-		description: 'Та же команда закрывает больше запросов без найма новых сотрудников.',
-		icon: 'i-lucide-users',
 	},
 ]
 
