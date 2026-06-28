@@ -141,48 +141,6 @@
 		<!-- TZ / KP analysis -->
 		<HowItWorksBrand section-id="tz-analysis" />
 
-		<!-- Testimonials -->
-		<section id="testimonials" ref="testimonialsReveal"
-			class="reveal py-(--landing-section-py) px-4 sm:px-6 lg:px-8">
-			<div class="mx-auto max-w-6xl">
-				<div class="mb-12 text-center">
-					<p class="landing-section-headline mb-2">
-						Отзывы
-					</p>
-					<h2 class="landing-section-title">
-						Что говорят команды закупок
-					</h2>
-				</div>
-
-				<div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-					<article v-for="(item, index) in testimonials" :key="item.name"
-						class="landing-card landing-card-testimonial reveal cursor-pointer"
-						:class="[`stagger-${index + 1}`, { 'is-visible': testimonialsVisible }]">
-						<div class="mb-3 flex gap-0.5 text-warning" aria-label="5 из 5">
-							<svg v-for="i in 5" :key="i" viewBox="0 0 24 24" class="size-4 shrink-0 fill-current"
-								aria-hidden="true">
-								<path
-									d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-							</svg>
-						</div>
-						<p class="mb-5 text-sm leading-relaxed text-default">
-							«{{ item.quote }}»
-						</p>
-						<div class="flex items-center gap-3">
-							<div
-								class="flex size-10 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-								{{ item.initials }}
-							</div>
-							<div>
-								<p class="text-sm font-medium text-highlighted">{{ item.name }}</p>
-								<p class="text-xs text-muted">{{ item.role }}</p>
-							</div>
-						</div>
-					</article>
-				</div>
-			</div>
-		</section>
-
 		<!-- Requests -->
 		<section id="requests" ref="requestsReveal"
 			class="reveal bg-elevated/25 py-(--landing-section-py) px-4 sm:px-6 lg:px-8">
@@ -313,7 +271,6 @@ onMounted(() => {
 const { target: metricsReveal, isVisible: metricsVisible } = useScrollReveal()
 const { target: featuresReveal, isVisible: featuresVisible } = useScrollReveal()
 const { target: painReveal, isVisible: painVisible } = useScrollReveal()
-const { target: testimonialsReveal, isVisible: testimonialsVisible } = useScrollReveal()
 const { target: requestsReveal, isVisible: requestsVisible } = useScrollReveal()
 const { target: subscriptionReveal, isVisible: subscriptionVisible } = useScrollReveal()
 const {
@@ -421,27 +378,6 @@ const painPoints = [
 		title: 'Сложно масштабировать команду',
 		description: 'Та же команда закрывает больше запросов без найма новых сотрудников.',
 		icon: 'i-lucide-users',
-	},
-]
-
-const testimonials = [
-	{
-		quote: 'Раньше на один тендер уходил весь день. Теперь проверяем за обед, и ошибок стало ноль.',
-		name: 'Алексей К.',
-		role: 'Руководитель отдела закупок',
-		initials: 'А',
-	},
-	{
-		quote: 'Начали участвовать в большем числе закупок - без расширения штата.',
-		name: 'Мария С.',
-		role: 'Коммерческий директор',
-		initials: 'М',
-	},
-	{
-		quote: 'Система нашла критическое несоответствие до дедлайна - спасли контракт.',
-		name: 'Дмитрий П.',
-		role: 'Главный инженер',
-		initials: 'Д',
 	},
 ]
 
