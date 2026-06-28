@@ -1,172 +1,464 @@
 <template>
-	<UPage>
-		<UPageHero
-title="AI-сервис для автоматизации закупок и анализа предложений поставщиков"
-			description="Поиск поставщиков, рассылка запросов, входящие ответы и сравнение КП с ТЗ - в одном браузерном интерфейсе. Без ручной сверки таблиц."
-			:links="heroLinks" />
+	<div class="landing-page">
+		<!-- Hero -->
+		<section class="landing-hero py-[var(--landing-section-py)] px-4 sm:px-6 lg:px-8">
+			<div class="landing-hero-shape landing-hero-shape-1" aria-hidden="true" />
+			<div class="landing-hero-shape landing-hero-shape-2" aria-hidden="true" />
+			<div
+				ref="heroReveal"
+				class="reveal is-visible relative z-10 mx-auto max-w-5xl text-center"
+			>
 
-		<UPageSection
-id="metrics" class="bg-elevated/25" headline="Результаты" title="Измеримый эффект для закупок"
-			description="Конкретные показатели, которые получают команды закупок.">
-			<UPageGrid class="gap-4 sm:grid-cols-2 lg:grid-cols-4">
-				<UPageCard
-v-for="metric in metrics" :key="metric.label" spotlight :title="metric.value"
-					:description="metric.label" :icon="metric.icon" />
-			</UPageGrid>
-		</UPageSection>
+				<p class="landing-hero-eyebrow mb-4 text-sm font-semibold uppercase tracking-widest">
+					TenderOptima
+				</p>
+				<h1 class="landing-hero-title mb-6 text-3xl font-bold leading-tight tracking-tight sm:text-4xl lg:text-5xl">
+					AI-сервис для автоматизации закупок и анализа предложений поставщиков
+				</h1>
+				<p class="landing-hero-subtitle mx-auto mb-10 max-w-3xl text-lg leading-relaxed sm:text-xl">
+					Поиск поставщиков, рассылка запросов, входящие ответы и сравнение КП с ТЗ - в одном браузерном интерфейсе. Без ручной сверки таблиц.
+				</p>
+				<div class="flex flex-col items-center justify-center gap-3 sm:flex-row">
+					<UButton
+						:to="registerPath"
+						size="xl"
+						leading-icon="i-lucide-user-plus"
+						class="cursor-pointer landing-cta-shadow"
+					>
+						Регистрация
+					</UButton>
+					<UButton
+						to="#how-it-works"
+						size="xl"
+						color="neutral"
+						variant="outline"
+						trailing-icon="i-lucide-arrow-right"
+						class="cursor-pointer landing-hero-secondary-btn"
+					>
+						Как это работает
+					</UButton>
+				</div>
+			</div>
+		</section>
 
-		<UPageSection
-id="features" title="Всё для работы с поставщиками - в одном инструменте"
-			description="TenderOptima автоматизирует поиск, переписку и технический анализ предложений.">
-			<UPageGrid class="gap-4 sm:grid-cols-2 lg:grid-cols-3">
-				<UPageCard
-v-for="(feature, index) in features" :key="feature.title" spotlight
-					:title="`${String(index + 1).padStart(2, '0')}. ${feature.title}`"
-					:description="feature.description" :icon="feature.icon" />
-			</UPageGrid>
-		</UPageSection>
+		<!-- Metrics -->
+		<section
+			id="metrics"
+			ref="metricsReveal"
+			class="landing-metrics-band reveal py-[var(--landing-section-py)] px-4 sm:px-6 lg:px-8"
+		>
+			<div class="mx-auto max-w-6xl">
+				<div class="mb-12 text-center">
+					<p class="landing-section-headline mb-2">
+						Результаты
+					</p>
+					<h2 class="landing-section-title mb-4">
+						Измеримый эффект для закупок
+					</h2>
+					<p class="landing-section-description mx-auto">
+						Конкретные показатели, которые получают команды закупок.
+					</p>
+				</div>
 
-		<UPageSection
-id="pain" class="bg-elevated/25" headline="Проблема"
-			title="Ручная обработка заявок отнимает время и повышает риски"
-			description="TenderOptima берёт на себя рутину, чтобы команда фокусировалась на решениях.">
-			<UPageGrid class="gap-4 sm:grid-cols-2 lg:grid-cols-3">
-				<UPageCard
-v-for="pain in painPoints" :key="pain.title" :title="pain.title"
-					:description="pain.description" :icon="pain.icon" />
-			</UPageGrid>
-		</UPageSection>
+				<div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+					<div
+						v-for="(metric, index) in metrics"
+						:key="metric.label"
+						class="landing-metric-card reveal rounded-2xl p-6 text-center backdrop-blur-sm"
+						:class="[`stagger-${index + 1}`, { 'is-visible': metricsVisible }]"
+					>
+						<UIcon :name="metric.icon" class="landing-metric-icon mx-auto mb-4 size-8" />
+						<p class="landing-metric-value mb-2">
+							{{ metricCounters[index]?.display || metric.value }}
+						</p>
+						<p class="text-sm leading-relaxed landing-metric-label">
+							{{ metric.label }}
+						</p>
+					</div>
+				</div>
+			</div>
+		</section>
 
-		<UPageSection
-id="how-it-works" headline="Процесс" title="Как это работает в браузере"
-			description="Полный цикл от поиска поставщиков до готового сравнения - без установки программ."
-			orientation="horizontal">
-			<div class="space-y-6">
-				<ol class="space-y-4">
-					<li
-v-for="(step, index) in browserFlowSteps" :key="step.title"
-						class="flex gap-4 rounded-xl border border-default bg-elevated/40 p-4 lg:p-5">
-						<span
-							class="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-							{{ index + 1 }}
-						</span>
-						<div class="min-w-0 space-y-1">
-							<p class="font-semibold text-highlighted">{{ step.title }}</p>
-							<p class="text-sm text-muted">{{ step.description }}</p>
+		<!-- Features -->
+		<section
+			id="features"
+			ref="featuresReveal"
+			class="reveal bg-default py-[var(--landing-section-py)] px-4 sm:px-6 lg:px-8"
+		>
+			<div class="mx-auto max-w-6xl">
+				<div class="mb-12 text-center">
+					<h2 class="landing-section-title mb-4">
+						Всё для работы с поставщиками - в одном инструменте
+					</h2>
+					<p class="landing-section-description mx-auto">
+						TenderOptima автоматизирует поиск, переписку и технический анализ предложений.
+					</p>
+				</div>
+
+				<div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+					<article
+						v-for="(feature, index) in features"
+						:key="feature.title"
+						class="landing-card landing-card-feature reveal cursor-pointer"
+						:class="[`stagger-${(index % 6) + 1}`, { 'is-visible': featuresVisible }]"
+					>
+						<div class="mb-4 flex items-start justify-between gap-3">
+							<div class="flex size-11 items-center justify-center rounded-xl bg-primary/10">
+								<UIcon :name="feature.icon" class="size-5 text-primary" />
+							</div>
+							<span class="text-xs font-semibold tabular-nums text-muted">
+								{{ String(index + 1).padStart(2, '0') }}
+							</span>
 						</div>
+						<h3 class="mb-2 text-lg font-semibold text-highlighted">
+							{{ feature.title }}
+						</h3>
+						<p class="text-sm leading-relaxed text-muted">
+							{{ feature.description }}
+						</p>
+					</article>
+				</div>
+			</div>
+		</section>
+
+		<!-- Pain points -->
+		<section
+			id="pain"
+			ref="painReveal"
+			class="reveal bg-elevated/25 py-[var(--landing-section-py)] px-4 sm:px-6 lg:px-8"
+		>
+			<div class="mx-auto max-w-6xl">
+				<div class="mb-12 text-center">
+					<p class="landing-section-headline mb-2">
+						Проблема
+					</p>
+					<h2 class="landing-section-title mb-4">
+						Ручная обработка заявок отнимает время и повышает риски
+					</h2>
+					<p class="landing-section-description mx-auto">
+						TenderOptima берёт на себя рутину, чтобы команда фокусировалась на решениях.
+					</p>
+				</div>
+
+				<div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+					<article
+						v-for="(pain, index) in painPoints"
+						:key="pain.title"
+						class="landing-card landing-card-pain reveal cursor-pointer"
+						:class="[`stagger-${index + 1}`, { 'is-visible': painVisible }]"
+					>
+						<div class="mb-4 flex size-11 items-center justify-center rounded-xl bg-error/10">
+							<UIcon :name="pain.icon" class="size-5 text-error" />
+						</div>
+						<h3 class="mb-2 text-lg font-semibold text-highlighted">
+							{{ pain.title }}
+						</h3>
+						<p class="text-sm leading-relaxed text-muted">
+							{{ pain.description }}
+						</p>
+					</article>
+				</div>
+			</div>
+		</section>
+
+		<!-- How it works -->
+		<section
+			id="how-it-works"
+			ref="howItWorksReveal"
+			class="reveal py-[var(--landing-section-py)] px-4 sm:px-6 lg:px-8"
+		>
+			<div class="mx-auto max-w-3xl">
+				<div class="mb-12 text-center">
+					<p class="landing-section-headline mb-2">
+						Процесс
+					</p>
+					<h2 class="landing-section-title mb-4">
+						Как это работает в браузере
+					</h2>
+					<p class="landing-section-description mx-auto">
+						Полный цикл от поиска поставщиков до готового сравнения - без установки программ.
+					</p>
+				</div>
+
+				<ol class="landing-steps">
+					<li
+						v-for="(step, index) in browserFlowSteps"
+						:key="step.title"
+					>
+						<button
+							type="button"
+							class="landing-step"
+							:class="{
+								'is-visible': isProcessStepVisible(index),
+								'is-active': processVisibleCount === index + 1,
+								'is-selected': selectedProcessStep === index,
+							}"
+							:aria-expanded="selectedProcessStep === index"
+							:aria-controls="`process-step-panel-${index}`"
+							@click="selectedProcessStep = index"
+						>
+							<span class="landing-step-number">{{ index + 1 }}</span>
+							<div class="landing-step-content min-w-0 space-y-1">
+								<p class="font-semibold text-highlighted">{{ step.title }}</p>
+								<p
+									:id="`process-step-panel-${index}`"
+									class="text-sm leading-relaxed text-muted"
+								>
+									{{ step.description }}
+								</p>
+							</div>
+							<UIcon
+								name="i-lucide-chevron-right"
+								class="landing-step-chevron size-5"
+							/>
+						</button>
 					</li>
 				</ol>
-
 			</div>
-		</UPageSection>
+		</section>
 
-		<UPageSection
-id="tz-analysis" class="bg-elevated/25" headline="ТЗ / КП"
-			title="Анализ требований и сравнение с коммерческими предложениями"
-			description="Система извлекает пункты из технического задания, затем сверяет каждое требование с КП поставщика.">
-			<div class="grid gap-8 lg:grid-cols-2 max-w-6xl mx-auto">
-				<figure class="space-y-3">
-					<figcaption class="space-y-1">
-						<p class="font-semibold text-highlighted">Требования из ТЗ</p>
-						<p class="text-sm text-muted">
-							Проверка и редактирование извлечённых пунктов перед загрузкой КП.
-						</p>
-					</figcaption>
-					<div class="overflow-hidden rounded-xl border border-default bg-default shadow-sm">
-						<img
-src="/landing/tz_refs.png" alt="Экран подтверждения требований из технического задания"
-							class="w-full h-auto" loading="lazy">
-					</div>
-				</figure>
+		<!-- TZ / KP analysis -->
+		<section
+			id="tz-analysis"
+			ref="tzReveal"
+			class="reveal bg-elevated/25 py-[var(--landing-section-py)] px-4 sm:px-6 lg:px-8"
+		>
+			<div class="mx-auto max-w-6xl">
+				<div class="mb-12 text-center">
+					<p class="landing-section-headline mb-2">
+						ТЗ / КП
+					</p>
+					<h2 class="landing-section-title mb-4">
+						Анализ требований и сравнение с коммерческими предложениями
+					</h2>
+					<p class="landing-section-description mx-auto">
+						Система извлекает пункты из технического задания, затем сверяет каждое требование с КП поставщика.
+					</p>
+				</div>
 
-				<figure class="space-y-3">
-					<figcaption class="space-y-1">
-						<p class="font-semibold text-highlighted">Сравнение с КП</p>
-						<p class="text-sm text-muted">
-							Таблица соответствий по каждому пункту, фильтры и экспорт результата.
-						</p>
-					</figcaption>
-					<div class="overflow-hidden rounded-xl border border-default bg-default shadow-sm">
-						<img
-src="/landing/tz_analyzis.png"
-							alt="Экран сравнения коммерческого предложения с требованиями ТЗ" class="w-full h-auto"
-							loading="lazy">
-					</div>
-				</figure>
+				<div class="grid gap-8 lg:grid-cols-2">
+					<figure
+						v-for="(screenshot, index) in tzScreenshots"
+						:key="screenshot.title"
+						class="reveal space-y-3"
+						:class="[`stagger-${index + 1}`, { 'is-visible': tzVisible }]"
+					>
+						<figcaption class="space-y-1">
+							<p class="font-semibold text-highlighted">{{ screenshot.title }}</p>
+							<p class="text-sm text-muted">{{ screenshot.description }}</p>
+						</figcaption>
+						<div class="landing-browser-frame">
+							<div class="landing-browser-chrome">
+								<span class="landing-browser-dot" />
+								<span class="landing-browser-dot" />
+								<span class="landing-browser-dot" />
+								<span class="landing-browser-url">app.tenderoptima.by</span>
+							</div>
+							<img
+								:src="screenshot.src"
+								:alt="screenshot.alt"
+								class="w-full h-auto"
+								loading="lazy"
+							>
+						</div>
+					</figure>
+				</div>
+
+				<div class="mt-10 flex justify-center">
+					<UButton
+						:to="registerPath"
+						size="lg"
+						leading-icon="i-lucide-user-plus"
+						class="cursor-pointer"
+					>
+						Регистрация
+					</UButton>
+				</div>
 			</div>
+		</section>
 
-			<div class="flex justify-center mt-8">
-				<UButton to="/auth" size="lg" leading-icon="i-lucide-user-plus">
+		<!-- Testimonials -->
+		<section
+			id="testimonials"
+			ref="testimonialsReveal"
+			class="reveal py-[var(--landing-section-py)] px-4 sm:px-6 lg:px-8"
+		>
+			<div class="mx-auto max-w-6xl">
+				<div class="mb-12 text-center">
+					<p class="landing-section-headline mb-2">
+						Отзывы
+					</p>
+					<h2 class="landing-section-title">
+						Что говорят команды закупок
+					</h2>
+				</div>
+
+				<div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+					<article
+						v-for="(item, index) in testimonials"
+						:key="item.name"
+						class="landing-card landing-card-testimonial reveal cursor-pointer"
+						:class="[`stagger-${index + 1}`, { 'is-visible': testimonialsVisible }]"
+					>
+						<div class="mb-3 flex gap-0.5 text-warning" aria-label="5 из 5">
+							<svg
+								v-for="i in 5"
+								:key="i"
+								viewBox="0 0 24 24"
+								class="size-4 shrink-0 fill-current"
+								aria-hidden="true"
+							>
+								<path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+							</svg>
+						</div>
+						<p class="mb-5 text-sm leading-relaxed text-default">
+							«{{ item.quote }}»
+						</p>
+						<div class="flex items-center gap-3">
+							<div class="flex size-10 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+								{{ item.initials }}
+							</div>
+							<div>
+								<p class="text-sm font-medium text-highlighted">{{ item.name }}</p>
+								<p class="text-xs text-muted">{{ item.role }}</p>
+							</div>
+						</div>
+					</article>
+				</div>
+			</div>
+		</section>
+
+		<!-- Requests -->
+		<section
+			id="requests"
+			ref="requestsReveal"
+			class="reveal bg-elevated/25 py-[var(--landing-section-py)] px-4 sm:px-6 lg:px-8"
+		>
+			<div class="mx-auto grid max-w-6xl items-center gap-10 lg:grid-cols-2">
+				<div :class="{ 'is-visible': requestsVisible }" class="reveal">
+					<h2 class="landing-section-title mb-4">
+						Ускорьте подготовку дополнительных запросов участникам
+					</h2>
+					<p class="landing-section-description">
+						Составление текста запросов и рассылка - в несколько кликов.
+					</p>
+				</div>
+
+				<div class="landing-card p-6 lg:p-8">
+					<div
+						v-for="(item, index) in requestHighlights"
+						:key="item"
+						class="reveal flex items-start gap-3 py-3 text-muted first:pt-0 last:pb-0"
+						:class="[`stagger-${index + 1}`, { 'is-visible': requestsVisible }]"
+					>
+						<UIcon name="i-lucide-check-circle" class="mt-0.5 size-5 shrink-0 text-primary" />
+						<span class="leading-relaxed">{{ item }}</span>
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<!-- Subscription -->
+		<section
+			id="subscription"
+			ref="subscriptionReveal"
+			class="reveal py-[var(--landing-section-py)] px-4 sm:px-6 lg:px-8"
+		>
+			<div class="mx-auto max-w-6xl">
+				<div class="mb-12 text-center">
+					<p class="landing-section-headline mb-2">
+						Подписка
+					</p>
+					<h2 class="landing-section-title mb-4">
+						Оформление доступа
+					</h2>
+					<p class="landing-section-description mx-auto">
+						Прозрачный процесс от регистрации до работы в системе.
+					</p>
+				</div>
+
+				<div class="landing-subscription-grid">
+					<article
+						v-for="(step, index) in subscriptionSteps"
+						:key="step.title"
+						class="landing-card landing-subscription-step cursor-pointer"
+						:class="{
+							'is-visible': isSubscriptionStepVisible(index),
+							'is-active': subscriptionVisibleCount === index + 1,
+						}"
+					>
+						<div class="landing-subscription-icon mb-4 flex size-11 items-center justify-center rounded-xl bg-primary/10">
+							<UIcon :name="step.icon" class="size-5 text-primary" />
+						</div>
+						<h3 class="mb-2 font-semibold text-highlighted">{{ step.title }}</h3>
+						<p class="text-sm leading-relaxed text-muted">{{ step.description }}</p>
+					</article>
+				</div>
+			</div>
+		</section>
+
+		<!-- FAQ -->
+		<section
+			id="faq"
+			ref="faqReveal"
+			class="reveal bg-elevated/25 py-[var(--landing-section-py)] px-4 sm:px-6 lg:px-8"
+		>
+			<div class="mx-auto max-w-3xl">
+				<div class="mb-10 text-center">
+					<p class="landing-section-headline mb-2">
+						FAQ
+					</p>
+					<h2 class="landing-section-title">
+						Частые вопросы
+					</h2>
+				</div>
+
+				<UAccordion
+					type="multiple"
+					:unmount-on-hide="false"
+					:items="faqAccordionItems"
+					class="rounded-xl border border-default bg-default px-4 sm:px-5"
+					:ui="{
+						trigger: 'py-4 text-base font-medium cursor-pointer',
+						body: 'text-sm text-muted pb-4 leading-relaxed',
+						content: 'overflow-hidden',
+					}"
+				/>
+			</div>
+		</section>
+
+		<!-- CTA -->
+		<section
+			ref="ctaReveal"
+			class="landing-cta-band reveal py-[var(--landing-section-py)] px-4 sm:px-6 lg:px-8"
+		>
+			<div
+				class="mx-auto max-w-3xl text-center"
+				:class="{ 'is-visible': ctaVisible }"
+			>
+				<h2 class="landing-cta-title mb-4 text-3xl font-bold sm:text-4xl">
+					AI + аналитика = лучшие контракты
+				</h2>
+				<p class="landing-cta-description mb-8 text-lg">
+					Автоматизируйте закупки уже сегодня. Работает в браузере - без установки.
+				</p>
+				<UButton
+					:to="registerPath"
+					size="xl"
+					color="neutral"
+					variant="solid"
+					leading-icon="i-lucide-user-plus"
+					class="cursor-pointer landing-cta-button"
+				>
 					Регистрация
 				</UButton>
 			</div>
-		</UPageSection>
-
-		<UPageSection id="testimonials" class="bg-elevated/25" headline="Отзывы" title="Что говорят команды закупок">
-			<UPageGrid class="gap-4 sm:grid-cols-2 lg:grid-cols-3">
-				<UCard v-for="item in testimonials" :key="item.name" class="h-full">
-					<div class="flex gap-0.5 mb-3 text-warning" aria-label="5 из 5">
-						<svg
-v-for="i in 5" :key="i" viewBox="0 0 24 24" class="size-4 shrink-0 fill-current"
-							aria-hidden="true">
-							<path
-								d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-						</svg>
-					</div>
-					<p class="text-sm text-default mb-4">«{{ item.quote }}»</p>
-					<div class="flex items-center gap-3">
-						<div
-							class="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-semibold text-primary">
-							{{ item.initials }}
-						</div>
-						<div>
-							<p class="text-sm font-medium">{{ item.name }}</p>
-							<p class="text-xs text-muted">{{ item.role }}</p>
-						</div>
-					</div>
-				</UCard>
-			</UPageGrid>
-		</UPageSection>
-
-		<UPageSection
-id="requests" title="Ускорьте подготовку дополнительных запросов участникам"
-			description="Составление текста запросов и рассылка - в несколько кликов." orientation="horizontal" reverse>
-			<div class="flex flex-col gap-4 rounded-xl border border-default bg-elevated p-6 lg:p-8">
-				<div v-for="item in requestHighlights" :key="item" class="flex items-start gap-3 text-muted">
-					<UIcon name="i-lucide-check-circle" class="mt-0.5 size-5 shrink-0 text-primary" />
-					<span>{{ item }}</span>
-				</div>
-			</div>
-		</UPageSection>
-
-		<UPageSection
-id="subscription" headline="Подписка" title="Оформление доступа"
-			description="Прозрачный процесс от регистрации до работы в системе.">
-			<UPageGrid>
-				<UPageCard
-v-for="(step, index) in subscriptionSteps" :key="index" spotlight :title="step.title"
-					:description="step.description" :icon="step.icon" />
-			</UPageGrid>
-		</UPageSection>
-
-		<UPageSection id="faq" class="bg-elevated/25" headline="FAQ" title="Частые вопросы">
-			<UAccordion
-type="multiple" :unmount-on-hide="false" :items="faqAccordionItems"
-				class="max-w-3xl mx-auto rounded-xl border border-default bg-default px-4 sm:px-5" :ui="{
-					trigger: 'py-4 text-base font-medium',
-					body: 'text-sm text-muted pb-4 leading-relaxed',
-					content: 'overflow-hidden',
-				}" />
-		</UPageSection>
-
-		<UPageCTA
-title="AI + аналитика = лучшие контракты"
-			description="Автоматизируйте закупки уже сегодня. Работает в браузере - без установки." :links="ctaLinks" />
-	</UPage>
+		</section>
+	</div>
 </template>
 
 <script setup lang="ts">
-import type { AccordionItem, ButtonProps } from '@nuxt/ui'
+import type { AccordionItem } from '@nuxt/ui'
 
 definePageMeta({
 	layout: 'default',
@@ -174,53 +466,98 @@ definePageMeta({
 
 const registerPath = '/auth?tab=register'
 
-const heroLinks = ref<ButtonProps[]>([
-	{
-		label: 'Регистрация',
-		to: registerPath,
-		icon: 'i-lucide-user-plus',
-		size: 'lg',
-	},
-	{
-		label: 'Как это работает',
-		color: 'neutral',
-		variant: 'subtle',
-		trailingIcon: 'i-lucide-arrow-right',
-		to: '#how-it-works',
-		size: 'lg',
-	},
-])
+const heroReveal = ref<HTMLElement | null>(null)
 
-const ctaLinks = ref<ButtonProps[]>([
-	{
-		label: 'Регистрация',
-		to: registerPath,
-		icon: 'i-lucide-user-plus',
-	},
-])
+onMounted(() => {
+	if (!import.meta.client) {
+		return
+	}
+
+	if (heroReveal.value) {
+		heroReveal.value.classList.add('is-visible')
+	}
+
+	if (faqReveal.value) {
+		faqReveal.value.classList.add('is-visible')
+	}
+})
+
+const { target: metricsReveal, isVisible: metricsVisible } = useScrollReveal()
+const { target: featuresReveal, isVisible: featuresVisible } = useScrollReveal()
+const { target: painReveal, isVisible: painVisible } = useScrollReveal()
+const { target: howItWorksReveal, isVisible: howItWorksVisible } = useScrollReveal()
+const {
+	visibleCount: processVisibleCount,
+	isStepVisible: isProcessStepVisible,
+} = useSequentialSteps(5, howItWorksVisible)
+
+const selectedProcessStep = ref(0)
+
+watch(processVisibleCount, (count) => {
+	if (count > 0) {
+		selectedProcessStep.value = count - 1
+	}
+})
+const { target: tzReveal, isVisible: tzVisible } = useScrollReveal()
+const { target: testimonialsReveal, isVisible: testimonialsVisible } = useScrollReveal()
+const { target: requestsReveal, isVisible: requestsVisible } = useScrollReveal()
+const { target: subscriptionReveal, isVisible: subscriptionVisible } = useScrollReveal()
+const {
+	visibleCount: subscriptionVisibleCount,
+	isStepVisible: isSubscriptionStepVisible,
+} = useSequentialSteps(4, subscriptionVisible, 180)
+const { target: faqReveal } = useScrollReveal()
+const { target: ctaReveal, isVisible: ctaVisible } = useScrollReveal()
 
 const metrics = [
 	{
 		value: '×10',
+		numericValue: 10,
+		prefix: '×',
+		suffix: '',
 		label: 'Быстрее анализ объёмных технических предложений',
 		icon: 'i-lucide-zap',
 	},
 	{
 		value: 'до 95%',
+		numericValue: 95,
+		prefix: 'до ',
+		suffix: '%',
 		label: 'Точность проверки по заданным параметрам',
 		icon: 'i-lucide-target',
 	},
 	{
 		value: '-80%',
+		numericValue: 80,
+		prefix: '-',
+		suffix: '%',
 		label: 'Снижение закупочных рисков за счёт системной проверки',
 		icon: 'i-lucide-shield-check',
 	},
 	{
 		value: '0',
+		numericValue: 0,
+		prefix: '',
+		suffix: '',
 		label: 'Установок - всё работает в браузере',
 		icon: 'i-lucide-globe',
 	},
 ]
+
+const metricCounters = metrics.map((metric) =>
+	useCountUp(metric.numericValue, {
+		prefix: metric.prefix,
+		suffix: metric.suffix,
+	}),
+)
+
+watch(metricsVisible, (visible) => {
+	if (visible) {
+		for (const counter of metricCounters) {
+			counter.start()
+		}
+	}
+})
 
 const features = [
 	{
@@ -287,8 +624,27 @@ const browserFlowSteps = [
 		description: 'Переписка, сравнение по требованиям и запрос недостающих параметров.',
 	},
 	{
-		title: 'Сравните ТЗ с КП и экспортируйте результат',
-		description: 'Загрузите ТЗ и КП, подтвердите требования, получите таблицу и экспорт.',
+		title: 'Отправка запросов на улучшение условий в один клик',
+		description: 'Сформируйте текст дополнительного запроса по шаблону и отправьте участникам без ручной подготовки каждого письма.',
+	},
+	{
+		title: 'Определите победителя и экспорт результата',
+		description: 'Сравните предложения, выберите победителя и экспортируйте итог в XLSX или DOCX.',
+	},
+]
+
+const tzScreenshots = [
+	{
+		title: 'Требования из ТЗ',
+		description: 'Проверка и редактирование извлечённых пунктов перед загрузкой КП.',
+		src: '/landing/tz_refs.png',
+		alt: 'Экран подтверждения требований из технического задания',
+	},
+	{
+		title: 'Сравнение с КП',
+		description: 'Таблица соответствий по каждому пункту, фильтры и экспорт результата.',
+		src: '/landing/tz_analyzis.png',
+		alt: 'Экран сравнения коммерческого предложения с требованиями ТЗ',
 	},
 ]
 
@@ -368,4 +724,5 @@ const faqAccordionItems = computed<AccordionItem[]>(() =>
 		value: String(index),
 	})),
 )
+
 </script>

@@ -250,6 +250,62 @@ export function resolveLetterTzFields(
 	return { ref, refValue }
 }
 
+export type LetterItemGrouping = {
+	groupKey: string
+	parentKey: string | null
+	tzVerbatim: string | null
+	isSplitChild: boolean
+}
+
+/** Group key and verbatim TZ text for letter sidebar / DOCX (no numbering in tzVerbatim). */
+export function resolveLetterItemGrouping(
+	item: {
+		requirement: string
+		requirement_ref: string | null
+		ref?: string | null
+		ref_value?: string | null
+	},
+	hierarchy: RequirementsHierarchy | null | undefined,
+	fallbackGroupKey: string,
+): LetterItemGrouping {
+	const leafKey = extractRequirementKey(item)
+
+	if (leafKey && hierarchy) {
+		const parentKey = parentRequirementKey(leafKey)
+		if (parentKey) {
+			const parent = findNodeByKey(hierarchy, parentKey)
+			if (parent && isSplitParent(parent)) {
+				const tzVerbatim = parent.ref_value?.trim()
+					|| parent.text.trim()
+					|| null
+				return {
+					groupKey: `parent:${parentKey}`,
+					parentKey,
+					tzVerbatim,
+					isSplitChild: true,
+				}
+			}
+		}
+	}
+
+	const { ref, refValue } = resolveLetterTzFields(item, hierarchy)
+	if (ref) {
+		return {
+			groupKey: `ref:${ref}`,
+			parentKey: ref,
+			tzVerbatim: refValue,
+			isSplitChild: false,
+		}
+	}
+
+	return {
+		groupKey: fallbackGroupKey,
+		parentKey: leafKey,
+		tzVerbatim: refValue,
+		isSplitChild: false,
+	}
+}
+
 export function normalizeTzRequirements(data: RequirementsHierarchy | null | undefined): RequirementsHierarchy {
 	if (!data || typeof data !== 'object' || Array.isArray(data)) return {}
 	const normalized: RequirementsHierarchy = {}

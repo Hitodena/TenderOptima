@@ -60,6 +60,7 @@ export default defineNuxtConfig({
 	},
 	fonts: {
 		families: [
+			{ name: 'Plus Jakarta Sans', provider: 'google', global: true },
 			{ name: 'Inter', provider: 'google', global: true },
 			{ name: 'JetBrains Mono', provider: 'google', global: true },
 		],

@@ -106,7 +106,7 @@ size="sm" variant="ghost" :to="`/requests/${id}/responses`" class="ml-auto" colo
 				</div>
 				<div v-else-if="request.status === RequestStatus.COMPLETED">
 					<UAlert
-color="success" variant="soft" icon="i-lucide-check" class="mb-4"
+color="primary" variant="soft" icon="i-lucide-check" class="mb-4"
 						description="Рассылка завершена" />
 				</div>
 				<div v-else-if="request.status === RequestStatus.CLOSED">

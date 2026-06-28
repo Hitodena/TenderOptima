@@ -164,7 +164,7 @@ const itemKpFilename = computed(() =>
 )
 
 function matchBorderClass(status: TZAnalysisStatus) {
-	if (status === 'met') return 'border-l-4 border-success'
+	if (status === 'met') return 'border-l-4 border-primary'
 	if (status === 'partial') return 'border-l-4 border-warning'
 	if (status === 'missing') return 'border-l-4 border-error'
 	return 'border-l-4 border-neutral-300 dark:border-neutral-600'

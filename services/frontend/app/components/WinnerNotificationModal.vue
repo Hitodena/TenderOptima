@@ -13,12 +13,12 @@
 		<template #body>
 			<div class="flex flex-col min-h-[min(70vh,40rem)]">
 				<div class="flex-1 min-h-0 overflow-y-auto pr-1 pb-4 space-y-4">
-					<div class="rounded-lg border border-success/30 bg-success/5 p-4">
-						<p class="text-xs font-medium text-success mb-1">
+					<div class="rounded-lg border border-primary/30 bg-primary/5 p-4">
+						<p class="text-xs font-medium text-primary mb-1">
 							Выбранный победитель:
 						</p>
 						<p class="text-sm font-semibold">{{ supplier.company_name }}</p>
-						<p class="text-xs text-success mt-1">
+						<p class="text-xs text-primary mt-1">
 							Email: {{ supplier.main_email }}
 						</p>
 					</div>
@@ -63,7 +63,7 @@
 						Отменить
 					</UButton>
 					<UButton
-						color="success"
+						color="primary"
 						leading-icon="i-lucide-send"
 						:loading="sending"
 						:disabled="!subject.trim() || !body.trim()"
@@ -157,7 +157,7 @@ async function send() {
 		)
 		toast.add({
 			title: 'Уведомление победителю отправлено',
-			color: 'success',
+			color: 'primary',
 			icon: 'i-lucide-check',
 		})
 		emit('sent')

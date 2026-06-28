@@ -61,7 +61,7 @@ v-for="thread in sortedThreads" :key="thread.rs_id" type="button"
 								</p>
 								<div class="flex items-center justify-between gap-2">
 									<UBadge
-										:color="thread.last_message?.direction === 'incoming' ? 'success' : 'neutral'"
+										:color="thread.last_message?.direction === 'incoming' ? 'primary' : 'neutral'"
 										variant="subtle" size="sm">
 										{{ thread.message_count }} {{ messageCountLabel(thread.message_count) }}
 									</UBadge>
@@ -198,7 +198,7 @@ v-else
 														title="Значение выросло" />
 													<UIcon
 														v-else-if="getOfferValueTrend(supplier.values[req], supplier.previous_values?.[req]) === 'down'"
-														name="i-lucide-arrow-down" class="w-5 h-5 shrink-0 text-success mt-0.5"
+														name="i-lucide-arrow-down" class="w-5 h-5 shrink-0 text-primary mt-0.5"
 														title="Значение снизилось" />
 												</div>
 											</td>
@@ -217,7 +217,7 @@ v-for="supplier in comparison.suppliers"
 :name="complianceForSupplier(supplier).passed
 													? 'i-lucide-circle-check'
 													: 'i-lucide-circle-x'" class="w-5 h-5 shrink-0" :class="complianceForSupplier(supplier).passed
-														? 'text-success'
+														? 'text-primary'
 														: 'text-error'" />
 											</td>
 										</tr>
@@ -264,7 +264,7 @@ v-for="supplier in comparison.suppliers"
 												<UButton
 													v-if="!hasConfirmedWinner"
 													size="xs"
-													color="success"
+													color="primary"
 													variant="soft"
 													leading-icon="i-lucide-trophy"
 													@click="openWinnerModal(supplier)"
@@ -276,7 +276,7 @@ v-for="supplier in comparison.suppliers"
 													class="flex flex-col items-start gap-1.5"
 												>
 													<UBadge
-														color="success"
+														color="primary"
 														variant="subtle"
 														size="sm"
 														class="whitespace-nowrap"
@@ -1231,7 +1231,7 @@ function comparisonStatusLabel(status: string) {
 }
 
 function comparisonStatusColor(status: string) {
-	if (status === 'met') return 'success'
+	if (status === 'met') return 'primary'
 	if (status === 'partial') return 'warning'
 	if (status === 'missing') return 'error'
 	return 'neutral'
@@ -1245,7 +1245,7 @@ function matchStatusIcon(status: TZAnalysisStatus) {
 }
 
 function matchStatusClass(status: TZAnalysisStatus) {
-	if (status === 'met') return 'text-success'
+	if (status === 'met') return 'text-primary'
 	if (status === 'partial') return 'text-warning'
 	if (status === 'missing') return 'text-error'
 	return 'text-muted'

@@ -76,8 +76,19 @@ type="button"
 
                     <div>
                         <p class="text-sm font-semibold mb-1">Визитная карточка</p>
-                        <p class="text-xs text-muted mb-3">
-                            Добавляется в конце письма. Изменения сохранятся в профиле.
+                        <p class="text-xs text-muted mb-2">
+                            Добавляется в конце письма.
+                        </p>
+                        <p class="mb-3 text-xs leading-relaxed text-primary">
+                            <UIcon name="i-lucide-info" class="mr-1 inline size-3.5 align-[-2px]" />
+                            Постоянный шаблон можно отредактировать в
+                            <ULink
+                                to="/profile?tab=business_card"
+                                class="font-semibold underline underline-offset-2 hover:opacity-80"
+                            >
+                                личном кабинете
+                            </ULink>.
+                            Изменения здесь тоже сохранятся в профиле.
                         </p>
                         <UTextarea
 v-model="form.businessInfo"

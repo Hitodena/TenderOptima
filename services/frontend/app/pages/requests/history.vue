@@ -32,7 +32,7 @@ v-for="req in visibleHistory" :key="req.id"
 								<UIcon name="i-lucide-package-search" class="w-5 h-5 text-primary" />
 								<span
 v-if="hasUnreadMessages(req)"
-									class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-success ring-2 ring-default" />
+									class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-primary ring-2 ring-default" />
 							</div>
 							<div class="flex-1 min-w-0">
 								<div class="flex items-center gap-2 mb-0.5">
@@ -55,7 +55,7 @@ v-if="hasUnreadMessages(req)"
 									</span>
 									<template v-if="showMessageStats(req)">
 										<span>·</span>
-										<span class="flex items-center gap-1 text-success">
+										<span class="flex items-center gap-1 text-primary">
 											<UIcon name="i-lucide-inbox" class="w-3 h-3" />
 											Входящие: {{ req.supplier_messages_incoming ?? 0 }} / Всего:
 											{{ req.supplier_messages_total ?? 0 }}
