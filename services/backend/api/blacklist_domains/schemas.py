@@ -28,6 +28,13 @@ class BlacklistCreate(BaseModel):
             examples=["Spam source"],
         ),
     ]
+    is_global: Annotated[
+        bool,
+        Field(
+            default=False,
+            description="Mark as global blacklist entry (admin only)",
+        ),
+    ]
 
 
 class BlacklistResponse(BaseModel):
@@ -53,6 +60,13 @@ class BlacklistResponse(BaseModel):
         Field(
             description="Reason provided when the domain was blacklisted",
             examples=["Spam source"],
+        ),
+    ]
+    is_global: Annotated[
+        bool,
+        Field(
+            description="Whether the entry applies to all users",
+            examples=[False],
         ),
     ]
     created_at: Annotated[

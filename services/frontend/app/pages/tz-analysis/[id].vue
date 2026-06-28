@@ -566,9 +566,13 @@ v-for="tab in letterPreviewTabs" :key="tab.value" type="button" block
 											@update:model-value="(v) => toggleGroupSelect(group, v === true)"
 											@click.stop
 										/>
-										<p class="text-sm font-medium text-default leading-snug min-w-0">
+										<p class="flex-1 text-sm font-medium text-default leading-snug min-w-0">
 											{{ letterGroupTitle(group) }}
 										</p>
+										<TzOriginalTzHint
+											v-if="letterGroupShowQuote(group) && group.refValue"
+											:text="group.refValue"
+										/>
 									</div>
 									<div
 										v-if="letterGroupSubLines(group).length"
@@ -592,15 +596,6 @@ v-for="tab in letterPreviewTabs" :key="tab.value" type="button" block
 											</span>
 										</label>
 									</div>
-									<UTooltip
-										v-if="letterGroupShowQuote(group)"
-										:text="group.refValue ?? ''"
-										:delay-duration="200"
-									>
-										<p class="pl-6 text-xs text-muted leading-relaxed line-clamp-3">
-											↳ «{{ letterGroupQuote(group) }}»
-										</p>
-									</UTooltip>
 								</div>
 							</div>
 						</div>
@@ -701,6 +696,7 @@ import { subscriptionProfilePath } from '#shared/utils/subscriptionDisplay'
 import RequirementResultsTree from '~/components/tz-analysis/RequirementResultsTree.vue'
 import RequirementTreeEditor from '~/components/tz-analysis/RequirementTreeEditor.vue'
 import TzAnalysisSuppliersPanel from '~/components/tz-analysis/TzAnalysisSuppliersPanel.vue'
+import TzOriginalTzHint from '~/components/tz-analysis/TzOriginalTzHint.vue'
 import { useRunStatusPolling } from '~/composables/useRunStatusPolling'
 import { useTzAnalysisFiles } from '~/composables/useTzAnalysisFiles'
 
@@ -805,8 +801,6 @@ type LetterGroup = {
 	items: TZItemView[]
 	status: TZAnalysisStatus
 }
-
-const LETTER_QUOTE_TRUNCATE = 120
 
 type KpItemGroup = {
 	id: number
@@ -997,7 +991,11 @@ const showSuppliersSidebar = computed(() =>
 	isTzConfirmed.value && !isAnalysisClosed.value,
 )
 const selectedSupplierStats = computed(() =>
-	computeStatsFromItems(itemsForSupplier(selectedSupplier.value)),
+	computeStatsFromItems(
+		itemsForSupplier(selectedSupplier.value).filter((item) =>
+			belongsToPrimaryKp(item),
+		),
+	),
 )
 
 const visibleKpItemGroups = computed(() => {
@@ -1182,17 +1180,6 @@ function toggleItemSelect(index: number, checked: boolean) {
 	saveLetterSelection()
 }
 
-function truncateLetterQuote(text: string, max = LETTER_QUOTE_TRUNCATE): string {
-	const trimmed = text.trim()
-	if (trimmed.length <= max) return trimmed
-	return `${trimmed.slice(0, max - 1).trimEnd()}…`
-}
-
-function letterGroupQuote(group: LetterGroup): string | null {
-	if (!group.refValue) return null
-	return truncateLetterQuote(group.refValue)
-}
-
 function letterGroupShowQuote(group: LetterGroup): boolean {
 	if (!group.refValue?.trim()) return false
 	return group.isSplitChild || group.items.length > 1
@@ -1213,19 +1200,19 @@ const letterGroupedPartial = computed(() =>
 const letterSidebarSections = computed(() => [
 	{
 		id: 'letter-sidebar-mismatch',
-		title: 'Не соответствует',
+		title: `Не соответствует (${letterModalMismatchItems.value.length})`,
 		titleClass: 'text-error',
 		groups: letterGroupedMismatch.value,
 	},
 	{
 		id: 'letter-sidebar-not-found',
-		title: 'Не найдено',
+		title: `Не найдено (${letterModalNotFoundItems.value.length})`,
 		titleClass: 'text-neutral',
 		groups: letterGroupedNotFound.value,
 	},
 	{
 		id: 'letter-sidebar-partial',
-		title: 'Частично',
+		title: `Частично (${letterModalPartialItems.value.length})`,
 		titleClass: 'text-warning',
 		groups: letterGroupedPartial.value,
 	},
@@ -1262,11 +1249,10 @@ function loadLetterSelection(): number[] | null {
 	}
 }
 
-function selectPrimaryKpLetterItems(kpFilename: string | null | undefined) {
+function selectPrimaryKpLetterItems() {
 	if (!analysis.value) return
-	const target = kpFilename ?? displayKpFilenames.value[0] ?? '_default'
 	tzSelectedIndices.value = letterItemsView.value
-		.filter((item) => getItemKpKey(item) === target && isTzSelectable(item.status))
+		.filter((item) => belongsToPrimaryKp(item) && isTzSelectable(item.status))
 		.map((item) => item._index)
 	saveLetterSelection()
 }
@@ -1287,7 +1273,7 @@ function restoreOrInitLetterSelection() {
 			return
 		}
 	}
-	selectPrimaryKpLetterItems(selectedSupplierPrimaryKp.value)
+	selectPrimaryKpLetterItems()
 }
 
 function letterMismatchReason(item: TZAnalysisItem) {
@@ -1473,6 +1459,17 @@ function getItemKpKey(item: TZAnalysisItem): string {
 	return item.kp_name || filenames[0] || '_default'
 }
 
+function resolveItemKpKey(
+	item: TZAnalysisItem,
+	supplierName?: string | null,
+): string {
+	const raw = getItemKpKey(item)
+	if (!supplierName || parseScopedKpName(raw)) {
+		return raw
+	}
+	return scopedKpDisplayName(supplierName, kpDisplayLabel(raw))
+}
+
 function belongsToSelectedSupplier(item: TZAnalysisItem): boolean {
 	const supplier = selectedSupplier.value
 	if (!supplier) return true
@@ -1483,7 +1480,11 @@ function belongsToPrimaryKp(item: TZAnalysisItem): boolean {
 	if (!belongsToSelectedSupplier(item)) return false
 	const primary = selectedSupplierPrimaryKp.value
 	if (!primary || !hasMultipleSelectedSupplierKps.value) return true
-	return getItemKpKey(item) === primary
+	return resolveItemKpKey(item, selectedSupplier.value?.name) === primary
+}
+
+function countLetterGroupItems(groups: LetterGroup[]): number {
+	return groups.reduce((total, group) => total + group.items.length, 0)
 }
 
 function getKpStats(kpKey: string): TZAnalysisKpStats | null {
@@ -1712,9 +1713,9 @@ const letterItemsByTab = computed(() => ({
 }))
 
 const letterPreviewTabs = computed(() => {
-	const mismatchSelected = letterItemsByTab.value.mismatch.length
-	const notFoundSelected = letterItemsByTab.value.not_found.length
-	const partialSelected = letterItemsByTab.value.partial.length
+	const mismatchSelected = countLetterGroupItems(letterItemsByTab.value.mismatch)
+	const notFoundSelected = countLetterGroupItems(letterItemsByTab.value.not_found)
+	const partialSelected = countLetterGroupItems(letterItemsByTab.value.partial)
 	return [
 		{
 			label: mismatchSelected
@@ -2148,10 +2149,9 @@ watch(showLetterModal, (open) => {
 		return
 	}
 	restoreOrInitLetterSelection()
-	const { mismatch, not_found, partial } = letterItemsByTab.value
-	if (mismatch.length > 0) letterPreviewTab.value = 'mismatch'
-	else if (not_found.length > 0) letterPreviewTab.value = 'not_found'
-	else if (partial.length > 0) letterPreviewTab.value = 'partial'
+	if (letterModalMismatchItems.value.length > 0) letterPreviewTab.value = 'mismatch'
+	else if (letterModalNotFoundItems.value.length > 0) letterPreviewTab.value = 'not_found'
+	else if (letterModalPartialItems.value.length > 0) letterPreviewTab.value = 'partial'
 	letterEditorDirty.value = false
 	syncLetterEditor(true)
 })

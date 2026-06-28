@@ -161,13 +161,16 @@ size="sm" variant="outline" color="primary"
 							</template>
 
 							<template #company_name-cell="{ row }">
-								<div class="flex items-center gap-2 min-w-0">
+								<div class="flex items-start gap-2 min-w-0 py-0.5">
 									<div
-										class="w-7 h-7 rounded-lg bg-elevated flex items-center justify-center shrink-0">
+										class="w-7 h-7 rounded-lg bg-elevated flex items-center justify-center shrink-0 mt-0.5">
 										<UIcon name="i-lucide-building-2" class="w-3.5 h-3.5 text-muted" />
 									</div>
-									<span class="font-medium truncate max-w-50">{{ row.original.supplier?.company_name
-									}}</span>
+									<span
+										class="font-medium text-sm leading-snug line-clamp-2 max-w-72 min-w-36"
+										:title="row.original.supplier?.company_name ?? undefined">
+										{{ row.original.supplier?.company_name }}
+									</span>
 									<SupplierInfoHint v-if="row.original.supplier" :supplier="row.original.supplier" />
 								</div>
 							</template>
@@ -343,7 +346,11 @@ const supplierColumns = computed<TableColumn<RequestSupplierResponse>[]>(() => {
 	if (!isTerminalStatus.value) {
 		cols.push({ accessorKey: 'is_enabled', header: 'Рассылка' })
 	}
-	cols.push({ accessorKey: 'company_name', header: 'Компания' })
+	cols.push({
+		accessorKey: 'company_name',
+		header: 'Компания',
+		meta: { class: { th: 'min-w-44', td: 'min-w-44 max-w-80' } },
+	})
 	if (!isTerminalStatus.value) {
 		cols.push({ accessorKey: 'domain', header: 'Домен' })
 	}

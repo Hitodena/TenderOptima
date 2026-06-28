@@ -213,12 +213,14 @@ export interface SupplierResponseResponse {
 export interface BlacklistCreate {
 	domain: string;
 	reason?: string | null;
+	is_global?: boolean;
 }
 
 export interface BlacklistResponse {
 	id: string;
 	domain: string;
 	reason: string | null;
+	is_global: boolean;
 	created_at: string;
 }
 
