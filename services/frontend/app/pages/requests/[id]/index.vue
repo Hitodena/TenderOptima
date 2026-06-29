@@ -69,7 +69,7 @@ v-if="request.status == RequestStatus.DRAFT" size="lg" variant="outline" color="
 
 					<UButton
 v-if="!isTerminalStatus && suppliers.length > 0" size="lg" leading-icon="i-lucide-send"
-						:disabled="enabledCount === 0" @click="showParamsModal = true">
+						:disabled="!canLaunchMailing" @click="showParamsModal = true">
 						Отправить запрос поставщикам
 					</UButton>
 
@@ -136,6 +136,15 @@ color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 v-model="supplierSearch" placeholder="Поиск поставщиков..." icon="i-lucide-search"
 					class="w-full sm:w-64 mb-3" size="lg" />
 
+				<UAlert
+					v-if="testPlanLockedCount > 0 && !isTerminalStatus"
+					color="warning"
+					variant="soft"
+					icon="i-lucide-lock"
+					class="mb-3"
+					:description="testPlanLockedMessage"
+				/>
+
 				<div class="border border-default rounded-md overflow-hidden">
 					<div class="max-h-105 overflow-auto">
 						<UTable
@@ -156,8 +165,8 @@ size="sm" variant="outline" color="primary"
 							<template #is_enabled-cell="{ row }">
 								<USwitch
 :model-value="row.original.is_enabled" size="sm"
-									:disabled="updatingToggle || isTerminalStatus"
-									@update:model-value="(val: any) => handleToggle(row.original, Boolean(val))" />
+									:disabled="updatingToggle || isTerminalStatus || isSupplierRowLocked(row.index)"
+									@update:model-value="(val: any) => handleToggle(row.original, Boolean(val), row.index)" />
 							</template>
 
 							<template #company_name-cell="{ row }">
@@ -167,7 +176,7 @@ size="sm" variant="outline" color="primary"
 										<UIcon name="i-lucide-building-2" class="w-3.5 h-3.5 text-muted" />
 									</div>
 									<span
-										class="font-medium text-sm leading-snug line-clamp-2 max-w-72 min-w-36"
+										class="font-medium text-sm leading-snug line-clamp-2 break-words min-w-36"
 										:title="row.original.supplier?.company_name ?? undefined">
 										{{ row.original.supplier?.company_name }}
 									</span>
@@ -238,6 +247,9 @@ v-if="!isTerminalStatus"
 					<p class="text-sm text-muted">
 						Выбрано <span class="font-semibold text-highlighted">{{ enabledCount }}</span> из
 						{{ filteredSuppliers.length }}
+						<template v-if="emailQuotaFooter">
+							<span> · {{ emailQuotaFooter }}</span>
+						</template>
 					</p>
 					<div class="flex items-center gap-2">
 						<UButton
@@ -247,7 +259,7 @@ size="xs" variant="ghost" color="neutral"
 						</UButton>
 						<UButton
 size="xs" variant="ghost" color="primary"
-							:disabled="updatingToggle || isTerminalStatus || enabledCount === suppliers.length"
+							:disabled="updatingToggle || isTerminalStatus || !canSelectMoreSuppliers"
 							@click="selectAll">
 							Выбрать все
 						</UButton>
@@ -257,10 +269,10 @@ size="xs" variant="ghost" color="primary"
 
 			<RequestParamsModal
 v-model:open="showParamsModal" :request="request" :supplier-count="enabledCount"
-				@launched="onLaunched" />
-			<AddSupplierModal v-model:open="showAddSupplier" :request-id="id" @added="fetchSuppliers" />
+				:subscription="subscription" @launched="onLaunched" />
+			<AddSupplierModal v-model:open="showAddSupplier" :request-id="id" @added="fetchSuppliersAndEnforceQuota" />
 			<EditSupplierEmailModal v-model:open="showEditEmail" :supplier="emailSupplier" @saved="onEmailSaved" />
-			<SupplierBookmarkModal v-model:open="showBookmarkModal" :request-id="id" @added="fetchSuppliers" />
+			<SupplierBookmarkModal v-model:open="showBookmarkModal" :request-id="id" @added="fetchSuppliersAndEnforceQuota" />
 
 		</template>
 
@@ -276,7 +288,7 @@ v-model:open="showParamsModal" :request="request" :supplier-count="enabledCount"
 </template>
 
 <script lang="ts" setup>
-import type { RequestSupplierResponse, Supplier } from '#shared/types'
+import type { RequestSupplierResponse, SubscriptionResponse, Supplier, UserResponse } from '#shared/types'
 import {
 	getRequestStatusColor,
 	getRequestStatusLabel,
@@ -286,14 +298,23 @@ import {
 	RequestSupplierStatus,
 } from '#shared/types'
 import { getApiErrorDetail } from '#shared/utils/apiError'
+import {
+	canSendEmail,
+	emailQuotaBlockMessage,
+	emailQuotaRemaining,
+	testPlanVisibleSupplierLimit,
+} from '#shared/utils/subscriptionAccess'
 import type { TableColumn, TableRow } from '@nuxt/ui'
 import SupplierBookmarkModal from '~/components/SupplierBookmarkModal.vue'
 import SupplierInfoHint from '~/components/requests/SupplierInfoHint.vue'
 
 const route = useRoute()
 const id = route.params.id as string
-const { post } = useApi()
+const { get, post } = useApi()
+const toast = useToast()
 const { formatDate } = useFormatDate()
+
+const subscription = ref<SubscriptionResponse | null>(null)
 
 const {
 	request,
@@ -309,7 +330,7 @@ const {
 	removeSupplier,
 } = useRequestDetail(id)
 
-useSearchPolling(id, request, suppliers, () => fetchSuppliers(true))
+useSearchPolling(id, request, suppliers, () => fetchSuppliersAndEnforceQuota(true))
 
 const showParamsModal = ref(false)
 const showAddSupplier = ref(false)
@@ -338,6 +359,47 @@ const filteredSuppliers = computed(() => {
 })
 
 const enabledCount = computed(() => suppliers.value.filter(s => s.is_enabled).length)
+const emailRemaining = computed(() => emailQuotaRemaining(subscription.value))
+const canLaunchMailing = computed(() =>
+	enabledCount.value > 0 && canSendEmail(subscription.value, enabledCount.value),
+)
+const canSelectMoreSuppliers = computed(() => {
+	if (emailRemaining.value === 0) return false
+	const visibleLimit = testPlanVisibleSupplierLimit(subscription.value)
+	const hasUnlockable = filteredSuppliers.value.some(
+		(s, index) => !s.is_enabled && !isSupplierRowLocked(index),
+	)
+	if (!hasUnlockable) return false
+	if (emailRemaining.value != null && enabledCount.value >= emailRemaining.value) {
+		return false
+	}
+	if (visibleLimit != null) {
+		const enabledInVisible = filteredSuppliers.value
+			.slice(0, visibleLimit)
+			.filter(s => s.is_enabled).length
+		return enabledInVisible < visibleLimit
+			&& (emailRemaining.value == null || enabledCount.value < emailRemaining.value)
+	}
+	return true
+})
+const emailQuotaFooter = computed(() => {
+	const sub = subscription.value
+	if (sub?.max_emails_per_month == null) return null
+	const remaining = emailRemaining.value
+	const limit = sub.max_emails_per_month
+	if (remaining == null) return null
+	return `можно отправить ещё ${remaining.toLocaleString('ru-RU')} из ${limit.toLocaleString('ru-RU')} в этом месяце`
+})
+const testPlanLockedCount = computed(() => {
+	const limit = testPlanVisibleSupplierLimit(subscription.value)
+	if (limit == null) return 0
+	return Math.max(0, filteredSuppliers.value.length - limit)
+})
+const testPlanLockedMessage = computed(() => {
+	const limit = testPlanVisibleSupplierLimit(subscription.value)
+	if (limit == null) return ''
+	return `На тестовом тарифе доступны первые ${limit} поставщиков. Ещё ${testPlanLockedCount.value} недоступны из‑за ограничения подписки.`
+})
 const statusColor = computed(() => getRequestStatusColor(request.value?.status ?? ''))
 const statusLabel = computed(() => getRequestStatusLabel(request.value?.status ?? ''))
 
@@ -349,7 +411,7 @@ const supplierColumns = computed<TableColumn<RequestSupplierResponse>[]>(() => {
 	cols.push({
 		accessorKey: 'company_name',
 		header: 'Компания',
-		meta: { class: { th: 'min-w-44', td: 'min-w-44 max-w-80' } },
+		meta: { class: { th: 'min-w-44', td: 'min-w-44 max-w-80 whitespace-normal align-top' } },
 	})
 	if (!isTerminalStatus.value) {
 		cols.push({ accessorKey: 'domain', header: 'Домен' })
@@ -361,15 +423,84 @@ const supplierColumns = computed<TableColumn<RequestSupplierResponse>[]>(() => {
 })
 
 onMounted(async () => {
-	await fetchRequest()
+	await Promise.all([fetchRequest(), fetchSubscription()])
 	if (route.query.searching === '1' && request.value?.status === RequestStatus.DRAFT) {
 		request.value.status = RequestStatus.SEARCHING
 	}
-	if (request.value) await fetchSuppliers()
+	if (request.value) await fetchSuppliersAndEnforceQuota()
 })
 
-async function handleToggle(rs: RequestSupplierResponse, newVal: boolean) {
+async function fetchSuppliersAndEnforceQuota(silent = false) {
+	await fetchSuppliers(silent)
+	await trimEnabledToQuota()
+}
+
+async function trimEnabledToQuota() {
+	if (isTerminalStatus.value) return
+
+	let maxEnabled = emailRemaining.value
+	if (maxEnabled == null) return
+
+	const visibleLimit = testPlanVisibleSupplierLimit(subscription.value)
+	if (visibleLimit != null) {
+		maxEnabled = Math.min(maxEnabled, visibleLimit)
+	}
+
+	let kept = 0
+	const toDisable: string[] = []
+	for (const s of suppliers.value) {
+		if (!s.is_enabled) continue
+		if (kept < maxEnabled) {
+			kept++
+		} else {
+			toDisable.push(s.id)
+		}
+	}
+
+	if (toDisable.length > 0) {
+		await updateSuppliersEnabled(toDisable, false)
+	}
+}
+
+async function fetchSubscription() {
+	try {
+		const user = await get<UserResponse>('/auth/me')
+		subscription.value = user.subscription ?? null
+	} catch {
+		subscription.value = null
+	}
+}
+
+function isSupplierRowLocked(index: number): boolean {
+	const limit = testPlanVisibleSupplierLimit(subscription.value)
+	if (limit == null) return false
+	return index >= limit
+}
+
+async function handleToggle(
+	rs: RequestSupplierResponse,
+	newVal: boolean,
+	rowIndex: number,
+) {
 	if (suppressToggleEvents.value || rs.is_enabled === newVal || isTerminalStatus.value) return
+
+	if (newVal) {
+		if (isSupplierRowLocked(rowIndex)) {
+			toast.add({
+				title: testPlanLockedMessage.value || 'Поставщик недоступен на тестовом тарифе',
+				color: 'warning',
+			})
+			return
+		}
+		if (!canSendEmail(subscription.value, enabledCount.value + 1)) {
+			const msg = emailQuotaBlockMessage(subscription.value, 1)
+			if (msg) {
+				toast.add({ title: msg, color: 'warning' })
+			}
+			return
+		}
+	}
+
 	await updateSuppliersEnabled([rs.id], newVal)
 }
 
@@ -385,10 +516,28 @@ async function confirmDeleteSupplier(rsId: string) {
 
 async function toggleAll(enabled: boolean) {
 	if (isTerminalStatus.value) return
-	const ids = suppliers.value
-		.filter(s => s.is_enabled !== enabled)
-		.map(s => s.id)
-	await updateSuppliersEnabled(ids, enabled)
+	if (!enabled) {
+		const ids = suppliers.value.filter(s => s.is_enabled).map(s => s.id)
+		if (ids.length) await updateSuppliersEnabled(ids, false)
+		return
+	}
+
+	const remaining = emailRemaining.value
+	const visibleLimit = testPlanVisibleSupplierLimit(subscription.value)
+	let candidates = filteredSuppliers.value.filter(s => !s.is_enabled)
+	if (visibleLimit != null) {
+		candidates = candidates.filter((_, index) => index < visibleLimit)
+	}
+	if (remaining != null) {
+		const slots = Math.max(0, remaining - enabledCount.value)
+		candidates = candidates.slice(0, slots)
+	}
+	if (candidates.length === 0) {
+		const msg = emailQuotaBlockMessage(subscription.value, 1)
+		if (msg) toast.add({ title: msg, color: 'warning' })
+		return
+	}
+	await updateSuppliersEnabled(candidates.map(s => s.id), true)
 }
 
 const selectAll = () => toggleAll(true)
@@ -415,9 +564,14 @@ function onLaunched() {
 }
 
 function getRowClass(row: TableRow<RequestSupplierResponse>) {
-	return row.original.sent_status === RequestSupplierStatus.REPLIED
-		? 'cursor-pointer hover:bg-elevated/50 transition-colors'
-		: ''
+	const classes: string[] = []
+	if (row.original.sent_status === RequestSupplierStatus.REPLIED) {
+		classes.push('cursor-pointer hover:bg-elevated/50 transition-colors')
+	}
+	if (isSupplierRowLocked(row.index)) {
+		classes.push('blur-[2px] opacity-60 pointer-events-none select-none')
+	}
+	return classes.join(' ')
 }
 
 function onRowSelect(e: Event, row: TableRow<RequestSupplierResponse>) {
@@ -433,6 +587,6 @@ function openEditEmailModal(supplier: Supplier) {
 }
 
 function onEmailSaved() {
-	fetchSuppliers()
+	fetchSuppliersAndEnforceQuota()
 }
 </script>

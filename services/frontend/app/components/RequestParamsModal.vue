@@ -140,6 +140,15 @@ v-if="error" color="error" variant="soft" icon="i-lucide-circle-alert" :descript
 v-if="props.supplierCount" color="info" variant="soft" icon="i-lucide-info" class="mb-4"
                     :description="`Запрос будет отправлен на ${props.supplierCount} ${getSupplierWord(props.supplierCount)}`" />
 
+                <UAlert
+                    v-if="emailQuotaConfirmHint"
+                    color="warning"
+                    variant="soft"
+                    icon="i-lucide-mail"
+                    class="mb-4"
+                    :description="emailQuotaConfirmHint"
+                />
+
                 <div class="flex items-center gap-2 text-sm text-muted mb-4">
                     Письмо сформировано на основе ваших параметров. Вы можете
                     отредактировать текст перед отправкой.
@@ -204,15 +213,18 @@ import type {
     AttachmentInfo,
     RequestResponse,
     RequestUpdate,
+    SubscriptionResponse,
     UserResponse,
     UserUpdate,
 } from "#shared/types"
 import { EMAIL_LETTER_MODAL_UI } from "#shared/constants/emailModal"
 import { getApiErrorDetail } from "#shared/utils/apiError"
+import { emailQuotaBlockMessage, emailQuotaRemaining } from "#shared/utils/subscriptionAccess"
 
 const props = defineProps<{
     request?: RequestResponse | null
     supplierCount?: number
+    subscription?: SubscriptionResponse | null
 }>()
 const isOpen = defineModel<boolean>("open", { default: false })
 const emit = defineEmits<{ launched: [] }>()
@@ -270,6 +282,15 @@ function getSupplierWord(count: number): string {
 const uploadDescription = computed(() => {
     const sizeMb = Math.round(MAX_UPLOAD_SIZE / 1024 / 1024)
     return `До ${MAX_UPLOAD_FILES} файлов (PDF, DOCX, XLS/XLSX, TXT, JPG/PNG/WEBP), до ${sizeMb} МБ каждый`
+})
+
+const emailQuotaConfirmHint = computed(() => {
+    const sub = props.subscription
+    if (sub?.max_emails_per_month == null) return null
+    const remaining = emailQuotaRemaining(sub)
+    const limit = sub.max_emails_per_month
+    if (remaining == null) return null
+    return `Остаток лимита писем в этом месяце: ${remaining.toLocaleString("ru-RU")} из ${limit.toLocaleString("ru-RU")}`
 })
 
 function loadFromRequest() {
@@ -439,6 +460,14 @@ async function goToConfirm() {
 
 async function handleLaunch() {
     if (!props.request) return
+    const quotaMsg = emailQuotaBlockMessage(
+        props.subscription,
+        props.supplierCount ?? 1,
+    )
+    if (quotaMsg) {
+        error.value = quotaMsg
+        return
+    }
     loading.value = true
     error.value = null
     try {

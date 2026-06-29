@@ -101,6 +101,7 @@ async def create_supplier(
                 supplier_id=supplier.id,
                 sent_to_email=normalized_email,
                 sent_status=RequestSupplierStatus.PENDING,
+                is_enabled=body.is_enabled,
             )
 
     if not is_new and body.request_id is None:

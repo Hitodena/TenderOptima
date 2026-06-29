@@ -251,6 +251,16 @@ async def send_reply(
 
     user = rs.request.user
     request = rs.request
+
+    async with db_manager.session() as session:
+        from backend.api.subscriptions.enforcement import (
+            worker_can_send_emails,
+        )
+
+        if not await worker_can_send_emails(session, user, count=1):
+            logger.warning("Email quota exhausted for reply", rs_id=rs_id)
+            return {"status": "error", "reason": "subscription_limit"}
+
     smtp_creds = resolve_smtp_credentials(user, config)
 
     att_data = _prepare_attachments(attachment_paths)
@@ -356,6 +366,18 @@ async def send_custom_email(
 
     user = rs.request.user
     request = rs.request
+
+    async with db_manager.session() as session:
+        from backend.api.subscriptions.enforcement import (
+            worker_can_send_emails,
+        )
+
+        if not await worker_can_send_emails(session, user, count=1):
+            logger.warning(
+                "Email quota exhausted for custom email", rs_id=rs_id
+            )
+            return {"status": "error", "reason": "subscription_limit"}
+
     smtp_creds = resolve_smtp_credentials(user, config)
     att_data = _prepare_attachments(attachment_paths)
     if att_data:
@@ -453,7 +475,28 @@ async def send_emails(self, request_id: str) -> dict:
             logger.warning("No pending suppliers", request_id=request_id)
             return {"sent": 0, "failed": 0}
 
+        from backend.api.subscriptions.enforcement import (
+            outbound_email_remaining,
+            worker_can_send_emails,
+        )
+
         user = request.user
+        remaining = await outbound_email_remaining(session, user)
+        if remaining == 0:
+            logger.warning(
+                "Email quota exhausted for bulk send",
+                request_id=request_id,
+            )
+            return {"sent": 0, "failed": 0, "error": "subscription_limit"}
+        if remaining is not None and len(pending) > remaining:
+            logger.warning(
+                "Capping bulk send to remaining quota",
+                request_id=request_id,
+                pending=len(pending),
+                remaining=remaining,
+            )
+            pending = pending[:remaining]
+
         smtp_creds = resolve_smtp_credentials(user, config)
 
     sent = 0
@@ -464,6 +507,16 @@ async def send_emails(self, request_id: str) -> dict:
     try:
         with smtp_connection(smtp_creds) as smtp:
             for rs in pending:
+                async with db_manager.session() as quota_session:
+                    if not await worker_can_send_emails(
+                        quota_session, user, count=1
+                    ):
+                        logger.warning(
+                            "Email quota exhausted mid-bulk send",
+                            request_id=request_id,
+                        )
+                        break
+
                 supplier = rs.supplier
                 recipient = rs.sent_to_email or supplier.main_email
 

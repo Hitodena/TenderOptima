@@ -142,6 +142,7 @@ async function handleAdd() {
 			extra_emails: parseExtraEmails(form.extra_emails, email),
 			source: 'manual',
 			request_id: props.requestId,
+			is_enabled: true,
 		}
 		await post('/suppliers/', payload)
 		emit('added')

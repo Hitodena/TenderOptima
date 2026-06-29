@@ -72,6 +72,16 @@ class SupplierCreate(BaseModel):
             examples=["123e4567-e89b-12d3-a456-426614174000"],
         ),
     ]
+    is_enabled: Annotated[
+        bool,
+        Field(
+            default=False,
+            description=(
+                "When attaching to a request, include the supplier in "
+                "mailing selection immediately."
+            ),
+        ),
+    ]
 
 
 class SupplierResponse(BaseModel):

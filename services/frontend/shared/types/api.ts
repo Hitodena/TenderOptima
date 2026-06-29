@@ -187,6 +187,7 @@ export interface SupplierCreate {
 	extra_emails?: string[] | null;
 	source?: string | null;
 	request_id?: string | null;
+	is_enabled?: boolean;
 }
 
 export interface Supplier {

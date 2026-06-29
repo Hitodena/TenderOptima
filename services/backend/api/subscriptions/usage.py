@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from backend.db.models import (
+    EmailMessage,
     Request,
     RequestSupplier,
     SearchHistory,
@@ -12,8 +13,8 @@ from backend.db.models import (
     TZAnalysisSupplier,
 )
 from backend.enums import (
+    EmailMessageDirection,
     RequestStatus,
-    RequestSupplierStatus,
     TZAnalysisRunStatus,
     TZAnalysisSupplierStatus,
 )
@@ -87,14 +88,17 @@ class SubscriptionUsageDAO:
     ) -> int:
         stmt = (
             select(func.count())
-            .select_from(RequestSupplier)
+            .select_from(EmailMessage)
+            .join(
+                RequestSupplier,
+                EmailMessage.request_supplier_id == RequestSupplier.id,
+            )
             .join(Request, RequestSupplier.request_id == Request.id)
             .where(
                 Request.user_id == user_id,
-                RequestSupplier.sent_status
-                == RequestSupplierStatus.SENT.value,
-                RequestSupplier.sent_at.is_not(None),
-                RequestSupplier.sent_at >= month_start,
+                EmailMessage.direction == EmailMessageDirection.OUTGOING.value,
+                EmailMessage.received_at.is_not(None),
+                EmailMessage.received_at >= month_start,
             )
         )
         return (await session.execute(stmt)).scalar_one()

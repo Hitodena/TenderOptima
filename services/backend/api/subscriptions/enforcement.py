@@ -158,6 +158,38 @@ async def ensure_can_send_emails(
     )
 
 
+async def outbound_email_remaining(
+    session: AsyncSession,
+    user: User,
+) -> int | None:
+    """Outbound emails left this month, or None if unlimited."""
+    subscription = await SubscriptionDAO.get_by_user_id(session, user.id)
+    if subscription is None or not _subscription_is_usable(subscription):
+        return 0
+    if not subscription.module_1_enabled:
+        return 0
+    _, max_emails, _ = _resolved_limits(subscription)
+    if max_emails is None:
+        return None
+    usage = await SubscriptionUsageDAO.get_for_user(session, user.id)
+    return max(0, max_emails - usage.emails_sent)
+
+
+async def worker_can_send_emails(
+    session: AsyncSession,
+    user: User,
+    *,
+    count: int = 1,
+) -> bool:
+    """Non-HTTP quota check for Celery tasks."""
+    if count <= 0:
+        return True
+    remaining = await outbound_email_remaining(session, user)
+    if remaining is None:
+        return True
+    return count <= remaining
+
+
 async def ensure_module_2_access(
     session: AsyncSession,
     user: User,

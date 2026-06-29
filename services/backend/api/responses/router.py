@@ -17,6 +17,7 @@ from backend.api.responses.schemas import (
     ReplyPayload,
     ThreadSummary,
 )
+from backend.api.subscriptions.enforcement import ensure_can_send_emails
 from backend.celery_app.tasks.email_tasks import send_custom_email, send_reply
 from backend.db.dao import (
     EmailMessageDAO,
@@ -237,6 +238,8 @@ async def post_reply(
             status_code=400, detail="Reply body cannot be empty"
         )
 
+    await ensure_can_send_emails(session, current_user, pending_count=1)
+
     send_reply.delay(str(rs_id), payload.body, None)  # type: ignore
     return {"status": "queued", "rs_id": str(rs_id)}
 
@@ -261,6 +264,8 @@ async def _queue_custom_supplier_email(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Subject and body cannot be empty",
         )
+
+    await ensure_can_send_emails(session, current_user, pending_count=1)
 
     send_custom_email.delay(  # type: ignore[attr-defined]
         str(rs_id),

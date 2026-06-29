@@ -51,6 +51,15 @@
 				</div>
 
 				<UAlert
+					v-if="quotaMessage && !canSend"
+					color="warning"
+					variant="soft"
+					icon="i-lucide-mail"
+					:description="quotaMessage"
+					class="shrink-0"
+				/>
+
+				<UAlert
 					v-if="error"
 					color="error"
 					variant="soft"
@@ -66,7 +75,7 @@
 						color="primary"
 						leading-icon="i-lucide-send"
 						:loading="sending"
-						:disabled="!subject.trim() || !body.trim()"
+						:disabled="!subject.trim() || !body.trim() || !canSend"
 						@click="send"
 					>
 						Отправить уведомление
@@ -78,15 +87,21 @@
 </template>
 
 <script lang="ts" setup>
-import type { Attachment, ComparisonSupplier } from '#shared/types'
+import type { Attachment, ComparisonSupplier, SubscriptionResponse } from '#shared/types'
 import {
 	EMAIL_LETTER_MODAL_FOOTER_CLASS,
 	EMAIL_LETTER_MODAL_UI,
 } from '#shared/constants/emailModal'
+import { getApiErrorDetail } from '#shared/utils/apiError'
+import {
+	canSendEmail,
+	emailQuotaBlockMessage,
+} from '#shared/utils/subscriptionAccess'
 
 const props = defineProps<{
 	requestId: string
 	supplier: ComparisonSupplier
+	subscription?: SubscriptionResponse | null
 }>()
 
 const isOpen = defineModel<boolean>('open', { default: false })
@@ -100,6 +115,9 @@ const body = ref('')
 const filesToUpload = ref<File[]>([])
 const sending = ref(false)
 const error = ref('')
+
+const canSend = computed(() => canSendEmail(props.subscription, 1))
+const quotaMessage = computed(() => emailQuotaBlockMessage(props.subscription, 1))
 
 function defaultSubject() {
 	return 'Поздравляем! Ваше предложение признано лучшим'
@@ -129,6 +147,10 @@ function close() {
 }
 
 async function send() {
+	if (!canSend.value) {
+		error.value = quotaMessage.value ?? 'Лимит исходящих писем исчерпан'
+		return
+	}
 	sending.value = true
 	error.value = ''
 	try {
@@ -163,11 +185,7 @@ async function send() {
 		emit('sent')
 		close()
 	} catch (e: unknown) {
-		const detail = (e as { response?: { data?: { detail?: string } } })
-			?.response?.data?.detail
-		error.value = typeof detail === 'string'
-			? detail
-			: 'Не удалось отправить уведомление'
+		error.value = getApiErrorDetail(e) ?? 'Не удалось отправить уведомление'
 	} finally {
 		sending.value = false
 	}

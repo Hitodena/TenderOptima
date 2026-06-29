@@ -418,10 +418,14 @@ v-model="replyBody" placeholder="Текст сообщения..." :rows="isMobi
 								<p class="text-xs text-muted hidden md:block">Ответ придёт поставщику на его email</p>
 								<UButton
 leading-icon="i-lucide-send" :loading="sendingReply"
-									:disabled="!replyBody.trim()" class="w-full md:w-auto" @click="sendReply">
+									:disabled="!replyBody.trim() || !canSendReplyEmail" class="w-full md:w-auto" @click="sendReply">
 									Отправить ответ
 								</UButton>
 							</div>
+							<UAlert
+v-if="replyQuotaMessage && !canSendReplyEmail"
+								color="warning" variant="soft" icon="i-lucide-mail" :description="replyQuotaMessage"
+								class="mt-2" />
 							<UAlert
 v-if="replyError" color="error" variant="soft" icon="i-lucide-circle-alert"
 								:description="replyError" class="mt-2" />
@@ -563,15 +567,16 @@ block size="sm" variant="outline" leading-icon="i-lucide-mail"
 
 		<ImproveConditionsModal
 v-if="modalSupplier" v-model:open="improveModalOpen" :request-id="id"
-			:supplier="modalSupplier" />
+			:supplier="modalSupplier" :subscription="subscription" />
 		<ResponseMismatchLetterModal
 v-if="letterModalSupplier" v-model:open="letterModalOpen" :request-id="id"
-			:supplier="letterModalSupplier" :initial-body="letterModalBody" />
+			:supplier="letterModalSupplier" :initial-body="letterModalBody" :subscription="subscription" />
 		<WinnerNotificationModal
 			v-if="winnerModalSupplier"
 			v-model:open="winnerModalOpen"
 			:request-id="id"
 			:supplier="winnerModalSupplier"
+			:subscription="subscription"
 			@sent="fetchComparison"
 		/>
 
@@ -614,8 +619,10 @@ import type {
 	Message,
 	RefreshAllResponse,
 	RequirementMatch,
+	SubscriptionResponse,
 	ThreadSummary,
 	TZAnalysisStatus,
+	UserResponse,
 } from '#shared/types'
 import { TZAnalysisRunStatus } from '#shared/types'
 import {
@@ -625,6 +632,10 @@ import {
 	supplierHasMismatches,
 } from '#shared/utils/mismatchLetter'
 import { getApiErrorDetail } from '#shared/utils/apiError'
+import {
+	canSendEmail,
+	emailQuotaBlockMessage,
+} from '#shared/utils/subscriptionAccess'
 import { useIntervalFn } from '@vueuse/core'
 import ImproveConditionsModal from '~/components/ImproveConditionsModal.vue'
 import ResponseMismatchLetterModal from '~/components/ResponseMismatchLetterModal.vue'
@@ -640,13 +651,27 @@ const { $axios } = useNuxtApp()
 const toast = useToast()
 const { formatDateTime, formatDateShort } = useFormatDate()
 
+const subscription = ref<SubscriptionResponse | null>(null)
+const canSendReplyEmail = computed(() => canSendEmail(subscription.value, 1))
+const replyQuotaMessage = computed(() => emailQuotaBlockMessage(subscription.value, 1))
+
 const isMobile = ref(false)
 onMounted(() => {
 	const update = () => { isMobile.value = window.innerWidth < 768 }
 	update()
 	window.addEventListener('resize', update)
 	onUnmounted(() => window.removeEventListener('resize', update))
+	void fetchSubscription()
 })
+
+async function fetchSubscription() {
+	try {
+		const user = await get<UserResponse>('/auth/me')
+		subscription.value = user.subscription ?? null
+	} catch {
+		subscription.value = null
+	}
+}
 
 const showParamsPanel = ref(true)
 const mainTab = ref<'thread' | 'comparison'>('thread')
@@ -842,6 +867,11 @@ const replyError = ref<string | null>(null)
 
 async function sendReply() {
 	if (!selectedRsId.value || !replyBody.value.trim()) return
+	if (!canSendReplyEmail.value) {
+		const msg = replyQuotaMessage.value
+		if (msg) toast.add({ title: msg, color: 'warning' })
+		return
+	}
 	const rsId = selectedRsId.value
 	const knownIds = new Set(messages.value.map(m => String(m.id)))
 	const body = replyBody.value
@@ -853,10 +883,11 @@ async function sendReply() {
 		toast.add({ title: 'Ответ отправлен', color: 'success', icon: 'i-lucide-mail-check' })
 		await pollMessagesAfterSend(rsId, knownIds)
 		await fetchThreads()
+		await fetchSubscription()
 	} catch (e: unknown) {
 		const detail = (e as { response?: { data?: { detail?: string } } })
 			?.response?.data?.detail
-		replyError.value = typeof detail === 'string' ? detail : 'Не удалось отправить ответ'
+		replyError.value = getApiErrorDetail(e) ?? (typeof detail === 'string' ? detail : 'Не удалось отправить ответ')
 	} finally {
 		sendingReply.value = false
 	}

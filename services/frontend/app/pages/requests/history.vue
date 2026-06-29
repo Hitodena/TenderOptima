@@ -46,7 +46,7 @@ v-if="hasUnreadMessages(req)"
 								<p class="text-xs text-muted flex items-center gap-2 flex-wrap">
 									<span class="flex items-center gap-1">
 										<UIcon name="i-lucide-map-pin" class="w-3 h-3" />
-										{{ req.delivery_region }}
+										{{ titleCaseWords(req.delivery_region) }}
 									</span>
 									<span>·</span>
 									<span class="flex items-center gap-1">
@@ -110,6 +110,7 @@ v-if="confirmCloseId === req.id" color="neutral" variant="ghost" size="xs"
 <script lang="ts" setup>
 import type { RequestResponse } from '#shared/types'
 import { getRequestStatusColor, getRequestStatusLabel, RequestStatus } from '#shared/types'
+import { titleCaseWords } from '#shared/utils/textFormat'
 
 const { post, get } = useApi()
 const { formatDate } = useFormatDate()

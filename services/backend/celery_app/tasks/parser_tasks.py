@@ -151,6 +151,7 @@ async def run_parser_search(self, request_id: str) -> dict:
                         supplier_id=supplier.id,
                         sent_to_email=result.emails[0],
                         sent_status=RequestSupplierStatus.PENDING,
+                        is_enabled=False,
                     )
                     saved += 1
 
