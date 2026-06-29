@@ -21,6 +21,7 @@ from backend.api.deps import get_current_user, get_session
 from backend.api.subscriptions.enforcement import (
     ensure_can_process_kp,
     ensure_module_2_work_allowed,
+    tz_kp_upload_limit_for_user,
 )
 from backend.api.tz_analysis.schemas import (
     STATUS_LABELS,
@@ -178,6 +179,7 @@ async def _save_upload(
     upload: UploadFile,
     dest_dir: Path,
     *,
+    limit: int,
     dest_name: str | None = None,
 ) -> Path:
     if not upload.filename and not dest_name:
@@ -185,7 +187,6 @@ async def _save_upload(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="File name is required",
         )
-    limit = config.max_tz_upload_size
     if upload.size and upload.size > limit:
         limit_mb = limit // (1024 * 1024)
         raise HTTPException(
@@ -281,9 +282,17 @@ async def run_tz_analysis(
 
     await ensure_module_2_work_allowed(session, current_user)
 
+    upload_limit = await tz_kp_upload_limit_for_user(
+        session, current_user, config
+    )
+
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
-        tz_path = await _save_upload(tz_file, tmp_path)
+        tz_path = await _save_upload(
+            tz_file,
+            tmp_path,
+            limit=upload_limit,
+        )
         tz_name = tz_file.filename or tz_path.name
 
         updated = await TZAnalysisDAO.update_fields(
@@ -415,6 +424,9 @@ async def run_tz_kp_analysis(
             current_user,
             kp_count=len(uploads),
         )
+        upload_limit = await tz_kp_upload_limit_for_user(
+            session, current_user, config
+        )
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             raw_kp_names = [
@@ -435,6 +447,7 @@ async def run_tz_kp_analysis(
                 kp_path = await _save_upload(
                     kp_upload,
                     tmp_path,
+                    limit=upload_limit,
                     dest_name=f"kp{idx}{suffix}",
                 )
                 kp_paths.append(kp_path)
@@ -867,6 +880,10 @@ async def create_tz_analysis_supplier(
         status=TZAnalysisSupplierStatus.PENDING.value,
     )
 
+    upload_limit = await tz_kp_upload_limit_for_user(
+        session, current_user, config
+    )
+
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
         raw_names = [
@@ -888,6 +905,7 @@ async def create_tz_analysis_supplier(
                 await _save_upload(
                     upload,
                     tmp_path,
+                    limit=upload_limit,
                     dest_name=f"kp{idx}{suffix}",
                 )
             )

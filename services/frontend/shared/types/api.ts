@@ -32,6 +32,7 @@ export interface SubscriptionResponse {
 	max_searches_per_month: number | null;
 	max_emails_per_month: number | null;
 	max_kp_processed_per_month: number | null;
+	max_tz_kp_upload_bytes: number | null;
 	geo_code: string;
 	currency_code: string;
 	price_module_1_monthly: string | null;

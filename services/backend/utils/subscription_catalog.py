@@ -11,16 +11,20 @@ class PlanCatalogEntry:
     max_searches_per_month: int | None
     max_emails_per_month: int | None
     max_kp_processed_per_month: int | None
+    max_tz_kp_upload_bytes: int | None
     price_module_1_monthly: Decimal | None
     price_module_2_monthly: Decimal | None
     price_bundle_monthly: Decimal | None
 
+
+_TEST_TZ_KP_UPLOAD_BYTES = 1 * 1024 * 1024
 
 PLAN_CATALOG: dict[str, PlanCatalogEntry] = {
     SubscriptionPlan.TEST.value: PlanCatalogEntry(
         max_searches_per_month=5,
         max_emails_per_month=10,
         max_kp_processed_per_month=2,
+        max_tz_kp_upload_bytes=_TEST_TZ_KP_UPLOAD_BYTES,
         price_module_1_monthly=None,
         price_module_2_monthly=None,
         price_bundle_monthly=None,
@@ -29,6 +33,7 @@ PLAN_CATALOG: dict[str, PlanCatalogEntry] = {
         max_searches_per_month=50,
         max_emails_per_month=1000,
         max_kp_processed_per_month=7,
+        max_tz_kp_upload_bytes=None,
         price_module_1_monthly=Decimal("160"),
         price_module_2_monthly=Decimal("220"),
         price_bundle_monthly=Decimal("340"),
@@ -37,6 +42,7 @@ PLAN_CATALOG: dict[str, PlanCatalogEntry] = {
         max_searches_per_month=150,
         max_emails_per_month=2500,
         max_kp_processed_per_month=20,
+        max_tz_kp_upload_bytes=None,
         price_module_1_monthly=Decimal("250"),
         price_module_2_monthly=Decimal("480"),
         price_bundle_monthly=Decimal("690"),
@@ -45,6 +51,7 @@ PLAN_CATALOG: dict[str, PlanCatalogEntry] = {
         max_searches_per_month=None,
         max_emails_per_month=None,
         max_kp_processed_per_month=None,
+        max_tz_kp_upload_bytes=None,
         price_module_1_monthly=None,
         price_module_2_monthly=None,
         price_bundle_monthly=None,
@@ -57,6 +64,7 @@ GEO_CURRENCY_PRICES: dict[str, dict[str, PlanCatalogEntry]] = {
             max_searches_per_month=50,
             max_emails_per_month=1000,
             max_kp_processed_per_month=7,
+            max_tz_kp_upload_bytes=None,
             price_module_1_monthly=Decimal("53"),
             price_module_2_monthly=Decimal("73"),
             price_bundle_monthly=Decimal("113"),
@@ -65,6 +73,7 @@ GEO_CURRENCY_PRICES: dict[str, dict[str, PlanCatalogEntry]] = {
             max_searches_per_month=150,
             max_emails_per_month=2500,
             max_kp_processed_per_month=20,
+            max_tz_kp_upload_bytes=None,
             price_module_1_monthly=Decimal("83"),
             price_module_2_monthly=Decimal("160"),
             price_bundle_monthly=Decimal("230"),
@@ -108,6 +117,11 @@ def resolve_subscription_limits(
         if max_kp_processed_per_month is not None
         else catalog.max_kp_processed_per_month,
     )
+
+
+def resolve_tz_kp_upload_limit(plan: str, geo_code: str) -> int | None:
+    """Per-plan TZ/KP upload cap; None means use platform default."""
+    return catalog_for_plan(plan, geo_code).max_tz_kp_upload_bytes
 
 
 def resolve_subscription_prices(

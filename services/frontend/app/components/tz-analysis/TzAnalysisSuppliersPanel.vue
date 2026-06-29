@@ -167,10 +167,13 @@ import {
 	TZAnalysisSupplierStatus,
 } from '#shared/types'
 
+import { formatUploadLimitMb } from '#shared/utils/subscriptionAccess'
+
 const props = withDefaults(defineProps<{
 	analysisId: string
 	suppliers: TZAnalysisSupplierItem[]
 	fileAccept: string
+	maxUploadSize: number
 	readonly?: boolean
 	hideKpFiles?: boolean
 	selectedSupplierId?: string | null
@@ -192,8 +195,6 @@ const emit = defineEmits<{
 
 const { post, del: delReq } = useApi()
 const toast = useToast()
-const { public: publicConfig } = useRuntimeConfig()
-const MAX_UPLOAD_SIZE = publicConfig.maxTzUploadSize as number
 
 const showAddForm = ref(false)
 const newSupplierName = ref('')
@@ -240,10 +241,10 @@ function onNewSupplierFilesChange(files: File | File[] | null | undefined) {
 	}
 	const list = Array.isArray(files) ? files : [files]
 	newSupplierFiles.value = list.filter((file) => {
-		if (file.size <= MAX_UPLOAD_SIZE) return true
+		if (file.size <= props.maxUploadSize) return true
 		toast.add({
 			title: 'Файл слишком большой',
-			description: `${file.name} превышает лимит`,
+			description: `${file.name} превышает ${formatUploadLimitMb(props.maxUploadSize)}`,
 			color: 'error',
 		})
 		return false

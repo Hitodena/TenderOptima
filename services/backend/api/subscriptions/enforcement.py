@@ -3,9 +3,13 @@
 from datetime import UTC, datetime
 
 from backend.api.subscriptions.usage import SubscriptionUsageDAO
+from backend.core.config import Config
 from backend.db.dao import SubscriptionDAO
 from backend.db.models import Subscription, User
-from backend.utils.subscription_catalog import resolve_subscription_limits
+from backend.utils.subscription_catalog import (
+    resolve_subscription_limits,
+    resolve_tz_kp_upload_limit,
+)
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -235,3 +239,27 @@ async def ensure_can_process_kp(
         used=usage.kp_processed,
         requested=kp_count,
     )
+
+
+def effective_tz_kp_upload_limit(
+    subscription: Subscription,
+    config: Config,
+) -> int:
+    """Effective TZ/KP upload size cap for a subscription."""
+    plan_limit = resolve_tz_kp_upload_limit(
+        subscription.plan,
+        subscription.geo_code,
+    )
+    if plan_limit is None:
+        return config.max_tz_upload_size
+    return min(plan_limit, config.max_tz_upload_size)
+
+
+async def tz_kp_upload_limit_for_user(
+    session: AsyncSession,
+    user: User,
+    config: Config,
+) -> int:
+    """Resolve TZ/KP upload limit for the current user."""
+    subscription = await _get_subscription_or_raise(session, user)
+    return effective_tz_kp_upload_limit(subscription, config)

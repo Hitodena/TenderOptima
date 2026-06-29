@@ -235,6 +235,7 @@ v-if="editableTzCount > 0" :rows="editableRequirementsTz"
 									:analysis-id="analysis.id"
 									:suppliers="suppliers"
 									:file-accept="fileAccept"
+									:max-upload-size="maxUploadSize"
 									:readonly="isCompleted || isAnalysisClosed"
 									:hide-kp-files="false"
 									:selected-supplier-id="selectedSupplierId"
@@ -691,6 +692,8 @@ import { EMAIL_LETTER_MODAL_FOOTER_CLASS, EMAIL_LETTER_MODAL_UI } from '#shared/
 import {
 	canStartModule2Work,
 	module2WorkBlockMessage,
+	tzKpUploadLimitBytes,
+	formatUploadLimitMb,
 } from '#shared/utils/subscriptionAccess'
 import { subscriptionProfilePath } from '#shared/utils/subscriptionDisplay'
 import RequirementResultsTree from '~/components/tz-analysis/RequirementResultsTree.vue'
@@ -715,13 +718,17 @@ function openSubscriptionProfile(): void {
 const { formatDate } = useFormatDate()
 const { public: publicConfig } = useRuntimeConfig()
 
-const MAX_UPLOAD_SIZE = publicConfig.maxTzUploadSize as number
+const maxUploadSize = computed(() =>
+	tzKpUploadLimitBytes(
+		user.value?.subscription,
+		publicConfig.maxTzUploadSize as number,
+	),
+)
 const fileAccept = '.pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp'
 
-const uploadDescription = computed(() => {
-	const sizeMb = Math.round(MAX_UPLOAD_SIZE / 1024 / 1024)
-	return `PDF, DOCX, XLSX, TXT, изображения. До ${sizeMb} МБ`
-})
+const uploadDescription = computed(() =>
+	`PDF, DOCX, XLSX, TXT, изображения. До ${formatUploadLimitMb(maxUploadSize.value)}`,
+)
 
 const loading = ref(true)
 const analysis = ref<TZAnalysisSession | null>(null)
@@ -2203,11 +2210,10 @@ function validateAndSetFile(
 		target.value = null
 		return
 	}
-	if (file.size > MAX_UPLOAD_SIZE) {
-		const sizeMb = Math.round(MAX_UPLOAD_SIZE / 1024 / 1024)
+	if (file.size > maxUploadSize.value) {
 		toast.add({
 			title: 'Файл слишком большой',
-			description: `${file.name} превышает ${sizeMb} МБ`,
+			description: `${file.name} превышает ${formatUploadLimitMb(maxUploadSize.value)}`,
 			color: 'error',
 		})
 		target.value = null

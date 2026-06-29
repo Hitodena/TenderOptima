@@ -81,3 +81,19 @@ export function module2WorkBlockMessage(
 	}
 	return null
 }
+
+export function tzKpUploadLimitBytes(
+	subscription: SubscriptionResponse | null | undefined,
+	platformDefault: number,
+): number {
+	const planLimit = subscription?.max_tz_kp_upload_bytes
+	return planLimit ?? platformDefault
+}
+
+export function formatUploadLimitMb(bytes: number): string {
+	const mb = bytes / (1024 * 1024)
+	if (mb < 1) {
+		return `${Math.round(bytes / 1024)} КБ`
+	}
+	return `${Math.round(mb)} МБ`
+}

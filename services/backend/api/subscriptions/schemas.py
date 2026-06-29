@@ -19,6 +19,7 @@ class SubscriptionResponse(BaseModel):
     max_searches_per_month: int | None
     max_emails_per_month: int | None
     max_kp_processed_per_month: int | None
+    max_tz_kp_upload_bytes: int | None
     geo_code: str
     currency_code: str
     price_module_1_monthly: Decimal | None
