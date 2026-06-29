@@ -255,6 +255,7 @@ import type {
 	SupplierBookmarkList,
 	SupplierCreate,
 } from '#shared/types'
+import { pluralizeSuppliers } from '#shared/utils/textFormat'
 
 const props = defineProps<{ requestId: string }>()
 const isOpen = defineModel<boolean>('open', { default: false })
@@ -479,7 +480,7 @@ async function addAllToRequest(list: SupplierBookmarkList) {
 		if (added > 0) emit('added')
 		if (failed === 0) {
 			toast.add({
-				title: `Добавлено поставщиков: ${added}`,
+				title: `Добавлено ${added} ${pluralizeSuppliers(added)}`,
 				color: 'success',
 				icon: 'i-lucide-check',
 			})

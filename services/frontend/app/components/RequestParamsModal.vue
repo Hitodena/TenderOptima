@@ -41,15 +41,15 @@ v-model="form.description"
 
                     <div>
                         <p class="text-sm font-semibold mb-1">Дополнительные параметры</p>
-                        <p class="text-xs text-muted mb-3">
-                            Укажите что должен указать поставщик в ответе
+                        <p class="text-xs text-muted mb-2">
+                            Укажите, что должен указать поставщик в ответе
                         </p>
 
                         <div>
-                            <div class="space-y-2 max-h-80 overflow-y-auto">
+                            <div class="space-y-0.5 max-h-80 overflow-y-auto">
                                 <div
 v-for="(label, idx) in form.labels" :key="idx"
-                                    class="flex items-center gap-2 py-1 px-2 rounded-lg hover:bg-elevated/50 transition-colors">
+                                    class="flex items-center gap-2 py-0.5 px-2 rounded-lg hover:bg-elevated/50 transition-colors">
                                     <span class="text-sm flex-1 truncate">{{ label }}</span>
                                     <button
 type="button"
@@ -88,7 +88,6 @@ type="button"
                             >
                                 личном кабинете
                             </ULink>.
-                            Изменения здесь тоже сохранятся в профиле.
                         </p>
                         <UTextarea
 v-model="form.businessInfo"
@@ -138,7 +137,7 @@ v-if="error" color="error" variant="soft" icon="i-lucide-circle-alert" :descript
                 <div class="flex-1 min-h-0 overflow-y-auto space-y-4 pr-1 pb-4">
                 <UAlert
 v-if="props.supplierCount" color="info" variant="soft" icon="i-lucide-info" class="mb-4"
-                    :description="`Запрос будет отправлен на ${props.supplierCount} ${getSupplierWord(props.supplierCount)}`" />
+                    :description="`Запрос будет отправлен на ${props.supplierCount} ${pluralizeSuppliers(props.supplierCount ?? 0)}`" />
 
                 <UAlert
                     v-if="emailQuotaConfirmHint"
@@ -219,7 +218,8 @@ import type {
 } from "#shared/types"
 import { EMAIL_LETTER_MODAL_UI } from "#shared/constants/emailModal"
 import { getApiErrorDetail } from "#shared/utils/apiError"
-import { emailQuotaBlockMessage, emailQuotaRemaining } from "#shared/utils/subscriptionAccess"
+import { pluralizeSuppliers } from "#shared/utils/textFormat"
+import { emailQuotaBlockMessage, emailQuotaRemaining, effectiveEmailLimit } from "#shared/utils/subscriptionAccess"
 
 const props = defineProps<{
     request?: RequestResponse | null
@@ -270,15 +270,6 @@ const { public: publicConfig } = useRuntimeConfig()
 const MAX_UPLOAD_FILES = publicConfig.maxUploadFiles as number
 const MAX_UPLOAD_SIZE = publicConfig.maxRequestUploadSize as number
 
-function getSupplierWord(count: number): string {
-    const n = count % 100
-    const n2 = n % 10
-    if (n >= 11 && n <= 19) return "поставщиков"
-    if (n2 >= 2 && n2 <= 4) return "поставщика"
-    if (n2 >= 1) return "поставщик"
-    return "поставщиков"
-}
-
 const uploadDescription = computed(() => {
     const sizeMb = Math.round(MAX_UPLOAD_SIZE / 1024 / 1024)
     return `До ${MAX_UPLOAD_FILES} файлов (PDF, DOCX, XLS/XLSX, TXT, JPG/PNG/WEBP), до ${sizeMb} МБ каждый`
@@ -286,9 +277,9 @@ const uploadDescription = computed(() => {
 
 const emailQuotaConfirmHint = computed(() => {
     const sub = props.subscription
-    if (sub?.max_emails_per_month == null) return null
+    const limit = effectiveEmailLimit(sub)
+    if (limit == null) return null
     const remaining = emailQuotaRemaining(sub)
-    const limit = sub.max_emails_per_month
     if (remaining == null) return null
     return `Остаток лимита писем в этом месяце: ${remaining.toLocaleString("ru-RU")} из ${limit.toLocaleString("ru-RU")}`
 })

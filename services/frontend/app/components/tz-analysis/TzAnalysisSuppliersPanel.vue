@@ -116,6 +116,13 @@
 		>
 			<template #body>
 				<div class="space-y-4">
+					<UAlert
+						color="info"
+						variant="soft"
+						icon="i-lucide-credit-card"
+						title="Лимит загрузки по подписке"
+						:description="kpUploadHint"
+					/>
 					<UFormField label="Название поставщика" required>
 						<UInput
 							v-model="newSupplierName"
@@ -204,6 +211,10 @@ const deletingId = ref<string | null>(null)
 
 const canAddSupplier = computed(() =>
 	newSupplierName.value.trim().length > 0 && newSupplierFiles.value.length > 0,
+)
+
+const kpUploadHint = computed(() =>
+	`По вашей подписке можно загружать коммерческие предложения размером до ${formatUploadLimitMb(props.maxUploadSize)} на каждый файл. Лимит зависит от тарифа.`,
 )
 
 function showKpFilesInCard(supplier: TZAnalysisSupplierItem) {

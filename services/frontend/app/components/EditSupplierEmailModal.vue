@@ -10,7 +10,7 @@
 				<div class="space-y-2 max-h-60 overflow-y-auto">
 					<UButton
 v-for="email in allEmails" :key="email"
-						:color="email === selectedEmail ? 'success' : 'neutral'"
+						:color="email === selectedEmail ? 'primary' : 'neutral'"
 						:variant="email === selectedEmail ? 'outline' : 'outline'"
 						class="w-full justify-start font-normal" @click="selectedEmail = email">
 						<template #leading>
@@ -20,7 +20,7 @@ v-for="email in allEmails" :key="email"
 						</template>
 						{{ email }}
 						<UBadge
-v-if="email === supplier.main_email" color="success" variant="subtle" size="sm"
+v-if="email === supplier.main_email" color="primary" variant="subtle" size="sm"
 							class="ml-auto">
 							Текущий
 						</UBadge>

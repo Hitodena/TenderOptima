@@ -22,7 +22,7 @@ _TEST_TZ_KP_UPLOAD_BYTES = 1 * 1024 * 1024
 PLAN_CATALOG: dict[str, PlanCatalogEntry] = {
     SubscriptionPlan.TEST.value: PlanCatalogEntry(
         max_searches_per_month=5,
-        max_emails_per_month=10,
+        max_emails_per_month=11,
         max_kp_processed_per_month=2,
         max_tz_kp_upload_bytes=_TEST_TZ_KP_UPLOAD_BYTES,
         price_module_1_monthly=None,
@@ -106,17 +106,24 @@ def resolve_subscription_limits(
 ) -> tuple[int | None, int | None, int | None]:
     """Use stored overrides when set, otherwise catalog defaults."""
     catalog = catalog_for_plan(plan, geo_code)
-    return (
+    searches = (
         max_searches_per_month
         if max_searches_per_month is not None
-        else catalog.max_searches_per_month,
+        else catalog.max_searches_per_month
+    )
+    emails = (
         max_emails_per_month
         if max_emails_per_month is not None
-        else catalog.max_emails_per_month,
+        else catalog.max_emails_per_month
+    )
+    kp = (
         max_kp_processed_per_month
         if max_kp_processed_per_month is not None
-        else catalog.max_kp_processed_per_month,
+        else catalog.max_kp_processed_per_month
     )
+    if plan == SubscriptionPlan.TEST.value and emails is not None:
+        emails = max(emails, 11)
+    return searches, emails, kp
 
 
 def resolve_tz_kp_upload_limit(plan: str, geo_code: str) -> int | None:

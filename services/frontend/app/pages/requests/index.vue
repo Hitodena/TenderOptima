@@ -10,7 +10,8 @@
 				</div>
 
 				<div class="flex justify-end mb-4">
-					<UButton to="/requests/history" size="lg" variant="outline" color="neutral"
+					<UButton
+to="/requests/history" size="lg" variant="outline" color="neutral"
 						leading-icon="i-lucide-history">
 						История запросов
 					</UButton>
@@ -19,7 +20,8 @@
 				<UCard class="shadow-sm mb-4">
 					<UForm :schema="schema" :state="form" class="space-y-5" @submit="handleSearch">
 						<UFormField label="Что ищете?" name="query" required>
-							<UInput v-model="form.query" placeholder="Промышленные насосы, картонные коробки..."
+							<UInput
+v-model="form.query" placeholder="Промышленные насосы, картонные коробки..."
 								icon="i-lucide-search" size="lg" class="w-full">
 								<template #trailing>
 									<SearchQueryRulesHint />
@@ -28,7 +30,8 @@
 						</UFormField>
 
 						<UFormField label="Регион поиска" name="delivery_region" required>
-							<UInput v-model="form.delivery_region" placeholder="еларусь" icon="i-lucide-map-pin"
+							<UInput
+v-model="form.delivery_region" placeholder="Беларусь" icon="i-lucide-map-pin"
 								size="lg" class="w-full" />
 						</UFormField>
 
@@ -36,7 +39,8 @@
 							Найти поставщиков
 						</UButton>
 
-						<SubscriptionErrorAlert v-if="searchError" :error="searchError"
+						<SubscriptionErrorAlert
+v-if="searchError" :error="searchError"
 							fallback="Не удалось запустить поиск. Попробуйте ещё раз." />
 					</UForm>
 				</UCard>
@@ -49,6 +53,7 @@
 <script lang="ts" setup>
 import type { RequestResponse } from '#shared/types'
 import { z } from 'zod'
+import { titleCaseWords } from '#shared/utils/textFormat'
 import SearchQueryRulesHint from '~/components/requests/SearchQueryRulesHint.vue'
 
 const { post } = useApi()
@@ -69,7 +74,7 @@ async function handleSearch() {
 	try {
 		const created = await post<RequestResponse>('/requests/', {
 			query: form.query.trim(),
-			delivery_region: form.delivery_region.trim(),
+			delivery_region: titleCaseWords(form.delivery_region),
 		})
 		await post(`/requests/${created.id}/search`)
 		await navigateTo(`/requests/${created.id}`)

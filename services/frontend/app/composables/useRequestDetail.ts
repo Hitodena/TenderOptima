@@ -1,4 +1,15 @@
 import type { RequestResponse, RequestSupplierResponse } from '#shared/types';
+import { isManualSupplierSource } from '#shared/utils/subscriptionAccess';
+
+function sortSuppliersManualFirst(
+	items: RequestSupplierResponse[],
+): RequestSupplierResponse[] {
+	return [...items].sort((a, b) => {
+		const aManual = isManualSupplierSource(a.supplier?.from_source) ? 0 : 1;
+		const bManual = isManualSupplierSource(b.supplier?.from_source) ? 0 : 1;
+		return aManual - bManual;
+	});
+}
 
 export function useRequestDetail(requestId: string) {
 	const { get, patch, del } = useApi();
@@ -25,8 +36,10 @@ export function useRequestDetail(requestId: string) {
 	async function fetchSuppliers(silent = false) {
 		if (!silent) loadingSuppliers.value = true;
 		try {
-			suppliers.value = await get<RequestSupplierResponse[]>(
-				`/requests/${requestId}/suppliers`,
+			suppliers.value = sortSuppliersManualFirst(
+				await get<RequestSupplierResponse[]>(
+					`/requests/${requestId}/suppliers`,
+				),
 			);
 		} catch {
 			suppliers.value = [];

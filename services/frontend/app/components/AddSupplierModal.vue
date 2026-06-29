@@ -60,6 +60,14 @@
 				</div>
 
 				<UAlert
+					v-if="testPlanHint"
+					color="info"
+					variant="soft"
+					icon="i-lucide-info"
+					:description="testPlanHint"
+				/>
+
+				<UAlert
 					v-if="error"
 					color="error"
 					variant="soft"
@@ -69,7 +77,7 @@
 
 				<div class="flex justify-end gap-2 pt-2">
 					<UButton color="neutral" variant="ghost" @click="close">Отмена</UButton>
-					<UButton type="submit" :loading="loading" leading-icon="i-lucide-plus">
+					<UButton type="submit" :loading="loading" :disabled="testPlanManualLimitReached" leading-icon="i-lucide-plus">
 						Добавить
 					</UButton>
 				</div>
@@ -80,10 +88,15 @@
 
 <script lang="ts" setup>
 import { z } from 'zod'
-import type { SupplierCreate } from '#shared/types'
+import type { SupplierCreate, SubscriptionResponse } from '#shared/types'
 import { getApiErrorDetail } from '#shared/utils/apiError'
+import { isTestPlan, TEST_PLAN_MANUAL_SUPPLIER_BONUS } from '#shared/utils/subscriptionAccess'
 
-const props = defineProps<{ requestId: string }>()
+const props = defineProps<{
+	requestId: string
+	subscription?: SubscriptionResponse | null
+	manualSupplierCount?: number
+}>()
 const isOpen = defineModel<boolean>('open', { default: false })
 const emit = defineEmits<{ added: [] }>()
 
@@ -105,6 +118,19 @@ const form = reactive({
 const showOptional = ref(false)
 const loading = ref(false)
 const error = ref<string | null>(null)
+
+const testPlanHint = computed(() => {
+	if (!isTestPlan(props.subscription)) return null
+	if ((props.manualSupplierCount ?? 0) >= TEST_PLAN_MANUAL_SUPPLIER_BONUS) {
+		return 'На тестовом тарифе можно добавить только одного поставщика вручную (сверх 10 из поиска).'
+	}
+	return 'На тестовом тарифе можно добавить одного поставщика вручную — он появится вверху списка (до 11 писем).'
+})
+
+const testPlanManualLimitReached = computed(() =>
+	isTestPlan(props.subscription)
+	&& (props.manualSupplierCount ?? 0) >= TEST_PLAN_MANUAL_SUPPLIER_BONUS,
+)
 
 function parseExtraEmails(raw: string, primaryEmail: string): string[] | null {
 	const parts = raw
@@ -130,7 +156,7 @@ function close() {
 }
 
 async function handleAdd() {
-	if (loading.value) return
+	if (loading.value || testPlanManualLimitReached.value) return
 	loading.value = true
 	error.value = null
 	try {

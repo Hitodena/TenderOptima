@@ -197,6 +197,7 @@ export interface Supplier {
 	company_name: string;
 	main_email: string;
 	extra_emails: string[];
+	from_source?: string | null;
 }
 
 export interface SupplierEmailUpdate {

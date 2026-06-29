@@ -29,7 +29,7 @@ to="/requests/history" variant="ghost" color="neutral" size="sm"
 						</span>
 						<span v-if="request.delivery_region" class="flex items-center gap-1">
 							<UIcon name="i-lucide-map-pin" class="w-3.5 h-3.5" />
-							{{ request.delivery_region }}
+							{{ titleCaseWords(request.delivery_region) }}
 						</span>
 					</div>
 				</div>
@@ -81,7 +81,7 @@ v-if="!isTerminalStatus && suppliers.length > 0" size="lg" leading-icon="i-lucid
 					</UButton>
 
 					<UButton
-						v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED && request.status !== RequestStatus.CLOSED && request.status !== RequestStatus.SEARCHING"
+						v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED && request.status !== RequestStatus.CLOSED && request.status !== RequestStatus.SEARCHING && !isTestPlan(subscription)"
 						size="lg" variant="outline" color="neutral" leading-icon="i-lucide-database"
 						@click="showBookmarkModal = true">
 						Из базы поставщиков
@@ -165,8 +165,8 @@ size="sm" variant="outline" color="primary"
 							<template #is_enabled-cell="{ row }">
 								<USwitch
 :model-value="row.original.is_enabled" size="sm"
-									:disabled="updatingToggle || isTerminalStatus || isSupplierRowLocked(row.index)"
-									@update:model-value="(val: any) => handleToggle(row.original, Boolean(val), row.index)" />
+									:disabled="updatingToggle || isTerminalStatus || isSupplierRowLocked(row.original)"
+									@update:model-value="(val: any) => handleToggle(row.original, Boolean(val))" />
 							</template>
 
 							<template #company_name-cell="{ row }">
@@ -176,7 +176,7 @@ size="sm" variant="outline" color="primary"
 										<UIcon name="i-lucide-building-2" class="w-3.5 h-3.5 text-muted" />
 									</div>
 									<span
-										class="font-medium text-sm leading-snug line-clamp-2 break-words min-w-36"
+										class="font-medium text-sm leading-snug line-clamp-2 wrap-break-word min-w-36"
 										:title="row.original.supplier?.company_name ?? undefined">
 										{{ row.original.supplier?.company_name }}
 									</span>
@@ -270,7 +270,13 @@ size="xs" variant="ghost" color="primary"
 			<RequestParamsModal
 v-model:open="showParamsModal" :request="request" :supplier-count="enabledCount"
 				:subscription="subscription" @launched="onLaunched" />
-			<AddSupplierModal v-model:open="showAddSupplier" :request-id="id" @added="fetchSuppliersAndEnforceQuota" />
+			<AddSupplierModal
+				v-model:open="showAddSupplier"
+				:request-id="id"
+				:subscription="subscription"
+				:manual-supplier-count="manualSupplierCount"
+				@added="fetchSuppliersAndEnforceQuota"
+			/>
 			<EditSupplierEmailModal v-model:open="showEditEmail" :supplier="emailSupplier" @saved="onEmailSaved" />
 			<SupplierBookmarkModal v-model:open="showBookmarkModal" :request-id="id" @added="fetchSuppliersAndEnforceQuota" />
 
@@ -298,11 +304,18 @@ import {
 	RequestSupplierStatus,
 } from '#shared/types'
 import { getApiErrorDetail } from '#shared/utils/apiError'
+import { titleCaseWords } from '#shared/utils/textFormat'
 import {
 	canSendEmail,
+	effectiveEmailLimit,
 	emailQuotaBlockMessage,
 	emailQuotaRemaining,
+	isManualSupplierSource,
+	isTestPlan,
+	testPlanLockedSuppliersMessage,
+	testPlanMaxSelectableSuppliers,
 	testPlanVisibleSupplierLimit,
+	TEST_PLAN_MANUAL_SUPPLIER_BONUS,
 } from '#shared/utils/subscriptionAccess'
 import type { TableColumn, TableRow } from '@nuxt/ui'
 import SupplierBookmarkModal from '~/components/SupplierBookmarkModal.vue'
@@ -363,43 +376,53 @@ const emailRemaining = computed(() => emailQuotaRemaining(subscription.value))
 const canLaunchMailing = computed(() =>
 	enabledCount.value > 0 && canSendEmail(subscription.value, enabledCount.value),
 )
+const manualSupplierCount = computed(() =>
+	suppliers.value.filter((s) => isManualSupplierSource(s.supplier?.from_source)).length,
+)
+
+const testPlanSelectableLimit = computed(() =>
+	testPlanMaxSelectableSuppliers(subscription.value, manualSupplierCount.value),
+)
+
 const canSelectMoreSuppliers = computed(() => {
 	if (emailRemaining.value === 0) return false
-	const visibleLimit = testPlanVisibleSupplierLimit(subscription.value)
 	const hasUnlockable = filteredSuppliers.value.some(
-		(s, index) => !s.is_enabled && !isSupplierRowLocked(index),
+		(s) => !s.is_enabled && !isSupplierRowLocked(s),
 	)
 	if (!hasUnlockable) return false
 	if (emailRemaining.value != null && enabledCount.value >= emailRemaining.value) {
 		return false
 	}
-	if (visibleLimit != null) {
-		const enabledInVisible = filteredSuppliers.value
-			.slice(0, visibleLimit)
-			.filter(s => s.is_enabled).length
-		return enabledInVisible < visibleLimit
-			&& (emailRemaining.value == null || enabledCount.value < emailRemaining.value)
+	const selectableLimit = testPlanSelectableLimit.value
+	if (selectableLimit != null && enabledCount.value >= selectableLimit) {
+		return false
 	}
 	return true
 })
 const emailQuotaFooter = computed(() => {
 	const sub = subscription.value
-	if (sub?.max_emails_per_month == null) return null
+	const limit = effectiveEmailLimit(sub)
+	if (limit == null) return null
 	const remaining = emailRemaining.value
-	const limit = sub.max_emails_per_month
 	if (remaining == null) return null
 	return `можно отправить ещё ${remaining.toLocaleString('ru-RU')} из ${limit.toLocaleString('ru-RU')} в этом месяце`
 })
 const testPlanLockedCount = computed(() => {
-	const limit = testPlanVisibleSupplierLimit(subscription.value)
-	if (limit == null) return 0
-	return Math.max(0, filteredSuppliers.value.length - limit)
+	const searchLimit = testPlanVisibleSupplierLimit(subscription.value)
+	if (searchLimit == null) return 0
+	const nonManual = filteredSuppliers.value.filter(
+		(s) => !isManualSupplierSource(s.supplier?.from_source),
+	)
+	const searchLocked = Math.max(0, nonManual.length - searchLimit)
+	const manuals = filteredSuppliers.value.filter((s) =>
+		isManualSupplierSource(s.supplier?.from_source),
+	)
+	const manualLocked = Math.max(0, manuals.length - TEST_PLAN_MANUAL_SUPPLIER_BONUS)
+	return searchLocked + manualLocked
 })
-const testPlanLockedMessage = computed(() => {
-	const limit = testPlanVisibleSupplierLimit(subscription.value)
-	if (limit == null) return ''
-	return `На тестовом тарифе доступны первые ${limit} поставщиков. Ещё ${testPlanLockedCount.value} недоступны из‑за ограничения подписки.`
-})
+const testPlanLockedMessage = computed(() =>
+	testPlanLockedSuppliersMessage(subscription.value, testPlanLockedCount.value),
+)
 const statusColor = computed(() => getRequestStatusColor(request.value?.status ?? ''))
 const statusLabel = computed(() => getRequestStatusLabel(request.value?.status ?? ''))
 
@@ -441,20 +464,35 @@ async function trimEnabledToQuota() {
 	let maxEnabled = emailRemaining.value
 	if (maxEnabled == null) return
 
-	const visibleLimit = testPlanVisibleSupplierLimit(subscription.value)
-	if (visibleLimit != null) {
-		maxEnabled = Math.min(maxEnabled, visibleLimit)
+	const selectableLimit = testPlanSelectableLimit.value
+	if (selectableLimit != null) {
+		maxEnabled = Math.min(maxEnabled, selectableLimit)
 	}
 
-	let kept = 0
+	let keptSearch = 0
+	let keptManual = 0
+	const searchLimit = testPlanVisibleSupplierLimit(subscription.value)
 	const toDisable: string[] = []
+
 	for (const s of suppliers.value) {
 		if (!s.is_enabled) continue
-		if (kept < maxEnabled) {
-			kept++
-		} else {
+		if (isManualSupplierSource(s.supplier?.from_source)) {
+			if (keptManual < 1) {
+				keptManual++
+				continue
+			}
 			toDisable.push(s.id)
+			continue
 		}
+		if (searchLimit != null && keptSearch >= searchLimit) {
+			toDisable.push(s.id)
+			continue
+		}
+		if (keptSearch + keptManual >= maxEnabled) {
+			toDisable.push(s.id)
+			continue
+		}
+		keptSearch++
 	}
 
 	if (toDisable.length > 0) {
@@ -471,23 +509,46 @@ async function fetchSubscription() {
 	}
 }
 
-function isSupplierRowLocked(index: number): boolean {
-	const limit = testPlanVisibleSupplierLimit(subscription.value)
-	if (limit == null) return false
-	return index >= limit
+function isSupplierRowLocked(rs: RequestSupplierResponse): boolean {
+	const searchLimit = testPlanVisibleSupplierLimit(subscription.value)
+	if (searchLimit == null) return false
+
+	if (isManualSupplierSource(rs.supplier?.from_source)) {
+		const firstManual = filteredSuppliers.value.find((s) =>
+			isManualSupplierSource(s.supplier?.from_source),
+		)
+		return firstManual?.id !== rs.id
+	}
+
+	const nonManual = filteredSuppliers.value.filter(
+		(s) => !isManualSupplierSource(s.supplier?.from_source),
+	)
+	const indexInSearch = nonManual.findIndex((s) => s.id === rs.id)
+	return indexInSearch < 0 || indexInSearch >= searchLimit
 }
 
 async function handleToggle(
 	rs: RequestSupplierResponse,
 	newVal: boolean,
-	rowIndex: number,
 ) {
 	if (suppressToggleEvents.value || rs.is_enabled === newVal || isTerminalStatus.value) return
 
 	if (newVal) {
-		if (isSupplierRowLocked(rowIndex)) {
+		if (isSupplierRowLocked(rs)) {
 			toast.add({
 				title: testPlanLockedMessage.value || 'Поставщик недоступен на тестовом тарифе',
+				color: 'warning',
+			})
+			return
+		}
+		const selectableLimit = testPlanSelectableLimit.value
+		if (
+			selectableLimit != null
+			&& enabledCount.value >= selectableLimit
+			&& !isManualSupplierSource(rs.supplier?.from_source)
+		) {
+			toast.add({
+				title: testPlanLockedMessage.value || 'Достигнут лимит выбора на тестовом тарифе',
 				color: 'warning',
 			})
 			return
@@ -523,10 +584,23 @@ async function toggleAll(enabled: boolean) {
 	}
 
 	const remaining = emailRemaining.value
-	const visibleLimit = testPlanVisibleSupplierLimit(subscription.value)
-	let candidates = filteredSuppliers.value.filter(s => !s.is_enabled)
-	if (visibleLimit != null) {
-		candidates = candidates.filter((_, index) => index < visibleLimit)
+	const searchLimit = testPlanVisibleSupplierLimit(subscription.value)
+	const selectableLimit = testPlanSelectableLimit.value
+	let candidates = filteredSuppliers.value.filter(
+		(s) => !s.is_enabled && !isSupplierRowLocked(s),
+	)
+	if (searchLimit != null) {
+		const enabledSearch = suppliers.value.filter(
+			(s) => s.is_enabled && !isManualSupplierSource(s.supplier?.from_source),
+		).length
+		const searchSlots = Math.max(0, searchLimit - enabledSearch)
+		const searchCandidates = candidates.filter((s) =>
+			!isManualSupplierSource(s.supplier?.from_source),
+		).slice(0, searchSlots)
+		const manualCandidates = candidates.filter((s) =>
+			isManualSupplierSource(s.supplier?.from_source),
+		).slice(0, Math.max(0, (selectableLimit ?? searchLimit) - searchLimit))
+		candidates = [...searchCandidates, ...manualCandidates]
 	}
 	if (remaining != null) {
 		const slots = Math.max(0, remaining - enabledCount.value)
@@ -568,7 +642,7 @@ function getRowClass(row: TableRow<RequestSupplierResponse>) {
 	if (row.original.sent_status === RequestSupplierStatus.REPLIED) {
 		classes.push('cursor-pointer hover:bg-elevated/50 transition-colors')
 	}
-	if (isSupplierRowLocked(row.index)) {
+	if (isSupplierRowLocked(row.original)) {
 		classes.push('blur-[2px] opacity-60 pointer-events-none select-none')
 	}
 	return classes.join(' ')

@@ -9,6 +9,15 @@
 					</p>
 				</div>
 
+				<UAlert
+					color="info"
+					variant="soft"
+					icon="i-lucide-info"
+					title="Лимит загрузки по подписке"
+					:description="uploadLimitHint"
+					class="mb-4"
+				/>
+
 				<div class="flex justify-end mb-4">
 					<UButton
 to="/tz-analysis/history" size="lg" variant="outline" color="neutral"
@@ -77,6 +86,7 @@ to="/tz-analysis/history" size="lg" variant="outline" color="neutral"
 import type { TZAnalysisSession, UserResponse } from '#shared/types'
 import {
 	canStartModule2Work,
+	module2UploadLimitHint,
 	module2WorkBlockMessage,
 } from '#shared/utils/subscriptionAccess'
 import { z } from 'zod'
@@ -84,6 +94,7 @@ import { z } from 'zod'
 definePageMeta({ layout: 'default' })
 
 const { get, post } = useApi()
+const { public: publicConfig } = useRuntimeConfig()
 
 const user = ref<UserResponse | null>(null)
 
@@ -101,6 +112,13 @@ const canCreateAnalysis = computed(() =>
 
 const module2BlockReason = computed(() =>
 	module2WorkBlockMessage(user.value?.subscription),
+)
+
+const uploadLimitHint = computed(() =>
+	module2UploadLimitHint(
+		user.value?.subscription,
+		publicConfig.maxTzUploadSize as number,
+	),
 )
 
 const schema = z.object({

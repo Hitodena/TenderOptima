@@ -1,6 +1,7 @@
 <script lang="ts" setup>
 import type { SubscriptionResponse } from '#shared/types'
 import { PLAN_LABELS } from '#shared/utils/subscriptionDisplay'
+import { effectiveEmailLimit } from '#shared/utils/subscriptionAccess'
 
 const props = defineProps<{
 	subscription: SubscriptionResponse | null | undefined
@@ -22,6 +23,8 @@ function formatPrice(value: string | null | undefined, currency: string) {
 const planLabel = computed(() =>
 	props.subscription ? planLabels[props.subscription.plan] ?? props.subscription.plan : null,
 )
+
+const emailLimit = computed(() => effectiveEmailLimit(props.subscription))
 </script>
 
 <template>
@@ -61,7 +64,7 @@ const planLabel = computed(() =>
 				<p class="text-sm">
 					Email:
 					<span class="font-medium">
-						{{ formatUsage(subscription.emails_sent_this_month, subscription.max_emails_per_month) }}
+						{{ formatUsage(subscription.emails_sent_this_month, emailLimit) }}
 					</span>
 				</p>
 				<p class="text-sm text-muted">

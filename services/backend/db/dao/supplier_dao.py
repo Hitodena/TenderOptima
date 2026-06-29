@@ -1,7 +1,7 @@
 import uuid
 
 from loguru import logger
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -11,7 +11,7 @@ from backend.db.models import (
     RequestSupplier,
     Supplier,
 )
-from backend.enums import RequestSupplierStatus
+from backend.enums import RequestSupplierStatus, SupplierSource
 
 
 class RequestSupplierDAO(BaseDAO[RequestSupplier]):
@@ -234,8 +234,20 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
         try:
             stmt = (
                 select(cls.model)
+                .join(Supplier, cls.model.supplier_id == Supplier.id)
                 .where(cls.model.request_id == request_id)
                 .options(selectinload(cls.model.supplier))
+                .order_by(
+                    case(
+                        (
+                            Supplier.from_source
+                            == SupplierSource.MANUAL.value,
+                            0,
+                        ),
+                        else_=1,
+                    ),
+                    cls.model.created_at,
+                )
             )
             result = await session.execute(stmt)
             instances = list(result.scalars().all())

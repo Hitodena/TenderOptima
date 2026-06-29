@@ -6,11 +6,39 @@ export function isTestPlan(
 	return subscription?.plan === 'test'
 }
 
+/** Search/auto-found suppliers selectable on trial (excluding manual slot). */
+export const TEST_PLAN_SEARCH_SUPPLIER_LIMIT = 10
+
+/** One manually added supplier slot on trial. */
+export const TEST_PLAN_MANUAL_SUPPLIER_BONUS = 1
+
+/** Total outbound emails per trial mailing month (10 auto + 1 manual). */
+export const TEST_PLAN_EMAIL_LIMIT = TEST_PLAN_SEARCH_SUPPLIER_LIMIT
+	+ TEST_PLAN_MANUAL_SUPPLIER_BONUS
+
+export function testPlanEmailLimit(
+	subscription: SubscriptionResponse | null | undefined,
+): number | null {
+	if (!isTestPlan(subscription)) return null
+	const stored = subscription?.max_emails_per_month
+	if (stored == null) return TEST_PLAN_EMAIL_LIMIT
+	return Math.max(stored, TEST_PLAN_EMAIL_LIMIT)
+}
+
+export function effectiveEmailLimit(
+	subscription: SubscriptionResponse | null | undefined,
+): number | null {
+	if (!subscription) return null
+	const testLimit = testPlanEmailLimit(subscription)
+	if (testLimit != null) return testLimit
+	return subscription.max_emails_per_month
+}
+
 export function emailQuotaRemaining(
 	subscription: SubscriptionResponse | null | undefined,
 ): number | null {
 	if (!subscription?.is_active || !subscription.module_1_enabled) return 0
-	const limit = subscription.max_emails_per_month
+	const limit = effectiveEmailLimit(subscription)
 	if (limit == null) return null
 	const used = subscription.emails_sent_this_month ?? 0
 	return Math.max(0, limit - used)
@@ -36,7 +64,7 @@ export function emailQuotaBlockMessage(
 		return 'Модуль 1 (поиск и рассылка) не подключён к вашей подписке'
 	}
 	if (canSendEmail(subscription, count)) return null
-	const limit = subscription.max_emails_per_month
+	const limit = effectiveEmailLimit(subscription)
 	const used = subscription.emails_sent_this_month ?? 0
 	if (limit == null) return null
 	return `Лимит подписки: ${used.toLocaleString('ru-RU')} из ${limit.toLocaleString('ru-RU')} писем в этом месяце`
@@ -46,7 +74,52 @@ export function testPlanVisibleSupplierLimit(
 	subscription: SubscriptionResponse | null | undefined,
 ): number | null {
 	if (!isTestPlan(subscription)) return null
-	return subscription?.max_emails_per_month ?? 10
+	return TEST_PLAN_SEARCH_SUPPLIER_LIMIT
+}
+
+export function isManualSupplierSource(
+	fromSource: string | null | undefined,
+): boolean {
+	return fromSource === 'manual'
+}
+
+export function testPlanMaxSelectableSuppliers(
+	subscription: SubscriptionResponse | null | undefined,
+	manualSupplierCount: number,
+): number | null {
+	if (!isTestPlan(subscription)) return null
+	const manualBonus = Math.min(
+		TEST_PLAN_MANUAL_SUPPLIER_BONUS,
+		Math.max(0, manualSupplierCount),
+	)
+	return TEST_PLAN_SEARCH_SUPPLIER_LIMIT + manualBonus
+}
+
+export function testPlanLockedSuppliersMessage(
+	subscription: SubscriptionResponse | null | undefined,
+	lockedCount: number,
+): string {
+	if (!isTestPlan(subscription)) return ''
+	const lockedPart =
+		lockedCount > 0
+			? ` Ещё ${lockedCount} из поиска недоступны из‑за ограничения подписки.`
+			: ''
+	return (
+		`На тестовом тарифе доступны ${TEST_PLAN_SEARCH_SUPPLIER_LIMIT} поставщиков из поиска`
+		+ ` и ${TEST_PLAN_MANUAL_SUPPLIER_BONUS} добавленный вручную (до ${TEST_PLAN_EMAIL_LIMIT} писем).${lockedPart}`
+	)
+}
+
+export function module2UploadLimitHint(
+	subscription: SubscriptionResponse | null | undefined,
+	platformDefaultBytes: number,
+): string {
+	const limitBytes = tzKpUploadLimitBytes(subscription, platformDefaultBytes)
+	const limitLabel = formatUploadLimitMb(limitBytes)
+	return (
+		`По вашей подписке можно загружать техническое задание и коммерческие предложения `
+		+ `размером до ${limitLabel} на каждый файл. Лимит зависит от тарифа.`
+	)
 }
 
 export function isModule2KpQuotaExhausted(

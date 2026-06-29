@@ -46,8 +46,17 @@ type="button" class="truncate max-w-full text-primary hover:underline text-left"
 
 			<template v-if="isDraft">
 				<UAlert
-color="info" variant="soft" icon="i-lucide-info" class="mb-6"
+color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 					description="Загрузите техническое задание и запустите анализ. После извлечения требований вы сможете проверить их и загрузить коммерческие предложения." />
+
+				<UAlert
+					color="info"
+					variant="soft"
+					icon="i-lucide-credit-card"
+					title="Лимит загрузки по подписке"
+					:description="uploadLimitHint"
+					class="mb-6"
+				/>
 
 				<UCard class="shadow-sm">
 					<UFormField label="Техническое задание" required>
@@ -691,6 +700,7 @@ import { getApiErrorDetail, isSubscriptionApiError } from '#shared/utils/apiErro
 import { EMAIL_LETTER_MODAL_FOOTER_CLASS, EMAIL_LETTER_MODAL_UI } from '#shared/constants/emailModal'
 import {
 	canStartModule2Work,
+	module2UploadLimitHint,
 	module2WorkBlockMessage,
 	tzKpUploadLimitBytes,
 	formatUploadLimitMb,
@@ -728,6 +738,13 @@ const fileAccept = '.pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp'
 
 const uploadDescription = computed(() =>
 	`PDF, DOCX, XLSX, TXT, изображения. До ${formatUploadLimitMb(maxUploadSize.value)}`,
+)
+
+const uploadLimitHint = computed(() =>
+	module2UploadLimitHint(
+		user.value?.subscription,
+		publicConfig.maxTzUploadSize as number,
+	),
 )
 
 const loading = ref(true)

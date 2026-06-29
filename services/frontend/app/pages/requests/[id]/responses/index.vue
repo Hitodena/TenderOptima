@@ -632,6 +632,7 @@ import {
 	supplierHasMismatches,
 } from '#shared/utils/mismatchLetter'
 import { getApiErrorDetail } from '#shared/utils/apiError'
+import { pluralizeSuppliers } from '#shared/utils/textFormat'
 import {
 	canSendEmail,
 	emailQuotaBlockMessage,
@@ -733,7 +734,7 @@ async function refreshAll() {
 		}
 		if (result.queued > 0) {
 			toast.add({
-				title: `Анализ запущен для ${result.queued} поставщиков`,
+				title: `Анализ запущен для ${result.queued} ${pluralizeSuppliers(result.queued)}`,
 				color: 'success',
 				icon: 'i-lucide-check',
 			})
