@@ -49,6 +49,8 @@ function sectionKey(key: string) {
 }
 
 function isSectionExpanded(key: string) {
+	if (props.readonly) return true
+
 	const stored = sectionExpanded.value[sectionKey(key)]
 	if (stored !== undefined) return stored
 	return rootKeys.value.has(key)

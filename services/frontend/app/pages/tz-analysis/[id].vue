@@ -167,8 +167,8 @@ v-if="isTzReviewPhase && !isAnalysisClosed"
 								<div class="flex items-center justify-between gap-2">
 									<p class="font-semibold text-sm">Требования из ТЗ</p>
 									<UBadge color="neutral" variant="subtle" size="xs">
-										{{ editableTzCount }}
-										{{ requirementWord(editableTzCount) }}
+										{{ displayedTzCount }}
+										{{ requirementWord(displayedTzCount) }}
 									</UBadge>
 								</div>
 							</template>
@@ -198,7 +198,7 @@ v-if="isTzReviewPhase && !isAnalysisClosed"
 									: ''"
 							>
 								<RequirementTreeEditor
-v-if="editableTzCount > 0" :rows="editableRequirementsTz"
+v-if="displayedTzCount > 0" :rows="displayedTzRequirementsRows"
 									:scope-id="isTzConfirmed ? 'tz-results' : 'tz-review'"
 									:readonly="isTzConfirmed || isCompleted" show-heading-hint
 									@remove="removeTzRequirement"
@@ -1546,6 +1546,14 @@ function collectResultsKpKeys(data: TZAnalysisSession): string[] {
 const editableTzCount = computed(() =>
 	countRequirementRows(editableRequirementsTz.value),
 )
+const displayedTzRequirementsRows = computed(() =>
+	isTzConfirmed.value
+		? flattenRequirementsToRows(analysis.value?.requirements_tz)
+		: editableRequirementsTz.value,
+)
+const displayedTzCount = computed(() =>
+	countRequirementRows(displayedTzRequirementsRows.value),
+)
 const showComparisonResultsCard = computed(() =>
 	hasComparisonResults.value
 	&& !isKpProcessing.value
@@ -2007,6 +2015,9 @@ function applyAnalysis(
 			if (!itemsOverrides.value[key]) {
 				itemsOverrides.value[key] = value
 			}
+		}
+		if (data.confirmed) {
+			syncEditableRequirements(data)
 		}
 	} else {
 		itemsOverrides.value = { ...(data.items_overrides ?? {}) }
