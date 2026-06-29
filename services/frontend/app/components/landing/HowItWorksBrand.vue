@@ -43,13 +43,6 @@
 							<span class="landing-hiw-step__content">
 								<span class="landing-hiw-step__title">{{ step.title }}</span>
 								<span class="landing-hiw-step__text">{{ step.text }}</span>
-								<span v-if="step.chips.length" class="landing-hiw-step__chips">
-									<span
-										v-for="chip in step.chips"
-										:key="chip"
-										class="landing-hiw-step__chip"
-									>{{ chip }}</span>
-								</span>
 							</span>
 						</button>
 					</li>
@@ -98,7 +91,6 @@ export interface BrandHowItWorksStep {
 	visualText: string
 	image: string
 	imageAlt: string
-	chips: string[]
 }
 
 const fallbackSteps: BrandHowItWorksStep[] = [
@@ -109,7 +101,6 @@ const fallbackSteps: BrandHowItWorksStep[] = [
 		visualText: 'Стартовая форма: подсказка по форматам, upload-зона и кнопка «Анализировать ТЗ».',
 		image: '/landing/upload_area_analyze.png',
 		imageAlt: 'Экран загрузки технического задания',
-		chips: ['DOCX', 'XLSX', 'PDF'],
 	},
 	{
 		id: 'analysis-progress',
@@ -118,7 +109,6 @@ const fallbackSteps: BrandHowItWorksStep[] = [
 		visualText: 'Индикатор обработки и статус анализа до появления структурированного списка.',
 		image: '/landing/analyze_load.png',
 		imageAlt: 'Экран процесса анализа технического задания',
-		chips: ['В обработке', 'Извлечение'],
 	},
 	{
 		id: 'edit-requirements',
@@ -127,7 +117,6 @@ const fallbackSteps: BrandHowItWorksStep[] = [
 		visualText: 'Дерево требований с возможностью правки и подтверждения перед сопоставлением.',
 		image: '/landing/edit_refs_analyze.png',
 		imageAlt: 'Экран редактирования извлечённых требований',
-		chips: ['Требования', 'Редактирование'],
 	},
 	{
 		id: 'kp-compare',
@@ -136,7 +125,6 @@ const fallbackSteps: BrandHowItWorksStep[] = [
 		visualText: 'Метрики соответствия, частичные совпадения и найденные несоответствия по пунктам.',
 		image: '/landing/tz_kp_compare.png',
 		imageAlt: 'Экран сравнения коммерческого предложения с требованиями ТЗ',
-		chips: ['Соответствие', 'Фильтры'],
 	},
 	{
 		id: 'supplier-letter',
@@ -145,7 +133,6 @@ const fallbackSteps: BrandHowItWorksStep[] = [
 		visualText: 'Формирование письма: навигация по разделам и текстовая область справа.',
 		image: '/landing/letter.png',
 		imageAlt: 'Форма письма поставщику по несоответствиям',
-		chips: ['DOCX', 'Несоответствия'],
 	},
 ]
 
@@ -334,26 +321,6 @@ onBeforeUnmount(stopAutoplay)
 	font-size: 0.875rem;
 	line-height: 1.6;
 	max-width: 36rem;
-}
-
-.landing-hiw-step__chips {
-	display: flex;
-	gap: 0.375rem;
-	flex-wrap: wrap;
-	margin-top: 0.125rem;
-}
-
-.landing-hiw-step__chip {
-	display: inline-flex;
-	align-items: center;
-	min-height: 1.625rem;
-	padding: 0 0.5rem;
-	border-radius: 0.375rem;
-	background: color-mix(in oklab, var(--ui-primary) 10%, transparent);
-	border: 1px solid color-mix(in oklab, var(--ui-primary) 18%, transparent);
-	color: var(--ui-primary);
-	font-size: 0.75rem;
-	font-weight: 600;
 }
 
 .landing-hiw-step.is-active .landing-hiw-step__index,

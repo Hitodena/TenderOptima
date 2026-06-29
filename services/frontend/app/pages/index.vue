@@ -223,23 +223,12 @@ definePageMeta({
 	layout: 'default',
 })
 
+const auth = useAuthStore()
+const { get } = useApi()
+
 const registerPath = '/auth?tab=register'
 
 const heroReveal = ref<HTMLElement | null>(null)
-
-onMounted(() => {
-	if (!import.meta.client) {
-		return
-	}
-
-	if (heroReveal.value) {
-		heroReveal.value.classList.add('is-visible')
-	}
-
-	if (faqReveal.value) {
-		faqReveal.value.classList.add('is-visible')
-	}
-})
 
 const { target: metricsReveal, isVisible: metricsVisible } = useScrollReveal()
 const { target: featuresReveal, isVisible: featuresVisible } = useScrollReveal()
@@ -251,6 +240,30 @@ const {
 } = useSequentialSteps(4, subscriptionVisible, 180)
 const { target: faqReveal } = useScrollReveal()
 const { target: ctaReveal, isVisible: ctaVisible } = useScrollReveal()
+
+onMounted(async () => {
+	if (!import.meta.client) {
+		return
+	}
+
+	if (auth.isAuthenticated.value) {
+		try {
+			await get('/auth/me')
+			await navigateTo('/requests')
+			return
+		} catch {
+			auth.clearToken()
+		}
+	}
+
+	if (heroReveal.value) {
+		heroReveal.value.classList.add('is-visible')
+	}
+
+	if (faqReveal.value) {
+		faqReveal.value.classList.add('is-visible')
+	}
+})
 
 const metrics = [
 	{

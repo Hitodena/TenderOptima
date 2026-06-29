@@ -80,6 +80,7 @@ if (auth.isAuthenticated.value) {
 	try {
 		user.value = await get<UserResponse>('/auth/me')
 	} catch {
+		auth.clearToken()
 		user.value = null
 	}
 }
