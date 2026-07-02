@@ -83,7 +83,7 @@ class CeleryConfig:
         "queue_order_strategy": "priority",
         "priority_steps": list(range(10)),
         "sep": ":",
-        "visibility_timeout": 7500,
+        "visibility_timeout": 23400,
     }
     task_default_priority = 0
 

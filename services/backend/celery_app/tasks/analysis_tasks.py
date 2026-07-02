@@ -42,10 +42,10 @@ from backend.utils.tz_storage import (
 
 config = get_config()
 
-_TZ_EXTRACT_SOFT_LIMIT = 6600  # 10 min
-_TZ_EXTRACT_TIME_LIMIT = 7200  # 15 min
-_KP_COMPARE_SOFT_LIMIT = 6600  # 110 min
-_KP_COMPARE_TIME_LIMIT = 7200  # 2 h
+_TZ_EXTRACT_SOFT_LIMIT = 7000  # 1 h 57 min
+_TZ_EXTRACT_TIME_LIMIT = 7200  # 2 h
+_KP_COMPARE_SOFT_LIMIT = 21000  # 5 h 50 min
+_KP_COMPARE_TIME_LIMIT = 21600  # 6 h
 
 
 def _merge_supplier_kp_result(
