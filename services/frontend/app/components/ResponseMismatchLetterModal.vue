@@ -20,13 +20,16 @@
 								<UInput v-model="subject" class="w-full" />
 							</UFormField>
 							<UFormField label="Сообщение" class="flex-1 min-h-0">
-								<UTextarea
+								<div class="flex flex-col gap-2">
+									<InsertBusinessInfoButton v-model="body" class="self-start" />
+									<UTextarea
 									v-model="body"
 									:rows="20"
 									class="w-full"
 									:ui="{ base: 'min-h-[min(40vh,24rem)] resize-y' }"
 									autoresize
 								/>
+								</div>
 							</UFormField>
 							<div>
 								<p class="text-sm font-semibold mb-1">Вложения</p>

@@ -19,10 +19,30 @@ to="/requests/history" size="lg" variant="outline" color="neutral"
 
 				<UCard class="shadow-sm mb-4">
 					<UForm :schema="schema" :state="form" class="space-y-5" @submit="handleSearch">
+						<UAlert
+							v-if="module1BlockReason"
+							color="warning"
+							variant="soft"
+							icon="i-lucide-triangle-alert"
+							class="mb-1"
+						>
+							<template #description>
+								<div class="space-y-2">
+									<p>{{ module1BlockReason }}</p>
+									<NuxtLink
+										:to="subscriptionProfilePath('subscription')"
+										class="text-sm font-medium text-primary hover:underline underline-offset-2"
+									>
+										Перейти к подписке
+									</NuxtLink>
+								</div>
+							</template>
+						</UAlert>
+
 						<UFormField label="Что ищете?" name="query" required>
 							<UInput
 v-model="form.query" placeholder="Промышленные насосы, картонные коробки..."
-								icon="i-lucide-search" size="lg" class="w-full">
+								icon="i-lucide-search" size="lg" class="w-full" :disabled="!canStartSearch">
 								<template #trailing>
 									<SearchQueryRulesHint />
 								</template>
@@ -32,10 +52,12 @@ v-model="form.query" placeholder="Промышленные насосы, кар�
 						<UFormField label="Регион поиска" name="delivery_region" required>
 							<UInput
 v-model="form.delivery_region" placeholder="Беларусь" icon="i-lucide-map-pin"
-								size="lg" class="w-full" />
+								size="lg" class="w-full" :disabled="!canStartSearch" />
 						</UFormField>
 
-						<UButton type="submit" block size="lg" leading-icon="i-lucide-search" :disabled="loading">
+						<UButton
+type="submit" block size="lg" leading-icon="i-lucide-search"
+							:disabled="loading || !canStartSearch">
 							Найти поставщиков
 						</UButton>
 
@@ -51,12 +73,17 @@ v-if="searchError" :error="searchError"
 </template>
 
 <script lang="ts" setup>
-import type { RequestResponse } from '#shared/types'
+import type { RequestResponse, UserResponse } from '#shared/types'
 import { z } from 'zod'
 import { titleCaseWords } from '#shared/utils/textFormat'
+import {
+	canStartModule1Work,
+	module1WorkBlockMessage,
+} from '#shared/utils/subscriptionAccess'
+import { subscriptionProfilePath } from '#shared/utils/subscriptionDisplay'
 import SearchQueryRulesHint from '~/components/requests/SearchQueryRulesHint.vue'
 
-const { post } = useApi()
+const { post, get } = useApi()
 
 const schema = z.object({
 	query: z.string().min(3, 'Минимум 3 символа').max(500, 'Максимум 500 символов'),
@@ -66,9 +93,26 @@ const schema = z.object({
 const form = reactive({ query: '', delivery_region: '' })
 const loading = ref(false)
 const searchError = ref<unknown | null>(null)
+const user = ref<UserResponse | null>(null)
+
+onMounted(async () => {
+	try {
+		user.value = await get<UserResponse>('/auth/me')
+	} catch {
+		user.value = null
+	}
+})
+
+const canStartSearch = computed(() =>
+	canStartModule1Work(user.value?.subscription),
+)
+
+const module1BlockReason = computed(() =>
+	module1WorkBlockMessage(user.value?.subscription),
+)
 
 async function handleSearch() {
-	if (loading.value) return
+	if (loading.value || !canStartSearch.value) return
 	searchError.value = null
 	loading.value = true
 	try {

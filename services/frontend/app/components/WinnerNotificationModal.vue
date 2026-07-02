@@ -26,7 +26,10 @@
 						<UInput v-model="subject" class="w-full" />
 					</UFormField>
 					<UFormField label="Текст письма">
-						<UTextarea v-model="body" :rows="18" class="w-full" autoresize />
+						<div class="flex flex-col gap-2">
+							<InsertBusinessInfoButton v-model="body" class="self-start" />
+							<UTextarea v-model="body" :rows="18" class="w-full" autoresize />
+						</div>
 					</UFormField>
 					<div>
 						<p class="text-sm font-semibold mb-1">Вложения</p>

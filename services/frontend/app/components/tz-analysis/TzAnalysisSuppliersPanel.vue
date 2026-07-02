@@ -117,6 +117,7 @@
 			<template #body>
 				<div class="space-y-4">
 					<UAlert
+						v-if="showUploadLimitAlert"
 						color="info"
 						variant="soft"
 						icon="i-lucide-credit-card"
@@ -186,12 +187,14 @@ const props = withDefaults(defineProps<{
 	selectedSupplierId?: string | null
 	compact?: boolean
 	rail?: boolean
+	showUploadLimitAlert?: boolean
 }>(), {
 	readonly: false,
 	hideKpFiles: false,
 	selectedSupplierId: null,
 	compact: false,
 	rail: false,
+	showUploadLimitAlert: false,
 })
 
 const emit = defineEmits<{

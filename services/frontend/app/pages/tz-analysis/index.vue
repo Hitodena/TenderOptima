@@ -10,6 +10,7 @@
 				</div>
 
 				<UAlert
+					v-if="isTestPlan(user?.subscription)"
 					color="info"
 					variant="soft"
 					icon="i-lucide-info"
@@ -86,6 +87,7 @@ to="/tz-analysis/history" size="lg" variant="outline" color="neutral"
 import type { TZAnalysisSession, UserResponse } from '#shared/types'
 import {
 	canStartModule2Work,
+	isTestPlan,
 	module2UploadLimitHint,
 	module2WorkBlockMessage,
 } from '#shared/utils/subscriptionAccess'

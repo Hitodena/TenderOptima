@@ -110,6 +110,39 @@ export function testPlanLockedSuppliersMessage(
 	)
 }
 
+export function isModule1SearchQuotaExhausted(
+	subscription: SubscriptionResponse | null | undefined,
+): boolean {
+	if (!subscription) return false
+	const limit = subscription.max_searches_per_month
+	if (limit == null) return false
+	return (subscription.searches_used_this_month ?? 0) >= limit
+}
+
+export function canStartModule1Work(
+	subscription: SubscriptionResponse | null | undefined,
+): boolean {
+	if (!subscription?.is_active || !subscription.module_1_enabled) return false
+	return !isModule1SearchQuotaExhausted(subscription)
+}
+
+export function module1WorkBlockMessage(
+	subscription: SubscriptionResponse | null | undefined,
+): string | null {
+	if (!subscription) return 'Подписка не назначена'
+	if (!subscription.is_active) return 'Подписка неактивна или истекла'
+	if (!subscription.module_1_enabled) {
+		return 'Модуль 1 (поиск и рассылка) не подключён к вашей подписке'
+	}
+	if (isModule1SearchQuotaExhausted(subscription)) {
+		const limit = subscription.max_searches_per_month
+		const used = subscription.searches_used_this_month ?? 0
+		if (limit == null) return null
+		return `Лимит подписки: ${used.toLocaleString('ru-RU')} из ${limit.toLocaleString('ru-RU')} поисков в этом месяце`
+	}
+	return null
+}
+
 export function module2UploadLimitHint(
 	subscription: SubscriptionResponse | null | undefined,
 	platformDefaultBytes: number,

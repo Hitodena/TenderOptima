@@ -67,6 +67,28 @@ class SubscriptionDAO(BaseDAO[Subscription]):
             return await cls.create(session, **defaults)
 
         if values:
+            plan = values.get("plan", existing.plan)
+            geo_code = values.get("geo_code", existing.geo_code)
+            plan_changed = "plan" in values and values["plan"] != existing.plan
+            geo_changed = (
+                "geo_code" in values
+                and values["geo_code"] != existing.geo_code
+            )
+            if plan_changed or geo_changed:
+                catalog = catalog_for_plan(plan, geo_code)
+                values.update(
+                    {
+                        "max_searches_per_month": catalog.max_searches_per_month,
+                        "max_emails_per_month": catalog.max_emails_per_month,
+                        "max_kp_processed_per_month": (
+                            catalog.max_kp_processed_per_month
+                        ),
+                        "price_module_1_monthly": catalog.price_module_1_monthly,
+                        "price_module_2_monthly": catalog.price_module_2_monthly,
+                        "price_bundle_monthly": catalog.price_bundle_monthly,
+                    }
+                )
+
             updated = await cls.update_fields(session, existing.id, **values)
             if updated is None:
                 raise ValueError(f"Subscription {existing.id} not found")

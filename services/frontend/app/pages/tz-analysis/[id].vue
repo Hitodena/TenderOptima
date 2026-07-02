@@ -50,6 +50,7 @@ color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 					description="Загрузите техническое задание и запустите анализ. После извлечения требований вы сможете проверить их и загрузить коммерческие предложения." />
 
 				<UAlert
+					v-if="isTestPlan(user?.subscription)"
 					color="info"
 					variant="soft"
 					icon="i-lucide-credit-card"
@@ -245,6 +246,7 @@ v-if="displayedTzCount > 0" :rows="displayedTzRequirementsRows"
 									:suppliers="suppliers"
 									:file-accept="fileAccept"
 									:max-upload-size="maxUploadSize"
+									:show-upload-limit-alert="isTestPlan(user?.subscription)"
 									:readonly="isCompleted || isAnalysisClosed"
 									:hide-kp-files="false"
 									:selected-supplier-id="selectedSupplierId"
@@ -380,7 +382,7 @@ color="neutral" variant="soft" icon="i-lucide-archive"
 												class="opacity-80"
 											>· основное КП</span>
 										</UBadge>
-										<UBadge color="primary" variant="subtle">
+										<UBadge color="success" variant="subtle">
 											{{ selectedSupplierStats.met_count }} ок
 										</UBadge>
 										<UBadge color="warning" variant="subtle">
@@ -612,6 +614,12 @@ v-for="tab in letterPreviewTabs" :key="tab.value" type="button" block
 					</aside>
 
 					<div ref="letterDocumentRef" class="relative min-h-[min(72vh,40rem)]">
+						<InsertBusinessInfoButton
+							v-if="hasLetterIssues"
+							v-model="letterEditorText"
+							class="absolute top-2 right-2 z-10"
+							@inserted="letterEditorDirty = true"
+						/>
 						<UTextarea
 							v-if="hasLetterIssues"
 							ref="letterTextareaRef"
@@ -700,6 +708,7 @@ import { getApiErrorDetail, isSubscriptionApiError } from '#shared/utils/apiErro
 import { EMAIL_LETTER_MODAL_FOOTER_CLASS, EMAIL_LETTER_MODAL_UI } from '#shared/constants/emailModal'
 import {
 	canStartModule2Work,
+	isTestPlan,
 	module2UploadLimitHint,
 	module2WorkBlockMessage,
 	tzKpUploadLimitBytes,
@@ -1543,9 +1552,6 @@ function collectResultsKpKeys(data: TZAnalysisSession): string[] {
 	return ordered
 }
 
-const editableTzCount = computed(() =>
-	countRequirementRows(editableRequirementsTz.value),
-)
 const displayedTzRequirementsRows = computed(() =>
 	isTzConfirmed.value
 		? flattenRequirementsToRows(analysis.value?.requirements_tz)

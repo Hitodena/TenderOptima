@@ -124,6 +124,15 @@ def _ensure_quota(
         )
 
 
+async def ensure_module_1_access(
+    session: AsyncSession,
+    user: User,
+) -> None:
+    """Module 1: active subscription with module 1 enabled."""
+    subscription = await _get_subscription_or_raise(session, user)
+    _ensure_module_enabled(subscription, module=1)
+
+
 async def ensure_can_search(
     session: AsyncSession,
     user: User,

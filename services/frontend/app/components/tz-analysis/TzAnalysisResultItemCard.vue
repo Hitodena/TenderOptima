@@ -85,7 +85,7 @@
 					<p v-else class="text-sm text-muted italic">
 						Не указано в КП
 					</p>
-					<p v-if="item.offer_ref" class="text-xs text-muted">
+					<p v-if="kpSourceRef" class="text-xs text-muted">
 						<span class="font-medium text-default/70">Ссылка:</span>
 						<button
 							v-if="analysisFiles && itemKpFilename"
@@ -93,9 +93,9 @@
 							class="ml-1 text-primary hover:underline text-left"
 							@click.stop="analysisFiles.openKpFile(itemKpFilename)"
 						>
-							{{ item.offer_ref }}
+							{{ kpSourceRef }}
 						</button>
-						<span v-else class="ml-1">{{ item.offer_ref }}</span>
+						<span v-else class="ml-1">{{ kpSourceRef }}</span>
 					</p>
 				</div>
 
@@ -116,7 +116,7 @@
 import type { TZAnalysisItem, TZAnalysisStatus } from '#shared/types'
 import { getTzItemStatusColor, getTzItemStatusLabel } from '#shared/types'
 import type { RequirementsHierarchy } from '#shared/utils/requirementsStruct'
-import { formatTzSourceRefLink } from '#shared/utils/tzRequirementDisplay'
+import { formatTzSourceRefLink, formatKpSourceRefLink } from '#shared/utils/tzRequirementDisplay'
 import TzRequirementDualText from '~/components/tz-analysis/TzRequirementDualText.vue'
 
 type TZItemView = TZAnalysisItem & { _index: number }
@@ -163,8 +163,12 @@ const itemKpFilename = computed(() =>
 	props.item.kp_name || props.defaultKpFilename || null,
 )
 
+const kpSourceRef = computed(() =>
+	formatKpSourceRefLink(props.item, props.item.ref),
+)
+
 function matchBorderClass(status: TZAnalysisStatus) {
-	if (status === 'met') return 'border-l-4 border-primary'
+	if (status === 'met') return 'border-l-4 border-success'
 	if (status === 'partial') return 'border-l-4 border-warning'
 	if (status === 'missing') return 'border-l-4 border-error'
 	return 'border-l-4 border-neutral-300 dark:border-neutral-600'

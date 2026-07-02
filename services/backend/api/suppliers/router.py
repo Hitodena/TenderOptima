@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_current_user, get_request_or_404, get_session
+from backend.api.subscriptions.enforcement import ensure_module_1_access
 from backend.api.suppliers.schemas import (
     BulkToggleSuppliersRequest,
     BulkToggleSuppliersResponse,
@@ -84,6 +85,7 @@ async def create_supplier(
         is_new = True
 
     if body.request_id is not None:
+        await ensure_module_1_access(session, current_user)
         request = await RequestDAO.get_by_id(session, body.request_id)
         if not request or request.user_id != current_user.id:
             raise HTTPException(
@@ -204,6 +206,7 @@ async def toggle_suppliers_bulk(
 ) -> BulkToggleSuppliersResponse:
     """Enable or disable multiple request-supplier rows in one transaction."""
     await get_request_or_404(request_id, session, current_user)
+    await ensure_module_1_access(session, current_user)
     updated = await RequestSupplierDAO.set_enabled_bulk(
         session, request_id, body.ids, body.is_enabled
     )

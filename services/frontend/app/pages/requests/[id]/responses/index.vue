@@ -1,24 +1,82 @@
 <template>
 	<div class="w-full">
-		<UContainer class="max-w-7xl py-0">
-			<div class="relative flex overflow-y-hidden min-h-0 w-full h-[calc(100dvh-5rem)]">
+		<div class="fixed inset-x-0 bottom-0 top-20 z-10 flex flex-col overflow-hidden bg-default">
+			<UContainer class="max-w-[1600px] py-0 flex flex-1 flex-col min-h-0 h-full w-full">
+				<div
+					class="shrink-0 flex items-center justify-between gap-2 px-3 md:px-4 py-2 border-b border-default bg-default/95 backdrop-blur supports-backdrop-filter:bg-default/80"
+				>
+					<div class="flex items-center gap-1 min-w-0">
+						<UButton
+							v-if="isMobile && selectedRsId && mainTab === 'thread'"
+							variant="ghost"
+							color="neutral"
+							size="xs"
+							icon="i-lucide-arrow-left"
+							class="shrink-0"
+							@click="selectedRsId = null"
+						/>
+						<UButton
+							variant="ghost"
+							color="neutral"
+							size="xs"
+							leading-icon="i-lucide-arrow-left"
+							to="/requests/history"
+						>
+							<span class="hidden sm:inline">К запросам</span>
+						</UButton>
+						<UButton
+							variant="ghost"
+							color="neutral"
+							size="xs"
+							leading-icon="i-lucide-users"
+							:to="`/requests/${id}`"
+						>
+							<span class="hidden sm:inline">К запросу</span>
+						</UButton>
+					</div>
 
-			<div
-class="shrink-0 border-r border-default flex flex-col"
-				:class="[isMobile && selectedRsId ? 'hidden' : 'flex', 'w-full md:w-64 lg:w-72']">
+					<div class="flex gap-1 p-0.5 bg-elevated rounded-lg shrink-0">
+						<button
+							type="button"
+							class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
+							:class="mainTab === 'thread'
+								? 'bg-default text-default shadow-sm'
+								: 'text-muted hover:text-default'"
+							@click="mainTab = 'thread'"
+						>
+							Переписка
+						</button>
+						<button
+							type="button"
+							class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
+							:class="mainTab === 'comparison'
+								? 'bg-default text-default shadow-sm'
+								: 'text-muted hover:text-default'"
+							@click="mainTab = 'comparison'"
+						>
+							Сравнение
+						</button>
+					</div>
 
-				<div class="px-4 py-3 border-b border-default flex items-center justify-between gap-2">
 					<UButton
-variant="ghost" color="neutral" size="xs" leading-icon="i-lucide-arrow-left"
-						to="/requests/history">
-						К запросам
-					</UButton>
-					<UButton
-variant="ghost" color="neutral" size="xs" icon="i-lucide-refresh-cw"
-						:loading="refreshingAll" title="Обновить анализ по всем поставщикам" @click="refreshAll" />
+						variant="ghost"
+						color="neutral"
+						size="xs"
+						icon="i-lucide-refresh-cw"
+						class="shrink-0"
+						:loading="refreshingAll"
+						title="Обновить анализ по всем поставщикам"
+						@click="refreshAll"
+					/>
 				</div>
 
-				<div class="px-3 py-2 border-b border-default space-y-2">
+				<div class="relative flex flex-1 min-h-0 min-w-0 overflow-hidden">
+					<div
+						class="shrink-0 border-r border-default flex flex-col min-h-0"
+						:class="[isMobile && selectedRsId ? 'hidden' : 'flex', 'w-full md:w-64 lg:w-72']"
+					>
+
+				<div class="px-3 py-2 border-b border-default space-y-2 shrink-0">
 					<UInput
 v-model="threadSearch" placeholder="Поиск..." icon="i-lucide-search" size="sm"
 						class="w-full" />
@@ -51,7 +109,9 @@ v-for="thread in sortedThreads" :key="thread.rs_id" type="button"
 							</div>
 							<div class="flex-1 min-w-0">
 								<div class="flex items-center justify-between gap-2 mb-1">
-									<p class="text-sm font-semibold truncate">{{ thread.supplier.company_name }}</p>
+									<p class="text-base font-semibold leading-snug line-clamp-2 min-w-0">
+										{{ thread.supplier.company_name }}
+									</p>
 									<span v-if="thread.unread" class="w-2 h-2 rounded-full bg-primary shrink-0" />
 								</div>
 								<p class="text-xs text-muted truncate mb-2">
@@ -78,30 +138,8 @@ v-for="thread in sortedThreads" :key="thread.rs_id" type="button"
 			</div>
 
 			<div
-class="flex-1 flex flex-col min-w-0"
+class="flex-1 flex flex-col min-w-0 min-h-0"
 				:class="isMobile && !selectedRsId && mainTab !== 'comparison' ? 'hidden' : 'flex'">
-
-				<div class="px-3 md:px-5 py-2 border-b border-default flex items-center gap-2 shrink-0">
-					<UButton
-v-if="isMobile && selectedRsId && mainTab === 'thread'" variant="ghost" size="sm"
-						icon="i-lucide-arrow-left" class="mr-1 shrink-0" @click="selectedRsId = null" />
-					<div class="flex gap-1 p-0.5 bg-elevated rounded-lg">
-						<button
-type="button" class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
-							:class="mainTab === 'thread'
-								? 'bg-default text-default shadow-sm'
-								: 'text-muted hover:text-default'" @click="mainTab = 'thread'">
-							Переписка
-						</button>
-						<button
-type="button" class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
-							:class="mainTab === 'comparison'
-								? 'bg-default text-default shadow-sm'
-								: 'text-muted hover:text-default'" @click="mainTab = 'comparison'">
-							Сравнение
-						</button>
-					</div>
-				</div>
 
 				<template v-if="mainTab === 'comparison'">
 					<div class="flex-1 flex flex-col min-h-0 min-w-0">
@@ -217,7 +255,7 @@ v-for="supplier in comparison.suppliers"
 :name="complianceForSupplier(supplier).passed
 													? 'i-lucide-circle-check'
 													: 'i-lucide-circle-x'" class="w-5 h-5 shrink-0" :class="complianceForSupplier(supplier).passed
-														? 'text-primary'
+														? 'text-success'
 														: 'text-error'" />
 											</td>
 										</tr>
@@ -410,7 +448,10 @@ v-for="att in msg.attachments" :key="att.filename" type="button"
 						</div>
 
 						<div class="border-t border-default px-3 md:px-5 py-4 shrink-0">
-							<p class="text-xs text-muted font-medium mb-2">Ответить на письмо</p>
+							<div class="flex items-center justify-between gap-2 mb-2">
+								<p class="text-xs text-muted font-medium">Ответить на письмо</p>
+								<InsertBusinessInfoButton v-model="replyBody" />
+							</div>
 							<UTextarea
 v-model="replyBody" placeholder="Текст сообщения..." :rows="isMobile ? 3 : 4"
 								class="w-full mb-3" />
@@ -438,7 +479,7 @@ v-if="replyError" color="error" variant="soft" icon="i-lucide-circle-alert"
 v-if="showParamsPanel && mainTab === 'thread'" class="shrink-0 border-l border-default flex flex-col"
 				:class="isMobile
 					? 'absolute inset-0 z-20 w-full bg-default'
-					: 'w-64 md:w-72'">
+					: 'w-72 md:w-80 lg:w-96'">
 
 				<div class="px-4 py-3 border-b border-default flex items-center justify-between gap-2">
 					<div class="flex items-center gap-2 min-w-0">
@@ -562,8 +603,9 @@ block size="sm" variant="outline" leading-icon="i-lucide-mail"
 					</div>
 				</div>
 			</div>
-			</div>
-		</UContainer>
+				</div>
+			</UContainer>
+		</div>
 
 		<ImproveConditionsModal
 v-if="modalSupplier" v-model:open="improveModalOpen" :request-id="id"
@@ -661,7 +703,11 @@ onMounted(() => {
 	const update = () => { isMobile.value = window.innerWidth < 768 }
 	update()
 	window.addEventListener('resize', update)
-	onUnmounted(() => window.removeEventListener('resize', update))
+	document.documentElement.classList.add('overflow-hidden')
+	onUnmounted(() => {
+		window.removeEventListener('resize', update)
+		document.documentElement.classList.remove('overflow-hidden')
+	})
 	void fetchSubscription()
 })
 
@@ -1263,7 +1309,7 @@ function comparisonStatusLabel(status: string) {
 }
 
 function comparisonStatusColor(status: string) {
-	if (status === 'met') return 'primary'
+	if (status === 'met') return 'success'
 	if (status === 'partial') return 'warning'
 	if (status === 'missing') return 'error'
 	return 'neutral'
@@ -1277,7 +1323,7 @@ function matchStatusIcon(status: TZAnalysisStatus) {
 }
 
 function matchStatusClass(status: TZAnalysisStatus) {
-	if (status === 'met') return 'text-primary'
+	if (status === 'met') return 'text-success'
 	if (status === 'partial') return 'text-warning'
 	if (status === 'missing') return 'text-error'
 	return 'text-muted'

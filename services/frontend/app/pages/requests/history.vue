@@ -156,8 +156,10 @@ const tabs = [
 ]
 
 function matchesTab(status: RequestStatus, tab: HistoryTab): boolean {
-	if (tab === 'closed') return status === RequestStatus.CLOSED
-	return status !== RequestStatus.CLOSED
+	if (tab === 'closed') {
+		return status === RequestStatus.CLOSED || status === RequestStatus.COMPLETED
+	}
+	return status !== RequestStatus.CLOSED && status !== RequestStatus.COMPLETED
 }
 
 const filteredHistory = computed(() => {

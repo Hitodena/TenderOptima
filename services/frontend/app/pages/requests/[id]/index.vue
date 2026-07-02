@@ -46,6 +46,26 @@ to="/requests/history" variant="ghost" color="neutral" size="sm"
 v-if="actionError" color="error" variant="soft" icon="i-lucide-circle-alert"
 				:description="actionError" class="mb-6" />
 
+			<UAlert
+				v-if="module1BlockReason && !isTerminalStatus"
+				color="warning"
+				variant="soft"
+				icon="i-lucide-triangle-alert"
+				class="mb-6"
+			>
+				<template #description>
+					<div class="space-y-2">
+						<p>{{ module1BlockReason }}</p>
+						<NuxtLink
+							:to="subscriptionProfilePath('subscription')"
+							class="text-sm font-medium text-primary hover:underline underline-offset-2"
+						>
+							Перейти к подписке
+						</NuxtLink>
+					</div>
+				</template>
+			</UAlert>
+
 			<div class="flex items-start justify-between mb-4 gap-4 flex-wrap">
 				<div>
 					<h2 class="text-lg font-semibold">Найденные поставщики</h2>
@@ -63,7 +83,8 @@ v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatu
 				<div class="flex items-center gap-2 shrink-0">
 					<UButton
 v-if="request.status == RequestStatus.DRAFT" size="lg" variant="outline" color="neutral"
-						leading-icon="i-lucide-search" :loading="searching" @click="runSearch">
+						leading-icon="i-lucide-search" :loading="searching" :disabled="!canStartModule1"
+						@click="runSearch">
 						Поиск поставщиков
 					</UButton>
 
@@ -76,6 +97,7 @@ v-if="!isTerminalStatus && suppliers.length > 0" size="lg" leading-icon="i-lucid
 					<UButton
 						v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED && request.status !== RequestStatus.CLOSED && request.status !== RequestStatus.SEARCHING"
 						size="lg" variant="outline" color="neutral" leading-icon="i-lucide-user-plus"
+						:disabled="!canStartModule1"
 						@click="showAddSupplier = true">
 						Добавить поставщика
 					</UButton>
@@ -307,16 +329,19 @@ import { getApiErrorDetail } from '#shared/utils/apiError'
 import { titleCaseWords } from '#shared/utils/textFormat'
 import {
 	canSendEmail,
+	canStartModule1Work,
 	effectiveEmailLimit,
 	emailQuotaBlockMessage,
 	emailQuotaRemaining,
 	isManualSupplierSource,
 	isTestPlan,
+	module1WorkBlockMessage,
 	testPlanLockedSuppliersMessage,
 	testPlanMaxSelectableSuppliers,
 	testPlanVisibleSupplierLimit,
 	TEST_PLAN_MANUAL_SUPPLIER_BONUS,
 } from '#shared/utils/subscriptionAccess'
+import { subscriptionProfilePath } from '#shared/utils/subscriptionDisplay'
 import type { TableColumn, TableRow } from '@nuxt/ui'
 import SupplierBookmarkModal from '~/components/SupplierBookmarkModal.vue'
 import SupplierInfoHint from '~/components/requests/SupplierInfoHint.vue'
@@ -328,6 +353,9 @@ const toast = useToast()
 const { formatDate } = useFormatDate()
 
 const subscription = ref<SubscriptionResponse | null>(null)
+
+const canStartModule1 = computed(() => canStartModule1Work(subscription.value))
+const module1BlockReason = computed(() => module1WorkBlockMessage(subscription.value))
 
 const {
 	request,

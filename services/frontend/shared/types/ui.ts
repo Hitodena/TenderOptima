@@ -109,7 +109,7 @@ export function getTzSupplierStatusLabel(s: string): string {
 }
 
 export const TZ_ITEM_STATUS_COLOR: Record<TZAnalysisStatus, BadgeColor> = {
-	met: 'primary',
+	met: 'success',
 	partial: 'warning',
 	missing: 'error',
 	not_found: 'neutral',

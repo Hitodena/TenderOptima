@@ -25,6 +25,7 @@ from backend.api.deps import (
 from backend.api.subscriptions.enforcement import (
     ensure_can_search,
     ensure_can_send_emails,
+    ensure_module_1_access,
 )
 from backend.api.user_requests.schemas import (
     Attachment,
@@ -102,6 +103,7 @@ async def create_request(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> RequestResponse:
     """Create a draft request with query and delivery region."""
+    await ensure_module_1_access(session, current_user)
     request = await RequestDAO.create(
         session,
         user_id=current_user.id,
