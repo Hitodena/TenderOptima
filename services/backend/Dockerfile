@@ -15,6 +15,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 	tesseract-ocr \
 	tesseract-ocr-eng \
 	tesseract-ocr-rus \
+	fontconfig \
+	fonts-liberation \
 	libreoffice-writer \
 	&& rm -rf /var/lib/apt/lists/* \
 	&& groupadd --gid 1001 appgroup \
@@ -30,7 +32,9 @@ ENV PATH="/app/.venv/bin:$PATH" \
 	PYTHONPATH=/app \
 	PYTHONUNBUFFERED=1 \
 	PYTHONDONTWRITEBYTECODE=1 \
-	HOME=/home/appuser
+	HOME=/home/appuser \
+	SAL_USE_VCLPLUGIN=svp \
+	SAL_DISABLE_OPENCL=1
 
 RUN mkdir -p /app/celerybeat /app/uploads /home/appuser/.cache && \
 	chown -R appuser:appgroup /app/celerybeat /app/uploads /home/appuser

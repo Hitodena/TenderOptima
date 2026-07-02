@@ -6,6 +6,7 @@ from unittest.mock import patch
 from backend.services.extraction.docx_to_pdf import (
     build_soffice_command,
     convert_docx_to_pdf,
+    find_converted_pdf,
 )
 from backend.utils.requirements_struct import (
     annotate_flat_with_page,
@@ -145,3 +146,16 @@ def test_build_soffice_command_uses_isolated_user_profile(
 
     assert command[1].startswith("-env:UserInstallation=file://")
     assert "--nofirststartwizard" in command
+    assert "pdf:writer_pdf_Export" in command
+
+
+def test_find_converted_pdf_prefers_expected_stem(tmp_path: Path) -> None:
+    out_dir = tmp_path / "pdf_out"
+    out_dir.mkdir()
+    (out_dir / "other.pdf").write_bytes(b"%PDF")
+    expected = out_dir / "source.pdf"
+    expected.write_bytes(b"%PDF")
+
+    found = find_converted_pdf(out_dir)
+
+    assert found == expected
