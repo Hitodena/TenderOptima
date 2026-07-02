@@ -44,12 +44,6 @@
 						</span>
 						<div class="flex-1 min-w-0">
 							<div v-if="node.rowIndex !== undefined" class="space-y-2">
-								<p
-									v-if="node.isHeading && showHeadingHint"
-									class="text-xs font-medium text-muted uppercase tracking-wide"
-								>
-									Заголовок раздела · не анализируется в КП
-								</p>
 								<UTextarea
 									v-if="rowsRef[node.rowIndex]"
 									v-model="rowsRef[node.rowIndex]!.text"
@@ -59,7 +53,6 @@
 									:rows="1"
 									:maxrows="20"
 									:autoresize-delay="50"
-									:placeholder="node.isHeading ? 'Название раздела (необязательно)' : undefined"
 									:readonly="readonly"
 									autoresize
 								/>
@@ -74,7 +67,6 @@
 								v-if="!readonly"
 								:show-remove="node.rowIndex !== undefined"
 								@add-child="emit('add-child', node.key)"
-								@add-heading="emit('add-heading', node.key)"
 								@add-sibling="onAddSibling(node)"
 								@remove="node.rowIndex !== undefined && emit('remove', node.rowIndex)"
 							/>
@@ -150,7 +142,6 @@
 							<RequirementNodeRail
 								v-if="!readonly"
 								@add-child="emit('add-child', node.key)"
-								@add-heading="emit('add-heading', node.key)"
 								@add-sibling="onAddSibling(node)"
 								@remove="emit('remove', node.rowIndex)"
 							/>

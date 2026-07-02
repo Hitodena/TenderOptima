@@ -97,11 +97,14 @@ v-else-if="sortedThreads.length === 0"
 						</p>
 					</div>
 
-					<button
-v-for="thread in sortedThreads" :key="thread.rs_id" type="button"
-						class="w-full text-left px-4 py-4 border-b border-default/50 hover:bg-elevated/50 transition-colors cursor-pointer"
-						:class="selectedRsId === thread.rs_id ? 'bg-elevated border-l-2 border-l-primary' : ''"
-						@click="selectThread(thread.rs_id)">
+					<div
+v-for="thread in sortedThreads" :key="thread.rs_id"
+						class="flex items-stretch border-b border-default/50"
+						:class="selectedRsId === thread.rs_id ? 'bg-elevated border-l-2 border-l-primary' : ''">
+						<button
+							type="button"
+							class="flex-1 min-w-0 text-left px-4 py-4 hover:bg-elevated/50 transition-colors cursor-pointer"
+							@click="selectThread(thread.rs_id)">
 						<div class="flex items-start gap-3">
 							<div
 								class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
@@ -133,7 +136,19 @@ v-for="thread in sortedThreads" :key="thread.rs_id" type="button"
 								</div>
 							</div>
 						</div>
-					</button>
+						</button>
+						<div class="flex items-center px-2 shrink-0">
+							<UButton
+								size="xs"
+								color="neutral"
+								variant="ghost"
+								leading-icon="i-lucide-database"
+								@click.stop="openSaveToBookmarkModal(thread.supplier)"
+							>
+								В базу
+							</UButton>
+						</div>
+					</div>
 				</div>
 			</div>
 
@@ -160,6 +175,29 @@ v-else-if="comparison.suppliers.length === 0"
 								<p class="text-sm">Нет проанализированных ответов</p>
 							</div>
 							<div v-else class="min-w-0 overflow-x-auto rounded-xl border border-default">
+								<div
+									v-if="priceRequirements.length"
+									class="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-default bg-elevated/30"
+								>
+									<span class="text-xs text-muted">Сортировка по цене:</span>
+									<UButton
+										v-for="req in priceRequirements"
+										:key="`sort-${req}`"
+										size="xs"
+										:variant="comparisonSortBy === req ? 'soft' : 'ghost'"
+										:color="comparisonSortBy === req ? 'primary' : 'neutral'"
+										@click="toggleComparisonSort(req)"
+									>
+										{{ req }}
+										<UIcon
+											v-if="comparisonSortBy === req"
+											:name="comparisonSortAsc
+												? 'i-lucide-arrow-up-narrow-wide'
+												: 'i-lucide-arrow-down-wide-narrow'"
+											class="w-3.5 h-3.5 ml-1"
+										/>
+									</UButton>
+								</div>
 								<table class="w-max min-w-full text-sm">
 									<thead>
 										<tr class="border-b border-default bg-elevated/50">
@@ -168,7 +206,7 @@ v-else-if="comparison.suppliers.length === 0"
 												Требование
 											</th>
 											<th
-v-for="supplier in comparison.suppliers" :key="supplier.rs_id"
+v-for="supplier in sortedComparisonSuppliers" :key="supplier.rs_id"
 												class="px-3 py-2.5 text-left text-xs font-semibold min-w-36 max-w-52 wrap-break-word whitespace-normal align-top">
 												<p class="wrap-break-word whitespace-normal">{{ supplier.company_name }}</p>
 												<p class="text-[10px] text-muted font-normal wrap-break-word whitespace-normal">
@@ -183,15 +221,32 @@ v-for="req in comparison.requirements" :key="req"
 											class="border-b border-default/50 last:border-0">
 											<td
 												class="sticky left-0 z-10 bg-default px-3 py-2.5 text-xs font-medium align-top wrap-break-word whitespace-normal max-w-56">
-												{{ req }}
+												<button
+													v-if="isPriceRequirement(req)"
+													type="button"
+													class="text-left hover:text-primary transition-colors"
+													@click="toggleComparisonSort(req)"
+												>
+													{{ req }}
+												</button>
+												<span v-else>{{ req }}</span>
 											</td>
 											<td
-v-for="supplier in comparison.suppliers" :key="supplier.rs_id"
+v-for="supplier in sortedComparisonSuppliers" :key="supplier.rs_id"
 												class="px-3 py-2.5 align-top wrap-break-word whitespace-normal max-w-52">
 												<div class="flex items-start gap-2">
 													<div class="flex-1 min-w-0 space-y-1">
 														<p class="text-xs wrap-break-word whitespace-normal">
 															{{ comparisonDisplayValue(supplier, req) }}
+														</p>
+														<p
+															v-if="formatPercentVsMin(supplier, req)"
+															class="text-[10px] font-medium tabular-nums"
+															:class="(supplier.percent_vs_min?.[req] ?? 0) <= 0
+																? 'text-success'
+																: 'text-warning'"
+														>
+															{{ formatPercentVsMin(supplier, req) }}
 														</p>
 														<p
 v-if="comparisonUserCorrected(supplier, req)"
@@ -249,7 +304,7 @@ v-else
 												Проверка соответствия
 											</td>
 											<td
-v-for="supplier in comparison.suppliers"
+v-for="supplier in sortedComparisonSuppliers"
 												:key="`compliance-${supplier.rs_id}`" class="px-3 py-3 align-middle">
 												<UIcon
 :name="complianceForSupplier(supplier).passed
@@ -265,7 +320,7 @@ v-for="supplier in comparison.suppliers"
 												Запросить отсутствующие параметры
 											</td>
 											<td
-v-for="supplier in comparison.suppliers"
+v-for="supplier in sortedComparisonSuppliers"
 												:key="`letter-${supplier.rs_id}`" class="px-3 py-3 align-middle">
 												<UButton
 v-if="supplierHasLetterMismatches(supplier)" size="xs"
@@ -282,7 +337,7 @@ v-if="supplierHasLetterMismatches(supplier)" size="xs"
 												Улучшить условия
 											</td>
 											<td
-v-for="supplier in comparison.suppliers"
+v-for="supplier in sortedComparisonSuppliers"
 												:key="`improve-${supplier.rs_id}`" class="px-3 py-3 align-middle">
 												<UButton
 size="xs" variant="outline" leading-icon="i-lucide-sparkles"
@@ -297,7 +352,7 @@ size="xs" variant="outline" leading-icon="i-lucide-sparkles"
 												Выбрать победителем
 											</td>
 											<td
-v-for="supplier in comparison.suppliers"
+v-for="supplier in sortedComparisonSuppliers"
 												:key="`winner-${supplier.rs_id}`" class="px-3 py-3 align-middle">
 												<UButton
 													v-if="!hasConfirmedWinner"
@@ -607,6 +662,10 @@ block size="sm" variant="outline" leading-icon="i-lucide-mail"
 			</UContainer>
 		</div>
 
+		<SaveSupplierToBookmarkModal
+			v-model:open="showSaveToBookmarkModal"
+			:supplier="saveToBookmarkSupplier"
+		/>
 		<ImproveConditionsModal
 v-if="modalSupplier" v-model:open="improveModalOpen" :request-id="id"
 			:supplier="modalSupplier" :subscription="subscription" />
@@ -662,6 +721,7 @@ import type {
 	RefreshAllResponse,
 	RequirementMatch,
 	SubscriptionResponse,
+	Supplier,
 	ThreadSummary,
 	TZAnalysisStatus,
 	UserResponse,
@@ -682,8 +742,9 @@ import {
 import { useIntervalFn } from '@vueuse/core'
 import ImproveConditionsModal from '~/components/ImproveConditionsModal.vue'
 import ResponseMismatchLetterModal from '~/components/ResponseMismatchLetterModal.vue'
+import SaveSupplierToBookmarkModal from '~/components/SaveSupplierToBookmarkModal.vue'
 import WinnerNotificationModal from '~/components/WinnerNotificationModal.vue'
-import { useRunStatusPolling } from '~/composables/useRunStatusPolling'
+import { getOfferValueTrend } from '#shared/utils/offerValue'
 
 definePageMeta({ layout: 'default' })
 
@@ -720,8 +781,15 @@ async function fetchSubscription() {
 	}
 }
 
+function openSaveToBookmarkModal(supplier: Supplier) {
+	saveToBookmarkSupplier.value = supplier
+	showSaveToBookmarkModal.value = true
+}
+
 const showParamsPanel = ref(true)
 const mainTab = ref<'thread' | 'comparison'>('thread')
+const showSaveToBookmarkModal = ref(false)
+const saveToBookmarkSupplier = ref<Supplier | null>(null)
 
 const threads = ref<ThreadSummary[]>([])
 const loadingThreads = ref(true)
@@ -953,6 +1021,59 @@ const editingMatchValue = ref('')
 const comparison = ref<ComparisonResponse | null>(null)
 const loadingComparison = ref(false)
 const exportingComparison = ref(false)
+const comparisonSortBy = ref<string | null>(null)
+const comparisonSortAsc = ref(true)
+
+const priceRequirements = computed(() =>
+	comparison.value?.price_requirements?.length
+		? comparison.value.price_requirements
+		: (comparison.value?.requirements ?? []).filter((req) =>
+			[
+				'Общая стоимость без НДС',
+				'Общая стоимость с НДС',
+				'Цена за единицу без НДС',
+			].includes(req),
+		),
+)
+
+const sortedComparisonSuppliers = computed((): ComparisonSupplier[] => {
+	const list = comparison.value?.suppliers ?? []
+	const sortKey = comparisonSortBy.value
+	if (!sortKey) return list
+	const asc = comparisonSortAsc.value
+	return [...list].sort((a, b) => {
+		const av = a.numeric_values?.[sortKey] ?? null
+		const bv = b.numeric_values?.[sortKey] ?? null
+		if (av === null && bv === null) return 0
+		if (av === null) return 1
+		if (bv === null) return -1
+		return asc ? av - bv : bv - av
+	})
+})
+
+function toggleComparisonSort(req: string) {
+	if (comparisonSortBy.value === req) {
+		comparisonSortAsc.value = !comparisonSortAsc.value
+		return
+	}
+	comparisonSortBy.value = req
+	comparisonSortAsc.value = true
+}
+
+function isPriceRequirement(req: string): boolean {
+	return priceRequirements.value.includes(req)
+}
+
+function formatPercentVsMin(
+	supplier: ComparisonSupplier,
+	req: string,
+): string | null {
+	const pct = supplier.percent_vs_min?.[req]
+	if (pct === null || pct === undefined) return null
+	if (pct === 0) return 'мин.'
+	const sign = pct > 0 ? '+' : ''
+	return `${sign}${pct.toLocaleString('ru-RU', { maximumFractionDigits: 1 })}%`
+}
 
 const hasConfirmedWinner = computed(() =>
 	comparison.value?.suppliers.some((supplier) => supplier.is_winner) ?? false,
@@ -1248,6 +1369,12 @@ async function fetchComparison() {
 		comparison.value = await get<ComparisonResponse>(
 			`/requests/${id}/analysis/comparison`,
 		)
+		if (
+			!comparisonSortBy.value
+			&& comparison.value.price_requirements?.length
+		) {
+			comparisonSortBy.value = comparison.value.price_requirements[0] ?? null
+		}
 	} catch {
 		comparison.value = null
 	} finally {

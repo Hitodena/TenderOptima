@@ -29,7 +29,6 @@ const props = withDefaults(
 
 const emit = defineEmits<{
 	'add-child': []
-	'add-heading': []
 	'add-sibling': []
 	remove: []
 }>()
@@ -42,9 +41,9 @@ const menuItems = computed((): DropdownMenuItem[][] => {
 			onSelect: () => emit('add-child'),
 		},
 		{
-			label: 'Заголовок',
-			icon: 'i-lucide-heading',
-			onSelect: () => emit('add-heading'),
+			label: 'Добавить пункт',
+			icon: 'i-lucide-plus',
+			onSelect: () => emit('add-sibling'),
 		},
 	]
 	if (props.showRemove) {

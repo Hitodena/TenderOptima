@@ -155,7 +155,7 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
     async def get_by_imap_id(
         cls, session: AsyncSession, imap_id: str
     ) -> EmailMessage | None:
-        """Load an email message by its IMAP ID."""
+        """Load an email message by mailbox-scoped polling id (host:user:uid)."""
         logger.debug(
             "Getting email message by IMAP ID",
             model=cls.model,

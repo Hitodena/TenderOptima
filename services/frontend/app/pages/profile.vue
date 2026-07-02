@@ -18,12 +18,15 @@
 				<UTabs v-model="activeTab" :items="tabs" :ui="{ list: 'mb-6' }">
 
 					<template #subscription>
-						<div>
-							<h2 class="text-base font-semibold mb-0.5">Статус подписки</h2>
-							<p class="text-sm text-muted mb-5">
-								Текущий тариф и лимиты вашей учётной записи
-							</p>
-							<ProfileSubscriptionPanel :subscription="user?.subscription" />
+						<div class="space-y-8">
+							<div>
+								<h2 class="text-base font-semibold mb-0.5">Статус подписки</h2>
+								<p class="text-sm text-muted mb-5">
+									Текущий тариф и лимиты вашей учётной записи
+								</p>
+								<ProfileSubscriptionPanel :subscription="user?.subscription" />
+							</div>
+							<ProfileBillingPanel :subscription="user?.subscription" />
 						</div>
 					</template>
 

@@ -83,6 +83,20 @@ class Config(BaseSettings):
     max_upload_size: int = 10 * 1024 * 1024
     max_tz_upload_size: int = 100 * 1024 * 1024
 
+    # BILLING_ISSUER_* — получатель услуг в счёте-фактуре (из env)
+    billing_issuer_organization_form: str = (
+        "Республиканское унитарное предприятие"
+    )
+    billing_issuer_name: str = "«Национальный центр поддержки экспорта»"
+    billing_issuer_country: str = "Беларусь"
+    billing_issuer_inn: str = "101223447"
+    billing_issuer_ogrn: str = "37445139"
+    billing_issuer_address: str = "220030, г. Минск, пл. Свободы, 17-1, к.1003"
+    billing_issuer_settlement_account: str = "BY58AKBB30120000044725100000"
+    billing_issuer_bank_name: str = "ЦБУ № 510 ОАО «АСБ Беларусбанк» г. Минск"
+    billing_issuer_bik: str = "AKBBBY2X"
+    billing_issuer_correspondent_account: str = ""
+
     # CORS
     cors_origins: list[str] = ["http://localhost:3000"]
     cors_allow_credentials: bool = True

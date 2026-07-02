@@ -129,12 +129,6 @@ function hasUnreadMessages(req: RequestResponse): boolean {
 }
 
 function openRequest(req: RequestResponse) {
-	const isTerminal =
-		req.status === RequestStatus.COMPLETED || req.status === RequestStatus.CLOSED
-	if (isTerminal) {
-		navigateTo(`/requests/${req.id}/responses`)
-		return
-	}
 	navigateTo(`/requests/${req.id}`)
 }
 

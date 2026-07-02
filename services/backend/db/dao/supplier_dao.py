@@ -68,8 +68,10 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
             tracking_id=tracking_id,
         )
         try:
-            stmt = select(cls.model).where(
-                cls.model.tracking_id == tracking_id
+            stmt = (
+                select(cls.model)
+                .where(cls.model.tracking_id == tracking_id)
+                .options(selectinload(cls.model.request))
             )
             result = await session.execute(stmt)
             instance = result.scalar_one_or_none()

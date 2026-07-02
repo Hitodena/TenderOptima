@@ -65,6 +65,59 @@ export interface UserEmailSettingsUpdate {
 	clear_imap_password?: boolean;
 }
 
+export interface BillingProfileResponse {
+	country: string | null;
+	organization_form: string | null;
+	inn: string | null;
+	organization_name: string | null;
+	kpp: string | null;
+	ogrn: string | null;
+	legal_address: string | null;
+	postal_address: string | null;
+	director_name: string | null;
+	bik: string | null;
+	bank_name: string | null;
+	settlement_account: string | null;
+	correspondent_account: string | null;
+	contact_person: string | null;
+	contact_full_name: string | null;
+	contact_email: string | null;
+	contact_phone: string | null;
+}
+
+export type BillingProfileUpdate = Partial<BillingProfileResponse>;
+
+export interface BillingDocumentLineItem {
+	name: string;
+	amount: string;
+}
+
+export interface BillingDocumentResponse {
+	id: string;
+	receipt_id: string;
+	plan: string;
+	period_start: string;
+	period_end: string;
+	currency_code: string;
+	total_amount: string;
+	line_items: BillingDocumentLineItem[];
+	email_status: string;
+	sent_at: string | null;
+	recipient_email: string | null;
+	created_at: string;
+}
+
+export interface BillingGenerateRequest {
+	period_year?: number | null;
+	period_month?: number | null;
+	send_email?: boolean;
+}
+
+export interface BillingGenerateResponse {
+	document: BillingDocumentResponse;
+	email_queued: boolean;
+}
+
 export interface SubscriptionUpdate {
 	plan?: SubscriptionPlan | null;
 	module_1_enabled?: boolean | null;
@@ -288,6 +341,8 @@ export interface TZAnalysisSupplierCreateRequest {
 export interface RequirementMatch {
 	requirement: string;
 	offer_value: string | null;
+	numeric_value?: number | null;
+	currency?: string | null;
 	explanation: string | null;
 	status: TZAnalysisStatus;
 	corrected_from?: string | null;
@@ -311,10 +366,13 @@ export interface ComparisonSupplier {
 	explanations?: Record<string, string | null>;
 	corrected_from?: Record<string, string | null>;
 	statuses: Record<string, string | null>;
+	numeric_values?: Record<string, number | null>;
+	percent_vs_min?: Record<string, number | null>;
 }
 
 export interface ComparisonResponse {
 	requirements: string[];
+	price_requirements?: string[];
 	suppliers: ComparisonSupplier[];
 }
 

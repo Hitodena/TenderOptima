@@ -27,6 +27,12 @@ from backend.db.models import Request, User
 from backend.enums import TZAnalysisRunStatus
 from backend.schemas.analysis import EmailAnalysisResult
 from backend.services.analysis.email_queue import queue_email_analysis
+from backend.utils.comparison_price import (
+    compute_percent_vs_min,
+    compute_row_minima,
+    is_price_requirement,
+    resolve_numeric_value,
+)
 from backend.utils.xlsx_export import (
     build_comparison_workbook,
     workbook_to_bytes,
@@ -56,24 +62,31 @@ def _match_maps_from_analysis(
     dict[str, str | None],
     dict[str, str | None],
     dict[str, str | None],
+    dict[str, float | None],
 ]:
     if not raw:
-        return {}, {}, {}, {}
+        return {}, {}, {}, {}, {}
     try:
         result = EmailAnalysisResult(**raw)
     except Exception:
-        return {}, {}, {}, {}
+        return {}, {}, {}, {}, {}
     values: dict[str, str | None] = {}
     statuses: dict[str, str | None] = {}
     explanations: dict[str, str | None] = {}
     corrected_from: dict[str, str | None] = {}
+    numeric_values: dict[str, float | None] = {}
     for match in result.matches:
         req = match.requirement.strip()
         values[req] = match.offer_value
         statuses[req] = match.status.value
         explanations[req] = match.explanation
         corrected_from[req] = match.corrected_from
-    return values, statuses, explanations, corrected_from
+        numeric_values[req] = resolve_numeric_value(
+            req,
+            match.offer_value,
+            match.numeric_value,
+        )
+    return values, statuses, explanations, corrected_from, numeric_values
 
 
 async def _latest_analyzed_incoming(session, rs_id: uuid.UUID):
@@ -96,6 +109,7 @@ async def _build_comparison(
     request: Request,
 ) -> ComparisonResponse:
     requirements = _requirements_list(request)
+    price_requirements = [r for r in requirements if is_price_requirement(r)]
     suppliers_rows: list[ComparisonSupplier] = []
     enabled = await RequestSupplierDAO.get_enabled_by_request(
         session, request.id
@@ -115,6 +129,9 @@ async def _build_comparison(
         corrected_from: dict[str, str | None] = {
             req: None for req in requirements
         }
+        numeric_values: dict[str, float | None] = {
+            req: None for req in requirements
+        }
         if analyzed and analyzed.analysis:
             analysis = analyzed.analysis
             (
@@ -122,6 +139,7 @@ async def _build_comparison(
                 match_statuses,
                 match_explanations,
                 match_corrected,
+                match_numeric,
             ) = _match_maps_from_analysis(analysis.raw_llm_response)
             prev = analysis.previous_parameters
             prev_map = prev if isinstance(prev, dict) else {}
@@ -134,6 +152,8 @@ async def _build_comparison(
                     explanations[req] = match_explanations[req]
                 if req in match_corrected:
                     corrected_from[req] = match_corrected[req]
+                if req in match_numeric:
+                    numeric_values[req] = match_numeric[req]
                 if req in prev_map and prev_map[req] is not None:
                     previous_values[req] = str(prev_map[req])
         suppliers_rows.append(
@@ -147,10 +167,26 @@ async def _build_comparison(
                 explanations=explanations,
                 corrected_from=corrected_from,
                 statuses=statuses,
+                numeric_values=numeric_values,
             )
         )
+
+    row_minima = compute_row_minima(
+        requirements,
+        [dict(s.numeric_values) for s in suppliers_rows],
+    )
+    for supplier in suppliers_rows:
+        percent_vs_min: dict[str, float | None] = {}
+        for req in price_requirements:
+            percent_vs_min[req] = compute_percent_vs_min(
+                supplier.numeric_values.get(req),
+                row_minima.get(req),
+            )
+        supplier.percent_vs_min = percent_vs_min
+
     return ComparisonResponse(
         requirements=requirements,
+        price_requirements=price_requirements,
         suppliers=suppliers_rows,
     )
 

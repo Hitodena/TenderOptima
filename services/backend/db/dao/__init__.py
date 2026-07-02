@@ -5,6 +5,10 @@ from .email_template_dao import EmailTemplateDAO
 from .request_dao import RequestDAO
 from .response_analysis_dao import ResponseAnalysisDAO
 from .search_dao import SearchHistoryDAO
+from .subscription_billing_dao import (
+    SubscriptionBillingDocumentDAO,
+    SubscriptionBillingProfileDAO,
+)
 from .subscription_dao import SubscriptionDAO, UserAdminDAO
 from .supplier_bookmark_dao import (
     SupplierBookmarkItemDAO,
@@ -32,5 +36,7 @@ __all__ = [
     "TZAnalysisSupplierDAO",
     "ResponseAnalysisDAO",
     "SubscriptionDAO",
+    "SubscriptionBillingDocumentDAO",
+    "SubscriptionBillingProfileDAO",
     "UserAdminDAO",
 ]

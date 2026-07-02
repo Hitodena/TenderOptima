@@ -1,6 +1,6 @@
 <script lang="ts" setup>
-import type { PricingPlanProps } from '@nuxt/ui'
 import type { SubscriptionPlan, SubscriptionResponse } from '#shared/types'
+import { effectiveEmailLimit } from '#shared/utils/subscriptionAccess'
 import {
 	PLAN_DESCRIPTIONS,
 	PLAN_LABELS,
@@ -12,7 +12,7 @@ import {
 	formatSearchesFeature,
 	formatUsageLimit,
 } from '#shared/utils/subscriptionDisplay'
-import { effectiveEmailLimit } from '#shared/utils/subscriptionAccess'
+import type { PricingPlanProps } from '@nuxt/ui'
 
 const props = defineProps<{
 	subscription: SubscriptionResponse | null | undefined
@@ -173,43 +173,40 @@ function buildPricingPlan(plan: SubscriptionPlan): PricingPlanProps {
 		billingPeriod: plan === 'corporate' ? undefined : billingPeriod,
 		terms: planPricingTerms(plan),
 		features: planFeatures(plan),
+		orientation: 'horizontal',
 		variant: isCurrent ? 'subtle' : 'outline',
-		highlight: isCurrent || isRecommended,
-		scale: isRecommended && !isCurrent,
+		highlight: isCurrent,
 		badge: isCurrent
 			? { label: 'Ваш тариф', color: 'primary', variant: 'subtle' }
 			: isRecommended
 				? { label: 'Рекомендуем', color: 'success', variant: 'subtle' }
 				: undefined,
+		ui: {
+			root: 'min-w-0 w-full',
+			featureTitle: 'text-muted text-sm text-pretty break-words',
+			terms: 'text-xs/5 text-muted text-center text-balance break-words',
+			title: 'text-highlighted text-xl sm:text-2xl text-pretty font-semibold',
+		},
 	}
 }
 
 const pricingPlans = computed(() =>
 	SUBSCRIPTION_PLAN_ORDER.map((plan) => buildPricingPlan(plan)),
 )
+
+const pricingPlansUi = {
+	base: 'flex flex-col gap-4 min-w-0',
+}
 </script>
 
 <template>
 	<div v-if="subscription" class="space-y-8">
 		<div class="flex flex-wrap items-center gap-2">
-			<UBadge
-				:color="subscription.is_active ? 'success' : 'neutral'"
-				variant="subtle"
-				:label="subscription.is_active ? 'Активна' : 'Неактивна'"
-			/>
+			<UBadge :color="subscription.is_active ? 'success' : 'neutral'" variant="subtle"
+				:label="subscription.is_active ? 'Активна' : 'Неактивна'" />
 			<UBadge color="primary" variant="subtle" :label="planLabel ?? subscription.plan" />
-			<UBadge
-				v-if="subscription.module_1_enabled"
-				color="neutral"
-				variant="outline"
-				label="Модуль 1"
-			/>
-			<UBadge
-				v-if="subscription.module_2_enabled"
-				color="neutral"
-				variant="outline"
-				label="Модуль 2"
-			/>
+			<UBadge v-if="subscription.module_1_enabled" color="neutral" variant="outline" label="Модуль 1" />
+			<UBadge v-if="subscription.module_2_enabled" color="neutral" variant="outline" label="Модуль 2" />
 		</div>
 
 		<div class="grid gap-4 sm:grid-cols-2">
@@ -224,7 +221,8 @@ const pricingPlans = computed(() =>
 					<div class="flex justify-between gap-3">
 						<span class="text-muted">Поиски</span>
 						<span class="font-medium tabular-nums">
-							{{ formatUsage(subscription.searches_used_this_month, subscription.max_searches_per_month) }}
+							{{ formatUsage(subscription.searches_used_this_month, subscription.max_searches_per_month)
+							}}
 						</span>
 					</div>
 					<div class="flex justify-between gap-3">
@@ -259,7 +257,14 @@ const pricingPlans = computed(() =>
 					Сравните возможности и лимиты по каждому плану
 				</p>
 			</div>
-			<UPricingPlans orientation="vertical" scale compact :plans="pricingPlans" />
+			<div class="min-w-0">
+				<UPricingPlans
+					orientation="vertical"
+					compact
+					:plans="pricingPlans"
+					:ui="pricingPlansUi"
+				/>
+			</div>
 		</div>
 	</div>
 
@@ -276,7 +281,14 @@ const pricingPlans = computed(() =>
 					Сравните возможности и лимиты по каждому плану
 				</p>
 			</div>
-			<UPricingPlans orientation="vertical" scale compact :plans="pricingPlans" />
+			<div class="min-w-0">
+				<UPricingPlans
+					orientation="vertical"
+					compact
+					:plans="pricingPlans"
+					:ui="pricingPlansUi"
+				/>
+			</div>
 		</div>
 	</div>
 </template>

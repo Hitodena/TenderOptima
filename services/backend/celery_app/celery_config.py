@@ -166,10 +166,15 @@ class CeleryConfig:
             "queue": "analysis",
             "routing_key": "analysis",
         },
+        "billing.send_document_email": {
+            "queue": "mail_send",
+            "routing_key": "mail.send",
+        },
     }
 
     include = [
         "backend.celery_app.tasks.email_tasks",
+        "backend.celery_app.tasks.billing_tasks",
         "backend.celery_app.tasks.parser_tasks",
         "backend.celery_app.tasks.analysis_tasks",
     ]

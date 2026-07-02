@@ -5,6 +5,10 @@ from .request import Request
 from .response import EmailMessage, ResponseAnalysis
 from .search import SearchHistory
 from .subscription import Subscription
+from .subscription_billing import (
+    SubscriptionBillingDocument,
+    SubscriptionBillingProfile,
+)
 from .supplier import RequestSupplier, Supplier
 from .supplier_bookmark import SupplierBookmarkItem, SupplierBookmarkList
 from .tz_analysis import TZAnalysis
@@ -24,6 +28,8 @@ __all__ = [
     "ResponseAnalysis",
     "SearchHistory",
     "Subscription",
+    "SubscriptionBillingDocument",
+    "SubscriptionBillingProfile",
     "Supplier",
     "RequestSupplier",
     "User",

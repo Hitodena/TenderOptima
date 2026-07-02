@@ -41,11 +41,14 @@ from backend.utils.email_utils import (
     normalize_message_id,
     resolve_reply_subject,
 )
+from backend.utils.imap_poll import (
+    build_mailbox_imap_id,
+    build_poll_mailboxes,
+    tracking_belongs_to_mailbox_owner,
+)
 from backend.utils.short_id import generate_tid
 from backend.utils.user_email_credentials import (
-    ImapCredentials,
     SmtpCredentials,
-    resolve_imap_credentials,
     resolve_smtp_credentials,
     smtp_connection,
 )
@@ -665,21 +668,11 @@ async def poll_imap(self) -> dict:
     async with db_manager.session() as session:
         imap_users = await UserAdminDAO.list_imap_configured_users(session)
 
-    mailboxes: list[tuple[str, ImapCredentials]] = []
-    seen_mailbox_keys: set[tuple[str, str]] = set()
-    for user in imap_users:
-        creds = resolve_imap_credentials(user, config)
-        key = (creds.host, creds.user)
-        if key in seen_mailbox_keys:
-            continue
-        seen_mailbox_keys.add(key)
-        mailboxes.append((str(user.id), creds))
+    mailboxes = build_poll_mailboxes(imap_users, config)
 
-    if not mailboxes:
-        global_creds = resolve_imap_credentials(None, config)
-        mailboxes.append(("global", global_creds))
-
-    for mailbox_label, imap_creds in mailboxes:
+    for mailbox in mailboxes:
+        mailbox_label = mailbox.label
+        imap_creds = mailbox.creds
         try:
             imap = imaplib.IMAP4_SSL(imap_creds.host, imap_creds.port)
             imap.login(imap_creds.user, imap_creds.password)
@@ -739,6 +732,9 @@ async def poll_imap(self) -> dict:
                         {
                             "uid": uid,
                             "uid_str": uid_str,
+                            "imap_id": build_mailbox_imap_id(
+                                imap_creds, uid_str
+                            ),
                             "tracking_id": match.group(1),
                             "subject": subject,
                             "body": body,
@@ -756,7 +752,7 @@ async def poll_imap(self) -> dict:
                 except Exception as exc:
                     logger.exception(
                         "Failed to parse message",
-                        imap_id=uid_str,
+                        imap_id=build_mailbox_imap_id(imap_creds, uid_str),
                         error=str(exc),
                     )
                     skipped += 1
@@ -776,8 +772,22 @@ async def poll_imap(self) -> dict:
                             skipped += 1
                             continue
 
+                        if not tracking_belongs_to_mailbox_owner(
+                            mailbox.owner_user_id,
+                            rs.request.user_id,
+                        ):
+                            logger.warning(
+                                "TID belongs to another user mailbox",
+                                tracking_id=str(item["tracking_id"]),
+                                mailbox=mailbox_label,
+                                request_user_id=str(rs.request.user_id),
+                                mailbox_owner_id=str(mailbox.owner_user_id),
+                            )
+                            skipped += 1
+                            continue
+
                         existing = await EmailMessageDAO.get_by_imap_id(
-                            session, item["uid_str"]
+                            session, item["imap_id"]
                         )
                         if existing:
                             skipped += 1
@@ -882,7 +892,7 @@ async def poll_imap(self) -> dict:
                             direction=EmailMessageDirection.INCOMING,
                             message_id=item.get("message_id"),
                             in_reply_to=item.get("in_reply_to"),
-                            imap_id=item["uid_str"],
+                            imap_id=item["imap_id"],
                             subject=item["subject"],
                             raw_body=email_body_text,
                             attachments=processed_attachments or None,
@@ -915,7 +925,7 @@ async def poll_imap(self) -> dict:
                     except Exception as exc:
                         logger.exception(
                             "Failed to save message",
-                            imap_id=item["uid_str"],
+                            imap_id=item["imap_id"],
                             error=str(exc),
                         )
                         skipped += 1

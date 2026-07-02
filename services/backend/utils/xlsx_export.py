@@ -13,6 +13,7 @@ from backend.services.analysis.docx_export import (
     _letter_tz_requirement_ref,
     _letter_tz_requirement_text,
 )
+from backend.utils.comparison_price import is_price_requirement
 
 _SUPPLIER_SUBCOLS = (
     "Первоначальное\nпредложение",
@@ -67,6 +68,8 @@ class ComparisonSupplierLike(Protocol):
     explanations: dict[str, str | None]
     corrected_from: dict[str, str | None]
     statuses: dict[str, str | None]
+    numeric_values: dict[str, float | None]
+    percent_vs_min: dict[str, float | None]
 
 
 def workbook_to_bytes(wb: Workbook) -> bytes:
@@ -296,6 +299,14 @@ def build_comparison_workbook(
                 status_label = ""
             else:
                 current = supplier.values.get(req) or "—"
+                pct = supplier.percent_vs_min.get(req)
+                if (
+                    is_price_requirement(req)
+                    and pct is not None
+                    and current != "—"
+                ):
+                    sign = "+" if pct > 0 else ""
+                    current = f"{current} ({sign}{pct:g}%)"
                 status_label = (
                     status_labels.get(status_key, status_key)
                     if status_key

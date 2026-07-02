@@ -23,6 +23,10 @@ from backend.services.analysis.email_queue import (
     queue_email_analysis,
     request_has_requirements,
 )
+from backend.utils.comparison_price import (
+    is_price_requirement,
+    parse_offer_numeric,
+)
 
 router = APIRouter(prefix="/responses", tags=["Response Analysis"])
 
@@ -228,6 +232,8 @@ async def patch_response_analysis(
             if old_value is not None and str(old_value).strip():
                 entry["corrected_from"] = str(old_value)
             entry["offer_value"] = new_value
+            if is_price_requirement(req):
+                entry["numeric_value"] = parse_offer_numeric(new_value)
             if new_value is not None and str(new_value).strip():
                 entry["status"] = TZAnalysisStatus.MET.value
                 entry["explanation"] = None

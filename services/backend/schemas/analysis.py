@@ -65,6 +65,8 @@ class TZAnalysisSessionResult(BaseModel):
 class RequirementMatch(BaseModel):
     requirement: str
     offer_value: str | None = None
+    numeric_value: float | None = None
+    currency: str | None = None
     explanation: str | None = None
     status: TZAnalysisStatus
     corrected_from: str | None = None

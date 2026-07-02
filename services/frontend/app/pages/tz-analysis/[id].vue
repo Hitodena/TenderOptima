@@ -1,5 +1,5 @@
 <template>
-	<UContainer class="py-8 max-w-7xl">
+	<UContainer class="py-8 max-w-7xl" :class="{ 'pb-28': showTzConfirmBar }">
 		<template v-if="loading">
 			<div class="space-y-4">
 				<USkeleton class="h-10 w-72" />
@@ -175,38 +175,22 @@ v-if="isTzReviewPhase && !isAnalysisClosed"
 							</template>
 
 							<div
-								v-if="!isTzConfirmed && !isCompleted"
-								class="sticky top-0 z-10 -mx-4 mb-4 px-4 pb-4 border-b border-default bg-default/95 backdrop-blur-sm sm:-mx-6 sm:px-6"
-							>
-								<UButton
-									color="primary"
-									variant="solid"
-									size="lg"
-									block
-									leading-icon="i-lucide-check"
-									:loading="confirmingTz"
-									:disabled="!requirementsRowsNonempty(editableRequirementsTz)"
-									@click="confirmTzRequirements"
-								>
-									Подтвердить требования
-								</UButton>
-							</div>
-
-							<div
 								class="overflow-y-auto pr-1"
 								:class="!isTzConfirmed && !isCompleted
 									? 'max-h-[min(58vh,calc(100dvh-18rem))]'
 									: ''"
 							>
 								<RequirementTreeEditor
-v-if="displayedTzCount > 0" :rows="displayedTzRequirementsRows"
+									v-if="displayedTzCount > 0"
+									:rows="displayedTzRequirementsRows"
 									:scope-id="isTzConfirmed ? 'tz-results' : 'tz-review'"
-									:readonly="isTzConfirmed || isCompleted" show-heading-hint
+									:readonly="isTzConfirmed || isCompleted"
 									@remove="removeTzRequirement"
 									@add-child="addTzChildRequirement"
 									@add-heading="addTzHeadingRequirement"
 									@add-sibling="addTzSiblingRequirement"
-									@reorder="reorderTzRequirement" />
+									@reorder="reorderTzRequirement"
+								/>
 								<p v-else class="text-sm text-muted text-center py-4">
 									Нет извлечённых требований
 								</p>
@@ -214,18 +198,19 @@ v-if="displayedTzCount > 0" :rows="displayedTzRequirementsRows"
 
 							<div
 								v-if="!isTzConfirmed && !isCompleted"
-								class="mt-4 pt-4 border-t border-default flex justify-center"
+								class="mt-4 pt-4 border-t border-default"
 							>
-								<UDropdownMenu :items="rootAddMenuItems" :ui="{ content: 'min-w-44' }">
+								<div class="flex justify-center">
 									<UButton
 										type="button"
 										variant="ghost"
 										color="neutral"
 										size="sm"
 										icon="i-lucide-plus"
-										label="Добавить"
+										label="Добавить требование"
+										@click="addTzRequirement()"
 									/>
-								</UDropdownMenu>
+								</div>
 							</div>
 						</UCard>
 					</template>
@@ -658,11 +643,32 @@ v-for="tab in letterPreviewTabs" :key="tab.value" type="button" block
 				</div>
 			</template>
 		</UModal>
+
+		<Teleport to="body">
+			<div
+				v-if="showTzConfirmBar"
+				class="fixed inset-x-0 bottom-0 z-50 border-t border-default bg-default/95 backdrop-blur-sm supports-[backdrop-filter]:bg-default/80 px-4 py-3"
+			>
+				<UContainer class="max-w-7xl">
+					<UButton
+						color="primary"
+						variant="solid"
+						size="xl"
+						block
+						leading-icon="i-lucide-check"
+						:loading="confirmingTz"
+						:disabled="!requirementsRowsNonempty(editableRequirementsTz)"
+						@click="confirmTzRequirements"
+					>
+						Подтвердить требования
+					</UButton>
+				</UContainer>
+			</div>
+		</Teleport>
 	</UContainer>
 </template>
 
 <script lang="ts" setup>
-import type { DropdownMenuItem } from '@nuxt/ui'
 import type {
 	TZAnalysisItem,
 	TZAnalysisKpStats,
@@ -1013,6 +1019,13 @@ const hasKpContent = computed(() => {
 })
 const isAnalysisClosed = computed(() =>
 	isCompleted.value && !hasKpContent.value,
+)
+const showTzConfirmBar = computed(() =>
+	isTzReviewPhase.value
+	&& !isAnalysisClosed.value
+	&& !isTzConfirmed.value
+	&& !isCompleted.value
+	&& activeContentTab.value === 'tz',
 )
 const visibleContentTabItems = computed(() => {
 	if (isAnalysisClosed.value || !isTzConfirmed.value) {
@@ -1674,28 +1687,6 @@ function addTzHeadingRequirement(parentKey: string) {
 		},
 	])
 }
-
-function addTzRootHeading() {
-	updateEditableRequirementsTz((rows) => [
-		...rows,
-		{ key: nextTopLevelKey(rows), text: '', isHeading: true },
-	])
-}
-
-const rootAddMenuItems = computed((): DropdownMenuItem[][] => [
-	[
-		{
-			label: 'Требование',
-			icon: 'i-lucide-list-plus',
-			onSelect: () => addTzRequirement(),
-		},
-		{
-			label: 'Заголовок',
-			icon: 'i-lucide-heading',
-			onSelect: () => addTzRootHeading(),
-		},
-	],
-])
 
 function removeTzRequirement(index: number) {
 	updateEditableRequirementsTz((rows) =>

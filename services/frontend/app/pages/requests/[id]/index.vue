@@ -192,7 +192,9 @@ size="sm" variant="outline" color="primary"
 							</template>
 
 							<template #company_name-cell="{ row }">
-								<div class="flex items-start gap-2 min-w-0 py-0.5">
+								<div
+									class="flex items-start gap-2 min-w-0 py-0.5"
+									:class="lockedRowContentClass(row.original)">
 									<div
 										class="w-7 h-7 rounded-lg bg-elevated flex items-center justify-center shrink-0 mt-0.5">
 										<UIcon name="i-lucide-building-2" class="w-3.5 h-3.5 text-muted" />
@@ -207,17 +209,19 @@ size="sm" variant="outline" color="primary"
 							</template>
 
 							<template #domain-cell="{ row }">
-								<a
+								<div :class="lockedRowContentClass(row.original)">
+									<a
 v-if="row.original.supplier?.domain"
-									:href="toExternalUrl(row.original.supplier.domain)" target="_blank"
-									class="text-primary hover:underline text-sm" @click.stop>
-									{{ formatDomainLabel(row.original.supplier.domain) }}
-								</a>
-								<span v-else class="text-sm text-muted">—</span>
+										:href="toExternalUrl(row.original.supplier.domain)" target="_blank"
+										class="text-primary hover:underline text-sm" @click.stop>
+										{{ formatDomainLabel(row.original.supplier.domain) }}
+									</a>
+									<span v-else class="text-sm text-muted">—</span>
+								</div>
 							</template>
 
 							<template #email-cell="{ row }">
-								<div class="flex items-center gap-2 min-w-0">
+								<div class="flex items-center gap-2 min-w-0" :class="lockedRowContentClass(row.original)">
 									<a
 v-if="row.original.supplier.main_email" target="blank"
 										:href="`mailto:${row.original.supplier.main_email}`"
@@ -243,20 +247,32 @@ v-if="!isTerminalStatus && row.original.supplier.extra_emails?.length > 1"
 							</template>
 
 							<template #actions-cell="{ row }">
-								<div v-if="!isTerminalStatus" class="flex items-center justify-end gap-1">
-									<template v-if="confirmDeleteSupplierId === row.original.id">
-										<UButton
-size="md" color="error" variant="soft" icon="i-lucide-check"
-											:loading="deletingSupplierIds.has(row.original.id)"
-											@click.stop="confirmDeleteSupplier(row.original.id)" />
-										<UButton
-size="md" color="neutral" variant="ghost" icon="i-lucide-x"
-											@click.stop="confirmDeleteSupplierId = null" />
-									</template>
+								<div class="flex items-center justify-end gap-1 shrink-0 whitespace-nowrap">
 									<UButton
-v-else size="md" color="error" variant="ghost" icon="i-lucide-trash-2"
-										:loading="deletingSupplierIds.has(row.original.id)"
-										@click.stop="confirmDeleteSupplierId = row.original.id" />
+										v-if="row.original.supplier"
+										size="sm"
+										color="neutral"
+										variant="ghost"
+										leading-icon="i-lucide-database"
+										@click.stop="openSaveToBookmarkModal(row.original.supplier)"
+									>
+										В базу
+									</UButton>
+									<template v-if="!isTerminalStatus">
+										<template v-if="confirmDeleteSupplierId === row.original.id">
+											<UButton
+size="sm" color="error" variant="soft" icon="i-lucide-check"
+												:loading="deletingSupplierIds.has(row.original.id)"
+												@click.stop="confirmDeleteSupplier(row.original.id)" />
+											<UButton
+size="sm" color="neutral" variant="ghost" icon="i-lucide-x"
+												@click.stop="confirmDeleteSupplierId = null" />
+										</template>
+										<UButton
+v-else size="sm" color="error" variant="ghost" icon="i-lucide-trash-2"
+											:loading="deletingSupplierIds.has(row.original.id)"
+											@click.stop="confirmDeleteSupplierId = row.original.id" />
+									</template>
 								</div>
 							</template>
 						</UTable>
@@ -301,6 +317,10 @@ v-model:open="showParamsModal" :request="request" :supplier-count="enabledCount"
 			/>
 			<EditSupplierEmailModal v-model:open="showEditEmail" :supplier="emailSupplier" @saved="onEmailSaved" />
 			<SupplierBookmarkModal v-model:open="showBookmarkModal" :request-id="id" @added="fetchSuppliersAndEnforceQuota" />
+			<SaveSupplierToBookmarkModal
+				v-model:open="showSaveToBookmarkModal"
+				:supplier="saveToBookmarkSupplier"
+			/>
 
 		</template>
 
@@ -343,6 +363,7 @@ import {
 } from '#shared/utils/subscriptionAccess'
 import { subscriptionProfilePath } from '#shared/utils/subscriptionDisplay'
 import type { TableColumn, TableRow } from '@nuxt/ui'
+import SaveSupplierToBookmarkModal from '~/components/SaveSupplierToBookmarkModal.vue'
 import SupplierBookmarkModal from '~/components/SupplierBookmarkModal.vue'
 import SupplierInfoHint from '~/components/requests/SupplierInfoHint.vue'
 
@@ -377,6 +398,8 @@ const showParamsModal = ref(false)
 const showAddSupplier = ref(false)
 const showEditEmail = ref(false)
 const showBookmarkModal = ref(false)
+const showSaveToBookmarkModal = ref(false)
+const saveToBookmarkSupplier = ref<Supplier | null>(null)
 const emailSupplier = ref<Supplier | null>(null)
 const supplierSearch = ref('')
 const confirmDeleteSupplierId = ref<string | null>(null)
@@ -469,7 +492,16 @@ const supplierColumns = computed<TableColumn<RequestSupplierResponse>[]>(() => {
 	}
 	cols.push({ accessorKey: 'email', header: 'Email' })
 	cols.push({ accessorKey: 'status', header: 'Статус' })
-	cols.push({ id: 'actions', header: '' })
+	cols.push({
+		id: 'actions',
+		header: '',
+		meta: {
+			class: {
+				th: 'sticky right-0 z-10 bg-default min-w-40',
+				td: 'sticky right-0 z-10 bg-default min-w-40',
+			},
+		},
+	})
 	return cols
 })
 
@@ -670,10 +702,11 @@ function getRowClass(row: TableRow<RequestSupplierResponse>) {
 	if (row.original.sent_status === RequestSupplierStatus.REPLIED) {
 		classes.push('cursor-pointer hover:bg-elevated/50 transition-colors')
 	}
-	if (isSupplierRowLocked(row.original)) {
-		classes.push('blur-[2px] opacity-60 pointer-events-none select-none')
-	}
 	return classes.join(' ')
+}
+
+function lockedRowContentClass(rs: RequestSupplierResponse): string {
+	return isSupplierRowLocked(rs) ? 'blur-[2px] opacity-60 select-none' : ''
 }
 
 function onRowSelect(e: Event, row: TableRow<RequestSupplierResponse>) {
@@ -686,6 +719,11 @@ function onRowSelect(e: Event, row: TableRow<RequestSupplierResponse>) {
 function openEditEmailModal(supplier: Supplier) {
 	emailSupplier.value = supplier
 	showEditEmail.value = true
+}
+
+function openSaveToBookmarkModal(supplier: Supplier) {
+	saveToBookmarkSupplier.value = supplier
+	showSaveToBookmarkModal.value = true
 }
 
 function onEmailSaved() {
