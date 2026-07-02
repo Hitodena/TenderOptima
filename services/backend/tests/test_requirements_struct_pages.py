@@ -3,7 +3,10 @@
 from pathlib import Path
 from unittest.mock import patch
 
-from backend.services.extraction.docx_to_pdf import convert_docx_to_pdf
+from backend.services.extraction.docx_to_pdf import (
+    build_soffice_command,
+    convert_docx_to_pdf,
+)
 from backend.utils.requirements_struct import (
     annotate_flat_with_page,
     build_requirement_page_map,
@@ -121,3 +124,24 @@ def test_convert_docx_to_pdf_returns_none_without_soffice(
     result = convert_docx_to_pdf(Path("sample.docx"))
 
     assert result is None
+
+
+def test_build_soffice_command_uses_isolated_user_profile(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    profile_dir = output_dir / "lo_profile"
+    profile_dir.mkdir()
+    docx_path = tmp_path / "sample.docx"
+    docx_path.write_bytes(b"docx")
+
+    command = build_soffice_command(
+        "/usr/bin/soffice",
+        output_dir=output_dir,
+        docx_path=docx_path,
+        profile_dir=profile_dir,
+    )
+
+    assert command[1].startswith("-env:UserInstallation=file://")
+    assert "--nofirststartwizard" in command

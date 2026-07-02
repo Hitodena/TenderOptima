@@ -18,7 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 	libreoffice-writer \
 	&& rm -rf /var/lib/apt/lists/* \
 	&& groupadd --gid 1001 appgroup \
-	&& useradd --uid 1001 --gid appgroup --no-create-home appuser
+	&& useradd --uid 1001 --gid appgroup --create-home --home-dir /home/appuser appuser
 
 WORKDIR /app
 
@@ -29,10 +29,11 @@ COPY --chown=appuser:appgroup . ./backend/
 ENV PATH="/app/.venv/bin:$PATH" \
 	PYTHONPATH=/app \
 	PYTHONUNBUFFERED=1 \
-	PYTHONDONTWRITEBYTECODE=1
+	PYTHONDONTWRITEBYTECODE=1 \
+	HOME=/home/appuser
 
-RUN mkdir -p /app/celerybeat /app/uploads && \
-	chown -R appuser:appgroup /app/celerybeat /app/uploads
+RUN mkdir -p /app/celerybeat /app/uploads /home/appuser/.cache && \
+	chown -R appuser:appgroup /app/celerybeat /app/uploads /home/appuser
 
 USER appuser
 

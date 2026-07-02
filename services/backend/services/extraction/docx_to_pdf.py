@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import tempfile
@@ -28,6 +29,29 @@ def find_soffice_executable() -> str | None:
     return None
 
 
+def build_soffice_command(
+    soffice: str,
+    *,
+    output_dir: Path,
+    docx_path: Path,
+    profile_dir: Path,
+) -> list[str]:
+    """Build a headless LibreOffice command with an isolated user profile."""
+    return [
+        soffice,
+        f"-env:UserInstallation={profile_dir.resolve().as_uri()}",
+        "--headless",
+        "--norestore",
+        "--nologo",
+        "--nofirststartwizard",
+        "--convert-to",
+        "pdf",
+        "--outdir",
+        str(output_dir),
+        str(docx_path),
+    ]
+
+
 def convert_docx_to_pdf(docx_path: Path) -> Path | None:
     """Render *docx_path* to PDF and return the output path.
 
@@ -47,15 +71,20 @@ def convert_docx_to_pdf(docx_path: Path) -> Path | None:
 
     with tempfile.TemporaryDirectory(prefix="docx2pdf_") as temp_dir:
         output_dir = Path(temp_dir)
-        command = [
+        profile_dir = output_dir / "lo_profile"
+        profile_dir.mkdir()
+        command = build_soffice_command(
             soffice,
-            "--headless",
-            "--convert-to",
-            "pdf",
-            "--outdir",
-            str(output_dir),
-            str(docx_path),
-        ]
+            output_dir=output_dir,
+            docx_path=docx_path,
+            profile_dir=profile_dir,
+        )
+        env = {
+            **os.environ,
+            "HOME": str(output_dir),
+            "TMPDIR": str(output_dir),
+            "SAL_USE_VCLPLUGIN": "gen",
+        }
         try:
             result = subprocess.run(
                 command,
@@ -63,6 +92,7 @@ def convert_docx_to_pdf(docx_path: Path) -> Path | None:
                 text=True,
                 timeout=120,
                 check=False,
+                env=env,
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
             logger.warning(
