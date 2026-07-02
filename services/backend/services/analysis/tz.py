@@ -22,23 +22,34 @@ from backend.services.llm.prompts.tz import (
     build_tz_chunk_prompt,
 )
 from backend.utils.requirements_struct import (
+    build_requirement_page_map,
     collect_leaf_entries,
     count_requirements,
     dedupe_hierarchy,
+    fix_offer_ref_page,
+    fix_requirement_ref_page,
     flatten_hierarchy,
     format_kp_offer_ref,
+    format_numbered_ref_value,
     format_tz_requirement_ref,
     key_from_reference,
+    lookup_page_for_key,
     merge_requirement_chunks,
     normalize_tz_requirements,
+    parse_page_from_ref,
     requirement_key_from_flat,
     resolve_letter_tz_fields,
-    strip_page_from_ref,
 )
 from backend.utils.text_chunker import chunk_text, clean_text
 
 _router = ExtractorRouter()
 _assembler = TextAssembler()
+
+
+def _assemble_document_text(file_path: Path) -> str:
+    """Extract and assemble plain text from a document file."""
+    return _assembler.assemble(_router.get(file_path).extract(file_path))
+
 
 _ROLLING_SUMMARY_KEYS = 10
 _ROLLING_DIGEST_SECTIONS = 8
@@ -656,6 +667,8 @@ async def _llm_recall_batch(
     user_id: str,
     kp_name: str,
     tz_hierarchy: dict | None = None,
+    tz_page_map: dict[str, int] | None = None,
+    kp_page_map: dict[str, int] | None = None,
 ) -> list[TZAnalysisItem]:
     """Recall sweep for still-unmatched requirements."""
     system, user = build_recall_sweep_prompt(
@@ -663,6 +676,7 @@ async def _llm_recall_batch(
         kp_text,
         batch_idx=batch_idx,
         total_batches=total_batches,
+        tz_page_map=tz_page_map,
     )
     parsed = await _llm_call_with_retry(
         system,
@@ -689,7 +703,12 @@ async def _llm_recall_batch(
         if item.requirement.strip() != req.strip():
             item = item.model_copy(update={"requirement": req})
         items.append(item)
-    return _ensure_item_refs(items, tz_hierarchy)
+    return _ensure_item_refs(
+        items,
+        tz_hierarchy,
+        tz_page_map=tz_page_map,
+        kp_page_map=kp_page_map,
+    )
 
 
 def _status_rank(status: TZAnalysisStatus) -> int:
@@ -759,8 +778,11 @@ def _apply_item_tz_ref_fields(
 def _ensure_item_refs(
     items: list[TZAnalysisItem],
     tz_hierarchy: dict | None = None,
+    *,
+    tz_page_map: dict[str, int] | None = None,
+    kp_page_map: dict[str, int] | None = None,
 ) -> list[TZAnalysisItem]:
-    """Fill missing refs and strip page numbers from LLM output."""
+    """Fill missing refs and normalize page numbers in TZ/KP source links."""
     updated: list[TZAnalysisItem] = []
     for item in items:
         item = _apply_item_tz_ref_fields(item, tz_hierarchy)
@@ -773,30 +795,54 @@ def _ensure_item_refs(
                 parts[1] if len(parts) > 1 else item.requirement.strip()
             )
 
-        requirement_ref = strip_page_from_ref(item.requirement_ref)
+        lookup_key = letter_key or req_key
+        tz_page = (
+            lookup_page_for_key(lookup_key, tz_page_map)
+            if tz_page_map and lookup_key
+            else None
+        )
+        if tz_page is None:
+            tz_page = parse_page_from_ref(item.requirement_ref)
+
+        requirement_ref = item.requirement_ref
         if letter_key and letter_text:
             requirement_ref = format_tz_requirement_ref(
                 letter_key,
-                None,
-                f"{letter_key}. {letter_text}",
-                quote=letter_text,
+                tz_page,
+                format_numbered_ref_value(letter_key, letter_text)
+                or item.requirement,
             )
         elif not requirement_ref and req_key:
             requirement_ref = format_tz_requirement_ref(
                 req_key,
-                None,
+                tz_page,
                 item.requirement,
-                quote=item.ref_value,
+            )
+        elif requirement_ref and tz_page is not None:
+            requirement_ref = fix_requirement_ref_page(
+                requirement_ref,
+                tz_page,
             )
 
-        offer_ref = strip_page_from_ref(item.offer_ref)
-        if item.offer_value and item.offer_value.strip() and not offer_ref:
-            offer_key = key_from_reference(offer_ref) or req_key
-            offer_ref = format_kp_offer_ref(
-                offer_key,
-                None,
-                item.offer_value,
-            )
+        offer_key = key_from_reference(item.offer_ref) or req_key
+        offer_page = (
+            lookup_page_for_key(offer_key, kp_page_map)
+            if kp_page_map and offer_key
+            else None
+        )
+        if offer_page is None:
+            offer_page = parse_page_from_ref(item.offer_ref)
+
+        offer_ref = item.offer_ref
+        if item.offer_value and item.offer_value.strip():
+            if not offer_ref:
+                offer_ref = format_kp_offer_ref(
+                    offer_key,
+                    offer_page,
+                    item.offer_value,
+                )
+            elif offer_page is not None:
+                offer_ref = fix_offer_ref_page(offer_ref, offer_page)
 
         updated.append(
             item.model_copy(
@@ -852,6 +898,8 @@ async def _llm_match_chunk_batch(
     analysis_id: str,
     user_id: str,
     tz_hierarchy: dict | None = None,
+    tz_page_map: dict[str, int] | None = None,
+    kp_page_map: dict[str, int] | None = None,
 ) -> list[TZAnalysisItem]:
     """Match a TZ batch against a raw KP chunk."""
     if not tz_batch or not kp_chunk.strip():
@@ -865,6 +913,7 @@ async def _llm_match_chunk_batch(
         total_kp_chunks=total_kp_chunks,
         tz_batch_idx=tz_batch_idx,
         total_tz_batches=total_tz_batches,
+        tz_page_map=tz_page_map,
     )
     parsed = await _llm_call_with_retry(
         system,
@@ -895,7 +944,12 @@ async def _llm_match_chunk_batch(
         if item.requirement.strip() != req.strip():
             item = item.model_copy(update={"requirement": req})
         items.append(item)
-    return _ensure_item_refs(items, tz_hierarchy)
+    return _ensure_item_refs(
+        items,
+        tz_hierarchy,
+        tz_page_map=tz_page_map,
+        kp_page_map=kp_page_map,
+    )
 
 
 async def _run_direct_chunk_matching(
@@ -906,6 +960,8 @@ async def _run_direct_chunk_matching(
     analysis_id: str,
     user_id: str,
     tz_hierarchy: dict | None = None,
+    tz_page_map: dict[str, int] | None = None,
+    kp_page_map: dict[str, int] | None = None,
 ) -> dict[str, TZAnalysisItem]:
     """Match TZ requirements against raw KP chunks."""
     cleaned = clean_text(kp_text)
@@ -970,6 +1026,8 @@ async def _run_direct_chunk_matching(
                     analysis_id=analysis_id,
                     user_id=user_id,
                     tz_hierarchy=tz_hierarchy,
+                    tz_page_map=tz_page_map,
+                    kp_page_map=kp_page_map,
                 )
 
         batch_results = await asyncio.gather(
@@ -1017,6 +1075,8 @@ async def _run_recall_sweep(
     analysis_id: str,
     user_id: str,
     tz_hierarchy: dict | None = None,
+    tz_page_map: dict[str, int] | None = None,
+    kp_page_map: dict[str, int] | None = None,
 ) -> None:
     """Second pass over still-unmatched requirements using compact KP text."""
     recall_candidates = _remaining_tz_requirements(tz_flat, found)
@@ -1072,6 +1132,8 @@ async def _run_recall_sweep(
             user_id=user_id,
             kp_name=kp_name,
             tz_hierarchy=tz_hierarchy,
+            tz_page_map=tz_page_map,
+            kp_page_map=kp_page_map,
         )
         for item in items:
             _merge_match_item(found, item, kp_name=kp_name)
@@ -1094,6 +1156,8 @@ async def _run_staged_kp_analysis(
     *,
     analysis_id: str,
     user_id: str,
+    tz_page_map: dict[str, int] | None = None,
+    kp_page_map: dict[str, int] | None = None,
 ) -> tuple[list[TZAnalysisItem], dict]:
     """Run KP analysis: direct chunk matching, recall sweep, display digest."""
     logger.info(
@@ -1111,6 +1175,8 @@ async def _run_staged_kp_analysis(
         analysis_id=analysis_id,
         user_id=user_id,
         tz_hierarchy=tz_hierarchy,
+        tz_page_map=tz_page_map,
+        kp_page_map=kp_page_map,
     )
     await _run_recall_sweep(
         tz_flat,
@@ -1120,6 +1186,8 @@ async def _run_staged_kp_analysis(
         analysis_id=analysis_id,
         user_id=user_id,
         tz_hierarchy=tz_hierarchy,
+        tz_page_map=tz_page_map,
+        kp_page_map=kp_page_map,
     )
 
     items = _build_not_found_items(
@@ -1127,6 +1195,8 @@ async def _run_staged_kp_analysis(
         found,
         kp_name=kp_name,
         tz_hierarchy=tz_hierarchy,
+        tz_page_map=tz_page_map,
+        kp_page_map=kp_page_map,
     )
 
     digest = await _normalize_kp_to_digest(
@@ -1158,6 +1228,8 @@ def _build_not_found_items(
     *,
     kp_name: str,
     tz_hierarchy: dict | None = None,
+    tz_page_map: dict[str, int] | None = None,
+    kp_page_map: dict[str, int] | None = None,
 ) -> list[TZAnalysisItem]:
     """Append not_found rows for TZ requirements missing from *found*."""
     items: list[TZAnalysisItem] = []
@@ -1166,12 +1238,17 @@ def _build_not_found_items(
         if req_key and req_key in found:
             items.append(found[req_key])
             continue
+        tz_page = (
+            lookup_page_for_key(req_key, tz_page_map)
+            if tz_page_map and req_key
+            else None
+        )
         items.append(
             TZAnalysisItem(
                 requirement=requirement,
                 requirement_ref=format_tz_requirement_ref(
                     req_key,
-                    None,
+                    tz_page,
                     requirement,
                 ),
                 offer_value=None,
@@ -1181,7 +1258,12 @@ def _build_not_found_items(
                 kp_name=kp_name,
             ),
         )
-    return _ensure_item_refs(items, tz_hierarchy)
+    return _ensure_item_refs(
+        items,
+        tz_hierarchy,
+        tz_page_map=tz_page_map,
+        kp_page_map=kp_page_map,
+    )
 
 
 async def _match_kp_paths_against_tz(
@@ -1192,6 +1274,7 @@ async def _match_kp_paths_against_tz(
     *,
     analysis_id: str,
     user_id: str,
+    tz_page_map: dict[str, int] | None = None,
 ) -> tuple[list[TZAnalysisItem], dict]:
     """Match one or more KP files against TZ using staged pipeline."""
     combined_text_parts: list[str] = []
@@ -1203,7 +1286,7 @@ async def _match_kp_paths_against_tz(
             kp_name=kp_name,
             path=str(kp_path),
         )
-        raw_text = _assembler.assemble(_router.get(kp_path).extract(kp_path))
+        raw_text = _assemble_document_text(kp_path)
         combined_text_parts.append(raw_text)
         logger.info(
             "KP file read finished",
@@ -1215,6 +1298,7 @@ async def _match_kp_paths_against_tz(
         )
 
     combined_text = "\n\n".join(combined_text_parts)
+    kp_page_map = build_requirement_page_map(combined_text)
     return await _run_staged_kp_analysis(
         combined_text,
         tz_flat,
@@ -1222,6 +1306,8 @@ async def _match_kp_paths_against_tz(
         kp_name,
         analysis_id=analysis_id,
         user_id=user_id,
+        tz_page_map=tz_page_map,
+        kp_page_map=kp_page_map,
     )
 
 
@@ -1238,7 +1324,7 @@ async def extract_tz_from_file(
         user_id=user_id,
         path=str(tz_path),
     )
-    raw_text = _assembler.assemble(_router.get(tz_path).extract(tz_path))
+    raw_text = _assemble_document_text(tz_path)
     result = await extract_tz_requirements(
         raw_text,
         analysis_id=analysis_id,
@@ -1259,6 +1345,7 @@ async def analyze_kp_files(
     kp_paths: list[Path],
     *,
     kp_display_names: list[str] | None = None,
+    tz_path: Path | None = None,
     analysis_id: str,
     user_id: str,
 ) -> TZAnalysisSessionResult:
@@ -1273,6 +1360,11 @@ async def analyze_kp_files(
     tz_hierarchy = normalize_tz_requirements(requirements_tz)
     tz_flat = flatten_hierarchy(tz_hierarchy)
     tz_count = len(tz_flat)
+    tz_page_map: dict[str, int] | None = None
+    if tz_path and tz_path.is_file():
+        tz_page_map = build_requirement_page_map(
+            _assemble_document_text(tz_path)
+        )
 
     requirements_kp: dict[str, dict] = {}
     all_items: list[TZAnalysisItem] = []
@@ -1284,6 +1376,7 @@ async def analyze_kp_files(
             kp_name,
             analysis_id=analysis_id,
             user_id=user_id,
+            tz_page_map=tz_page_map,
         )
         requirements_kp[kp_name] = hierarchy
         all_items.extend(items)
@@ -1318,6 +1411,7 @@ async def analyze_supplier_kps(
     requirements_tz: dict,
     kp_files: list[tuple[str, list[Path]]],
     *,
+    tz_path: Path | None = None,
     analysis_id: str,
     user_id: str,
 ) -> TZAnalysisSessionResult:
@@ -1329,6 +1423,11 @@ async def analyze_supplier_kps(
     tz_flat = flatten_hierarchy(tz_hierarchy)
     tz_count = len(tz_flat)
     kp_display_names = [name for name, _ in kp_files]
+    tz_page_map: dict[str, int] | None = None
+    if tz_path and tz_path.is_file():
+        tz_page_map = build_requirement_page_map(
+            _assemble_document_text(tz_path)
+        )
 
     requirements_kp: dict[str, dict] = {}
     all_items: list[TZAnalysisItem] = []
@@ -1342,6 +1441,7 @@ async def analyze_supplier_kps(
             display_name,
             analysis_id=analysis_id,
             user_id=user_id,
+            tz_page_map=tz_page_map,
         )
         requirements_kp[display_name] = hierarchy
         all_items.extend(items)

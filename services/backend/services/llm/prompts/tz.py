@@ -107,9 +107,11 @@ _ATOMIC_REQUIREMENT_RULES = """\
 регулируемыми опорами» — один атомарный пункт.
 5. Не копируй весь длинный текст исходного пункта в каждый дочерний пункт.
 6. При атомарном дроблении сохраняй полный исходный текст исходного пункта \
-в ref_value родительского узла и продублируй его в ref_value каждого \
-дочернего узла; в поле ref дочернего узла укажи ключ исходного пункта \
-(например, «33.1» для «33.1.1»)."""
+с его готовой нумерацией в ref_value родительского узла и продублируй его \
+в ref_value каждого дочернего узла; в поле ref дочернего узла укажи ключ \
+исходного пункта (например, «33.1» для «33.1.1»).
+7. ref_value копируй из документа максимально дословно; если в пункте уже \
+есть номер («2. Доступное количество: ...»), сохраняй его в ref_value целиком."""
 
 _STRICT_MATCH_RULES = """\
 ## Семантика сопоставления (строго)
@@ -201,36 +203,36 @@ _ATOMIC_EXAMPLE_JSON = """\
   "requirements": {
     "33.1": {
       "text": "",
-      "ref_value": "Полный исходный текст пункта 33.1 из ТЗ до атомарного дробления",
+      "ref_value": "33.1. Полный исходный текст пункта 33.1 из ТЗ до атомарного дробления",
       "children": {
         "33.1.1": {
           "text": "Производительность: не менее 1200 кг/час",
           "ref": "33.1",
-          "ref_value": "Полный исходный текст пункта 33.1 из ТЗ до атомарного дробления",
+          "ref_value": "33.1. Полный исходный текст пункта 33.1 из ТЗ до атомарного дробления",
           "children": {}
         },
         "33.1.2": {
           "text": "Рама машины полностью из нержавеющей стали не хуже AISI 304 с регулируемыми по высоте опорами",
           "ref": "33.1",
-          "ref_value": "Полный исходный текст пункта 33.1 из ТЗ до атомарного дробления",
+          "ref_value": "33.1. Полный исходный текст пункта 33.1 из ТЗ до атомарного дробления",
           "children": {}
         },
         "33.1.3": {
           "text": "Работа машины по фотометке",
           "ref": "33.1",
-          "ref_value": "Полный исходный текст пункта 33.1 из ТЗ до атомарного дробления",
+          "ref_value": "33.1. Полный исходный текст пункта 33.1 из ТЗ до атомарного дробления",
           "children": {}
         },
         "33.1.4": {
           "text": "Формирование блока за счет формовочных пуансонов из рулона полиэтилена диаметром не менее 450 мм",
           "ref": "33.1",
-          "ref_value": "Полный исходный текст пункта 33.1 из ТЗ до атомарного дробления",
+          "ref_value": "33.1. Полный исходный текст пункта 33.1 из ТЗ до атомарного дробления",
           "children": {}
         },
         "33.1.5": {
           "text": "Глубина вытягивания до 100 мм включительно",
           "ref": "33.1",
-          "ref_value": "Полный исходный текст пункта 33.1 из ТЗ до атомарного дробления",
+          "ref_value": "33.1. Полный исходный текст пункта 33.1 из ТЗ до атомарного дробления",
           "children": {}
         }
       }
@@ -260,13 +262,16 @@ def _format_rules() -> str:
 ## Формат ответа
 
 Каждый узел: {"text": "...", "ref_value": "...", "ref": "...", "children": {}}
-- text — атомарное или полное требование для сравнения с КП
-- ref_value — полный исходный текст пункта из документа ТЗ с его нумерацией \
-в содержании (без номера в начале строки)
+- text — атомарное или полное требование для сравнения с КП (без ведущего \
+номера пункта)
+- ref_value — полный исходный текст пункта из документа ТЗ, включая готовую \
+нумерацию, если она есть («2. Доступное количество: ...»); копируй \
+дословно, не переформулируй
 - ref — ключ исходного пункта ТЗ, если текущий узел получен атомарным \
 дроблением (например, для «33.1.1» ref = «33.1»); для исходных пунктов \
 без дробления ref не указывай
-Номер пункта — только в ключе JSON, не в text и не в начале ref_value.
+Номер пункта — в ключе JSON и в ref_value (если есть в документе); в text \
+номер не дублируй.
 
 Если во фрагменте нет содержательных требований — верни {"requirements": {}}.
 
@@ -402,8 +407,19 @@ def build_kp_match_chunk_prompt(
     total_kp_chunks: int,
     tz_batch_idx: int,
     total_tz_batches: int,
+    tz_page_map: dict[str, int] | None = None,
 ) -> tuple[str, str]:
-    tz_list = "\n".join(f"{i + 1}. {req}" for i, req in enumerate(tz_batch))
+    from backend.utils.requirements_struct import annotate_flat_with_page
+
+    tz_lines: list[str] = []
+    for i, req in enumerate(tz_batch):
+        annotated = (
+            annotate_flat_with_page(req, tz_page_map, doc_label="ТЗ")
+            if tz_page_map
+            else req
+        )
+        tz_lines.append(f"{i + 1}. {annotated}")
+    tz_list = "\n".join(tz_lines)
 
     system = (
         """\
@@ -432,10 +448,12 @@ def build_kp_match_chunk_prompt(
 просто пропусти требование
 4. Ищи предложения поставщика (товар, характеристики, срок, цена), \
 не процедурный текст
-5. requirement_ref ОБЯЗАТЕЛЕН. Формат: «ТЗ, п. X.Y.Z: «цитата из ТЗ»». \
-НЕ указывай номер страницы — только пункт документа.
+5. requirement_ref ОБЯЗАТЕЛЕН. Формат: «Источник ТЗ, стр N, пункт X.Y.Z» \
+(без цитат в ссылке). Номер страницы бери из маркера [ТЗ, стр. N] в тексте \
+требования или из «--- Страница N ---» в фрагменте ТЗ.
 6. offer_ref ОБЯЗАТЕЛЕН, когда offer_value не null. \
-Формат: «КП, п. Y: «цитата из КП»» или «КП: «цитата»», если пункт неизвестен.
+Формат: «Источник КП, стр N, пункт Y» (без цитат в ссылке). Номер страницы \
+бери из «--- Страница N ---» во фрагменте КП.
 7. Поле requirement ОБЯЗАТЕЛЬНО начинается с номера пункта и точки с пробелом: \
 «X. текст», «X.Y. текст» или «X.Y.Z. текст». Номер бери из списка ТЗ.
 8. requirement и requirement_ref описывают одно и то же требование.
@@ -450,11 +468,11 @@ def build_kp_match_chunk_prompt(
   "items": [
     {
       "requirement": "X.Y. цитата из ТЗ с ведущим номером пункта",
-      "requirement_ref": "ТЗ, п. X.Y: «...»",
+      "requirement_ref": "Источник ТЗ, стр 1, пункт X.Y",
       "ref": "X.Y",
-      "ref_value": "полный исходный текст пункта ТЗ без ведущего номера",
+      "ref_value": "полный исходный текст пункта ТЗ с готовой нумерацией, если есть",
       "offer_value": "цитата из КП",
-      "offer_ref": "КП, п. Y: «...»",
+      "offer_ref": "Источник КП, стр 2, пункт Y",
       "explanation": "обоснование",
       "status": "met|partial|missing"
     }
@@ -610,11 +628,11 @@ def _compliance_item_schema() -> str:
   "items": [
     {
       "requirement": "X.Y.Z. текст требования из ТЗ",
-      "requirement_ref": "ТЗ, п. X.Y.Z: «...»",
+      "requirement_ref": "Источник ТЗ, стр 1, пункт X.Y.Z",
       "ref": "X.Y",
-      "ref_value": "полный исходный текст пункта ТЗ без ведущего номера",
+      "ref_value": "полный исходный текст пункта ТЗ с готовой нумерацией, если есть",
       "offer_value": "ответ поставщика на русском или null",
-      "offer_ref": "КП: «цитата из src_quote на EN/IT» или null",
+      "offer_ref": "Источник КП, стр 2, пункт Y или null",
       "explanation": "обоснование",
       "status": "met|partial|missing|not_found"
     }
@@ -630,9 +648,20 @@ def build_compliance_prompt(
     tz_section_title: str,
     batch_idx: int,
     total_batches: int,
+    tz_page_map: dict[str, int] | None = None,
 ) -> tuple[str, str]:
     """Build per-section monolingual compliance prompt (forced verdict)."""
-    tz_list = "\n".join(f"{i + 1}. {req}" for i, req in enumerate(tz_batch))
+    from backend.utils.requirements_struct import annotate_flat_with_page
+
+    tz_lines: list[str] = []
+    for i, req in enumerate(tz_batch):
+        annotated = (
+            annotate_flat_with_page(req, tz_page_map, doc_label="ТЗ")
+            if tz_page_map
+            else req
+        )
+        tz_lines.append(f"{i + 1}. {annotated}")
+    tz_list = "\n".join(tz_lines)
 
     system = f"""\
 Ты — специалист по анализу соответствия тендерных предложений. \
@@ -657,8 +686,8 @@ def build_compliance_prompt(
 2. Поле requirement — точная формулировка из списка ТЗ
 3. offer_value — конкретное предложение на русском из digest КП; \
 для not_found — null
-4. offer_ref — цитата src_quote из КП на исходном языке; для not_found — null
-5. requirement_ref формат: «ТЗ, п. X.Y: «цитата»»
+4. offer_ref — короткая ссылка «Источник КП, стр N, пункт Y»; для not_found — null
+5. requirement_ref формат: «Источник ТЗ, стр N, пункт X.Y» (без цитат)
 6. explanation обязателен для partial, missing, not_found; для met — кратко
 
 Верни ТОЛЬКО JSON:
@@ -677,9 +706,20 @@ def build_recall_sweep_prompt(
     *,
     batch_idx: int,
     total_batches: int,
+    tz_page_map: dict[str, int] | None = None,
 ) -> tuple[str, str]:
     """Build recall sweep prompt for still-unmatched requirements."""
-    tz_list = "\n".join(f"{i + 1}. {req}" for i, req in enumerate(tz_batch))
+    from backend.utils.requirements_struct import annotate_flat_with_page
+
+    tz_lines: list[str] = []
+    for i, req in enumerate(tz_batch):
+        annotated = (
+            annotate_flat_with_page(req, tz_page_map, doc_label="ТЗ")
+            if tz_page_map
+            else req
+        )
+        tz_lines.append(f"{i + 1}. {annotated}")
+    tz_list = "\n".join(tz_lines)
 
     system = f"""\
 Ты — специалист по поиску соответствий в тендерных документах. \

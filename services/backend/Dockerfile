@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 	tesseract-ocr \
 	tesseract-ocr-eng \
 	tesseract-ocr-rus \
+	libreoffice-writer \
 	&& rm -rf /var/lib/apt/lists/* \
 	&& groupadd --gid 1001 appgroup \
 	&& useradd --uid 1001 --gid appgroup --no-create-home appuser

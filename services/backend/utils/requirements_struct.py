@@ -498,15 +498,12 @@ def format_tz_requirement_ref(
     *,
     quote: str | None = None,
 ) -> str:
-    """Build a TZ source reference with page and пункт when possible."""
-    if quote is not None:
-        ref_quote = " ".join(quote.strip().split())
-    else:
-        ref_quote = _quote_from_flat(requirement)
-    key_part = f"п. {key}" if key else "п. ?"
+    """Build a short TZ source reference: «Источник ТЗ, стр X, пункт Y»."""
+    del requirement, quote  # short format omits inline quotes
+    key_part = f"пункт {key}" if key else "пункт ?"
     if page is not None:
-        return f"ТЗ, стр. {page}, {key_part}: «{ref_quote}»"
-    return f"ТЗ, {key_part}: «{ref_quote}»"
+        return f"Источник ТЗ, стр {page}, {key_part}"
+    return f"Источник ТЗ, {key_part}"
 
 
 def format_kp_offer_ref(
@@ -514,15 +511,12 @@ def format_kp_offer_ref(
     page: int | None,
     offer_value: str,
 ) -> str:
-    """Build a KP source reference with page and пункт when possible."""
-    quote = _truncate_quote(offer_value)
-    if page is not None and key:
-        return f"КП, стр. {page}, п. {key}: «{quote}»"
+    """Build a short KP source reference: «Источник КП, стр X, пункт Y»."""
+    del offer_value  # short format omits inline quotes
+    key_part = f"пункт {key}" if key else "пункт ?"
     if page is not None:
-        return f"КП, стр. {page}: «{quote}»"
-    if key:
-        return f"КП, п. {key}: «{quote}»"
-    return f"КП: «{quote}»"
+        return f"Источник КП, стр {page}, {key_part}"
+    return f"Источник КП, {key_part}"
 
 
 def _inject_page_into_ref(
@@ -533,11 +527,11 @@ def _inject_page_into_ref(
 ) -> str | None:
     if not ref:
         return ref
-    fixed = re.sub(r"стр\.\s*N\b", f"стр. {page}", ref, flags=re.IGNORECASE)
-    if "стр." not in fixed.lower():
+    fixed = re.sub(r"стр\.?\s*\d+", f"стр {page}", ref, flags=re.IGNORECASE)
+    if not re.search(r"стр\.?\s*\d+", fixed, flags=re.IGNORECASE):
         fixed = re.sub(
             rf"^({re.escape(doc_label)},\s*)",
-            rf"\1стр. {page}, ",
+            rf"\1стр {page}, ",
             fixed,
             count=1,
         )
@@ -546,12 +540,12 @@ def _inject_page_into_ref(
 
 def fix_requirement_ref_page(ref: str | None, page: int) -> str | None:
     """Inject or replace page number in a TZ requirement reference."""
-    return _inject_page_into_ref(ref, page, doc_label="ТЗ")
+    return _inject_page_into_ref(ref, page, doc_label="Источник ТЗ")
 
 
 def fix_offer_ref_page(ref: str | None, page: int) -> str | None:
     """Inject or replace page number in a KP offer reference."""
-    return _inject_page_into_ref(ref, page, doc_label="КП")
+    return _inject_page_into_ref(ref, page, doc_label="Источник КП")
 
 
 def annotate_flat_with_page(
@@ -579,3 +573,57 @@ def strip_page_from_ref(ref: str | None) -> str | None:
     cleaned = re.sub(r",\s*,", ", ", cleaned)
     cleaned = re.sub(r"\(\s*\)", "", cleaned)
     return cleaned.strip() or None
+
+
+def parse_page_from_ref(ref: str | None) -> int | None:
+    """Extract page number from a TZ/KP reference string."""
+    if not ref:
+        return None
+    match = re.search(r"стр\.?\s*(\d+)", ref, flags=re.IGNORECASE)
+    if not match:
+        return None
+    return int(match.group(1))
+
+
+def ref_value_starts_with_key(key: str | None, ref_value: str | None) -> bool:
+    """True when *ref_value* already begins with the requirement key."""
+    if not key or not ref_value:
+        return False
+    normalized_key = key.replace("/", ".")
+    trimmed = ref_value.strip()
+    prefix = f"{normalized_key}. "
+    if trimmed.startswith(prefix):
+        return True
+    return bool(
+        re.match(
+            rf"^{re.escape(normalized_key)}\.\s",
+            trimmed,
+        )
+    )
+
+
+def format_numbered_ref_value(
+    key: str | None, ref_value: str | None
+) -> str | None:
+    """Build display line «key. text» without duplicating an existing prefix."""
+    if not ref_value or not ref_value.strip():
+        return None
+    trimmed = ref_value.strip()
+    if key and ref_value_starts_with_key(key, trimmed):
+        return trimmed
+    if key:
+        return f"{key.replace('/', '.')}. {trimmed}"
+    return trimmed
+
+
+def format_letter_requirement_line(
+    key: str | None,
+    ref_value: str | None,
+    *,
+    fallback_requirement: str | None = None,
+) -> str:
+    """Format TZ requirement text for letters and exports."""
+    formatted = format_numbered_ref_value(key, ref_value)
+    if formatted:
+        return formatted
+    return (fallback_requirement or "").strip()

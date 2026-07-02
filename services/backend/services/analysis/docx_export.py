@@ -8,7 +8,9 @@ from docx.styles.style import ParagraphStyle
 from backend.enums import TZAnalysisStatus
 from backend.schemas.analysis import TZAnalysisItem
 from backend.utils.requirements_struct import (
+    format_letter_requirement_line,
     format_tz_requirement_ref,
+    parse_page_from_ref,
     requirement_key_from_flat,
 )
 
@@ -53,12 +55,12 @@ def _letter_tz_key(item: TZAnalysisItem) -> str | None:
 
 
 def _letter_tz_requirement_text(item: TZAnalysisItem) -> str:
-    if item.ref_value:
-        key = _letter_tz_key(item)
-        if key:
-            return f"{key}. {item.ref_value}"
-        return item.ref_value
-    return item.requirement
+    key = _letter_tz_key(item)
+    return format_letter_requirement_line(
+        key,
+        item.ref_value,
+        fallback_requirement=item.requirement,
+    )
 
 
 def _letter_tz_requirement_ref(item: TZAnalysisItem) -> str | None:
@@ -66,7 +68,13 @@ def _letter_tz_requirement_ref(item: TZAnalysisItem) -> str | None:
     text = item.ref_value
     if key and text:
         return format_tz_requirement_ref(
-            key, None, f"{key}. {text}", quote=text
+            key,
+            parse_page_from_ref(item.requirement_ref),
+            format_letter_requirement_line(
+                key,
+                text,
+                fallback_requirement=item.requirement,
+            ),
         )
     return item.requirement_ref
 

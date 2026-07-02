@@ -368,6 +368,8 @@ async def run_tz_kp_compare(self, analysis_id: str) -> dict:
         kp_display_names = list(row.kp_filenames or [])
         suppliers = await TZAnalysisSupplierDAO.list_by_analysis(session, aid)
 
+    tz_path = resolve_tz_only_file(aid)
+
     if not requirements_nonempty(requirements_tz):
         async with db_manager.session() as session:
             await TZAnalysisDAO.update_fields(
@@ -422,6 +424,7 @@ async def run_tz_kp_compare(self, analysis_id: str) -> dict:
             result = await analyze_supplier_kps(
                 requirements_tz,
                 kp_payload,
+                tz_path=tz_path,
                 analysis_id=analysis_id,
                 user_id=user_id,
             )
@@ -449,6 +452,7 @@ async def run_tz_kp_compare(self, analysis_id: str) -> dict:
                 requirements_tz,
                 kp_paths,
                 kp_display_names=kp_display_names or None,
+                tz_path=tz_path,
                 analysis_id=analysis_id,
                 user_id=user_id,
             )
@@ -534,6 +538,8 @@ async def run_tz_compare(self, analysis_id: str) -> dict:
         kp_display_names = list(row.kp_filenames or [])
         suppliers = await TZAnalysisSupplierDAO.list_by_analysis(session, aid)
 
+    tz_path = resolve_tz_only_file(aid)
+
     if not requirements_nonempty(requirements_tz):
         async with db_manager.session() as session:
             await TZAnalysisDAO.update_fields(
@@ -576,6 +582,7 @@ async def run_tz_compare(self, analysis_id: str) -> dict:
             result = await analyze_supplier_kps(
                 requirements_tz,
                 kp_payload,
+                tz_path=tz_path,
                 analysis_id=analysis_id,
                 user_id=user_id,
             )
@@ -593,6 +600,7 @@ async def run_tz_compare(self, analysis_id: str) -> dict:
                 requirements_tz,
                 kp_paths,
                 kp_display_names=kp_display_names or None,
+                tz_path=tz_path,
                 analysis_id=analysis_id,
                 user_id=user_id,
             )
@@ -712,6 +720,8 @@ async def run_supplier_kp_process(
             )
         return {"error": "no_requirements_tz", "analysis_id": analysis_id}
 
+    tz_path = resolve_tz_only_file(aid)
+
     paths = resolve_supplier_kp_files(aid, sid)
     display_names = list(supplier.kp_filenames or [])
     if not paths or len(display_names) != len(paths):
@@ -731,6 +741,7 @@ async def run_supplier_kp_process(
         result = await analyze_supplier_kps(
             requirements_tz,
             kp_payload,
+            tz_path=tz_path,
             analysis_id=analysis_id,
             user_id=user_id,
         )
