@@ -66,9 +66,8 @@ v-if="!auth.isAuthenticated.value" to="/auth" color="neutral" variant="outline"
 	</UHeader>
 
 		<slot />
+		<IdeaSuggestionModal v-model:open="ideaModalOpen" />
 	</div>
-
-	<IdeaSuggestionModal v-model:open="ideaModalOpen" />
 </template>
 
 
