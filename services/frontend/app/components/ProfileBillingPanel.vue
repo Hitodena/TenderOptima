@@ -31,11 +31,6 @@ const extractFiles = ref<File[]>([])
 
 const billingFileAccept = '.pdf,.doc,.docx,.png,.jpg,.jpeg,.webp,.txt'
 
-const currentBillingPeriodLabel = computed(() => {
-	const now = new Date()
-	const month = now.toLocaleDateString('ru-RU', { month: 'long' })
-	return `${month} ${now.getFullYear()}`
-})
 
 function applyBillingProfile(data: BillingProfileResponse) {
 	for (const key of BILLING_PROFILE_FIELDS) {
@@ -366,18 +361,15 @@ function formatDocumentStatus(doc: BillingDocumentResponse) {
 			<div class="rounded-lg border border-default p-4 space-y-4">
 				<div class="space-y-1">
 					<p class="text-sm font-semibold">Формирование документов</p>
-					<p class="text-sm text-muted">
-						За текущий период: {{ currentBillingPeriodLabel }}
-					</p>
 				</div>
 				<UButton
 					color="primary"
-					leading-icon="i-lucide-file-output"
+					leading-icon="i-lucide-receipt"
 					:loading="billingGenerating"
 					:disabled="!subscription?.is_active"
 					@click="generateBillingDocument"
 				>
-					Сформировать и отправить документы
+					Получить счёт на оплату
 				</UButton>
 			</div>
 

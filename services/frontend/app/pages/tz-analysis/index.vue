@@ -40,10 +40,10 @@ to="/tz-analysis/history" size="lg" variant="outline" color="neutral"
 								<div class="space-y-2">
 									<p>{{ module2BlockReason }}</p>
 									<ULink
-										to="/profile?tab=subscription"
+										to="/profile?tab=acts"
 										class="text-sm font-medium text-primary hover:underline underline-offset-2"
 									>
-										Открыть подписку в профиле
+										Открыть профиль
 									</ULink>
 								</div>
 							</template>
@@ -84,7 +84,7 @@ to="/tz-analysis/history" size="lg" variant="outline" color="neutral"
 </template>
 
 <script lang="ts" setup>
-import type { TZAnalysisSession, UserResponse } from '#shared/types'
+import type { TZAnalysisSession } from '#shared/types'
 import {
 	canStartModule2Work,
 	isTestPlan,
@@ -95,25 +95,18 @@ import { z } from 'zod'
 
 definePageMeta({ layout: 'default' })
 
-const { get, post } = useApi()
+const { post } = useApi()
 const { public: publicConfig } = useRuntimeConfig()
+const { user, loaded, ensureLoaded } = useCurrentUser()
 
-const user = ref<UserResponse | null>(null)
-
-onMounted(async () => {
-	try {
-		user.value = await get<UserResponse>('/auth/me')
-	} catch {
-		user.value = null
-	}
-})
+onMounted(() => ensureLoaded())
 
 const canCreateAnalysis = computed(() =>
 	canStartModule2Work(user.value?.subscription),
 )
 
 const module2BlockReason = computed(() =>
-	module2WorkBlockMessage(user.value?.subscription),
+	loaded.value ? module2WorkBlockMessage(user.value?.subscription) : null,
 )
 
 const uploadLimitHint = computed(() =>

@@ -29,6 +29,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
 	'add-child': []
+	'add-heading': []
 	'add-sibling': []
 	remove: []
 }>()
@@ -39,6 +40,11 @@ const menuItems = computed((): DropdownMenuItem[][] => {
 			label: 'Подпункт',
 			icon: 'i-lucide-list-plus',
 			onSelect: () => emit('add-child'),
+		},
+		{
+			label: 'Раздел',
+			icon: 'i-lucide-folder-plus',
+			onSelect: () => emit('add-heading'),
 		},
 	]
 	if (props.showRemove) {

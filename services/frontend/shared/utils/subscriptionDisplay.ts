@@ -119,7 +119,7 @@ export function subscriptionNavBadge(
 	}
 }
 
-export function subscriptionProfilePath(tab = 'subscription'): string {
+export function subscriptionProfilePath(tab = 'acts'): string {
 	return `/profile?tab=${tab}`
 }
 

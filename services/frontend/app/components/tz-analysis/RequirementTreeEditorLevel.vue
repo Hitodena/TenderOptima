@@ -63,13 +63,14 @@
 									<span v-else class="text-muted font-normal">Раздел</span>
 								</p>
 							</div>
-							<RequirementNodeRail
-								v-if="!readonly"
-								:show-remove="node.rowIndex !== undefined"
-								@add-child="emit('add-child', node.key)"
-								@add-sibling="onAddSibling(node)"
-								@remove="node.rowIndex !== undefined && emit('remove', node.rowIndex)"
-							/>
+						<RequirementNodeRail
+							v-if="!readonly"
+							:show-remove="node.rowIndex !== undefined"
+							@add-child="emit('add-child', node.key)"
+							@add-heading="emit('add-heading', node.key)"
+							@add-sibling="onAddSibling(node)"
+							@remove="node.rowIndex !== undefined && emit('remove', node.rowIndex)"
+						/>
 						</div>
 						<button
 							v-if="!readonly && node.rowIndex !== undefined"
@@ -139,12 +140,13 @@
 								:readonly="readonly"
 								autoresize
 							/>
-							<RequirementNodeRail
-								v-if="!readonly"
-								@add-child="emit('add-child', node.key)"
-								@add-sibling="onAddSibling(node)"
-								@remove="emit('remove', node.rowIndex)"
-							/>
+						<RequirementNodeRail
+							v-if="!readonly"
+							@add-child="emit('add-child', node.key)"
+							@add-heading="emit('add-heading', node.key)"
+							@add-sibling="onAddSibling(node)"
+							@remove="emit('remove', node.rowIndex)"
+						/>
 						</div>
 						<button
 							v-if="!readonly"

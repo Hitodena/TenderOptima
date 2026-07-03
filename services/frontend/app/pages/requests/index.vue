@@ -30,10 +30,10 @@ to="/requests/history" size="lg" variant="outline" color="neutral"
 								<div class="space-y-2">
 									<p>{{ module1BlockReason }}</p>
 									<NuxtLink
-										:to="subscriptionProfilePath('subscription')"
+										:to="subscriptionProfilePath()"
 										class="text-sm font-medium text-primary hover:underline underline-offset-2"
 									>
-										Перейти к подписке
+										Перейти к профилю
 									</NuxtLink>
 								</div>
 							</template>
@@ -73,7 +73,7 @@ v-if="searchError" :error="searchError"
 </template>
 
 <script lang="ts" setup>
-import type { RequestResponse, UserResponse } from '#shared/types'
+import type { RequestResponse } from '#shared/types'
 import { z } from 'zod'
 import { titleCaseWords } from '#shared/utils/textFormat'
 import {
@@ -83,7 +83,8 @@ import {
 import { subscriptionProfilePath } from '#shared/utils/subscriptionDisplay'
 import SearchQueryRulesHint from '~/components/requests/SearchQueryRulesHint.vue'
 
-const { post, get } = useApi()
+const { post } = useApi()
+const { user, loaded, ensureLoaded } = useCurrentUser()
 
 const schema = z.object({
 	query: z.string().min(3, 'Минимум 3 символа').max(500, 'Максимум 500 символов'),
@@ -93,22 +94,15 @@ const schema = z.object({
 const form = reactive({ query: '', delivery_region: '' })
 const loading = ref(false)
 const searchError = ref<unknown | null>(null)
-const user = ref<UserResponse | null>(null)
 
-onMounted(async () => {
-	try {
-		user.value = await get<UserResponse>('/auth/me')
-	} catch {
-		user.value = null
-	}
-})
+onMounted(() => ensureLoaded())
 
 const canStartSearch = computed(() =>
 	canStartModule1Work(user.value?.subscription),
 )
 
 const module1BlockReason = computed(() =>
-	module1WorkBlockMessage(user.value?.subscription),
+	loaded.value ? module1WorkBlockMessage(user.value?.subscription) : null,
 )
 
 async function handleSearch() {

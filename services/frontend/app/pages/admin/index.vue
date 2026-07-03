@@ -197,6 +197,92 @@
 							</div>
 						</div>
 					</template>
+
+				<template #blacklist>
+					<div class="space-y-4">
+						<div class="flex items-center justify-between flex-wrap gap-3">
+							<p class="text-sm text-muted">
+								Глобальный список заблокированных сайтов. Домены недоступны для всех пользователей при поиске.
+							</p>
+							<UButton
+								size="sm"
+								leading-icon="i-lucide-plus"
+								@click="openAddBlacklist"
+							>
+								Добавить домен
+							</UButton>
+						</div>
+
+						<div class="overflow-x-auto rounded-lg border border-default">
+							<UTable
+								:data="blacklist"
+								:columns="blacklistColumns"
+								:loading="loadingBlacklist"
+								class="min-w-[500px]"
+							>
+								<template #empty>
+									<div class="flex flex-col items-center justify-center py-12 gap-3">
+										<UIcon name="i-lucide-shield-check" class="w-10 h-10 text-muted opacity-40" />
+										<p class="text-muted">Список пуст</p>
+									</div>
+								</template>
+
+								<template #created_at-cell="{ row }">
+									<span class="text-xs text-muted whitespace-nowrap">{{ formatDate(row.original.created_at) }}</span>
+								</template>
+
+								<template #reason-cell="{ row }">
+									<span class="text-xs text-muted">{{ row.original.reason ?? '—' }}</span>
+								</template>
+
+								<template #actions-cell="{ row }">
+									<div class="flex justify-end">
+										<UButton
+											size="xs"
+											color="error"
+											variant="ghost"
+											icon="i-lucide-trash-2"
+											:loading="deletingBlacklistId === row.original.id"
+											@click="deleteBlacklistEntry(row.original.id)"
+										/>
+									</div>
+								</template>
+							</UTable>
+						</div>
+					</div>
+
+					<UModal v-model:open="addBlacklistOpen" title="Добавить домен в блэклист" :ui="{ content: 'max-w-md' }">
+						<template #body>
+							<UForm :schema="blacklistSchema" :state="blacklistForm" class="space-y-4" @submit="submitAddBlacklist">
+								<UFormField label="Домен" name="domain" required hint="Например: spam-site.ru">
+									<UInput
+										v-model="blacklistForm.domain"
+										icon="i-lucide-globe"
+										placeholder="example.com"
+										class="w-full"
+									/>
+								</UFormField>
+								<UFormField label="Причина" name="reason">
+									<UInput
+										v-model="blacklistForm.reason"
+										icon="i-lucide-info"
+										placeholder="Спам, недостоверные данные и т.д."
+										class="w-full"
+									/>
+								</UFormField>
+								<div class="flex justify-end gap-2 pt-2">
+									<UButton variant="ghost" color="neutral" type="button" @click="addBlacklistOpen = false">
+										Отмена
+									</UButton>
+									<UButton type="submit" :loading="savingBlacklist" leading-icon="i-lucide-shield-ban">
+										Добавить
+									</UButton>
+								</div>
+							</UForm>
+						</template>
+					</UModal>
+				</template>
+
 				</UTabs>
 			</UCard>
 		</div>
@@ -204,8 +290,10 @@
 </template>
 
 <script lang="ts" setup>
+import { z } from 'zod'
 import type { TableColumn } from '@nuxt/ui'
 import type {
+	BlacklistResponse,
 	FrontendErrorLogResponse,
 	IdeaSuggestionResponse,
 	UserResponse,
@@ -213,7 +301,7 @@ import type {
 
 definePageMeta({ layout: 'default' })
 
-const { get } = useApi()
+const { get, post, del: delReq } = useApi()
 const { formatDate } = useFormatDate()
 
 const user = ref<UserResponse | null>(null)
@@ -234,6 +322,7 @@ const tabs = [
 	{ label: 'Пользователи', slot: 'users', value: 'users', icon: 'i-lucide-users' },
 	{ label: 'Ошибки', slot: 'errors', value: 'errors', icon: 'i-lucide-bug' },
 	{ label: 'Идеи', slot: 'ideas', value: 'ideas', icon: 'i-lucide-lightbulb' },
+	{ label: 'Блэклист', slot: 'blacklist', value: 'blacklist', icon: 'i-lucide-shield-ban' },
 ]
 
 const expanded = ref<Set<string>>(new Set())
@@ -330,9 +419,86 @@ watch(activeTab, (tab) => {
 	if (tab === 'ideas' && ideas.value.length === 0 && !loadingIdeas.value) {
 		void fetchIdeas()
 	}
+	if (tab === 'blacklist' && blacklist.value.length === 0 && !loadingBlacklist.value) {
+		void fetchBlacklist()
+	}
 })
 
 onMounted(() => {
-	// errors and ideas are loaded lazily on tab activation
+	// tabs are loaded lazily on activation
 })
+
+// --- Blacklist tab ---
+
+const toast = useToast()
+
+const blacklist = ref<BlacklistResponse[]>([])
+const loadingBlacklist = ref(false)
+const deletingBlacklistId = ref<string | null>(null)
+const addBlacklistOpen = ref(false)
+const savingBlacklist = ref(false)
+
+const blacklistForm = reactive({ domain: '', reason: '' })
+
+const blacklistSchema = z.object({
+	domain: z.string().min(3, 'Минимум 3 символа').max(255),
+	reason: z.string().max(500).optional(),
+})
+
+const blacklistColumns: TableColumn<BlacklistResponse>[] = [
+	{ accessorKey: 'domain', header: 'Домен' },
+	{ accessorKey: 'reason', header: 'Причина' },
+	{ accessorKey: 'created_at', header: 'Добавлен' },
+	{ id: 'actions', header: '' },
+]
+
+async function fetchBlacklist() {
+	loadingBlacklist.value = true
+	try {
+		const data = await get<BlacklistResponse[]>('/blacklist')
+		blacklist.value = data.filter((entry) => entry.is_global)
+	} catch {
+		blacklist.value = []
+	} finally {
+		loadingBlacklist.value = false
+	}
+}
+
+function openAddBlacklist() {
+	blacklistForm.domain = ''
+	blacklistForm.reason = ''
+	addBlacklistOpen.value = true
+}
+
+async function submitAddBlacklist() {
+	if (savingBlacklist.value) return
+	savingBlacklist.value = true
+	try {
+		const created = await post<BlacklistResponse>('/blacklist', {
+			domain: blacklistForm.domain.trim().toLowerCase(),
+			reason: blacklistForm.reason.trim() || null,
+			is_global: true,
+		})
+		blacklist.value = [created, ...blacklist.value]
+		addBlacklistOpen.value = false
+		toast.add({ title: 'Домен добавлен в блэклист', color: 'success' })
+	} catch {
+		toast.add({ title: 'Не удалось добавить домен', color: 'error' })
+	} finally {
+		savingBlacklist.value = false
+	}
+}
+
+async function deleteBlacklistEntry(id: string) {
+	deletingBlacklistId.value = id
+	try {
+		await delReq(`/blacklist/${id}`)
+		blacklist.value = blacklist.value.filter((entry) => entry.id !== id)
+		toast.add({ title: 'Домен удалён из блэклиста', color: 'success' })
+	} catch {
+		toast.add({ title: 'Не удалось удалить домен', color: 'error' })
+	} finally {
+		deletingBlacklistId.value = null
+	}
+}
 </script>

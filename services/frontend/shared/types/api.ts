@@ -240,6 +240,7 @@ export interface SupplierCreate {
 	email: string;
 	extra_emails?: string[] | null;
 	phone?: string | null;
+	comments?: string | null;
 	source?: string | null;
 	request_id?: string | null;
 	is_enabled?: boolean;
@@ -252,7 +253,16 @@ export interface Supplier {
 	main_email: string;
 	extra_emails: string[];
 	phone?: string | null;
+	comments?: string | null;
 	from_source?: string | null;
+}
+
+export interface SupplierUpdate {
+	company_name?: string | null;
+	domain?: string | null;
+	phone?: string | null;
+	extra_emails?: string[] | null;
+	comments?: string | null;
 }
 
 export interface SupplierEmailUpdate {

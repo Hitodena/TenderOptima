@@ -111,43 +111,53 @@
 				</div>
 			</section>
 
-				<!-- Quick links row -->
-				<section class="border-t border-default bg-elevated/30 px-4 py-6 sm:px-6 lg:px-8">
-					<div class="mx-auto max-w-5xl">
-						<p class="mb-4 text-xs font-semibold uppercase tracking-widest text-muted">
-							Быстрый доступ
-						</p>
-						<div class="flex flex-wrap gap-3">
-							<UButton
-								to="/requests/history"
-								variant="outline"
-								color="neutral"
-								leading-icon="i-lucide-history"
-								size="sm"
-							>
-								История запросов
-							</UButton>
-							<UButton
-								to="/tz-analysis/history"
-								variant="outline"
-								color="neutral"
-								leading-icon="i-lucide-archive"
-								size="sm"
-							>
-								История анализов
-							</UButton>
-							<UButton
-								:to="subscriptionPath"
-								variant="outline"
-								color="neutral"
-								leading-icon="i-lucide-credit-card"
-								size="sm"
-							>
-								Подписка
-							</UButton>
-						</div>
+			<!-- Quick links row -->
+			<section class="border-t border-default bg-elevated/30 px-4 py-6 sm:px-6 lg:px-8">
+				<div class="mx-auto max-w-5xl">
+					<p class="mb-4 text-xs font-semibold uppercase tracking-widest text-muted">
+						Быстрый доступ
+					</p>
+					<div class="flex flex-wrap gap-3">
+						<UButton
+							to="/requests/history"
+							variant="outline"
+							color="neutral"
+							leading-icon="i-lucide-history"
+							size="sm"
+						>
+							История запросов
+						</UButton>
+						<UButton
+							to="/tz-analysis/history"
+							variant="outline"
+							color="neutral"
+							leading-icon="i-lucide-archive"
+							size="sm"
+						>
+							История анализов
+						</UButton>
+						<UButton
+							:to="subscriptionPath"
+							variant="outline"
+							color="neutral"
+							leading-icon="i-lucide-credit-card"
+							size="sm"
+						>
+							Подписка
+						</UButton>
 					</div>
-				</section>
+				</div>
+			</section>
+
+			<!-- Subscription stats for authorized users -->
+			<section v-if="user?.subscription" class="border-t border-default px-4 py-6 sm:px-6 lg:px-8">
+				<div class="mx-auto max-w-5xl">
+					<p class="mb-4 text-xs font-semibold uppercase tracking-widest text-muted">
+						Статус подписки
+					</p>
+					<ProfileSubscriptionPanel :subscription="user.subscription" />
+				</div>
+			</section>
 			</div>
 		</template>
 

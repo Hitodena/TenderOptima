@@ -57,6 +57,14 @@ class SupplierCreate(BaseModel):
             examples=["+7 (495) 123-45-67"],
         ),
     ]
+    comments: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description="Free-text notes/comments for the supplier",
+            max_length=2000,
+        ),
+    ]
     source: Annotated[
         SupplierSource | None,
         Field(
@@ -133,6 +141,14 @@ class SupplierResponse(BaseModel):
             examples=["+7 (495) 123-45-67"],
         ),
     ]
+    comments: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description="Free-text notes/comments for the supplier",
+            max_length=2000,
+        ),
+    ]
     from_source: Annotated[
         str | None,
         Field(
@@ -140,6 +156,51 @@ class SupplierResponse(BaseModel):
             examples=["manual"],
         ),
     ] = None
+
+
+class SupplierUpdate(BaseModel):
+    """Payload for updating editable supplier fields."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    company_name: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description="Updated company name",
+            min_length=1,
+            max_length=200,
+        ),
+    ]
+    domain: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description="Updated domain (lowercased)",
+            min_length=3,
+            max_length=255,
+        ),
+    ]
+    phone: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description="Updated phone number",
+            max_length=50,
+        ),
+    ]
+    extra_emails: Annotated[
+        list[EmailStr] | None,
+        Field(default=None, description="Updated additional email list"),
+    ]
+    comments: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description="Free-text notes/comments",
+            max_length=2000,
+        ),
+    ]
 
 
 class SupplierMainEmailUpdate(BaseModel):

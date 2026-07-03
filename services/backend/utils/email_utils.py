@@ -1,6 +1,8 @@
 import email.utils
 import re
 
+from email_validator import EmailNotValidError, validate_email
+
 from backend.db.models import EmailMessage, Request, User
 from backend.enums import EmailMessageDirection
 from backend.utils.user_utils import build_business_info
@@ -88,6 +90,25 @@ def normalize_message_id(raw: str | None) -> str | None:
     if not inner:
         return None
     return f"<{inner}>"
+
+
+def encode_recipient_for_smtp(address: str) -> str:
+    """Convert an email address to ASCII-safe form for SMTP envelope commands.
+
+    IDN domains (e.g. база-дров.бел) are encoded to punycode so that
+    smtplib's RCPT TO command does not raise UnicodeEncodeError.
+    Raises ValueError if the address cannot be normalized.
+    """
+    try:
+        result = validate_email(address.strip(), check_deliverability=False)
+        ascii_address = result.ascii_email
+        if ascii_address is None:
+            raise ValueError(
+                f"No ASCII representation for address: {address!r}"
+            )
+        return ascii_address
+    except EmailNotValidError as exc:
+        raise ValueError(f"Invalid email address {address!r}: {exc}") from exc
 
 
 def reply_subject(original: str) -> str:

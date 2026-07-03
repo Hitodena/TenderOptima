@@ -695,7 +695,7 @@ import {
 	buildResultTree,
 	countRequirementRows,
 	flattenRequirementsToRows,
-	nextChildKey,
+	insertChildAfterParentRow,
 	renumberRequirementRows,
 	insertSiblingBeforeRow,
 	moveRequirementRowBlock,
@@ -1667,25 +1667,14 @@ function addTzChildRequirement(parentKey: string) {
 				? { ...row, isHeading: true }
 				: row,
 		)
-		return [
-			...withHeading,
-			{
-				key: nextChildKey(parentKey, withHeading),
-				text: '',
-			},
-		]
+		return insertChildAfterParentRow(withHeading, parentKey)
 	})
 }
 
 function addTzHeadingRequirement(parentKey: string) {
-	updateEditableRequirementsTz((rows) => [
-		...rows,
-		{
-			key: nextChildKey(parentKey, rows),
-			text: '',
-			isHeading: true,
-		},
-	])
+	updateEditableRequirementsTz((rows) =>
+		insertChildAfterParentRow(rows, parentKey, { isHeading: true }),
+	)
 }
 
 function removeTzRequirement(index: number) {

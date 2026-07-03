@@ -18,6 +18,7 @@ class Supplier(IDMixinUUID, TimestampMixin, Base):
     main_email: Mapped[str] = mapped_column(nullable=False)
     extra_emails: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    comments: Mapped[str | None] = mapped_column(Text, nullable=True)
     from_source: Mapped[str | None] = mapped_column()
 
     added_by_user_id: Mapped[uuid.UUID | None] = mapped_column(

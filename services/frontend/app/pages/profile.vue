@@ -17,18 +17,11 @@
 
 				<UTabs v-model="activeTab" :items="tabs" :ui="{ list: 'mb-6' }">
 
-					<template #subscription>
-						<div class="space-y-8">
-							<div>
-								<h2 class="text-base font-semibold mb-0.5">Статус подписки</h2>
-								<p class="text-sm text-muted mb-5">
-									Текущий тариф и лимиты вашей учётной записи
-								</p>
-								<ProfileSubscriptionPanel :subscription="user?.subscription" />
-							</div>
-							<ProfileBillingPanel :subscription="user?.subscription" />
-						</div>
-					</template>
+				<template #acts>
+					<div class="space-y-8">
+						<ProfileBillingPanel :subscription="user?.subscription" />
+					</div>
+				</template>
 
 					<template #business_card>
 						<div>
@@ -212,7 +205,7 @@ const form = reactive({
 })
 
 const tabs = computed(() => [
-	{ label: 'Статус подписки', slot: 'subscription', value: 'subscription', icon: 'i-lucide-credit-card' },
+	{ label: 'Акты', slot: 'acts', value: 'acts', icon: 'i-lucide-file-text' },
 	{ label: 'Визитная карточка', slot: 'business_card', value: 'business_card', icon: 'i-lucide-id-card' },
 	{ label: 'Профиль', slot: 'profile', value: 'profile', icon: 'i-lucide-user' },
 	{ label: 'Свяжитесь с нами', slot: 'contact', value: 'contact', icon: 'i-lucide-mail' },
@@ -223,7 +216,7 @@ const tabFromQuery = computed(() => {
 	return typeof raw === 'string' ? raw : null
 })
 
-const activeTab = ref('subscription')
+const activeTab = ref('acts')
 
 watch(
 	tabFromQuery,

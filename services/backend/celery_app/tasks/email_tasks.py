@@ -37,6 +37,7 @@ from backend.utils.email_utils import (
     build_outbound_subject,
     build_request_email_body,
     build_threading_headers,
+    encode_recipient_for_smtp,
     make_message_id,
     normalize_message_id,
     resolve_reply_subject,
@@ -207,8 +208,9 @@ def _send_mime(
     recipient: str,
     smtp_creds: SmtpCredentials,
 ) -> None:
+    smtp_recipient = encode_recipient_for_smtp(recipient)
     with smtp_connection(smtp_creds) as smtp:
-        smtp.sendmail(smtp_creds.user, recipient, msg.as_string())
+        smtp.sendmail(smtp_creds.user, smtp_recipient, msg.as_string())
 
 
 async def _mark_rs_status(
@@ -307,7 +309,7 @@ async def send_reply(
     try:
         _send_mime(msg, recipient, smtp_creds)
         logger.info("Reply sent via SMTP", rs_id=rs_id, recipient=recipient)
-    except smtplib.SMTPException as exc:
+    except (smtplib.SMTPException, UnicodeEncodeError, ValueError) as exc:
         logger.exception(
             "SMTP send failed for reply", rs_id=rs_id, error=str(exc)
         )
@@ -427,7 +429,7 @@ async def send_custom_email(
             rs_id=rs_id,
             recipient=recipient,
         )
-    except smtplib.SMTPException as exc:
+    except (smtplib.SMTPException, UnicodeEncodeError, ValueError) as exc:
         logger.exception(
             "SMTP send failed for custom email", rs_id=rs_id, error=str(exc)
         )
@@ -573,9 +575,10 @@ async def send_emails(self, request_id: str) -> dict:
                 msg["Message-ID"] = outbound_message_id
 
                 try:
+                    smtp_recipient = encode_recipient_for_smtp(recipient)
                     smtp.sendmail(
                         smtp_creds.user,
-                        recipient,
+                        smtp_recipient,
                         msg.as_string(),
                     )
                     results.append(
@@ -594,7 +597,11 @@ async def send_emails(self, request_id: str) -> dict:
                         domain=supplier.domain,
                         recipient=recipient,
                     )
-                except smtplib.SMTPException as exc:
+                except (
+                    smtplib.SMTPException,
+                    UnicodeEncodeError,
+                    ValueError,
+                ) as exc:
                     logger.error(
                         "Failed to send email",
                         domain=supplier.domain,

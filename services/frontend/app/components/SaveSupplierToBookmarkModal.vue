@@ -6,67 +6,91 @@
 	>
 		<template #body>
 			<div v-if="supplier" class="space-y-4">
-				<div class="rounded-lg border border-default bg-elevated/30 p-3">
-					<p class="text-sm font-semibold truncate">{{ supplier.company_name }}</p>
-					<p class="text-xs text-muted truncate">{{ supplier.main_email }}</p>
-					<p v-if="supplier.domain" class="text-xs text-muted/70 truncate">
-						{{ formatDomainLabel(supplier.domain) }}
-					</p>
-				</div>
-
-				<div v-if="loading && !lists.length" class="space-y-2">
-					<USkeleton class="h-10 w-full rounded-md" />
-				</div>
-
-				<template v-else>
-					<UFormField label="База поставщиков" required>
-						<div class="flex items-center gap-2">
-							<USelectMenu
-								v-model="selectedListId"
-								value-key="id"
-								label-key="title"
-								:items="listOptions"
-								placeholder="Выберите базу"
-								icon="i-lucide-database"
-								class="flex-1 w-full"
-								:loading="loading"
-							/>
-							<UButton
-								size="sm"
-								variant="outline"
-								icon="i-lucide-plus"
-								title="Новая база"
-								@click="openCreateList"
-							/>
-						</div>
+				<UForm :schema="itemSchema" :state="itemForm" class="space-y-3" @submit="saveToList">
+					<UFormField label="Название компании" name="company_name" required>
+						<UInput
+							v-model="itemForm.company_name"
+							icon="i-lucide-building-2"
+							class="w-full"
+						/>
 					</UFormField>
 
-					<UAlert
-						v-if="duplicateWarning"
-						color="warning"
-						variant="soft"
-						icon="i-lucide-triangle-alert"
-						:description="duplicateWarning"
-					/>
+					<UFormField label="Email" name="email" required>
+						<UInput
+							v-model="itemForm.email"
+							type="email"
+							icon="i-lucide-mail"
+							class="w-full"
+						/>
+					</UFormField>
 
-					<p v-if="!listOptions.length && !loading" class="text-xs text-muted">
-						У вас пока нет баз. Создайте новую, чтобы сохранить поставщика.
-					</p>
-				</template>
+					<UFormField label="Домен" name="domain">
+						<UInput
+							v-model="itemForm.domain"
+							placeholder="supplier.ru"
+							icon="i-lucide-globe"
+							class="w-full"
+						/>
+					</UFormField>
 
-				<div class="flex justify-end gap-2 pt-2">
-					<UButton variant="ghost" color="neutral" @click="isOpen = false">
-						Отмена
-					</UButton>
-					<UButton
-						:loading="saving"
-						:disabled="!canSave"
-						leading-icon="i-lucide-database"
-						@click="saveToList"
-					>
-						Сохранить
-					</UButton>
-				</div>
+					<UFormField label="Иное" name="notes" hint="Контакты, телефоны, комментарии">
+						<UTextarea v-model="itemForm.notes" :rows="2" class="w-full" />
+					</UFormField>
+
+					<div v-if="loading && !lists.length" class="space-y-2">
+						<USkeleton class="h-10 w-full rounded-md" />
+					</div>
+
+					<template v-else>
+						<UFormField label="База поставщиков" required>
+							<div class="flex items-center gap-2">
+								<USelectMenu
+									v-model="selectedListId"
+									value-key="id"
+									label-key="title"
+									:items="listOptions"
+									placeholder="Выберите базу"
+									icon="i-lucide-database"
+									class="flex-1 w-full"
+									:loading="loading"
+								/>
+								<UButton
+									size="sm"
+									variant="outline"
+									icon="i-lucide-plus"
+									title="Новая база"
+									@click="openCreateList"
+								/>
+							</div>
+						</UFormField>
+
+						<UAlert
+							v-if="duplicateWarning"
+							color="warning"
+							variant="soft"
+							icon="i-lucide-triangle-alert"
+							:description="duplicateWarning"
+						/>
+
+						<p v-if="!listOptions.length && !loading" class="text-xs text-muted">
+							У вас пока нет баз. Создайте новую, чтобы сохранить поставщика.
+						</p>
+					</template>
+
+					<div class="flex justify-end gap-2 pt-2">
+						<UButton variant="ghost" color="neutral" type="button" @click="isOpen = false">
+							Отмена
+						</UButton>
+						<UButton
+							type="submit"
+							:loading="saving"
+							:disabled="!canSave"
+							leading-icon="i-lucide-database"
+						>
+							Сохранить
+						</UButton>
+					</div>
+				</UForm>
 			</div>
 		</template>
 	</UModal>
@@ -83,7 +107,7 @@
 					/>
 				</UFormField>
 				<div class="flex justify-end gap-2 pt-2">
-					<UButton variant="ghost" color="neutral" @click="createListOpen = false">
+					<UButton variant="ghost" color="neutral" type="button" @click="createListOpen = false">
 						Отмена
 					</UButton>
 					<UButton type="submit" :loading="savingList">
@@ -98,7 +122,6 @@
 <script lang="ts" setup>
 import { z } from 'zod'
 import type { Supplier, SupplierBookmarkItem, SupplierBookmarkList } from '#shared/types'
-import { formatDomainLabel } from '#shared/utils/url'
 
 const props = defineProps<{ supplier: Supplier | null }>()
 const isOpen = defineModel<boolean>('open', { default: false })
@@ -119,6 +142,25 @@ const listSchema = z.object({
 	title: z.string().min(1, 'Обязательное поле').max(255),
 })
 
+const itemForm = reactive({
+	company_name: '',
+	email: '',
+	domain: '',
+	notes: '',
+})
+
+const itemSchema = z.object({
+	company_name: z.string().min(1, 'Обязательное поле').max(200),
+	email: z.string().email('Неверный формат email'),
+	domain: z.string().optional(),
+	notes: z.string().optional(),
+})
+
+function normalizeDomain(value: string | null | undefined): string | null {
+	const trimmed = (value ?? '').trim()
+	return trimmed.length >= 3 ? trimmed : null
+}
+
 const listOptions = computed(() =>
 	lists.value.filter((list) => !list.is_global),
 )
@@ -127,30 +169,17 @@ const selectedList = computed(() =>
 	listOptions.value.find((list) => list.id === selectedListId.value) ?? null,
 )
 
-function normalizeEmail(value: string | null | undefined): string {
-	return (value ?? '').trim().toLowerCase()
-}
-
-function normalizeDomain(value: string | null | undefined): string | null {
-	const trimmed = (value ?? '').trim()
-	return trimmed.length >= 3 ? trimmed : null
-}
-
-function isDuplicateEmail(list: SupplierBookmarkList, email: string): boolean {
-	const normalized = normalizeEmail(email)
-	return list.items.some((item) => normalizeEmail(item.email) === normalized)
-}
-
 const duplicateWarning = computed(() => {
-	if (!props.supplier?.main_email || !selectedList.value) return null
-	if (isDuplicateEmail(selectedList.value, props.supplier.main_email)) {
+	if (!itemForm.email || !selectedList.value) return null
+	const normalized = itemForm.email.trim().toLowerCase()
+	if (selectedList.value.items.some((item) => (item.email ?? '').trim().toLowerCase() === normalized)) {
 		return 'Этот email уже есть в выбранной базе'
 	}
 	return null
 })
 
 const canSave = computed(() =>
-	Boolean(selectedListId.value && props.supplier?.main_email && !duplicateWarning.value),
+	Boolean(selectedListId.value && itemForm.email && !duplicateWarning.value),
 )
 
 async function fetchLists() {
@@ -199,15 +228,16 @@ async function createList() {
 }
 
 async function saveToList() {
-	if (!canSave.value || !props.supplier || !selectedListId.value || saving.value) return
+	if (!canSave.value || !selectedListId.value || saving.value) return
 	saving.value = true
 	try {
 		const created = await post<SupplierBookmarkItem>(
 			`/supplier-bookmarks/${selectedListId.value}/items`,
 			{
-				company_name: props.supplier.company_name.trim(),
-				email: props.supplier.main_email.trim(),
-				domain: normalizeDomain(props.supplier.domain),
+				company_name: itemForm.company_name.trim(),
+				email: itemForm.email.trim(),
+				domain: normalizeDomain(itemForm.domain),
+				notes: itemForm.notes.trim() || null,
 			},
 		)
 		lists.value = lists.value.map((list) =>
@@ -216,7 +246,7 @@ async function saveToList() {
 				: list,
 		)
 		toast.add({
-			title: `${props.supplier.company_name} добавлен в базу`,
+			title: `${itemForm.company_name} добавлен в базу`,
 			color: 'success',
 			icon: 'i-lucide-check',
 		})
@@ -230,6 +260,10 @@ async function saveToList() {
 
 watch(isOpen, (open) => {
 	if (open) {
+		itemForm.company_name = props.supplier?.company_name ?? ''
+		itemForm.email = props.supplier?.main_email ?? ''
+		itemForm.domain = props.supplier?.domain ?? ''
+		itemForm.notes = ''
 		selectedListId.value = null
 		fetchLists()
 	}

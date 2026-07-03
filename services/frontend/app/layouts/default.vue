@@ -72,7 +72,6 @@ v-if="!auth.isAuthenticated.value" to="/auth" color="neutral" variant="outline"
 
 
 <script lang="ts" setup>
-import type { UserResponse } from '#shared/types'
 import type { DropdownMenuItem, NavigationMenuItem } from '@nuxt/ui'
 import {
 	subscriptionModulesSummary,
@@ -81,19 +80,13 @@ import {
 } from '#shared/utils/subscriptionDisplay'
 
 const auth = useAuthStore()
-const { get } = useApi()
 const route = useRoute()
 
 const ideaModalOpen = ref(false)
-const user = ref<UserResponse | null>(null)
+const { user, ensureLoaded } = useCurrentUser()
 
 if (auth.isAuthenticated.value) {
-	try {
-		user.value = await get<UserResponse>('/auth/me')
-	} catch {
-		auth.clearToken()
-		user.value = null
-	}
+	await ensureLoaded()
 }
 
 const isLandingPage = computed(() => route.path === '/')
@@ -103,7 +96,7 @@ const isTzAnalysisActive = computed(() => route.path.startsWith('/tz-analysis'))
 const isProfileSubscriptionActive = computed(
 	() =>
 		route.path === '/subscription'
-		|| (route.path === '/profile' && route.query.tab === 'subscription'),
+		|| (route.path === '/profile' && (route.query.tab === 'subscription' || route.query.tab === 'acts')),
 )
 const subscriptionBadge = computed(() => subscriptionNavBadge(user.value?.subscription))
 

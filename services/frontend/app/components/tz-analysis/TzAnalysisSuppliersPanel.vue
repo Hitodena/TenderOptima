@@ -132,25 +132,24 @@
 							class="w-full"
 						/>
 					</UFormField>
-					<UFormField label="Файлы КП" required>
-						<UFileUpload
-							:model-value="newSupplierFiles"
-							:accept="fileAccept"
-							:interactive="false"
-							multiple
-							layout="list"
-							position="inside"
-							class="w-full min-h-32"
-							@update:model-value="onNewSupplierFilesChange"
-						>
-							<template #actions="{ open }">
-								<UButton type="button" variant="outline" size="sm" @click="open()">
-									<UIcon name="i-lucide-file-spreadsheet" class="w-4 h-4" />
-									Выбрать КП
-								</UButton>
-							</template>
-						</UFileUpload>
-					</UFormField>
+				<UFormField label="Файл КП" required>
+					<UFileUpload
+						:model-value="newSupplierFile"
+						:accept="fileAccept"
+						:interactive="false"
+						layout="list"
+						position="inside"
+						class="w-full min-h-32"
+						@update:model-value="onNewSupplierFileChange"
+					>
+						<template #actions="{ open }">
+							<UButton type="button" variant="outline" size="sm" @click="open()">
+								<UIcon name="i-lucide-file-spreadsheet" class="w-4 h-4" />
+								Выбрать КП
+							</UButton>
+						</template>
+					</UFileUpload>
+				</UFormField>
 				</div>
 			</template>
 			<template #footer>
@@ -208,12 +207,12 @@ const toast = useToast()
 
 const showAddForm = ref(false)
 const newSupplierName = ref('')
-const newSupplierFiles = ref<File[]>([])
+const newSupplierFile = ref<File | null>(null)
 const adding = ref(false)
 const deletingId = ref<string | null>(null)
 
 const canAddSupplier = computed(() =>
-	newSupplierName.value.trim().length > 0 && newSupplierFiles.value.length > 0,
+	newSupplierName.value.trim().length > 0 && newSupplierFile.value !== null,
 )
 
 const kpUploadHint = computed(() =>
@@ -245,35 +244,38 @@ function kpFileWord(count: number) {
 function resetAddForm() {
 	showAddForm.value = false
 	newSupplierName.value = ''
-	newSupplierFiles.value = []
+	newSupplierFile.value = null
 }
 
-function onNewSupplierFilesChange(files: File | File[] | null | undefined) {
+function onNewSupplierFileChange(files: File | File[] | null | undefined) {
 	if (!files) {
-		newSupplierFiles.value = []
+		newSupplierFile.value = null
 		return
 	}
-	const list = Array.isArray(files) ? files : [files]
-	newSupplierFiles.value = list.filter((file) => {
-		if (file.size <= props.maxUploadSize) return true
+	const file = Array.isArray(files) ? files[0] ?? null : files
+	if (!file) {
+		newSupplierFile.value = null
+		return
+	}
+	if (file.size > props.maxUploadSize) {
 		toast.add({
 			title: 'Файл слишком большой',
 			description: `${file.name} превышает ${formatUploadLimitMb(props.maxUploadSize)}`,
 			color: 'error',
 		})
-		return false
-	})
+		newSupplierFile.value = null
+		return
+	}
+	newSupplierFile.value = file
 }
 
 async function createSupplier() {
-	if (!canAddSupplier.value || adding.value) return
+	if (!canAddSupplier.value || adding.value || !newSupplierFile.value) return
 	adding.value = true
 	try {
 		const fd = new FormData()
 		fd.append('name', newSupplierName.value.trim())
-		for (const file of newSupplierFiles.value) {
-			fd.append('kp_files', file)
-		}
+		fd.append('kp_files', newSupplierFile.value)
 		await post<TZAnalysisSupplierItem>(
 			`/tz-analysis/${props.analysisId}/suppliers`,
 			fd,

@@ -6,7 +6,7 @@
 		:readonly="readonly"
 		@remove="(index) => emit('remove', index)"
 		@add-child="handleAddChild"
-		@add-heading="(parentKey) => emit('add-heading', parentKey)"
+		@add-heading="handleAddHeading"
 		@add-sibling="(index) => emit('add-sibling', index)"
 		@reorder="(from, to) => emit('reorder', from, to)"
 		@toggle-section="toggleSection"
@@ -74,6 +74,11 @@ function expandSection(key: string) {
 function handleAddChild(parentKey: string) {
 	expandSection(parentKey)
 	emit('add-child', parentKey)
+}
+
+function handleAddHeading(parentKey: string) {
+	expandSection(parentKey)
+	emit('add-heading', parentKey)
 }
 
 provide('requirementTreeEditor', {

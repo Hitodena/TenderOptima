@@ -14,6 +14,7 @@ from backend.api.suppliers.schemas import (
     SupplierMainEmailUpdate,
     SupplierRemoveResponse,
     SupplierResponse,
+    SupplierUpdate,
 )
 from backend.db.dao import RequestDAO, RequestSupplierDAO, SupplierDAO
 from backend.db.models import User
@@ -80,6 +81,7 @@ async def create_supplier(
             main_email=normalized_email,
             extra_emails=extra_emails,
             phone=body.phone.strip() if body.phone else None,
+            comments=body.comments.strip() if body.comments else None,
             from_source=body.source,
             added_by_user_id=current_user.id,
         )
@@ -167,6 +169,68 @@ async def update_supplier_main_email(
         session, supplier_id, main_email=normalized_email
     )
     return SupplierResponse.model_validate(updated)
+
+
+@router.patch(
+    "/{supplier_id}",
+    response_model=SupplierResponse,
+    summary="Update editable supplier fields",
+    responses={
+        200: {"description": "Supplier updated successfully"},
+        401: {"description": "Missing or invalid authentication credentials"},
+        404: {"description": "Supplier not found"},
+        422: {"description": "Validation error in request payload"},
+    },
+)
+async def update_supplier(
+    supplier_id: uuid.UUID,
+    body: SupplierUpdate,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> SupplierResponse:
+    """Update company_name, domain, phone, extra_emails, or comments.
+
+    Only the owner (added_by_user_id) can edit manually-added suppliers.
+    Parser-sourced suppliers without an owner can be edited by any user.
+    """
+    supplier = await SupplierDAO.get_by_id(session, supplier_id)
+    if not supplier:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Supplier not found",
+        )
+
+    if (
+        supplier.added_by_user_id
+        and supplier.added_by_user_id != current_user.id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Supplier not found or does not belong to you",
+        )
+
+    fields: dict = {}
+    if body.company_name is not None:
+        fields["company_name"] = body.company_name
+    if body.domain is not None:
+        fields["domain"] = body.domain.lower().strip()
+    if body.phone is not None:
+        fields["phone"] = body.phone.strip() or None
+    if body.extra_emails is not None:
+        normalized_main = supplier.main_email.lower()
+        fields["extra_emails"] = [
+            e.lower().strip()
+            for e in body.extra_emails
+            if e.lower().strip() != normalized_main
+        ] or None
+    if body.comments is not None:
+        fields["comments"] = body.comments.strip() or None
+
+    if fields:
+        supplier = await SupplierDAO.update_fields(
+            session, supplier_id, **fields
+        )
+    return SupplierResponse.model_validate(supplier)
 
 
 @request_suppliers_router.get(

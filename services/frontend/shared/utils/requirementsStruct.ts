@@ -687,6 +687,37 @@ export function insertSiblingBeforeRow(
 	return next
 }
 
+/**
+ * Insert a new child row immediately after the parent row (as first child),
+ * so it appears at the top of the parent's children list instead of appended
+ * at the end of the flat array.
+ *
+ * The new row is given the key that `nextChildKey` would assign for the parent,
+ * so the tree builder knows it belongs to the parent. After insertion the caller
+ * should run `renumberRequirementRows` to reassign all keys in tree order.
+ */
+export function insertChildAfterParentRow(
+	rows: EditableRequirementRow[],
+	parentKey: string,
+	options?: { isHeading?: boolean },
+): EditableRequirementRow[] {
+	const normalizedParent = parentKey.trim().replace(/\//g, '.')
+	const parentIndex = rows.findIndex(
+		(row) => normalizeRequirementKey(row.key) === normalizedParent,
+	)
+	const childKey = nextChildKey(parentKey, rows)
+	if (parentIndex === -1) {
+		return [...rows, { key: childKey, text: '', isHeading: options?.isHeading }]
+	}
+	const next = [...rows]
+	next.splice(parentIndex + 1, 0, {
+		key: childKey,
+		text: '',
+		isHeading: options?.isHeading,
+	})
+	return next
+}
+
 /** Reassign sequential keys (1, 2, 1.1, …) from current tree order after add/remove. */
 export function renumberRequirementRows(
 	rows: EditableRequirementRow[],
