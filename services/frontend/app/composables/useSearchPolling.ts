@@ -12,6 +12,7 @@ export function useSearchPolling(
 ) {
 	const { get } = useApi();
 	const toast = useToast();
+	const finalizing = ref(false);
 
 	const isSearching = computed(
 		() => request.value?.status === RequestStatus.SEARCHING,
@@ -27,7 +28,12 @@ export function useSearchPolling(
 
 			if (updated.status !== RequestStatus.SEARCHING) {
 				stopSearchPolling();
-				await onSearchComplete();
+				finalizing.value = true;
+				try {
+					await onSearchComplete();
+				} finally {
+					finalizing.value = false;
+				}
 
 				if (updated.status === RequestStatus.ACTIVE) {
 					const count = suppliers.value.length
@@ -84,6 +90,7 @@ export function useSearchPolling(
 
 	return {
 		isSearching,
+		finalizing,
 		resetSearchTracking,
 	};
 }

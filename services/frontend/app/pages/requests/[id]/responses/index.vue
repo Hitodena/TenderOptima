@@ -1028,11 +1028,7 @@ const priceRequirements = computed(() =>
 	comparison.value?.price_requirements?.length
 		? comparison.value.price_requirements
 		: (comparison.value?.requirements ?? []).filter((req) =>
-			[
-				'Общая стоимость без НДС',
-				'Общая стоимость с НДС',
-				'Цена за единицу без НДС',
-			].includes(req),
+			['Цена за единицу без НДС'].includes(req),
 		),
 )
 

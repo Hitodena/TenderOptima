@@ -1,6 +1,8 @@
 from .base import Base, IDMixinUUID, TimestampMixin
 from .blacklisted_domain import BlacklistedDomain
 from .email_template import EmailTemplate
+from .frontend_error_log import FrontendErrorLog
+from .idea_suggestion import IdeaSuggestion
 from .request import Request
 from .response import EmailMessage, ResponseAnalysis
 from .search import SearchHistory
@@ -21,6 +23,8 @@ __all__ = [
     "TimestampMixin",
     "BlacklistedDomain",
     "EmailTemplate",
+    "FrontendErrorLog",
+    "IdeaSuggestion",
     "Request",
     "SupplierBookmarkList",
     "SupplierBookmarkItem",

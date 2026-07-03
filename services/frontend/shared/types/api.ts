@@ -239,6 +239,7 @@ export interface SupplierCreate {
 	company_name: string;
 	email: string;
 	extra_emails?: string[] | null;
+	phone?: string | null;
 	source?: string | null;
 	request_id?: string | null;
 	is_enabled?: boolean;
@@ -250,6 +251,7 @@ export interface Supplier {
 	company_name: string;
 	main_email: string;
 	extra_emails: string[];
+	phone?: string | null;
 	from_source?: string | null;
 }
 
@@ -538,4 +540,58 @@ export interface TZAnalysisPreviewResponse {
 	title: string;
 	paragraphs: string[];
 	has_issues: boolean;
+}
+
+export interface UserBrief {
+	id: string;
+	email: string;
+	full_name: string | null;
+}
+
+export interface FrontendErrorLogCreate {
+	message: string;
+	backend_response?: string | null;
+	page_url?: string | null;
+	request_method?: string | null;
+	request_url?: string | null;
+	status_code?: number | null;
+}
+
+export interface FrontendErrorLogResponse {
+	id: string;
+	user_id: string | null;
+	user: UserBrief | null;
+	message: string;
+	backend_response: string | null;
+	page_url: string | null;
+	request_method: string | null;
+	request_url: string | null;
+	status_code: number | null;
+	created_at: string;
+}
+
+export interface FrontendErrorLogPageResponse {
+	items: FrontendErrorLogResponse[];
+	page: number;
+	size: number;
+	total: number;
+}
+
+export interface IdeaSuggestionCreate {
+	message: string;
+}
+
+export interface IdeaSuggestionResponse {
+	id: string;
+	user_id: string;
+	user: UserBrief | null;
+	message: string;
+	created_at: string;
+}
+
+export interface IdeaSuggestionPageResponse {
+	items: IdeaSuggestionResponse[];
+	page: number;
+	size: number;
+	total: number;
 }

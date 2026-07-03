@@ -40,11 +40,6 @@ const menuItems = computed((): DropdownMenuItem[][] => {
 			icon: 'i-lucide-list-plus',
 			onSelect: () => emit('add-child'),
 		},
-		{
-			label: 'Добавить пункт',
-			icon: 'i-lucide-plus',
-			onSelect: () => emit('add-sibling'),
-		},
 	]
 	if (props.showRemove) {
 		items.push({

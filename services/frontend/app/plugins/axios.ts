@@ -47,6 +47,28 @@ export default defineNuxtPlugin(() => {
 				});
 			}
 
+			if (import.meta.client) {
+				const requestUrl: string | undefined = error.config?.url;
+				const isFeedbackEndpoint = requestUrl?.includes('/feedback/errors');
+				if (!isFeedbackEndpoint) {
+					const route = useRoute();
+					const { reportError } = useErrorReporter();
+					const backendData = error.response?.data;
+					const backendResponse = backendData
+						? JSON.stringify(backendData).slice(0, 8000)
+						: null;
+
+					void reportError({
+						message: error.message ?? 'API error',
+						backend_response: backendResponse,
+						page_url: route.fullPath,
+						request_method: (error.config?.method ?? '').toUpperCase() || null,
+						request_url: requestUrl ?? null,
+						status_code: status ?? null,
+					});
+				}
+			}
+
 			return Promise.reject(error);
 		},
 	);

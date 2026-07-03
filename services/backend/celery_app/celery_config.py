@@ -177,6 +177,7 @@ class CeleryConfig:
         "backend.celery_app.tasks.billing_tasks",
         "backend.celery_app.tasks.parser_tasks",
         "backend.celery_app.tasks.analysis_tasks",
+        "backend.celery_app.tasks.security_tasks",
     ]
 
     # Logging

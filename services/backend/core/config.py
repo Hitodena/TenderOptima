@@ -68,6 +68,7 @@ class Config(BaseSettings):
     # Auth
     secret_key: str
     alghoritm: str
+    admin_alert_email: str = ""
 
     # Parser
     parser_url: str

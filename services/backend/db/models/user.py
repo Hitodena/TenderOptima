@@ -1,4 +1,6 @@
-from sqlalchemy import Text
+from datetime import datetime
+
+from sqlalchemy import DateTime, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db.models.base import Base, IDMixinUUID, TimestampMixin
@@ -27,6 +29,15 @@ class User(IDMixinUUID, TimestampMixin, Base):
     is_admin: Mapped[bool] = mapped_column(default=False)
     agree_terms: Mapped[bool] = mapped_column(default=True)
     agree_marketing: Mapped[bool] = mapped_column(default=False)
+
+    failed_login_attempts: Mapped[int] = mapped_column(
+        default=0, nullable=False
+    )
+    lockout_level: Mapped[int] = mapped_column(default=0, nullable=False)
+    locked_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     requests: Mapped[list["Request"]] = relationship(  # noqa: F821 # type: ignore
         back_populates="user", uselist=True, lazy="selectin"
@@ -64,4 +75,10 @@ class User(IDMixinUUID, TimestampMixin, Base):
         relationship(
             back_populates="user",
         )
+    )
+    frontend_error_logs: Mapped[list["FrontendErrorLog"]] = relationship(  # noqa: F821 # type: ignore
+        back_populates="user",
+    )
+    idea_suggestions: Mapped[list["IdeaSuggestion"]] = relationship(  # noqa: F821 # type: ignore
+        back_populates="user",
     )

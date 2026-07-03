@@ -222,6 +222,49 @@ function formatDocumentStatus(doc: BillingDocumentResponse) {
 		</div>
 
 		<template v-else>
+			<div class="rounded-lg border border-default p-4 space-y-4">
+				<p class="text-sm font-semibold">Извлечение реквизитов</p>
+				<p class="text-xs text-muted">
+					Загрузите документы или вставьте текст — нейросеть заполнит поля формы ниже.
+				</p>
+				<UFormField label="Текст с реквизитами">
+					<UTextarea
+						v-model="extractText"
+						class="w-full"
+						:rows="4"
+						placeholder="Вставьте реквизиты из письма, договора или карточки организации"
+					/>
+				</UFormField>
+				<UFormField label="Файлы PDF, DOCX, изображения">
+					<UFileUpload
+						:model-value="extractFiles"
+						:accept="billingFileAccept"
+						:interactive="false"
+						multiple
+						layout="list"
+						position="inside"
+						class="w-full min-h-28"
+						@update:model-value="onExtractFilesChange"
+					>
+						<template #actions="{ open }">
+							<UButton type="button" variant="outline" size="sm" @click="open()">
+								<UIcon name="i-lucide-upload" class="w-4 h-4" />
+								Выбрать файлы
+							</UButton>
+						</template>
+					</UFileUpload>
+				</UFormField>
+				<UButton
+					variant="soft"
+					color="primary"
+					leading-icon="i-lucide-sparkles"
+					:loading="billingExtracting"
+					@click="extractBillingProfile"
+				>
+					Извлечь поля нейросетью
+				</UButton>
+			</div>
+
 			<UForm
 				:schema="billingProfileSchema"
 				:state="billingProfile"
@@ -319,46 +362,6 @@ function formatDocumentStatus(doc: BillingDocumentResponse) {
 					</UButton>
 				</div>
 			</UForm>
-
-			<div class="rounded-lg border border-default p-4 space-y-4">
-				<p class="text-sm font-semibold">Извлечение реквизитов</p>
-				<UFormField label="Текст с реквизитами">
-					<UTextarea
-						v-model="extractText"
-						class="w-full"
-						:rows="4"
-						placeholder="Вставьте реквизиты из письма, договора или карточки организации"
-					/>
-				</UFormField>
-				<UFormField label="Файлы PDF, DOCX, изображения">
-					<UFileUpload
-						:model-value="extractFiles"
-						:accept="billingFileAccept"
-						:interactive="false"
-						multiple
-						layout="list"
-						position="inside"
-						class="w-full min-h-28"
-						@update:model-value="onExtractFilesChange"
-					>
-						<template #actions="{ open }">
-							<UButton type="button" variant="outline" size="sm" @click="open()">
-								<UIcon name="i-lucide-upload" class="w-4 h-4" />
-								Выбрать файлы
-							</UButton>
-						</template>
-					</UFileUpload>
-				</UFormField>
-				<UButton
-					variant="soft"
-					color="primary"
-					leading-icon="i-lucide-sparkles"
-					:loading="billingExtracting"
-					@click="extractBillingProfile"
-				>
-					Извлечь поля нейросетью
-				</UButton>
-			</div>
 
 			<div class="rounded-lg border border-default p-4 space-y-4">
 				<div class="space-y-1">

@@ -35,7 +35,8 @@ function formatShortSourceRef(
 	key: string | null,
 	page: number | null,
 ): string {
-	const keyPart = key ? `пункт ${key}` : 'пункт ?'
+	if (!key) return 'Не найдено'
+	const keyPart = `пункт ${key}`
 	if (page != null) return `${prefix}, стр ${page}, ${keyPart}`
 	return `${prefix}, ${keyPart}`
 }

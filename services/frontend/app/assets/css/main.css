@@ -277,6 +277,10 @@ input[type='number'] {
 	transform: translateY(-4px);
 }
 
+.landing-card-down:hover {
+	transform: translateY(4px);
+}
+
 .landing-card-feature {
 	padding: 1.75rem;
 	height: 100%;

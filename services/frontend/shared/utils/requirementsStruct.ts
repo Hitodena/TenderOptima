@@ -672,6 +672,21 @@ export function insertSiblingAfterRow(
 	return next
 }
 
+export function insertSiblingBeforeRow(
+	rows: EditableRequirementRow[],
+	beforeIndex: number,
+	options?: { isHeading?: boolean },
+): EditableRequirementRow[] {
+	const [start] = getRowSubtreeRange(rows, beforeIndex)
+	const next = [...rows]
+	next.splice(start, 0, {
+		key: '',
+		text: '',
+		isHeading: options?.isHeading,
+	})
+	return next
+}
+
 /** Reassign sequential keys (1, 2, 1.1, …) from current tree order after add/remove. */
 export function renumberRequirementRows(
 	rows: EditableRequirementRow[],

@@ -48,6 +48,15 @@ class SupplierCreate(BaseModel):
             description="Additional contact emails besides the primary email",
         ),
     ]
+    phone: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description="Optional phone number for the supplier",
+            max_length=50,
+            examples=["+7 (495) 123-45-67"],
+        ),
+    ]
     source: Annotated[
         SupplierSource | None,
         Field(
@@ -114,6 +123,14 @@ class SupplierResponse(BaseModel):
         Field(
             description="Additional contact emails",
             examples=[["sales@example-supplier.ru"]],
+        ),
+    ]
+    phone: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description="Optional phone number for the supplier",
+            examples=["+7 (495) 123-45-67"],
         ),
     ]
     from_source: Annotated[

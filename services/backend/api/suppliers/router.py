@@ -79,6 +79,7 @@ async def create_supplier(
             company_name=body.company_name,
             main_email=normalized_email,
             extra_emails=extra_emails,
+            phone=body.phone.strip() if body.phone else None,
             from_source=body.source,
             added_by_user_id=current_user.id,
         )

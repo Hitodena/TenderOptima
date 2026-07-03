@@ -4,8 +4,6 @@ from decimal import Decimal
 
 PRICE_REQUIREMENT_LABELS: frozenset[str] = frozenset(
     {
-        "Общая стоимость без НДС",
-        "Общая стоимость с НДС",
         "Цена за единицу без НДС",
     }
 )

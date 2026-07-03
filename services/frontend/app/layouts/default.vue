@@ -4,7 +4,7 @@
 		mode="slideover"
 		:menu="{ side: 'right' }"
 		:toggle="auth.isAuthenticated.value || isLandingPage"
-		class="sticky top-0 z-50 h-20 border-b border-default bg-default/95 backdrop-blur supports-[backdrop-filter]:bg-default/80"
+		class="sticky top-0 z-50 h-20 border-b border-default bg-default/95 backdrop-blur supports-backdrop-filter:bg-default/80"
 	>
 		<template #left>
 			<ULink
@@ -45,6 +45,15 @@ to="/"
 			<div class="flex items-center gap-2">
 				<UColorModeButton />
 				<UButton
+					v-if="auth.isAuthenticated.value"
+					color="neutral"
+					variant="ghost"
+					icon="i-lucide-lightbulb"
+					size="lg"
+					title="Предложить идею"
+					@click="ideaModalOpen = true"
+				/>
+				<UButton
 v-if="!auth.isAuthenticated.value" to="/auth" color="neutral" variant="outline"
 					leading-icon="i-lucide-log-in" label="Войти" size="lg" />
 				<UDropdownMenu v-else :items="userMenuItems" :ui="{ content: 'w-48' }">
@@ -58,6 +67,8 @@ v-if="!auth.isAuthenticated.value" to="/auth" color="neutral" variant="outline"
 
 		<slot />
 	</div>
+
+	<IdeaSuggestionModal v-model:open="ideaModalOpen" />
 </template>
 
 
@@ -67,13 +78,14 @@ import type { DropdownMenuItem, NavigationMenuItem } from '@nuxt/ui'
 import {
 	subscriptionModulesSummary,
 	subscriptionNavBadge,
-	subscriptionProfilePath,
+	subscriptionPlansPath,
 } from '#shared/utils/subscriptionDisplay'
 
 const auth = useAuthStore()
 const { get } = useApi()
 const route = useRoute()
 
+const ideaModalOpen = ref(false)
 const user = ref<UserResponse | null>(null)
 
 if (auth.isAuthenticated.value) {
@@ -90,9 +102,10 @@ const isLandingPage = computed(() => route.path === '/')
 const isRequestsActive = computed(() => route.path.startsWith('/requests'))
 const isTzAnalysisActive = computed(() => route.path.startsWith('/tz-analysis'))
 const isProfileSubscriptionActive = computed(
-	() => route.path === '/profile' && route.query.tab === 'subscription',
+	() =>
+		route.path === '/subscription'
+		|| (route.path === '/profile' && route.query.tab === 'subscription'),
 )
-
 const subscriptionBadge = computed(() => subscriptionNavBadge(user.value?.subscription))
 
 const landingNavItems = computed<NavigationMenuItem[]>(() => [
@@ -154,7 +167,7 @@ const navItems = computed<NavigationMenuItem[]>(() => [
 		label: 'Подписка',
 		icon: 'i-lucide-credit-card',
 		active: isProfileSubscriptionActive.value,
-		to: subscriptionProfilePath(),
+		to: subscriptionPlansPath(),
 		description: subscriptionModulesSummary(user.value?.subscription),
 		badge: {
 			label: subscriptionBadge.value.label,
@@ -167,21 +180,35 @@ const navItems = computed<NavigationMenuItem[]>(() => [
 
 
 
-const userMenuItems = computed<DropdownMenuItem[][]>(() => [
-	[
-		{
-			label: user.value?.email,
-			disabled: true,
-			icon: 'i-lucide-mail',
-		},
-	],
-	[{
-		label: 'Профиль',
-		icon: 'i-lucide-user',
-		to: '/profile'
-	},
-	],
-	[
+const userMenuItems = computed<DropdownMenuItem[][]>(() => {
+	const sections: DropdownMenuItem[][] = [
+		[
+			{
+				label: user.value?.email,
+				disabled: true,
+				icon: 'i-lucide-mail',
+			},
+		],
+		[
+			{
+				label: 'Профиль',
+				icon: 'i-lucide-user',
+				to: '/profile',
+			},
+		],
+	]
+
+	if (user.value?.is_admin) {
+		sections.push([
+			{
+				label: 'Админка',
+				icon: 'i-lucide-shield',
+				to: '/admin',
+			},
+		])
+	}
+
+	sections.push([
 		{
 			label: 'Выйти',
 			icon: 'i-lucide-log-out',
@@ -189,9 +216,10 @@ const userMenuItems = computed<DropdownMenuItem[][]>(() => [
 			onSelect: () => {
 				auth.clearToken()
 				navigateTo('/auth')
-			}
-		}
-	]
+			},
+		},
+	])
 
-])
+	return sections
+})
 </script>

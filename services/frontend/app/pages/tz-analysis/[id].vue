@@ -62,7 +62,7 @@ color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 				<UCard class="shadow-sm">
 					<UFormField label="Техническое задание" required>
 						<UFileUpload
-:model-value="tzFile" :accept="fileAccept" :interactive="true"
+:model-value="tzFile" :accept="fileAccept" :interactive="false"
 							:description="uploadDescription" layout="list" class="w-full min-h-32" position="inside"
 							@update:model-value="onTzFileChange">
 							<template #actions="{ open }">
@@ -191,26 +191,26 @@ v-if="isTzReviewPhase && !isAnalysisClosed"
 									@add-sibling="addTzSiblingRequirement"
 									@reorder="reorderTzRequirement"
 								/>
-								<p v-else class="text-sm text-muted text-center py-4">
-									Нет извлечённых требований
-								</p>
-							</div>
-
-							<div
-								v-if="!isTzConfirmed && !isCompleted"
-								class="mt-4 pt-4 border-t border-default"
-							>
-								<div class="flex justify-center">
+								<div
+									v-else-if="!isTzConfirmed && !isCompleted"
+									class="flex flex-col items-center gap-3 py-4"
+								>
+									<p class="text-sm text-muted text-center">
+										Нет извлечённых требований
+									</p>
 									<UButton
 										type="button"
-										variant="ghost"
-										color="neutral"
+										variant="soft"
+										color="primary"
 										size="sm"
 										icon="i-lucide-plus"
 										label="Добавить требование"
 										@click="addTzRequirement()"
 									/>
 								</div>
+								<p v-else class="text-sm text-muted text-center py-4">
+									Нет извлечённых требований
+								</p>
 							</div>
 						</UCard>
 					</template>
@@ -647,14 +647,14 @@ v-for="tab in letterPreviewTabs" :key="tab.value" type="button" block
 		<Teleport to="body">
 			<div
 				v-if="showTzConfirmBar"
-				class="fixed inset-x-0 bottom-0 z-50 border-t border-default bg-default/95 backdrop-blur-sm supports-[backdrop-filter]:bg-default/80 px-4 py-3"
+				class="fixed inset-x-0 bottom-0 z-50 pointer-events-none px-4 pb-4 sm:pb-6"
 			>
-				<UContainer class="max-w-7xl">
+				<UContainer class="max-w-7xl flex justify-center">
 					<UButton
 						color="primary"
 						variant="solid"
 						size="xl"
-						block
+						class="pointer-events-auto min-w-[min(100%,20rem)] shadow-lg ring-1 ring-primary/20 rounded-xl"
 						leading-icon="i-lucide-check"
 						:loading="confirmingTz"
 						:disabled="!requirementsRowsNonempty(editableRequirementsTz)"
@@ -697,7 +697,7 @@ import {
 	flattenRequirementsToRows,
 	nextChildKey,
 	renumberRequirementRows,
-	insertSiblingAfterRow,
+	insertSiblingBeforeRow,
 	moveRequirementRowBlock,
 	requirementsNonempty,
 	requirementsRowsNonempty,
@@ -1694,9 +1694,9 @@ function removeTzRequirement(index: number) {
 	)
 }
 
-function addTzSiblingRequirement(afterIndex: number) {
+function addTzSiblingRequirement(beforeIndex: number) {
 	updateEditableRequirementsTz((rows) =>
-		insertSiblingAfterRow(rows, afterIndex),
+		insertSiblingBeforeRow(rows, beforeIndex),
 	)
 }
 

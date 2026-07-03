@@ -2,6 +2,8 @@ from .base_dao import BaseDAO
 from .blacklisted_domain_dao import BlacklistedDomainDAO
 from .email_message_dao import EmailMessageDAO
 from .email_template_dao import EmailTemplateDAO
+from .frontend_error_log_dao import FrontendErrorLogDAO
+from .idea_suggestion_dao import IdeaSuggestionDAO
 from .request_dao import RequestDAO
 from .response_analysis_dao import ResponseAnalysisDAO
 from .search_dao import SearchHistoryDAO
@@ -21,6 +23,8 @@ from .user_dao import UserDAO
 
 __all__ = [
     "BaseDAO",
+    "FrontendErrorLogDAO",
+    "IdeaSuggestionDAO",
     "RequestDAO",
     "RequestSupplier",
     "RequestSupplierDAO",

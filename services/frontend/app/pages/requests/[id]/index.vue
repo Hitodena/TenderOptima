@@ -143,7 +143,10 @@ color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 				</div>
 			</div>
 
-			<UCard v-if="request.status === RequestStatus.SEARCHING" class="mb-4 mt-4 shadow-sm">
+			<UCard
+				v-if="request.status === RequestStatus.SEARCHING || finalizing"
+				class="mb-4 mt-4 shadow-sm"
+			>
 				<div class="flex flex-col items-center justify-center py-20 gap-4 text-muted">
 					<UIcon name="i-lucide-loader" class="w-10 h-10 animate-spin text-warning" />
 					<p class="text-sm font-medium text-center">Поиск поставщиков</p>
@@ -153,10 +156,36 @@ color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 				</div>
 			</UCard>
 
-			<UCard v-else class="mb-4 mt-4">
+		<UCard v-else class="mb-4 mt-4">
+			<div class="flex items-center gap-2 mb-3 flex-wrap">
 				<UInput
-v-model="supplierSearch" placeholder="Поиск поставщиков..." icon="i-lucide-search"
-					class="w-full sm:w-64 mb-3" size="lg" />
+					v-model="supplierSearch"
+					placeholder="Поиск поставщиков..."
+					icon="i-lucide-search"
+					class="flex-1 min-w-40 sm:max-w-64"
+					size="lg"
+				/>
+				<template v-if="!isTerminalStatus">
+					<UButton
+						size="sm"
+						variant="ghost"
+						color="neutral"
+						:disabled="updatingToggle || enabledCount === 0"
+						@click="deselectAll"
+					>
+						Снять все
+					</UButton>
+					<UButton
+						size="sm"
+						variant="ghost"
+						color="primary"
+						:disabled="updatingToggle || !canSelectMoreSuppliers"
+						@click="selectAll"
+					>
+						Выбрать все
+					</UButton>
+				</template>
+			</div>
 
 				<UAlert
 					v-if="testPlanLockedCount > 0 && !isTerminalStatus"
@@ -279,30 +308,17 @@ v-else size="sm" color="error" variant="ghost" icon="i-lucide-trash-2"
 					</div>
 				</div>
 
-				<div
+			<div
 v-if="!isTerminalStatus"
-					class="px-4 py-3 border-t border-default flex items-center justify-between gap-3 flex-wrap">
-					<p class="text-sm text-muted">
-						Выбрано <span class="font-semibold text-highlighted">{{ enabledCount }}</span> из
-						{{ filteredSuppliers.length }}
-						<template v-if="emailQuotaFooter">
-							<span> · {{ emailQuotaFooter }}</span>
-						</template>
-					</p>
-					<div class="flex items-center gap-2">
-						<UButton
-size="xs" variant="ghost" color="neutral"
-							:disabled="updatingToggle || isTerminalStatus || enabledCount === 0" @click="deselectAll">
-							Снять все
-						</UButton>
-						<UButton
-size="xs" variant="ghost" color="primary"
-							:disabled="updatingToggle || isTerminalStatus || !canSelectMoreSuppliers"
-							@click="selectAll">
-							Выбрать все
-						</UButton>
-					</div>
-				</div>
+				class="px-4 py-3 border-t border-default">
+				<p class="text-sm text-muted">
+					Выбрано <span class="font-semibold text-highlighted">{{ enabledCount }}</span> из
+					{{ filteredSuppliers.length }}
+					<template v-if="emailQuotaFooter">
+						<span> · {{ emailQuotaFooter }}</span>
+					</template>
+				</p>
+			</div>
 			</UCard>
 
 			<RequestParamsModal
@@ -392,7 +408,12 @@ const {
 	removeSupplier,
 } = useRequestDetail(id)
 
-useSearchPolling(id, request, suppliers, () => fetchSuppliersAndEnforceQuota(true))
+const { finalizing } = useSearchPolling(
+	id,
+	request,
+	suppliers,
+	() => fetchSuppliersAndEnforceQuota(),
+)
 
 const showParamsModal = ref(false)
 const showAddSupplier = ref(false)

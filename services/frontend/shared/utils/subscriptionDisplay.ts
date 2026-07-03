@@ -123,6 +123,10 @@ export function subscriptionProfilePath(tab = 'subscription'): string {
 	return `/profile?tab=${tab}`
 }
 
+export function subscriptionPlansPath(): string {
+	return '/subscription'
+}
+
 export function formatPlanLimit(value: number | null | undefined): string {
 	if (value == null) return 'индивидуально'
 	return value.toLocaleString('ru-RU')

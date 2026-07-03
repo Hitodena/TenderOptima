@@ -152,11 +152,7 @@ v-if="profileSuccess" color="success" variant="soft" icon="i-lucide-check"
 						</div>
 					</template>
 
-					<template v-if="user?.is_admin" #admin>
-						<ProfileAdminPanel />
-					</template>
-
-				</UTabs>
+			</UTabs>
 			</UCard>
 
 			<UCard>
@@ -215,23 +211,12 @@ const form = reactive({
 	contact_email: user.value?.contact_email ?? '',
 })
 
-const tabs = computed(() => {
-	const items = [
-		{ label: 'Статус подписки', slot: 'subscription', value: 'subscription', icon: 'i-lucide-credit-card' },
-		{ label: 'Визитная карточка', slot: 'business_card', value: 'business_card', icon: 'i-lucide-id-card' },
-		{ label: 'Профиль', slot: 'profile', value: 'profile', icon: 'i-lucide-user' },
-		{ label: 'Свяжитесь с нами', slot: 'contact', value: 'contact', icon: 'i-lucide-mail' },
-	]
-	if (user.value?.is_admin) {
-		items.push({
-			label: 'Админка',
-			slot: 'admin',
-			value: 'admin',
-			icon: 'i-lucide-shield',
-		})
-	}
-	return items
-})
+const tabs = computed(() => [
+	{ label: 'Статус подписки', slot: 'subscription', value: 'subscription', icon: 'i-lucide-credit-card' },
+	{ label: 'Визитная карточка', slot: 'business_card', value: 'business_card', icon: 'i-lucide-id-card' },
+	{ label: 'Профиль', slot: 'profile', value: 'profile', icon: 'i-lucide-user' },
+	{ label: 'Свяжитесь с нами', slot: 'contact', value: 'contact', icon: 'i-lucide-mail' },
+])
 
 const tabFromQuery = computed(() => {
 	const raw = route.query.tab

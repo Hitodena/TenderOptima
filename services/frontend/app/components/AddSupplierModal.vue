@@ -35,27 +35,36 @@
 					</UButton>
 
 					<div v-show="showOptional" class="mt-3 space-y-3">
-						<UFormField label="Домен" name="domain" hint="example.com">
-							<UInput
-								v-model="form.domain"
-								placeholder="supplier.ru"
-								icon="i-lucide-globe"
-								class="w-full"
-							/>
-						</UFormField>
+				<UFormField label="Домен" name="domain" hint="example.com">
+						<UInput
+							v-model="form.domain"
+							placeholder="supplier.ru"
+							icon="i-lucide-globe"
+							class="w-full"
+						/>
+					</UFormField>
 
-						<UFormField
-							label="Дополнительные email"
-							name="extra_emails"
-							hint="Через запятую или с новой строки"
-						>
-							<UTextarea
-								v-model="form.extra_emails"
-								:rows="3"
-								placeholder="info@supplier.ru, zakupki@supplier.ru"
-								class="w-full"
-							/>
-						</UFormField>
+					<UFormField label="Телефон" name="phone">
+						<UInput
+							v-model="form.phone"
+							placeholder="+7 (495) 123-45-67"
+							icon="i-lucide-phone"
+							class="w-full"
+						/>
+					</UFormField>
+
+					<UFormField
+						label="Дополнительные email"
+						name="extra_emails"
+						hint="Через запятую или с новой строки"
+					>
+						<UTextarea
+							v-model="form.extra_emails"
+							:rows="3"
+							placeholder="info@supplier.ru, zakupki@supplier.ru"
+							class="w-full"
+						/>
+					</UFormField>
 					</div>
 				</div>
 
@@ -106,6 +115,7 @@ const schema = z.object({
 	domain: z.string().optional(),
 	company_name: z.string().min(1, 'Обязательное поле').max(200),
 	email: z.string().email('Неверный формат email'),
+	phone: z.string().max(50).optional(),
 	extra_emails: z.string().optional(),
 })
 
@@ -113,6 +123,7 @@ const form = reactive({
 	domain: '',
 	company_name: '',
 	email: '',
+	phone: '',
 	extra_emails: '',
 })
 const showOptional = ref(false)
@@ -145,6 +156,7 @@ function resetForm() {
 	form.domain = ''
 	form.company_name = ''
 	form.email = ''
+	form.phone = ''
 	form.extra_emails = ''
 	showOptional.value = false
 	error.value = null
@@ -166,6 +178,7 @@ async function handleAdd() {
 			company_name: form.company_name.trim(),
 			email,
 			extra_emails: parseExtraEmails(form.extra_emails, email),
+			phone: form.phone.trim() || null,
 			source: 'manual',
 			request_id: props.requestId,
 			is_enabled: true,

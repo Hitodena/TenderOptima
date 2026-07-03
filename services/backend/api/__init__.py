@@ -7,6 +7,7 @@ from backend.api.blacklist_domains.router import (
     router as blacklist_domains_router,
 )
 from backend.api.email_templates.router import router as email_templates_router
+from backend.api.feedback.router import router as feedback_router
 from backend.api.response_analysis.router import (
     router as response_analysis_router,
 )
@@ -26,6 +27,7 @@ from backend.api.user_requests.router import router as user_requests_router
 
 api_router = APIRouter(prefix="/api")
 api_router.include_router(admin_router)
+api_router.include_router(feedback_router)
 api_router.include_router(billing_router)
 api_router.include_router(email_templates_router)
 api_router.include_router(supplier_bookmarks_router)

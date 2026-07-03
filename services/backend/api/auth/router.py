@@ -12,10 +12,16 @@ from backend.api.auth.schemas import (
     UserUpdate,
 )
 from backend.api.deps import get_current_user, get_session
+from backend.celery_app.tasks.security_tasks import send_login_lockout_alert
 from backend.db.dao import SubscriptionDAO, UserDAO
 from backend.db.models import User
 from backend.enums import SubscriptionPlan
 from backend.utils.jwt_utils import create_access_token
+from backend.utils.login_lockout import (
+    raise_if_locked,
+    record_failed_login,
+    reset_login_lockout,
+)
 from backend.utils.security import hash_password, verify_password
 from backend.utils.user_utils import build_business_info
 
@@ -90,14 +96,31 @@ async def login(
     validation.
     """
     user = await UserDAO.get_by_email(session, form_data.username)
+    if user:
+        raise_if_locked(user)
+
     if not user or not verify_password(
         form_data.password, user.hashed_password
     ):
+        if user:
+            send_alert = await record_failed_login(session, user)
+            if send_alert and user.locked_until is not None:
+                send_login_lockout_alert.delay(
+                    user.email,
+                    user.lockout_level,
+                    user.locked_until.isoformat(),
+                )
+            if user.locked_until is not None:
+                raise_if_locked(user)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    reset_login_lockout(user)
+    session.add(user)
+    await session.commit()
 
     access_token = create_access_token(data={"sub": user.email})
     return TokenResponse(access_token=access_token, token_type="bearer")

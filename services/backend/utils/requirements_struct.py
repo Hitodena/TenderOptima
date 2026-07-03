@@ -500,7 +500,9 @@ def format_tz_requirement_ref(
 ) -> str:
     """Build a short TZ source reference: «Источник ТЗ, стр X, пункт Y»."""
     del requirement, quote  # short format omits inline quotes
-    key_part = f"пункт {key}" if key else "пункт ?"
+    if not key:
+        return "Не найдено"
+    key_part = f"пункт {key}"
     if page is not None:
         return f"Источник ТЗ, стр {page}, {key_part}"
     return f"Источник ТЗ, {key_part}"
@@ -513,7 +515,9 @@ def format_kp_offer_ref(
 ) -> str:
     """Build a short KP source reference: «Источник КП, стр X, пункт Y»."""
     del offer_value  # short format omits inline quotes
-    key_part = f"пункт {key}" if key else "пункт ?"
+    if not key:
+        return "Не найдено"
+    key_part = f"пункт {key}"
     if page is not None:
         return f"Источник КП, стр {page}, {key_part}"
     return f"Источник КП, {key_part}"
