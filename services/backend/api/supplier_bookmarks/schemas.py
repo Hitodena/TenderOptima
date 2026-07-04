@@ -12,6 +12,7 @@ class SupplierBookmarkItemResponse(BaseModel):
     company_name: str
     email: str
     domain: str | None
+    phone: str | None
     notes: str | None
     created_at: datetime
     updated_at: datetime
@@ -53,6 +54,7 @@ class SupplierBookmarkItemCreate(BaseModel):
         str | None,
         Field(default=None, min_length=3, max_length=255),
     ]
+    phone: Annotated[str | None, Field(default=None, max_length=50)]
     notes: Annotated[str | None, Field(default=None, max_length=2000)]
 
 
@@ -66,4 +68,5 @@ class SupplierBookmarkItemUpdate(BaseModel):
     domain: Annotated[
         str | None, Field(default=None, min_length=3, max_length=255)
     ]
+    phone: Annotated[str | None, Field(default=None, max_length=50)]
     notes: Annotated[str | None, Field(default=None, max_length=2000)]

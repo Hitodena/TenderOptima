@@ -37,14 +37,14 @@ const emit = defineEmits<{
 const menuItems = computed((): DropdownMenuItem[][] => {
 	const items: DropdownMenuItem[] = [
 		{
+			label: 'Раздел',
+			icon: 'i-lucide-folder-plus',
+			onSelect: () => emit('add-sibling'),
+		},
+		{
 			label: 'Подпункт',
 			icon: 'i-lucide-list-plus',
 			onSelect: () => emit('add-child'),
-		},
-		{
-			label: 'Раздел',
-			icon: 'i-lucide-folder-plus',
-			onSelect: () => emit('add-heading'),
 		},
 	]
 	if (props.showRemove) {

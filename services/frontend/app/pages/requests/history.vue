@@ -129,7 +129,15 @@ function hasUnreadMessages(req: RequestResponse): boolean {
 }
 
 function openRequest(req: RequestResponse) {
-	navigateTo(`/requests/${req.id}`)
+	if (
+		req.status === RequestStatus.QUEUED
+		|| req.status === RequestStatus.COMPLETED
+		|| req.status === RequestStatus.CLOSED
+	) {
+		navigateTo(`/requests/${req.id}/responses`)
+	} else {
+		navigateTo(`/requests/${req.id}`)
+	}
 }
 
 const PAGE_SIZE = 10

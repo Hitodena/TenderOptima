@@ -1,8 +1,5 @@
 <script lang="ts" setup>
 import type { UserResponse } from '#shared/types'
-import {
-	subscriptionProfilePath,
-} from '#shared/utils/subscriptionDisplay'
 
 definePageMeta({ layout: 'default' })
 
@@ -10,6 +7,7 @@ const { get } = useApi()
 const toast = useToast()
 
 const user = ref<UserResponse | null>(null)
+const showBillingModal = ref(false)
 
 try {
 	user.value = await get<UserResponse>('/auth/me')
@@ -71,17 +69,17 @@ function showCardPaymentStub() {
 						</div>
 					</div>
 					<ol class="text-sm text-muted space-y-2 list-decimal list-inside">
-						<li>Заполните реквизиты организации в личном кабинете</li>
+						<li>Заполните реквизиты организации в форме выставления счёта</li>
 						<li>При необходимости извлеките поля нейросетью из документов</li>
-						<li>Сформируйте счёт и акт — мы отправим документы на email</li>
+						<li>Сформируйте счёт — мы отправим документы на email</li>
 						<li>После поступления оплаты администратор активирует тариф</li>
 					</ol>
 					<UButton
 						color="primary"
-						leading-icon="i-lucide-arrow-right"
-						:to="subscriptionProfilePath()"
+						leading-icon="i-lucide-receipt"
+						@click="showBillingModal = true"
 					>
-						Перейти к оформлению счёта
+						Выставить счёт
 					</UButton>
 				</UCard>
 
@@ -116,5 +114,10 @@ function showCardPaymentStub() {
 				</UCard>
 			</div>
 		</section>
+
+		<BillingInvoiceModal
+			v-model:open="showBillingModal"
+			:subscription="user?.subscription"
+		/>
 	</UContainer>
 </template>

@@ -46,30 +46,48 @@ v-model="form.description"
                         </p>
 
                         <div>
-                            <div class="space-y-0.5 max-h-80 overflow-y-auto">
-                                <div
-v-for="(label, idx) in form.labels" :key="idx"
-                                    class="flex items-center gap-2 py-0.5 px-2 rounded-lg hover:bg-elevated/50 transition-colors">
-                                    <span class="text-sm flex-1 truncate">{{ label }}</span>
+                            <div class="flex flex-wrap gap-1.5 mb-3 min-h-8">
+                                <UBadge
+                                    v-for="(label, idx) in form.labels"
+                                    :key="idx"
+                                    size="md"
+                                    variant="soft"
+                                    color="primary"
+                                    class="gap-1.5 pr-1 cursor-default"
+                                >
+                                    {{ label }}
                                     <button
-type="button"
-                                        class="w-8 h-8 flex items-center justify-center rounded text-muted hover:text-error hover:bg-elevated transition-colors shrink-0"
-                                        @click="removeLabel(idx)">
-                                        <UIcon name="i-lucide-x" class="w-4 h-4" />
+                                        type="button"
+                                        class="ml-0.5 text-primary/60 hover:text-error transition-colors"
+                                        @click="removeLabel(idx)"
+                                    >
+                                        <UIcon name="i-lucide-x" class="w-3 h-3" />
                                     </button>
-                                </div>
+                                </UBadge>
+                                <span
+                                    v-if="!form.labels.length"
+                                    class="text-xs text-muted italic self-center"
+                                >
+                                    Нет параметров
+                                </span>
                             </div>
 
-                            <div class="flex gap-2 mt-3 items-center px-2">
+                            <div class="flex gap-2">
                                 <UInput
-v-model="form.newLabel" placeholder="Требование (цена, сроки, условия...)"
-                                    class="flex-1" size="lg" @keyup.enter="addLabel" />
-                                <button
-type="button"
-                                    class="w-8 h-8 flex items-center justify-center rounded text-muted hover:text-primary hover:bg-elevated transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                                    :disabled="!form.newLabel.trim()" @click="addLabel">
-                                    <UIcon name="i-lucide-plus" class="w-4 h-4" />
-                                </button>
+                                    v-model="form.newLabel"
+                                    placeholder="Требование (цена, сроки, условия...)"
+                                    class="flex-1"
+                                    size="lg"
+                                    @keyup.enter="addLabel"
+                                />
+                                <UButton
+                                    icon="i-lucide-plus"
+                                    variant="outline"
+                                    color="neutral"
+                                    size="lg"
+                                    :disabled="!form.newLabel.trim()"
+                                    @click="addLabel"
+                                />
                             </div>
                         </div>
                     </div>

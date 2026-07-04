@@ -50,6 +50,14 @@ class RegisterCreate(BaseModel):
             examples=["Acme Corp"],
         ),
     ]
+    phone: Annotated[
+        str,
+        Field(
+            description="Phone number with country code, E.164 format",
+            pattern=r"^\+[1-9]\d{7,14}$",
+            examples=["+79161234567"],
+        ),
+    ]
     agree_terms: Annotated[
         bool,
         Field(
@@ -121,6 +129,13 @@ class UserResponse(BaseModel):
         Field(
             description="Company or organization name",
             examples=["ООО «Поставщик»"],
+        ),
+    ]
+    phone: Annotated[
+        str | None,
+        Field(
+            description="Phone number with country code, as provided at registration",
+            examples=["+79161234567"],
         ),
     ]
     contact_email: Annotated[

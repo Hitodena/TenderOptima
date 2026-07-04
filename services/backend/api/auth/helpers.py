@@ -20,6 +20,7 @@ async def user_to_response(
         email=user.email,
         full_name=user.full_name,
         company_name=user.company_name,
+        phone=user.phone,
         contact_email=user.contact_email,
         business_info=user.business_info,
         is_admin=user.is_admin,

@@ -60,6 +60,7 @@ async def register(
         hashed_password=hashed_password,
         full_name=request.full_name,
         company_name=request.company_name,
+        phone=request.phone,
     )
     business_info = build_business_info(user)
     await UserDAO.update_contact_info(

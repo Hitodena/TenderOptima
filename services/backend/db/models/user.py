@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Text
+from sqlalchemy import DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db.models.base import Base, IDMixinUUID, TimestampMixin
@@ -14,6 +14,7 @@ class User(IDMixinUUID, TimestampMixin, Base):
 
     full_name: Mapped[str] = mapped_column(nullable=False)
     company_name: Mapped[str | None] = mapped_column()
+    phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     contact_email: Mapped[str | None] = mapped_column()
     business_info: Mapped[str | None] = mapped_column(Text)

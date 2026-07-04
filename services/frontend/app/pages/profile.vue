@@ -19,7 +19,7 @@
 
 				<template #acts>
 					<div class="space-y-8">
-						<ProfileBillingPanel :subscription="user?.subscription" />
+						<ProfileBillingPanel />
 					</div>
 				</template>
 
@@ -87,6 +87,14 @@ v-model="form.company_name" placeholder="ООО «Ваша компания»"
 									<UInput
 v-model="form.contact_email" type="email" placeholder="sales@company.ru"
 										icon="i-lucide-mail" class="w-full" />
+								</UFormField>
+
+								<UFormField
+label="Телефон" name="phone"
+									hint="Указан при регистрации, изменить нельзя">
+									<UInput
+:model-value="user?.phone || 'Не указан'" icon="i-lucide-phone"
+										class="w-full" disabled />
 								</UFormField>
 
 								<UAlert

@@ -859,11 +859,6 @@ async def create_tz_analysis_supplier(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="At least one KP file is required",
         )
-    if len(kp_files) > 1:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only one KP file per supplier is allowed",
-        )
     clean_name = name.strip()
     if await TZAnalysisSupplierDAO.name_exists(
         session, analysis_id, clean_name

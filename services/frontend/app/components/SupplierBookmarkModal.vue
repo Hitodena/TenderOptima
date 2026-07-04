@@ -91,40 +91,140 @@
 								<div v-if="!list.items.length" class="text-xs text-muted text-center py-4">
 									В базе пока нет поставщиков
 								</div>
-								<div
-									v-for="item in list.items"
-									:key="item.id"
-									class="flex items-center gap-3 rounded-lg border border-default bg-default p-3"
-								>
-									<div class="w-8 h-8 rounded-lg bg-elevated flex items-center justify-center shrink-0">
-										<UIcon name="i-lucide-building-2" class="w-4 h-4 text-muted" />
-									</div>
-									<div class="flex-1 min-w-0">
-										<p class="text-sm font-medium truncate">{{ item.company_name }}</p>
-										<p class="text-xs text-muted truncate">{{ item.email }}</p>
-										<p v-if="item.domain" class="text-xs text-muted/60 truncate">{{ item.domain }}</p>
-									</div>
-									<div class="flex items-center gap-1 shrink-0">
-										<UButton
-											v-if="canModifyList(list)"
-											size="xs"
-											variant="ghost"
-											color="error"
-											icon="i-lucide-trash-2"
-											:loading="deletingItemId === item.id"
-											@click="removeItem(list.id, item.id)"
-										/>
-										<UButton
-											size="sm"
-											variant="soft"
-											leading-icon="i-lucide-plus"
-											:loading="addingItemId === item.id"
-											@click="addToRequest(item)"
+								<template v-for="item in list.items" :key="item.id">
+									<div
+										v-if="editingItemId === item.id"
+										class="rounded-lg border border-default p-4 bg-default"
+									>
+										<p class="text-sm font-semibold mb-3">Редактировать поставщика</p>
+										<UForm
+											:schema="itemSchema"
+											:state="editItemForm"
+											class="space-y-3"
+											@submit="() => saveEditItem(list.id, item.id)"
 										>
-											Добавить
-										</UButton>
+											<UFormField label="Название компании" name="company_name" required>
+												<UInput
+													v-model="editItemForm.company_name"
+													placeholder="ООО ПромПоставка"
+													icon="i-lucide-building-2"
+													class="w-full"
+												/>
+											</UFormField>
+											<UFormField label="Email" name="email" required>
+												<UInput
+													v-model="editItemForm.email"
+													type="email"
+													placeholder="sales@supplier.ru"
+													icon="i-lucide-mail"
+													class="w-full"
+												/>
+											</UFormField>
+
+											<div>
+												<UButton
+													type="button"
+													variant="ghost"
+													color="neutral"
+													size="sm"
+													class="px-0"
+													:trailing-icon="showEditItemOptional ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+													@click="showEditItemOptional = !showEditItemOptional"
+												>
+													Дополнительные поля
+												</UButton>
+
+												<div v-show="showEditItemOptional" class="mt-3 space-y-3">
+													<UFormField label="Домен" name="domain" hint="example.com">
+														<UInput
+															v-model="editItemForm.domain"
+															placeholder="supplier.ru"
+															icon="i-lucide-globe"
+															class="w-full"
+														/>
+													</UFormField>
+													<UFormField label="Телефон" name="phone">
+														<UInput
+															v-model="editItemForm.phone"
+															placeholder="+7 (495) 123-45-67"
+															icon="i-lucide-phone"
+															class="w-full"
+														/>
+													</UFormField>
+													<UFormField
+														label="Заметки"
+														name="notes"
+														hint="Контактное лицо, условия поставки..."
+													>
+														<UTextarea
+															v-model="editItemForm.notes"
+															:rows="3"
+															placeholder="Контактное лицо, условия поставки..."
+															class="w-full"
+														/>
+													</UFormField>
+												</div>
+											</div>
+
+											<div class="flex justify-end gap-2">
+												<UButton
+													size="sm"
+													variant="ghost"
+													color="neutral"
+													type="button"
+													@click="cancelEditItem"
+												>
+													Отмена
+												</UButton>
+												<UButton size="sm" type="submit" :loading="savingEditItem">
+													Сохранить
+												</UButton>
+											</div>
+										</UForm>
 									</div>
-								</div>
+									<div
+										v-else
+										class="flex items-center gap-3 rounded-lg border border-default bg-default p-3"
+									>
+										<div class="w-8 h-8 rounded-lg bg-elevated flex items-center justify-center shrink-0">
+											<UIcon name="i-lucide-building-2" class="w-4 h-4 text-muted" />
+										</div>
+										<div class="flex-1 min-w-0">
+											<p class="text-sm font-medium truncate">{{ item.company_name }}</p>
+											<p class="text-xs text-muted truncate">{{ item.email }}</p>
+											<p v-if="item.phone" class="text-xs text-muted/60 truncate">{{ item.phone }}</p>
+											<p v-if="item.domain" class="text-xs text-muted/60 truncate">{{ item.domain }}</p>
+										</div>
+										<div class="flex items-center gap-1 shrink-0">
+											<UButton
+												v-if="canModifyList(list)"
+												size="xs"
+												variant="ghost"
+												color="neutral"
+												icon="i-lucide-pencil"
+												@click="startEditItem(item)"
+											/>
+											<UButton
+												v-if="canModifyList(list)"
+												size="xs"
+												variant="ghost"
+												color="error"
+												icon="i-lucide-trash-2"
+												:loading="deletingItemId === item.id"
+												@click="removeItem(list.id, item.id)"
+											/>
+											<UButton
+												size="sm"
+												variant="soft"
+												leading-icon="i-lucide-plus"
+												:loading="addingItemId === item.id"
+												@click="addToRequest(item)"
+											>
+												Добавить
+											</UButton>
+										</div>
+									</div>
+								</template>
 
 								<div v-if="canModifyList(list)">
 									<UButton
@@ -184,15 +284,23 @@
 															class="w-full"
 														/>
 													</UFormField>
+													<UFormField label="Телефон" name="phone">
+														<UInput
+															v-model="itemForm.phone"
+															placeholder="+7 (495) 123-45-67"
+															icon="i-lucide-phone"
+															class="w-full"
+														/>
+													</UFormField>
 													<UFormField
 														label="Заметки"
 														name="notes"
-														hint="Контакты, телефоны, комментарии"
+														hint="Контактное лицо, условия поставки..."
 													>
 														<UTextarea
 															v-model="itemForm.notes"
 															:rows="3"
-															placeholder="Телефон, контактное лицо, условия поставки..."
+															placeholder="Контактное лицо, условия поставки..."
 															class="w-full"
 														/>
 													</UFormField>
@@ -252,6 +360,7 @@
 import { z } from 'zod'
 import type {
 	SupplierBookmarkItem,
+	SupplierBookmarkItemUpdate,
 	SupplierBookmarkList,
 	SupplierCreate,
 } from '#shared/types'
@@ -261,25 +370,29 @@ const props = defineProps<{ requestId: string }>()
 const isOpen = defineModel<boolean>('open', { default: false })
 const emit = defineEmits<{ added: [] }>()
 
-const { get, post, del } = useApi()
+const { get, post, patch, del } = useApi()
 const toast = useToast()
 
 const lists = ref<SupplierBookmarkList[]>([])
 const loading = ref(false)
 const savingList = ref(false)
 const savingItem = ref(false)
+const savingEditItem = ref(false)
 const deletingListId = ref<string | null>(null)
 const deletingItemId = ref<string | null>(null)
 const addingItemId = ref<string | null>(null)
 const addingListId = ref<string | null>(null)
 const addingToListId = ref<string | null>(null)
+const editingItemId = ref<string | null>(null)
 const search = ref('')
 const expandedListIds = ref(new Set<string>())
 const createListOpen = ref(false)
 
 const listForm = reactive({ title: '' })
-const itemForm = reactive({ domain: '', company_name: '', email: '', notes: '' })
+const itemForm = reactive({ domain: '', company_name: '', email: '', phone: '', notes: '' })
+const editItemForm = reactive({ domain: '', company_name: '', email: '', phone: '', notes: '' })
 const showItemOptional = ref(false)
+const showEditItemOptional = ref(false)
 
 const listSchema = z.object({
 	title: z.string().min(1, 'Обязательное поле').max(255),
@@ -289,6 +402,7 @@ const itemSchema = z.object({
 	domain: z.string().optional(),
 	company_name: z.string().min(1, 'Обязательное поле').max(200),
 	email: z.string().email('Неверный формат email'),
+	phone: z.string().optional(),
 	notes: z.string().optional(),
 })
 
@@ -320,6 +434,11 @@ function canModifyList(list: SupplierBookmarkList): boolean {
 function normalizeDomain(value: string | null | undefined): string | null {
 	const trimmed = (value ?? '').trim()
 	return trimmed.length >= 3 ? trimmed : null
+}
+
+function normalizePhone(value: string | null | undefined): string | null {
+	const trimmed = (value ?? '').trim()
+	return trimmed || null
 }
 
 function toggleList(listId: string) {
@@ -382,10 +501,12 @@ async function removeList(listId: string) {
 }
 
 function startAddItem(listId: string) {
+	cancelEditItem()
 	addingToListId.value = listId
 	itemForm.domain = ''
 	itemForm.company_name = ''
 	itemForm.email = ''
+	itemForm.phone = ''
 	itemForm.notes = ''
 	showItemOptional.value = false
 }
@@ -393,6 +514,56 @@ function startAddItem(listId: string) {
 function cancelAddItem() {
 	addingToListId.value = null
 	showItemOptional.value = false
+}
+
+function startEditItem(item: SupplierBookmarkItem) {
+	cancelAddItem()
+	editingItemId.value = item.id
+	editItemForm.company_name = item.company_name
+	editItemForm.email = item.email
+	editItemForm.domain = item.domain ?? ''
+	editItemForm.phone = item.phone ?? ''
+	editItemForm.notes = item.notes ?? ''
+	showEditItemOptional.value = Boolean(item.domain || item.phone || item.notes)
+}
+
+function cancelEditItem() {
+	editingItemId.value = null
+	showEditItemOptional.value = false
+}
+
+async function saveEditItem(listId: string, itemId: string) {
+	if (savingEditItem.value) return
+	savingEditItem.value = true
+	try {
+		const payload: SupplierBookmarkItemUpdate = {
+			company_name: editItemForm.company_name.trim(),
+			email: editItemForm.email.trim(),
+			domain: normalizeDomain(editItemForm.domain),
+			phone: normalizePhone(editItemForm.phone),
+			notes: editItemForm.notes.trim() || null,
+		}
+		const updated = await patch<SupplierBookmarkItem>(
+			`/supplier-bookmarks/${listId}/items/${itemId}`,
+			payload,
+		)
+		lists.value = lists.value.map((list) =>
+			list.id === listId
+				? {
+						...list,
+						items: list.items.map((item) =>
+							item.id === itemId ? updated : item,
+						),
+					}
+				: list,
+		)
+		cancelEditItem()
+		toast.add({ title: 'Поставщик обновлён', color: 'success' })
+	} catch {
+		toast.add({ title: 'Не удалось обновить поставщика', color: 'error' })
+	} finally {
+		savingEditItem.value = false
+	}
 }
 
 async function createItem(listId: string) {
@@ -403,6 +574,7 @@ async function createItem(listId: string) {
 			company_name: itemForm.company_name.trim(),
 			email: itemForm.email.trim(),
 			domain: normalizeDomain(itemForm.domain),
+			phone: normalizePhone(itemForm.phone),
 			notes: itemForm.notes.trim() || null,
 		})
 		lists.value = lists.value.map((list) =>
@@ -420,6 +592,9 @@ async function createItem(listId: string) {
 }
 
 async function removeItem(listId: string, itemId: string) {
+	if (editingItemId.value === itemId) {
+		cancelEditItem()
+	}
 	deletingItemId.value = itemId
 	try {
 		await del(`/supplier-bookmarks/${listId}/items/${itemId}`)
@@ -441,6 +616,7 @@ function supplierPayload(item: SupplierBookmarkItem): SupplierCreate {
 		domain: normalizeDomain(item.domain),
 		company_name: item.company_name.trim(),
 		email: item.email.trim(),
+		phone: normalizePhone(item.phone),
 		source: 'manual',
 		request_id: props.requestId,
 	}

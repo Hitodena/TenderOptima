@@ -646,6 +646,80 @@ input[type='number'] {
 	}
 }
 
+/* Landing: text-only process flow (e.g. supplier search steps) */
+.landing-flow-grid {
+	display: grid;
+	gap: 1rem;
+	grid-template-columns: 1fr;
+}
+
+@media (min-width: 768px) {
+	.landing-flow-grid {
+		grid-template-columns: repeat(2, 1fr);
+	}
+}
+
+@media (min-width: 1024px) {
+	.landing-flow-grid {
+		grid-template-columns: repeat(4, 1fr);
+	}
+}
+
+.landing-flow-step {
+	position: relative;
+	padding: 1.5rem;
+	height: 100%;
+	opacity: 0;
+	transform: translateY(20px);
+	transition:
+		opacity 0.5s ease,
+		transform 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+		box-shadow 0.25s ease,
+		border-color 0.25s ease;
+}
+
+.landing-flow-step.is-visible {
+	opacity: 1;
+	transform: translateY(0);
+}
+
+.landing-flow-step.is-active .landing-flow-marker {
+	animation: landing-step-pop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.landing-flow-marker {
+	transition: transform 0.35s ease;
+}
+
+.landing-flow-step:not(:last-child)::after {
+	content: '';
+	display: none;
+}
+
+@media (min-width: 1024px) {
+	.landing-flow-step:not(:last-child)::after {
+		display: block;
+		position: absolute;
+		top: 2.5rem;
+		right: -0.625rem;
+		width: 1.25rem;
+		height: 2px;
+		background: linear-gradient(90deg, var(--color-accent) 0%, var(--ui-border) 100%);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.landing-flow-step {
+		opacity: 1;
+		transform: none;
+		transition: none;
+	}
+
+	.landing-flow-step.is-active .landing-flow-marker {
+		animation: none;
+	}
+}
+
 /* Landing: CTA band */
 .landing-cta-band {
 	background: color-mix(in oklab, var(--ui-primary) 8%, var(--ui-bg-elevated));

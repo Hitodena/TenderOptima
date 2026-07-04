@@ -76,6 +76,10 @@ v-model="registerForm.company_name" placeholder="ООО Ромашка"
 								</UFormField>
 							</div>
 
+							<UFormField label="Телефон" name="phone" required>
+								<PhoneNumberInput v-model="registerForm.phone" default-country="BY" />
+							</UFormField>
+
 							<UFormField label="Пароль" name="password" required hint="Минимум 8 символов">
 								<UInput
 v-model="registerForm.password"
@@ -150,6 +154,7 @@ type="submit" class="w-full justify-center" size="lg" :loading="registerLoading"
 <script lang="ts" setup>
 import type { RegisterCreate, TokenResponse } from '#shared/types'
 import { getApiErrorDetail } from '#shared/utils/apiError'
+import { isValidPhoneNumber } from 'libphonenumber-js'
 import { z } from 'zod'
 
 definePageMeta({ layout: 'auth' })
@@ -182,6 +187,10 @@ const registerSchema = z.object({
 	email: z.string().email('Неверный формат email'),
 	full_name: z.string().min(2, 'Минимум 2 символа'),
 	company_name: z.string().optional(),
+	phone: z
+		.string()
+		.min(1, 'Введите номер телефона')
+		.refine((val) => isValidPhoneNumber(val), 'Введите корректный номер телефона'),
 	password: z.string().min(8, 'Минимум 8 символов'),
 	agree_terms: z.boolean().optional(),
 	agree_marketing: z.boolean().optional(),
@@ -217,6 +226,7 @@ const registerForm = reactive({
 	password: '',
 	full_name: '',
 	company_name: '',
+	phone: '',
 	agree_terms: false,
 	agree_marketing: false,
 })
@@ -234,6 +244,7 @@ async function handleRegister() {
 			password: registerForm.password,
 			full_name: registerForm.full_name,
 			company_name: registerForm.company_name || null,
+			phone: registerForm.phone,
 			agree_terms: registerForm.agree_terms,
 			agree_marketing: registerForm.agree_marketing,
 		}

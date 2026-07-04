@@ -697,7 +697,7 @@ import {
 	flattenRequirementsToRows,
 	insertChildAfterParentRow,
 	renumberRequirementRows,
-	insertSiblingBeforeRow,
+	insertSiblingAfterRow,
 	moveRequirementRowBlock,
 	requirementsNonempty,
 	requirementsRowsNonempty,
@@ -1683,9 +1683,9 @@ function removeTzRequirement(index: number) {
 	)
 }
 
-function addTzSiblingRequirement(beforeIndex: number) {
+function addTzSiblingRequirement(afterIndex: number) {
 	updateEditableRequirementsTz((rows) =>
-		insertSiblingBeforeRow(rows, beforeIndex),
+		insertSiblingAfterRow(rows, afterIndex),
 	)
 }
 

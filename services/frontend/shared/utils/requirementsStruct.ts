@@ -657,6 +657,25 @@ export function moveRequirementRowBlock(
 	return without
 }
 
+/**
+ * A brand-new sibling row with a blank key/text is invisible: `buildTreeFromRows`
+ * drops any row that has no key, no text, and isn't a heading (see its skip
+ * condition), so it would never be picked up by the following
+ * `renumberRequirementRows` pass and would silently disappear. Assigning it a
+ * real (temporary, non-colliding) key in the same parent scope keeps it in the
+ * tree immediately; the exact numeric value doesn't matter since
+ * `renumberRequirementRows` reassigns sequential keys from array order right
+ * after insertion.
+ */
+function siblingPlaceholderKey(
+	rows: EditableRequirementRow[],
+	anchorIndex: number,
+): string {
+	const anchorKey = normalizeRequirementKey(rows[anchorIndex]?.key ?? '')
+	const parentKey = parentRequirementKey(anchorKey)
+	return parentKey ? nextChildKey(parentKey, rows) : nextTopLevelKey(rows)
+}
+
 export function insertSiblingAfterRow(
 	rows: EditableRequirementRow[],
 	afterIndex: number,
@@ -665,7 +684,7 @@ export function insertSiblingAfterRow(
 	const [, end] = getRowSubtreeRange(rows, afterIndex)
 	const next = [...rows]
 	next.splice(end + 1, 0, {
-		key: '',
+		key: siblingPlaceholderKey(rows, afterIndex),
 		text: '',
 		isHeading: options?.isHeading,
 	})
@@ -680,7 +699,7 @@ export function insertSiblingBeforeRow(
 	const [start] = getRowSubtreeRange(rows, beforeIndex)
 	const next = [...rows]
 	next.splice(start, 0, {
-		key: '',
+		key: siblingPlaceholderKey(rows, beforeIndex),
 		text: '',
 		isHeading: options?.isHeading,
 	})

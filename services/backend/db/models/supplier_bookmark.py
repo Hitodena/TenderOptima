@@ -45,6 +45,7 @@ class SupplierBookmarkItem(IDMixinUUID, TimestampMixin, Base):
     company_name: Mapped[str] = mapped_column(String(200), nullable=False)
     email: Mapped[str] = mapped_column(String(320), nullable=False)
     domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     bookmark_list: Mapped["SupplierBookmarkList"] = relationship(

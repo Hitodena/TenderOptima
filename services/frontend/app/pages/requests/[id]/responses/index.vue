@@ -536,18 +536,11 @@ v-if="showParamsPanel && mainTab === 'thread'" class="shrink-0 border-l border-d
 					? 'absolute inset-0 z-20 w-full bg-default'
 					: 'w-72 md:w-80 lg:w-96'">
 
-				<div class="px-4 py-3 border-b border-default flex items-center justify-between gap-2">
-					<div class="flex items-center gap-2 min-w-0">
-						<UButton
+				<div class="px-4 py-3 border-b border-default flex items-center gap-2">
+					<UButton
 v-if="isMobile" variant="ghost" color="neutral" size="xs" icon="i-lucide-arrow-left"
-							@click="showParamsPanel = false" />
-						<p class="text-sm font-semibold truncate">Соответствие требованиям</p>
-					</div>
-					<div class="flex items-center gap-1 shrink-0">
-						<UButton
-v-if="!isMobile" size="xs" variant="ghost" color="neutral" icon="i-lucide-x"
-							@click="showParamsPanel = false" />
-					</div>
+						@click="showParamsPanel = false" />
+					<p class="text-sm font-semibold truncate">Соответствие требованиям</p>
 				</div>
 
 				<div class="flex-1 overflow-y-auto px-3 py-3">

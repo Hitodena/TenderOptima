@@ -268,6 +268,43 @@ v-for="(feature, index) in features" :key="feature.title"
 					</div>
 				</section>
 
+				<!-- Supplier search flow -->
+				<section
+id="supplier-search" ref="supplierFlowReveal"
+					class="reveal py-(--landing-section-py) px-4 sm:px-6 lg:px-8">
+					<div class="mx-auto max-w-6xl">
+						<div class="mb-12 text-center">
+							<p class="landing-section-headline mb-2">
+								Поиск поставщиков
+							</p>
+							<h2 class="landing-section-title mb-4">
+								Как проходит поиск и рассылка запросов
+							</h2>
+							<p class="landing-section-description mx-auto">
+								От запроса до сравнения предложений - четыре шага без ручной подготовки писем и таблиц.
+							</p>
+						</div>
+
+						<div class="landing-flow-grid">
+							<article
+v-for="(step, index) in supplierFlowSteps" :key="step.title"
+								class="landing-card landing-flow-step" :class="{
+									'is-visible': isSupplierFlowStepVisible(index),
+									'is-active': supplierFlowVisibleCount === index + 1,
+								}">
+								<div
+									class="landing-flow-marker mb-4 flex size-11 items-center justify-center rounded-xl bg-primary/10">
+									<span class="text-sm font-bold tabular-nums text-primary">
+										{{ String(index + 1).padStart(2, '0') }}
+									</span>
+								</div>
+								<h3 class="mb-2 font-semibold text-highlighted">{{ step.title }}</h3>
+								<p class="text-sm leading-relaxed text-muted">{{ step.description }}</p>
+							</article>
+						</div>
+					</div>
+				</section>
+
 				<!-- TZ / KP analysis -->
 				<HowItWorksBrand section-id="tz-analysis" />
 
@@ -438,6 +475,11 @@ const heroReveal = ref<HTMLElement | null>(null)
 
 const { target: metricsReveal, isVisible: metricsVisible } = useScrollReveal()
 const { target: featuresReveal, isVisible: featuresVisible } = useScrollReveal()
+const { target: supplierFlowReveal, isVisible: supplierFlowVisible } = useScrollReveal()
+const {
+	visibleCount: supplierFlowVisibleCount,
+	isStepVisible: isSupplierFlowStepVisible,
+} = useSequentialSteps(4, supplierFlowVisible, 180)
 const { target: requestsReveal, isVisible: requestsVisible } = useScrollReveal()
 const { target: subscriptionReveal, isVisible: subscriptionVisible } = useScrollReveal()
 const {
@@ -519,6 +561,25 @@ const features = [
 		title: 'Меньше рутины',
 		description: 'Специалисты занимаются стратегией, а не ручной сверкой таблиц.',
 		icon: 'i-lucide-sparkles',
+	},
+]
+
+const supplierFlowSteps = [
+	{
+		title: 'Поиск и подбор',
+		description: 'Опишите закупку и регион поставки - сервис автоматически находит поставщиков с контактами для рассылки.',
+	},
+	{
+		title: 'Параметры запроса',
+		description: 'Уточните требования к ответу: цену, сроки, условия поставки и другие пункты, которые должен указать поставщик.',
+	},
+	{
+		title: 'Рассылка и переписка',
+		description: 'Письма уходят выбранным поставщикам, а ответы попадают во входящие с пометкой непрочитанных.',
+	},
+	{
+		title: 'Сравнение предложений',
+		description: 'Ответы автоматически сверяются по каждому параметру - остаётся выбрать лучшее предложение.',
 	},
 ]
 

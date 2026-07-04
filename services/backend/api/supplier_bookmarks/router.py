@@ -175,12 +175,14 @@ async def create_supplier_bookmark_item(
         )
 
     normalized_domain = body.domain.lower().strip() if body.domain else None
+    normalized_phone = body.phone.strip() if body.phone else None
     instance = await SupplierBookmarkItemDAO.create(
         session,
         list_id=list_id,
         company_name=body.company_name.strip(),
         email=str(body.email).lower().strip(),
         domain=normalized_domain,
+        phone=normalized_phone,
         notes=body.notes,
     )
     return SupplierBookmarkItemResponse.model_validate(instance)
@@ -226,6 +228,8 @@ async def update_supplier_bookmark_item(
         values["email"] = str(values["email"]).lower().strip()
     if "domain" in values and values["domain"]:
         values["domain"] = values["domain"].lower().strip()
+    if "phone" in values and values["phone"]:
+        values["phone"] = values["phone"].strip()
 
     if not values:
         return SupplierBookmarkItemResponse.model_validate(item)

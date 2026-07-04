@@ -16,6 +16,7 @@ export interface UserResponse {
 	email: string;
 	full_name: string | null;
 	company_name?: string | null;
+	phone?: string | null;
 	contact_email?: string | null;
 	business_info?: string | null;
 	is_admin?: boolean;
@@ -160,6 +161,7 @@ export interface RegisterCreate {
 	password: string;
 	full_name: string;
 	company_name?: string | null;
+	phone: string;
 	agree_terms: boolean;
 	agree_marketing: boolean;
 }
@@ -414,6 +416,7 @@ export interface SupplierBookmarkItem {
 	company_name: string;
 	email: string;
 	domain: string | null;
+	phone: string | null;
 	notes: string | null;
 	created_at: string;
 	updated_at: string;
@@ -438,6 +441,15 @@ export interface SupplierBookmarkItemCreate {
 	company_name: string;
 	email: string;
 	domain?: string | null;
+	phone?: string | null;
+	notes?: string | null;
+}
+
+export interface SupplierBookmarkItemUpdate {
+	company_name?: string;
+	email?: string;
+	domain?: string | null;
+	phone?: string | null;
 	notes?: string | null;
 }
 

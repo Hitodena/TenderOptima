@@ -132,11 +132,12 @@
 							class="w-full"
 						/>
 					</UFormField>
-				<UFormField label="Файл КП" required>
+				<UFormField label="Файлы КП" required>
 					<UFileUpload
-						:model-value="newSupplierFile"
+						:model-value="newSupplierFiles"
 						:accept="fileAccept"
 						:interactive="false"
+						multiple
 						layout="list"
 						position="inside"
 						class="w-full min-h-32"
@@ -145,7 +146,7 @@
 						<template #actions="{ open }">
 							<UButton type="button" variant="outline" size="sm" @click="open()">
 								<UIcon name="i-lucide-file-spreadsheet" class="w-4 h-4" />
-								Выбрать КП
+								Выбрать файлы КП
 							</UButton>
 						</template>
 					</UFileUpload>
@@ -207,12 +208,12 @@ const toast = useToast()
 
 const showAddForm = ref(false)
 const newSupplierName = ref('')
-const newSupplierFile = ref<File | null>(null)
+const newSupplierFiles = ref<File[]>([])
 const adding = ref(false)
 const deletingId = ref<string | null>(null)
 
 const canAddSupplier = computed(() =>
-	newSupplierName.value.trim().length > 0 && newSupplierFile.value !== null,
+	newSupplierName.value.trim().length > 0 && newSupplierFiles.value.length > 0,
 )
 
 const kpUploadHint = computed(() =>
@@ -244,38 +245,39 @@ function kpFileWord(count: number) {
 function resetAddForm() {
 	showAddForm.value = false
 	newSupplierName.value = ''
-	newSupplierFile.value = null
+	newSupplierFiles.value = []
 }
 
 function onNewSupplierFileChange(files: File | File[] | null | undefined) {
 	if (!files) {
-		newSupplierFile.value = null
+		newSupplierFiles.value = []
 		return
 	}
-	const file = Array.isArray(files) ? files[0] ?? null : files
-	if (!file) {
-		newSupplierFile.value = null
-		return
+	const arr = Array.isArray(files) ? files : [files]
+	const valid: File[] = []
+	for (const file of arr) {
+		if (file.size > props.maxUploadSize) {
+			toast.add({
+				title: 'Файл слишком большой',
+				description: `${file.name} превышает ${formatUploadLimitMb(props.maxUploadSize)}`,
+				color: 'error',
+			})
+			continue
+		}
+		valid.push(file)
 	}
-	if (file.size > props.maxUploadSize) {
-		toast.add({
-			title: 'Файл слишком большой',
-			description: `${file.name} превышает ${formatUploadLimitMb(props.maxUploadSize)}`,
-			color: 'error',
-		})
-		newSupplierFile.value = null
-		return
-	}
-	newSupplierFile.value = file
+	newSupplierFiles.value = valid
 }
 
 async function createSupplier() {
-	if (!canAddSupplier.value || adding.value || !newSupplierFile.value) return
+	if (!canAddSupplier.value || adding.value || newSupplierFiles.value.length === 0) return
 	adding.value = true
 	try {
 		const fd = new FormData()
 		fd.append('name', newSupplierName.value.trim())
-		fd.append('kp_files', newSupplierFile.value)
+		for (const file of newSupplierFiles.value) {
+			fd.append('kp_files', file)
+		}
 		await post<TZAnalysisSupplierItem>(
 			`/tz-analysis/${props.analysisId}/suppliers`,
 			fd,
