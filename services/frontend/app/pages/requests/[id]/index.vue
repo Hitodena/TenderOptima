@@ -282,14 +282,6 @@ v-if="!isTerminalStatus && row.original.supplier.extra_emails?.length > 1"
 										size="sm"
 										color="neutral"
 										variant="ghost"
-										icon="i-lucide-pencil"
-										@click.stop="openEditSupplierModal(row.original.supplier)"
-									/>
-									<UButton
-										v-if="row.original.supplier"
-										size="sm"
-										color="neutral"
-										variant="ghost"
 										leading-icon="i-lucide-database"
 										@click.stop="openSaveToBookmarkModal(row.original.supplier)"
 									>
@@ -338,11 +330,6 @@ v-model:open="showParamsModal" :request="request" :supplier-count="enabledCount"
 				:subscription="subscription"
 				:manual-supplier-count="manualSupplierCount"
 				@added="fetchSuppliersAndEnforceQuota"
-			/>
-			<AddSupplierModal
-				v-model:open="showEditSupplier"
-				:supplier="editSupplier"
-				@updated="fetchSuppliersAndEnforceQuota"
 			/>
 			<EditSupplierEmailModal v-model:open="showEditEmail" :supplier="emailSupplier" @saved="onEmailSaved" />
 			<SupplierBookmarkModal v-model:open="showBookmarkModal" :request-id="id" @added="fetchSuppliersAndEnforceQuota" />
@@ -431,8 +418,6 @@ const { finalizing } = useSearchPolling(
 const showParamsModal = ref(false)
 const showAddSupplier = ref(false)
 const showEditEmail = ref(false)
-const showEditSupplier = ref(false)
-const editSupplier = ref<Supplier | null>(null)
 const showBookmarkModal = ref(false)
 const showSaveToBookmarkModal = ref(false)
 const saveToBookmarkSupplier = ref<Supplier | null>(null)
@@ -760,11 +745,6 @@ function openEditEmailModal(supplier: Supplier) {
 function openSaveToBookmarkModal(supplier: Supplier) {
 	saveToBookmarkSupplier.value = supplier
 	showSaveToBookmarkModal.value = true
-}
-
-function openEditSupplierModal(supplier: Supplier) {
-	editSupplier.value = supplier
-	showEditSupplier.value = true
 }
 
 function onEmailSaved() {

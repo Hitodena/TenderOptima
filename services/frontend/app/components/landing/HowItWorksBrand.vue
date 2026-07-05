@@ -56,11 +56,15 @@
 							class="landing-hiw__panel landing-card"
 							:aria-label="currentStep.title"
 						>
-							<div class="landing-hiw__panel-screen">
+							<div
+								class="landing-hiw__panel-screen"
+								:class="{ 'landing-hiw__panel-screen--compact': currentStep.imageCompact }"
+							>
 								<img
 									:src="currentStep.image"
 									:alt="currentStep.imageAlt"
 									class="landing-hiw__panel-image"
+									:class="{ 'landing-hiw__panel-image--compact': currentStep.imageCompact }"
 									loading="lazy"
 									decoding="async"
 								>
@@ -91,6 +95,7 @@ export interface BrandHowItWorksStep {
 	visualText: string
 	image: string
 	imageAlt: string
+	imageCompact?: boolean
 }
 
 const fallbackSteps: BrandHowItWorksStep[] = [
@@ -357,6 +362,18 @@ onBeforeUnmount(stopAutoplay)
 	display: block;
 	width: 100%;
 	height: auto;
+}
+
+.landing-hiw__panel-screen--compact {
+	height: min(20rem, 38vh);
+	overflow: hidden;
+}
+
+.landing-hiw__panel-image--compact {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	object-position: top center;
 }
 
 .landing-hiw__panel-meta {

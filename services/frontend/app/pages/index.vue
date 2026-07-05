@@ -269,41 +269,13 @@ v-for="(feature, index) in features" :key="feature.title"
 				</section>
 
 				<!-- Supplier search flow -->
-				<section
-id="supplier-search" ref="supplierFlowReveal"
-					class="reveal py-(--landing-section-py) px-4 sm:px-6 lg:px-8">
-					<div class="mx-auto max-w-6xl">
-						<div class="mb-12 text-center">
-							<p class="landing-section-headline mb-2">
-								Поиск поставщиков
-							</p>
-							<h2 class="landing-section-title mb-4">
-								Как проходит поиск и рассылка запросов
-							</h2>
-							<p class="landing-section-description mx-auto">
-								От запроса до сравнения предложений - четыре шага без ручной подготовки писем и таблиц.
-							</p>
-						</div>
-
-						<div class="landing-flow-grid">
-							<article
-v-for="(step, index) in supplierFlowSteps" :key="step.title"
-								class="landing-card landing-flow-step" :class="{
-									'is-visible': isSupplierFlowStepVisible(index),
-									'is-active': supplierFlowVisibleCount === index + 1,
-								}">
-								<div
-									class="landing-flow-marker mb-4 flex size-11 items-center justify-center rounded-xl bg-primary/10">
-									<span class="text-sm font-bold tabular-nums text-primary">
-										{{ String(index + 1).padStart(2, '0') }}
-									</span>
-								</div>
-								<h3 class="mb-2 font-semibold text-highlighted">{{ step.title }}</h3>
-								<p class="text-sm leading-relaxed text-muted">{{ step.description }}</p>
-							</article>
-						</div>
-					</div>
-				</section>
+				<HowItWorksBrand
+					section-id="supplier-search"
+					eyebrow="Поиск поставщиков"
+					title="Как проходит поиск и рассылка запросов"
+					lead="От запроса до сравнения предложений — четыре шага без ручной подготовки писем и таблиц."
+					:steps="supplierFlowSteps"
+				/>
 
 				<!-- TZ / KP analysis -->
 				<HowItWorksBrand section-id="tz-analysis" />
@@ -475,11 +447,6 @@ const heroReveal = ref<HTMLElement | null>(null)
 
 const { target: metricsReveal, isVisible: metricsVisible } = useScrollReveal()
 const { target: featuresReveal, isVisible: featuresVisible } = useScrollReveal()
-const { target: supplierFlowReveal, isVisible: supplierFlowVisible } = useScrollReveal()
-const {
-	visibleCount: supplierFlowVisibleCount,
-	isStepVisible: isSupplierFlowStepVisible,
-} = useSequentialSteps(4, supplierFlowVisible, 180)
 const { target: requestsReveal, isVisible: requestsVisible } = useScrollReveal()
 const { target: subscriptionReveal, isVisible: subscriptionVisible } = useScrollReveal()
 const {
@@ -566,20 +533,38 @@ const features = [
 
 const supplierFlowSteps = [
 	{
-		title: 'Поиск и подбор',
-		description: 'Опишите закупку и регион поставки - сервис автоматически находит поставщиков с контактами для рассылки.',
+		id: 'supplier-search',
+		title: 'Поиск поставщиков',
+		text: 'Опишите закупку и регион — сервис находит компании с контактами и добавляет их в список для рассылки.',
+		visualText: 'Форма поиска: запрос, регион и кнопка «Найти поставщиков» — результаты появляются автоматически.',
+		image: '/landing/supplier_flow.gif',
+		imageAlt: 'Анимация поиска поставщиков по запросу и региону',
 	},
 	{
-		title: 'Параметры запроса',
-		description: 'Уточните требования к ответу: цену, сроки, условия поставки и другие пункты, которые должен указать поставщик.',
+		id: 'supplier-correspondence',
+		title: 'Переписка с поставщиками',
+		text: 'Письма уходят выбранным поставщикам, ответы собираются во входящих — переписка и извлечение данных в одном окне.',
+		visualText: 'Список поставщиков слева, переписка по центру и панель соответствия требованиям справа.',
+		image: '/landing/email_chat.png',
+		imageAlt: 'Экран переписки с поставщиками и извлечения параметров из ответов',
 	},
 	{
-		title: 'Рассылка и переписка',
-		description: 'Письма уходят выбранным поставщикам, а ответы попадают во входящие с пометкой непрочитанных.',
-	},
-	{
+		id: 'supplier-compare',
 		title: 'Сравнение предложений',
-		description: 'Ответы автоматически сверяются по каждому параметру - остаётся выбрать лучшее предложение.',
+		text: 'Ответы сверяются по каждому параметру запроса — цена, сроки, условия — с сортировкой и статусами по пунктам.',
+		visualText: 'Таблица сравнения: требования в строках, предложение поставщика и статус «Выполнено» / «Частично».',
+		image: '/landing/supplier_table.png',
+		imageAlt: 'Таблица сравнения коммерческих предложений поставщиков',
+		imageCompact: true,
+	},
+	{
+		id: 'supplier-export',
+		title: 'Выгрузка в Excel',
+		text: 'Готовая таблица соответствия выгружается в XLSX — для согласования, архива или передачи коллегам.',
+		visualText: 'Экспорт с теми же параметрами, статусами и пояснениями — без ручной сборки таблицы.',
+		image: '/landing/excel.png',
+		imageAlt: 'Таблица сравнения предложений в формате Excel',
+		imageCompact: true,
 	},
 ]
 

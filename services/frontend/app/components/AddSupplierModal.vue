@@ -18,7 +18,7 @@
 						placeholder="sales@supplier.ru"
 						icon="i-lucide-mail"
 						class="w-full"
-						:disabled="isEditMode"
+						:disabled="isEditMode && !isBookmarkMode"
 					/>
 				</UFormField>
 
@@ -55,6 +55,7 @@
 						</UFormField>
 
 						<UFormField
+							v-if="!isBookmarkMode"
 							label="Дополнительные email"
 							name="extra_emails"
 							hint="Через запятую или с новой строки"
@@ -67,11 +68,15 @@
 							/>
 						</UFormField>
 
-						<UFormField label="Иное" name="comments" hint="Комментарий от пользователя">
+						<UFormField
+							:label="isBookmarkMode ? 'Заметки' : 'Иное'"
+							name="comments"
+							:hint="isBookmarkMode ? 'Контактное лицо, условия поставки...' : 'Комментарий от пользователя'"
+						>
 							<UTextarea
 								v-model="form.comments"
-								:rows="2"
-								placeholder="Любые заметки по поставщику"
+								:rows="isBookmarkMode ? 3 : 2"
+								:placeholder="isBookmarkMode ? 'Контактное лицо, условия поставки...' : 'Любые заметки по поставщику'"
 								class="w-full"
 							/>
 						</UFormField>
@@ -112,7 +117,14 @@
 
 <script lang="ts" setup>
 import { z } from 'zod'
-import type { Supplier, SupplierCreate, SupplierUpdate, SubscriptionResponse } from '#shared/types'
+import type {
+	Supplier,
+	SupplierBookmarkItem,
+	SupplierBookmarkItemUpdate,
+	SupplierCreate,
+	SupplierUpdate,
+	SubscriptionResponse,
+} from '#shared/types'
 import { getApiErrorDetail } from '#shared/utils/apiError'
 import { isTestPlan, TEST_PLAN_MANUAL_SUPPLIER_BONUS } from '#shared/utils/subscriptionAccess'
 
@@ -121,13 +133,16 @@ const props = defineProps<{
 	subscription?: SubscriptionResponse | null
 	manualSupplierCount?: number
 	supplier?: Supplier | null
+	bookmarkListId?: string | null
+	bookmarkItem?: SupplierBookmarkItem | null
 }>()
 const isOpen = defineModel<boolean>('open', { default: false })
 const emit = defineEmits<{ added: []; updated: [] }>()
 
 const { post, patch } = useApi()
 
-const isEditMode = computed(() => Boolean(props.supplier))
+const isBookmarkMode = computed(() => props.bookmarkListId != null)
+const isEditMode = computed(() => Boolean(props.supplier || props.bookmarkItem))
 const modalTitle = computed(() => isEditMode.value ? 'Редактировать поставщика' : 'Добавить поставщика')
 
 const schema = z.object({
@@ -152,7 +167,7 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 
 const testPlanHint = computed(() => {
-	if (isEditMode.value || !isTestPlan(props.subscription)) return null
+	if (isBookmarkMode.value || isEditMode.value || !isTestPlan(props.subscription)) return null
 	if ((props.manualSupplierCount ?? 0) >= TEST_PLAN_MANUAL_SUPPLIER_BONUS) {
 		return 'На тестовом тарифе можно добавить только одного поставщика вручную (сверх 10 из поиска).'
 	}
@@ -160,9 +175,20 @@ const testPlanHint = computed(() => {
 })
 
 const testPlanManualLimitReached = computed(() =>
-	isTestPlan(props.subscription)
+	!isBookmarkMode.value
+	&& isTestPlan(props.subscription)
 	&& (props.manualSupplierCount ?? 0) >= TEST_PLAN_MANUAL_SUPPLIER_BONUS,
 )
+
+function normalizeDomain(value: string | null | undefined): string | null {
+	const trimmed = (value ?? '').trim()
+	return trimmed.length >= 3 ? trimmed : null
+}
+
+function normalizePhone(value: string | null | undefined): string | null {
+	const trimmed = (value ?? '').trim()
+	return trimmed || null
+}
 
 function parseExtraEmails(raw: string, primaryEmail: string): string[] | null {
 	const parts = raw
@@ -174,7 +200,15 @@ function parseExtraEmails(raw: string, primaryEmail: string): string[] | null {
 }
 
 function resetForm() {
-	if (props.supplier) {
+	if (props.bookmarkItem) {
+		form.domain = props.bookmarkItem.domain ?? ''
+		form.company_name = props.bookmarkItem.company_name
+		form.email = props.bookmarkItem.email
+		form.phone = props.bookmarkItem.phone ?? ''
+		form.extra_emails = ''
+		form.comments = props.bookmarkItem.notes ?? ''
+		showOptional.value = Boolean(form.domain || form.phone || form.comments)
+	} else if (props.supplier) {
 		form.domain = props.supplier.domain ?? ''
 		form.company_name = props.supplier.company_name
 		form.email = props.supplier.main_email
@@ -200,12 +234,37 @@ function close() {
 	isOpen.value = false
 }
 
+function bookmarkPayload() {
+	return {
+		company_name: form.company_name.trim(),
+		email: form.email.trim(),
+		domain: normalizeDomain(form.domain),
+		phone: normalizePhone(form.phone),
+		notes: form.comments.trim() || null,
+	}
+}
+
 async function handleSubmit() {
 	if (loading.value) return
 	loading.value = true
 	error.value = null
 	try {
-		if (isEditMode.value && props.supplier) {
+		if (isBookmarkMode.value && props.bookmarkListId) {
+			if (isEditMode.value && props.bookmarkItem) {
+				const payload: SupplierBookmarkItemUpdate = bookmarkPayload()
+				await patch(
+					`/supplier-bookmarks/${props.bookmarkListId}/items/${props.bookmarkItem.id}`,
+					payload,
+				)
+				emit('updated')
+			} else {
+				await post(
+					`/supplier-bookmarks/${props.bookmarkListId}/items`,
+					bookmarkPayload(),
+				)
+				emit('added')
+			}
+		} else if (isEditMode.value && props.supplier) {
 			const updatePayload: SupplierUpdate = {
 				company_name: form.company_name.trim() || undefined,
 				domain: form.domain.trim() || null,
