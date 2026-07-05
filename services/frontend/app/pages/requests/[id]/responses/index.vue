@@ -655,9 +655,9 @@ block size="sm" variant="outline" leading-icon="i-lucide-mail"
 			</UContainer>
 		</div>
 
-		<SaveSupplierToBookmarkModal
+		<AddSupplierModal
 			v-model:open="showSaveToBookmarkModal"
-			:supplier="saveToBookmarkSupplier"
+			:source-supplier="saveToBookmarkSupplier"
 		/>
 		<ImproveConditionsModal
 v-if="modalSupplier" v-model:open="improveModalOpen" :request-id="id"
@@ -735,7 +735,6 @@ import {
 import { useIntervalFn } from '@vueuse/core'
 import ImproveConditionsModal from '~/components/ImproveConditionsModal.vue'
 import ResponseMismatchLetterModal from '~/components/ResponseMismatchLetterModal.vue'
-import SaveSupplierToBookmarkModal from '~/components/SaveSupplierToBookmarkModal.vue'
 import WinnerNotificationModal from '~/components/WinnerNotificationModal.vue'
 import { getOfferValueTrend } from '#shared/utils/offerValue'
 

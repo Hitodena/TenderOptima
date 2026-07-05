@@ -333,9 +333,9 @@ v-model:open="showParamsModal" :request="request" :supplier-count="enabledCount"
 			/>
 			<EditSupplierEmailModal v-model:open="showEditEmail" :supplier="emailSupplier" @saved="onEmailSaved" />
 			<SupplierBookmarkModal v-model:open="showBookmarkModal" :request-id="id" @added="fetchSuppliersAndEnforceQuota" />
-			<SaveSupplierToBookmarkModal
+			<AddSupplierModal
 				v-model:open="showSaveToBookmarkModal"
-				:supplier="saveToBookmarkSupplier"
+				:source-supplier="saveToBookmarkSupplier"
 			/>
 
 		</template>
@@ -379,7 +379,6 @@ import {
 } from '#shared/utils/subscriptionAccess'
 import { subscriptionProfilePath } from '#shared/utils/subscriptionDisplay'
 import type { TableColumn, TableRow } from '@nuxt/ui'
-import SaveSupplierToBookmarkModal from '~/components/SaveSupplierToBookmarkModal.vue'
 import SupplierBookmarkModal from '~/components/SupplierBookmarkModal.vue'
 import SupplierInfoHint from '~/components/requests/SupplierInfoHint.vue'
 

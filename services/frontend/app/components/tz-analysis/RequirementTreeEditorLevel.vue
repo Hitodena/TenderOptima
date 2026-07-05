@@ -4,6 +4,7 @@
 			v-for="node in nodes"
 			:key="`${scopeId}-${node.key}-${node.rowIndex ?? 'h'}`"
 			class="space-y-3"
+			:data-row-key="node.rowIndex !== undefined ? `${scopeId}:${node.key}` : undefined"
 		>
 			<template v-if="node.isHeading || node.children.length > 0">
 				<div
@@ -65,27 +66,35 @@
 							</div>
 						<RequirementNodeRail
 							v-if="!readonly"
-							:show-remove="node.rowIndex !== undefined"
 							@add-child="emit('add-child', node.key)"
 							@add-heading="emit('add-heading', node.key)"
 							@add-sibling="onAddSibling(node)"
-							@remove="node.rowIndex !== undefined && emit('remove', node.rowIndex)"
 						/>
 						</div>
-						<button
-							v-if="!readonly && node.rowIndex !== undefined"
-							type="button"
-							class="shrink-0 mt-2 p-1 rounded hover:bg-elevated/60 cursor-grab active:cursor-grabbing touch-none"
-							draggable="true"
-							aria-label="Перетащить пункт"
-							@dragstart="onDragStart($event, node.rowIndex!)"
-							@dragend="onDragEnd"
-						>
-							<UIcon
-								name="i-lucide-grip-vertical"
-								class="w-5 h-5 text-muted"
+						<div v-if="!readonly && node.rowIndex !== undefined" class="flex shrink-0 items-start gap-0.5 mt-1.5">
+							<UButton
+								type="button"
+								variant="ghost"
+								color="error"
+								size="sm"
+								icon="i-lucide-trash-2"
+								aria-label="Удалить пункт"
+								@click="emit('remove', node.rowIndex!)"
 							/>
-						</button>
+							<button
+								type="button"
+								class="p-1 rounded hover:bg-elevated/60 cursor-grab active:cursor-grabbing touch-none"
+								draggable="true"
+								aria-label="Перетащить пункт"
+								@dragstart="onDragStart($event, node.rowIndex!)"
+								@dragend="onDragEnd"
+							>
+								<UIcon
+									name="i-lucide-grip-vertical"
+									class="w-5 h-5 text-muted"
+								/>
+							</button>
+						</div>
 					</div>
 				</div>
 
@@ -145,23 +154,32 @@
 							@add-child="emit('add-child', node.key)"
 							@add-heading="emit('add-heading', node.key)"
 							@add-sibling="onAddSibling(node)"
-							@remove="emit('remove', node.rowIndex)"
 						/>
 						</div>
-						<button
-							v-if="!readonly"
-							type="button"
-							class="shrink-0 mt-2 p-1 rounded hover:bg-elevated/60 cursor-grab active:cursor-grabbing touch-none"
-							draggable="true"
-							aria-label="Перетащить пункт"
-							@dragstart="onDragStart($event, node.rowIndex)"
-							@dragend="onDragEnd"
-						>
-							<UIcon
-								name="i-lucide-grip-vertical"
-								class="w-5 h-5 text-muted"
+						<div v-if="!readonly" class="flex shrink-0 items-start gap-0.5 mt-1.5">
+							<UButton
+								type="button"
+								variant="ghost"
+								color="error"
+								size="sm"
+								icon="i-lucide-trash-2"
+								aria-label="Удалить пункт"
+								@click="emit('remove', node.rowIndex)"
 							/>
-						</button>
+							<button
+								type="button"
+								class="p-1 rounded hover:bg-elevated/60 cursor-grab active:cursor-grabbing touch-none"
+								draggable="true"
+								aria-label="Перетащить пункт"
+								@dragstart="onDragStart($event, node.rowIndex)"
+								@dragend="onDragEnd"
+							>
+								<UIcon
+									name="i-lucide-grip-vertical"
+									class="w-5 h-5 text-muted"
+								/>
+							</button>
+						</div>
 					</div>
 				</div>
 			</template>

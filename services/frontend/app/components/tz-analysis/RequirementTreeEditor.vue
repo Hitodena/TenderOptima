@@ -7,7 +7,7 @@
 		@remove="(index) => emit('remove', index)"
 		@add-child="handleAddChild"
 		@add-heading="handleAddHeading"
-		@add-sibling="(index) => emit('add-sibling', index)"
+		@add-sibling="handleAddSibling"
 		@reorder="(from, to) => emit('reorder', from, to)"
 		@toggle-section="toggleSection"
 	/>
@@ -79,6 +79,15 @@ function handleAddChild(parentKey: string) {
 function handleAddHeading(parentKey: string) {
 	expandSection(parentKey)
 	emit('add-heading', parentKey)
+}
+
+function handleAddSibling(afterIndex: number) {
+	const anchorKey = props.rows[afterIndex]?.key ?? ''
+	const parentKey = anchorKey.includes('.')
+		? anchorKey.replace(/\//g, '.').split('.').slice(0, -1).join('.')
+		: null
+	if (parentKey) expandSection(parentKey)
+	emit('add-sibling', afterIndex)
 }
 
 provide('requirementTreeEditor', {

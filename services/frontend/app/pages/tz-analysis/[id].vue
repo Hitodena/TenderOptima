@@ -696,6 +696,7 @@ import {
 	countRequirementRows,
 	flattenRequirementsToRows,
 	insertChildAfterParentRow,
+	getRowSubtreeRange,
 	renumberRequirementRows,
 	insertSiblingAfterRow,
 	moveRequirementRowBlock,
@@ -1684,9 +1685,26 @@ function removeTzRequirement(index: number) {
 }
 
 function addTzSiblingRequirement(afterIndex: number) {
+	const [, end] = getRowSubtreeRange(editableRequirementsTz.value, afterIndex)
+	const insertIndex = end + 1
 	updateEditableRequirementsTz((rows) =>
 		insertSiblingAfterRow(rows, afterIndex),
 	)
+	const inserted = editableRequirementsTz.value[insertIndex]
+	const rowKey = inserted?.key ?? ''
+	const scopeId = isTzConfirmed.value ? 'tz-results' : 'tz-review'
+	const isTopLevel = rowKey.length > 0 && !rowKey.includes('.')
+	toast.add({
+		title: isTopLevel ? `Добавлен раздел ${rowKey}` : `Добавлен пункт ${rowKey}`,
+		color: 'success',
+		icon: 'i-lucide-check',
+	})
+	nextTick(() => {
+		const el = document.querySelector(
+			`[data-row-key="${scopeId}:${rowKey}"]`,
+		)
+		el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+	})
 }
 
 function reorderTzRequirement(fromIndex: number, toIndex: number) {
