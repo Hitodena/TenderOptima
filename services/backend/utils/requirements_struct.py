@@ -345,6 +345,110 @@ def flatten_hierarchy(hierarchy: dict[str, RequirementNode]) -> list[str]:
     return [f"{key}. {text}" for key, text in collect_leaf_entries(hierarchy)]
 
 
+def flatten_hierarchy_for_matching(
+    hierarchy: dict[str, RequirementNode],
+) -> list[str]:
+    """Flat strings with ref_value context for LLM matching."""
+    normalized = normalize_tz_requirements(hierarchy)
+    result: list[str] = []
+    for key, text in collect_leaf_entries(normalized):
+        line = f"{key}. {text}"
+        node = find_node_by_key(normalized, key)
+        if node is not None:
+            ref_value = str(node.get("ref_value") or "").strip()
+            if (
+                ref_value
+                and ref_value != text
+                and not line.endswith(ref_value)
+            ):
+                line = f"{line}\n  (исходный пункт: {ref_value})"
+        result.append(line)
+    return result
+
+
+def _count_leaves_in_node(node: RequirementNode) -> int:
+    children = _node_children(node)
+    if not children:
+        return 1 if node["text"].strip() else 0
+    return sum(_count_leaves_in_node(child) for child in children.values())
+
+
+def collect_tz_sections(
+    hierarchy: dict[str, RequirementNode],
+) -> list[tuple[str, str, int]]:
+    """Return top-level TZ sections as (key, title, leaf_count)."""
+    normalized = normalize_tz_requirements(hierarchy)
+    sections: list[tuple[str, str, int]] = []
+    for key in sorted(normalized.keys(), key=_version_sort_key):
+        node = normalized[key]
+        title = str(node.get("text") or "").strip() or f"Раздел {key}"
+        count = _count_leaves_in_node(node)
+        if count > 0:
+            sections.append((str(key), title, count))
+    return sections
+
+
+def top_section_key(requirement_key: str | None) -> str | None:
+    """Return the top-level section key for a dotted requirement key."""
+    if not requirement_key:
+        return None
+    return requirement_key.replace("/", ".").split(".")[0]
+
+
+def group_flat_by_top_section(
+    tz_flat: list[str],
+) -> dict[str, list[str]]:
+    """Group flat requirement lines by top-level TZ section key."""
+    grouped: dict[str, list[str]] = {}
+    for requirement in tz_flat:
+        key = requirement_key_from_flat(requirement) or ""
+        section = top_section_key(key) or "__other__"
+        grouped.setdefault(section, []).append(requirement)
+    return grouped
+
+
+def render_digest_for_matching(
+    digest: dict[str, dict],
+    *,
+    section_keys: list[str] | None = None,
+) -> str:
+    """Render KP digest as compact Russian text for LLM matching."""
+    if not digest:
+        return ""
+
+    keys = section_keys if section_keys is not None else sorted(digest.keys())
+    lines: list[str] = []
+    for section_key in keys:
+        section = digest.get(section_key)
+        if not section or not isinstance(section, dict):
+            continue
+        title = str(section.get("title") or section_key).strip()
+        summary = str(section.get("summary") or "").strip()
+        header = f"[раздел {section_key}: {title}]"
+        if summary and summary != title:
+            header = f"{header} — {summary}"
+        lines.append(header)
+        for fact_index, fact in enumerate(section.get("facts") or [], start=1):
+            if not isinstance(fact, dict):
+                continue
+            ru_text = str(fact.get("ru_text") or "").strip()
+            if not ru_text:
+                continue
+            page = fact.get("page")
+            page_hint = ""
+            if page is not None:
+                try:
+                    page_hint = f" [КП, стр. {int(page)}]"
+                except (TypeError, ValueError):
+                    pass
+            lines.append(f"  {fact_index}. {ru_text}{page_hint}")
+            src_quote = str(fact.get("src_quote") or "").strip()
+            if src_quote:
+                lines.append(f"     (цитата: {src_quote})")
+        lines.append("")
+    return "\n".join(lines).strip()
+
+
 def count_requirements(data: object) -> int:
     """Count leaf requirements in a hierarchy."""
     return len(flatten_hierarchy(normalize_tz_requirements(data)))

@@ -249,6 +249,32 @@ async def list_thread_messages(
 
 
 @router.post(
+    "/{request_id}/suppliers/{rs_id}/mark-read",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Mark supplier thread as read",
+)
+async def mark_supplier_thread_read(
+    request_id: uuid.UUID,
+    rs_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> Response:
+    """Record that the user opened and read the supplier email thread."""
+    await get_request_or_404(request_id, session, current_user)
+    updated = await RequestSupplierDAO.mark_thread_read(
+        session,
+        request_id,
+        rs_id,
+    )
+    if updated is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Request supplier not found for this request",
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
     "/{request_id}/suppliers/{rs_id}/reply",
     status_code=status.HTTP_202_ACCEPTED,
     summary="Queue an outgoing reply in the thread",

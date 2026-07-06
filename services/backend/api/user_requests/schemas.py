@@ -129,7 +129,8 @@ class RequestResponse(BaseModel):
         Field(
             default=0,
             description=(
-                "Threads whose latest message is incoming (new supplier reply)"
+                "Threads with unread incoming supplier replies "
+                "(not opened since the last incoming message)"
             ),
         ),
     ] = 0

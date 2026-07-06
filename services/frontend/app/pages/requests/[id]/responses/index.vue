@@ -925,8 +925,27 @@ function selectThread(rsId: string) {
 	mainTab.value = 'thread'
 	replyBody.value = ''
 	replyError.value = null
-	fetchMessages(rsId)
+	void openThread(rsId)
+}
+
+async function openThread(rsId: string) {
+	const loaded = await fetchMessages(rsId)
+	if (loaded) {
+		await markThreadRead(rsId)
+	}
 	fetchAnalysis()
+}
+
+async function markThreadRead(rsId: string) {
+	try {
+		await post(`/requests/${id}/suppliers/${rsId}/mark-read`)
+		const thread = threads.value.find(t => t.rs_id === rsId)
+		if (thread) {
+			thread.unread = false
+		}
+	} catch {
+		// keep server state on next threads refresh
+	}
 }
 
 const messages = ref<Message[]>([])
@@ -937,7 +956,7 @@ const latestIncomingId = computed(() =>
 	[...messages.value].reverse().find(m => m.direction === 'incoming')?.id ?? null,
 )
 
-async function fetchMessages(rsId: string, options?: { silent?: boolean }) {
+async function fetchMessages(rsId: string, options?: { silent?: boolean }): Promise<boolean> {
 	const silent = options?.silent ?? false
 	if (!silent) {
 		loadingMessages.value = true
@@ -945,8 +964,10 @@ async function fetchMessages(rsId: string, options?: { silent?: boolean }) {
 	}
 	try {
 		messages.value = await get<Message[]>(`/requests/${id}/suppliers/${rsId}/messages`)
+		return true
 	} catch {
 		if (!silent) messages.value = []
+		return false
 	} finally {
 		if (!silent) loadingMessages.value = false
 		await nextTick()

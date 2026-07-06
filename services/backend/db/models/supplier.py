@@ -56,6 +56,10 @@ class RequestSupplier(IDMixinUUID, TimestampMixin, Base):
 
     is_enabled: Mapped[bool] = mapped_column(default=False)
     is_winner: Mapped[bool] = mapped_column(default=False)
+    thread_read_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     smtp_message_id: Mapped[str | None] = mapped_column()
 

@@ -249,7 +249,8 @@ _KP_DIGEST_EXAMPLE_JSON = """\
       "facts": [
         {
           "ru_text": "Объём сыроизготовителя: 8000 л",
-          "src_quote": "Cheese vat capacity: 8,000 liters"
+          "src_quote": "Cheese vat capacity: 8,000 liters",
+          "page": 3
         }
       ]
     }
@@ -552,8 +553,10 @@ def build_kp_normalize_prompt(
 draining_tunnel, packaging, automation, utilities и т.п.)
 3. Каждый факт — атомарное предложение на русском в ru_text
 4. src_quote — дословная цитата из КП на исходном языке (EN/IT)
-5. Не пропускай табличные данные и спецификации
-6. Не включай рекламный текст компании без технического содержания
+5. page — номер страницы из маркера «--- Страница N ---» во фрагменте; \
+если маркера нет — null
+6. Не пропускай табличные данные и спецификации
+7. Не включай рекламный текст компании без технического содержания
 
 ## Формат ответа
 
@@ -638,6 +641,70 @@ def _compliance_item_schema() -> str:
     }
   ]
 }"""
+
+
+def build_kp_digest_match_prompt(
+    tz_batch: list[str],
+    digest_text: str,
+    kp_name: str,
+    *,
+    batch_idx: int,
+    total_batches: int,
+    tz_page_map: dict[str, int] | None = None,
+) -> tuple[str, str]:
+    """Build forced-verdict prompt comparing TZ batch to full KP digest."""
+    from backend.utils.requirements_struct import annotate_flat_with_page
+
+    tz_lines: list[str] = []
+    for i, req in enumerate(tz_batch):
+        annotated = (
+            annotate_flat_with_page(req, tz_page_map, doc_label="ТЗ")
+            if tz_page_map
+            else req
+        )
+        tz_lines.append(f"{i + 1}. {annotated}")
+    tz_list = "\n".join(tz_lines)
+
+    system = f"""\
+Ты — специалист по анализу соответствия тендерных предложений. \
+Сравни требования ТЗ с нормализованным предложением поставщика \
+({kp_name}) из digest КП.
+
+Батч {batch_idx + 1} из {total_batches}.
+
+## Статусы (ОБЯЗАТЕЛЬНО для КАЖДОГО требования из списка)
+
+- "met"        — КП однозначно и строго выполняет ограничение ТЗ
+- "partial"    — КП упоминает тему, но условие закрыто неполно или с оговорками
+- "missing"    — в КП есть ответ, но он не соответствует требованию
+- "not_found"  — в digest КП нет информации по требованию (offer_value = null)
+
+{_STRICT_MATCH_RULES}
+
+## Правила
+
+1. Верни РОВНО одну запись items на КАЖДОЕ требование из списка — \
+не пропускай ни одного
+2. Поле requirement — точная формулировка из списка ТЗ (включая контекст \
+исходного пункта, если он указан)
+3. offer_value — конкретное предложение на русском из digest КП; \
+для not_found — null
+4. offer_ref — «Источник КП, стр N, раздел X» по локатору факта в digest; \
+для not_found — null
+5. requirement_ref формат: «Источник ТЗ, стр N, пункт X.Y» (без цитат)
+6. explanation обязателен для partial, missing, not_found; для met — кратко
+7. Ищи ответ по всему digest — не ограничивайся одним разделом
+
+{_STRICT_MATCH_EXAMPLES}
+
+Верни ТОЛЬКО JSON:
+{_compliance_item_schema()}"""
+
+    user = (
+        f"### Требования ТЗ:\n{tz_list}\n\n"
+        f"### Нормализованное КП ({kp_name}):\n{digest_text}"
+    )
+    return system, user
 
 
 def build_compliance_prompt(

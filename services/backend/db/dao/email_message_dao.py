@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 from backend.db.dao.base_dao import BaseDAO
 from backend.db.models import EmailMessage, RequestSupplier
 from backend.enums import EmailMessageDirection
-from backend.schemas import ThreadSummaryRow
+from backend.schemas.thread import ThreadSummaryRow, is_thread_unread
 
 
 class EmailMessageDAO(BaseDAO[EmailMessage]):
@@ -293,7 +293,8 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
     ) -> dict[uuid.UUID, tuple[int, int, int]]:
         """Return (total, incoming, unread_threads) per request id.
 
-        unread_threads = supplier links whose latest message is incoming.
+        unread_threads = supplier links whose latest incoming message is newer
+        than thread_read_at (or never marked read).
         """
         if not request_ids:
             return {}
@@ -337,7 +338,7 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
             rs = message.request_supplier
             if rs is None:
                 continue
-            if message.direction == EmailMessageDirection.INCOMING.value:
+            if is_thread_unread(message, rs.thread_read_at):
                 unread[rs.request_id] = unread.get(rs.request_id, 0) + 1
 
         return {
