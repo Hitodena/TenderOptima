@@ -76,7 +76,13 @@ class Config(BaseSettings):
     # OpenAI
     openai_api_key: str
     openai_model: str
+    openai_model_kp: str = ""
     openai_base_url: str
+
+    def openai_model_for_kp(self) -> str:
+        """KP analysis model; falls back to ``openai_model`` when unset."""
+        kp = self.openai_model_kp.strip()
+        return kp if kp else self.openai_model
 
     # Upload
     upload_dir: str = "/app/uploads"

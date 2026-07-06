@@ -4,6 +4,7 @@ from pathlib import Path
 from loguru import logger
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
+from backend.core.config import get_config
 from backend.enums import TZAnalysisStatus
 from backend.schemas.analysis import (
     TZAnalysisItem,
@@ -41,6 +42,8 @@ from backend.utils.requirements_struct import (
     resolve_letter_tz_fields,
 )
 from backend.utils.text_chunker import chunk_text, clean_text
+
+config = get_config()
 
 _router = ExtractorRouter()
 _assembler = TextAssembler()
@@ -160,7 +163,11 @@ async def _llm_extract_tz_chunk(
     last_exc: Exception | None = None
     for attempt in range(1, _LLM_CHUNK_MAX_ATTEMPTS + 1):
         try:
-            raw = await llm_client.complete(system, user)
+            raw = await llm_client.complete(
+                system,
+                user,
+                model=config.openai_model,
+            )
             coerced = _coerce_llm_payload(raw, result_key)
             parsed = result_model(**coerced)
             partial = parsed.requirements
@@ -341,7 +348,11 @@ async def fill_empty_headings(
     names: dict[str, str] = {}
     system, user = build_heading_names_prompt(empty)
     try:
-        raw = await llm_client.complete(system, user)
+        raw = await llm_client.complete(
+            system,
+            user,
+            model=config.openai_model,
+        )
         parsed = HeadingNamesResult(**raw)
         names = {
             _heading_node_key(key): str(value).strip()
@@ -515,6 +526,7 @@ async def _llm_call_with_retry(
     user: str,
     result_model: type[BaseModel],
     *,
+    model: str,
     analysis_id: str,
     user_id: str,
     stage: str,
@@ -524,7 +536,7 @@ async def _llm_call_with_retry(
     log_ctx = context or {}
     for attempt in range(1, _LLM_CHUNK_MAX_ATTEMPTS + 1):
         try:
-            raw = await llm_client.complete(system, user)
+            raw = await llm_client.complete(system, user, model=model)
             return result_model(**raw)
         except (ValidationError, ValueError, TypeError) as exc:
             last_exc = exc
@@ -565,6 +577,7 @@ async def _llm_normalize_kp_chunk(
         system,
         user,
         KPNormalizeResult,
+        model=config.openai_model_for_kp(),
         analysis_id=analysis_id,
         user_id=user_id,
         stage="kp_normalize",
@@ -682,6 +695,7 @@ async def _llm_recall_batch(
         system,
         user,
         TZAnalysisResult,
+        model=config.openai_model_for_kp(),
         analysis_id=analysis_id,
         user_id=user_id,
         stage="recall_sweep",
@@ -919,6 +933,7 @@ async def _llm_match_chunk_batch(
         system,
         user,
         TZAnalysisResult,
+        model=config.openai_model_for_kp(),
         analysis_id=analysis_id,
         user_id=user_id,
         stage="chunk_match",

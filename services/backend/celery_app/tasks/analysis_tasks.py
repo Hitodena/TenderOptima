@@ -502,7 +502,7 @@ async def run_tz_kp_compare(self, analysis_id: str) -> dict:
             missing_count=result.missing_count,
             not_found_count=result.not_found_count,
             tz_requirements_count=result.tz_requirements_count,
-            llm_model=config.openai_model,
+            llm_model=config.openai_model_for_kp(),
             status=TZAnalysisRunStatus.ACTIVE.value,
         )
     logger.info(
@@ -650,7 +650,7 @@ async def run_tz_compare(self, analysis_id: str) -> dict:
             missing_count=result.missing_count,
             not_found_count=result.not_found_count,
             tz_requirements_count=result.tz_requirements_count,
-            llm_model=config.openai_model,
+            llm_model=config.openai_model_for_kp(),
             status=TZAnalysisRunStatus.ACTIVE.value,
         )
     logger.info(
@@ -827,7 +827,7 @@ async def run_supplier_kp_process(
             missing_count=top_stats["missing_count"],
             not_found_count=top_stats["not_found_count"],
             tz_requirements_count=result.tz_requirements_count,
-            llm_model=config.openai_model,
+            llm_model=config.openai_model_for_kp(),
             status=TZAnalysisRunStatus.ACTIVE.value,
         )
 

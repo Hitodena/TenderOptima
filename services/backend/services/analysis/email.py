@@ -2,6 +2,7 @@ from pathlib import Path
 
 from loguru import logger
 
+from backend.core.config import get_config
 from backend.enums import TZAnalysisStatus
 from backend.schemas.analysis import EmailAnalysisResult, RequirementMatch
 from backend.services.extraction.assembler import TextAssembler
@@ -12,6 +13,8 @@ from backend.services.extraction.router import (
 from backend.services.llm.client import llm_client
 from backend.services.llm.prompts.email import build_email_prompt
 from backend.utils.ocr import OcrNotAvailableError
+
+config = get_config()
 
 _router = ExtractorRouter()
 _assembler = TextAssembler()
@@ -121,7 +124,11 @@ async def analyze_email(
         baseline_matches=baseline_matches,
         prior_matches=prior_matches,
     )
-    raw = await llm_client.complete(system, user)
+    raw = await llm_client.complete(
+        system,
+        user,
+        model=config.openai_model,
+    )
 
     result = EmailAnalysisResult(**raw)
     if prior_matches:
