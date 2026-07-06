@@ -76,15 +76,37 @@
 								>
 									Добавить всех
 								</UButton>
-								<UButton
-									v-if="canModifyList(list)"
-									size="xs"
-									variant="ghost"
-									color="error"
-									icon="i-lucide-trash-2"
-									:loading="deletingListId === list.id"
-									@click.stop="removeList(list.id)"
-								/>
+								<template v-if="canModifyList(list)">
+									<template v-if="confirmDeleteListId === list.id">
+										<UButton
+											size="xs"
+											color="error"
+											variant="soft"
+											icon="i-lucide-check"
+											aria-label="Подтвердить удаление базы"
+											:loading="deletingListId === list.id"
+											@click.stop="confirmRemoveList(list.id)"
+										/>
+										<UButton
+											size="xs"
+											color="neutral"
+											variant="ghost"
+											icon="i-lucide-x"
+											aria-label="Отменить удаление"
+											@click.stop="confirmDeleteListId = null"
+										/>
+									</template>
+									<UButton
+										v-else
+										size="xs"
+										variant="ghost"
+										color="error"
+										icon="i-lucide-trash-2"
+										aria-label="Удалить базу"
+										:loading="deletingListId === list.id"
+										@click.stop="startDeleteListConfirm(list.id)"
+									/>
+								</template>
 							</button>
 
 							<div v-if="expandedListIds.has(list.id)" class="border-t border-default p-3 space-y-3 bg-elevated/20">
@@ -114,15 +136,37 @@
 											icon="i-lucide-pencil"
 											@click="openEditItemModal(list.id, item)"
 										/>
-										<UButton
-											v-if="canModifyList(list)"
-											size="xs"
-											variant="ghost"
-											color="error"
-											icon="i-lucide-trash-2"
-											:loading="deletingItemId === item.id"
-											@click="removeItem(list.id, item.id)"
-										/>
+										<template v-if="canModifyList(list)">
+											<template v-if="confirmDeleteItemId === item.id">
+												<UButton
+													size="xs"
+													color="error"
+													variant="soft"
+													icon="i-lucide-check"
+													aria-label="Подтвердить удаление"
+													:loading="deletingItemId === item.id"
+													@click.stop="confirmRemoveItem(list.id, item.id)"
+												/>
+												<UButton
+													size="xs"
+													color="neutral"
+													variant="ghost"
+													icon="i-lucide-x"
+													aria-label="Отменить удаление"
+													@click.stop="confirmDeleteItemId = null"
+												/>
+											</template>
+											<UButton
+												v-else
+												size="xs"
+												variant="ghost"
+												color="error"
+												icon="i-lucide-trash-2"
+												aria-label="Удалить поставщика"
+												:loading="deletingItemId === item.id"
+												@click.stop="startDeleteItemConfirm(item.id)"
+											/>
+										</template>
 										<UButton
 											size="sm"
 											variant="soft"
@@ -206,6 +250,8 @@ const loading = ref(false)
 const savingList = ref(false)
 const deletingListId = ref<string | null>(null)
 const deletingItemId = ref<string | null>(null)
+const confirmDeleteListId = ref<string | null>(null)
+const confirmDeleteItemId = ref<string | null>(null)
 const addingItemId = ref<string | null>(null)
 const addingListId = ref<string | null>(null)
 const search = ref('')
@@ -254,6 +300,31 @@ function normalizeDomain(value: string | null | undefined): string | null {
 function normalizePhone(value: string | null | undefined): string | null {
 	const trimmed = (value ?? '').trim()
 	return trimmed || null
+}
+
+function clearDeleteConfirm() {
+	confirmDeleteListId.value = null
+	confirmDeleteItemId.value = null
+}
+
+function startDeleteListConfirm(listId: string) {
+	confirmDeleteItemId.value = null
+	confirmDeleteListId.value = listId
+}
+
+function startDeleteItemConfirm(itemId: string) {
+	confirmDeleteListId.value = null
+	confirmDeleteItemId.value = itemId
+}
+
+async function confirmRemoveList(listId: string) {
+	confirmDeleteListId.value = null
+	await removeList(listId)
+}
+
+async function confirmRemoveItem(listId: string, itemId: string) {
+	confirmDeleteItemId.value = null
+	await removeItem(listId, itemId)
 }
 
 function toggleList(listId: string) {
@@ -408,5 +479,10 @@ async function addAllToRequest(list: SupplierBookmarkList) {
 
 watch(isOpen, (open) => {
 	if (open) fetchLists()
+	else clearDeleteConfirm()
+})
+
+watch(search, () => {
+	clearDeleteConfirm()
 })
 </script>

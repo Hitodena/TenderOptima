@@ -4,7 +4,7 @@
 		:scope-id="scopeId"
 		:show-heading-hint="showHeadingHint"
 		:readonly="readonly"
-		@remove="(index) => emit('remove', index)"
+		@remove="handleRemove"
 		@add-child="handleAddChild"
 		@add-heading="handleAddHeading"
 		@add-sibling="handleAddSibling"
@@ -43,6 +43,7 @@ const rootKeys = computed(() => new Set(tree.value.map((node) => node.key)))
 const sectionExpanded = ref<Record<string, boolean>>({})
 const dragFromIndex = ref<number | null>(null)
 const dropTargetIndex = ref<number | null>(null)
+const confirmRemoveIndex = ref<number | null>(null)
 
 function sectionKey(key: string) {
 	return `${props.scopeId}:${key}`
@@ -71,6 +72,11 @@ function expandSection(key: string) {
 	}
 }
 
+function handleRemove(index: number) {
+	confirmRemoveIndex.value = null
+	emit('remove', index)
+}
+
 function handleAddChild(parentKey: string) {
 	expandSection(parentKey)
 	emit('add-child', parentKey)
@@ -94,6 +100,7 @@ provide('requirementTreeEditor', {
 	isSectionExpanded,
 	dragFromIndex,
 	dropTargetIndex,
+	confirmRemoveIndex,
 })
 provide('editableRequirementRows', toRef(props, 'rows'))
 </script>

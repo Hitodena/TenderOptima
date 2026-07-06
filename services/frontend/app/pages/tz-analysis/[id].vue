@@ -175,6 +175,7 @@ v-if="isTzReviewPhase && !isAnalysisClosed"
 							</template>
 
 							<div
+								ref="tzRequirementsScrollRef"
 								class="overflow-y-auto pr-1"
 								:class="!isTzConfirmed && !isCompleted
 									? 'max-h-[min(58vh,calc(100dvh-18rem))]'
@@ -1653,15 +1654,67 @@ function updateEditableRequirementsTz(
 	)
 }
 
+const tzRequirementsScrollRef = ref<HTMLElement | null>(null)
+
+function tzRequirementsScopeId() {
+	return isTzConfirmed.value ? 'tz-results' : 'tz-review'
+}
+
+function scrollToRequirementRowSync(
+	rowIndex: number,
+	scopeId: string,
+	attempt = 0,
+) {
+	const container = tzRequirementsScrollRef.value
+	if (!container) return
+
+	const el = container.querySelector<HTMLElement>(
+		`[data-row-index="${scopeId}:${rowIndex}"]`,
+	)
+	if (!el) {
+		if (attempt < 8) {
+			requestAnimationFrame(() =>
+				scrollToRequirementRowSync(rowIndex, scopeId, attempt + 1),
+			)
+		}
+		return
+	}
+
+	const containerRect = container.getBoundingClientRect()
+	const elRect = el.getBoundingClientRect()
+	const offsetTop = elRect.top - containerRect.top + container.scrollTop
+	const targetScroll = offsetTop - container.clientHeight / 2 + elRect.height / 2
+	container.scrollTo({
+		top: Math.max(0, targetScroll),
+		behavior: 'smooth',
+	})
+}
+
+function scrollToRequirementRow(rowIndex: number) {
+	const scopeId = tzRequirementsScopeId()
+	nextTick(() => {
+		requestAnimationFrame(() => {
+			scrollToRequirementRowSync(rowIndex, scopeId)
+		})
+	})
+}
+
 function addTzRequirement() {
 	updateEditableRequirementsTz((rows) => [
 		...rows,
 		{ key: nextTopLevelKey(rows), text: '' },
 	])
+	scrollToRequirementRow(editableRequirementsTz.value.length - 1)
 }
 
 function addTzChildRequirement(parentKey: string) {
 	const parentNorm = parentKey.trim().replace(/\//g, '.')
+	const parentIndex = editableRequirementsTz.value.findIndex(
+		(row) => row.key.trim().replace(/\//g, '.') === parentNorm,
+	)
+	const insertIndex = parentIndex === -1
+		? editableRequirementsTz.value.length
+		: parentIndex + 1
 	updateEditableRequirementsTz((rows) => {
 		const withHeading = rows.map((row) =>
 			row.key.trim().replace(/\//g, '.') === parentNorm
@@ -1670,12 +1723,21 @@ function addTzChildRequirement(parentKey: string) {
 		)
 		return insertChildAfterParentRow(withHeading, parentKey)
 	})
+	scrollToRequirementRow(insertIndex)
 }
 
 function addTzHeadingRequirement(parentKey: string) {
+	const parentNorm = parentKey.trim().replace(/\//g, '.')
+	const parentIndex = editableRequirementsTz.value.findIndex(
+		(row) => row.key.trim().replace(/\//g, '.') === parentNorm,
+	)
+	const insertIndex = parentIndex === -1
+		? editableRequirementsTz.value.length
+		: parentIndex + 1
 	updateEditableRequirementsTz((rows) =>
 		insertChildAfterParentRow(rows, parentKey, { isHeading: true }),
 	)
+	scrollToRequirementRow(insertIndex)
 }
 
 function removeTzRequirement(index: number) {
@@ -1692,19 +1754,13 @@ function addTzSiblingRequirement(afterIndex: number) {
 	)
 	const inserted = editableRequirementsTz.value[insertIndex]
 	const rowKey = inserted?.key ?? ''
-	const scopeId = isTzConfirmed.value ? 'tz-results' : 'tz-review'
 	const isTopLevel = rowKey.length > 0 && !rowKey.includes('.')
 	toast.add({
 		title: isTopLevel ? `Добавлен раздел ${rowKey}` : `Добавлен пункт ${rowKey}`,
 		color: 'success',
 		icon: 'i-lucide-check',
 	})
-	nextTick(() => {
-		const el = document.querySelector(
-			`[data-row-key="${scopeId}:${rowKey}"]`,
-		)
-		el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-	})
+	scrollToRequirementRow(insertIndex)
 }
 
 function reorderTzRequirement(fromIndex: number, toIndex: number) {

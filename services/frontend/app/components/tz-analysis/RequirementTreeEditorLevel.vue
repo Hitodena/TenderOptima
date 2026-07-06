@@ -5,6 +5,7 @@
 			:key="`${scopeId}-${node.key}-${node.rowIndex ?? 'h'}`"
 			class="space-y-3"
 			:data-row-key="node.rowIndex !== undefined ? `${scopeId}:${node.key}` : undefined"
+			:data-row-index="node.rowIndex !== undefined ? `${scopeId}:${node.rowIndex}` : undefined"
 		>
 			<template v-if="node.isHeading || node.children.length > 0">
 				<div
@@ -72,14 +73,35 @@
 						/>
 						</div>
 						<div v-if="!readonly && node.rowIndex !== undefined" class="flex shrink-0 items-start gap-0.5 mt-1.5">
+							<template v-if="editor.confirmRemoveIndex.value === node.rowIndex">
+								<UButton
+									type="button"
+									size="sm"
+									color="error"
+									variant="soft"
+									icon="i-lucide-check"
+									aria-label="Подтвердить удаление"
+									@click="confirmRemove(node.rowIndex!)"
+								/>
+								<UButton
+									type="button"
+									size="sm"
+									color="neutral"
+									variant="ghost"
+									icon="i-lucide-x"
+									aria-label="Отменить удаление"
+									@click="editor.confirmRemoveIndex.value = null"
+								/>
+							</template>
 							<UButton
+								v-else
 								type="button"
 								variant="ghost"
 								color="error"
 								size="sm"
 								icon="i-lucide-trash-2"
 								aria-label="Удалить пункт"
-								@click="emit('remove', node.rowIndex!)"
+								@click="editor.confirmRemoveIndex.value = node.rowIndex!"
 							/>
 							<button
 								type="button"
@@ -157,14 +179,35 @@
 						/>
 						</div>
 						<div v-if="!readonly" class="flex shrink-0 items-start gap-0.5 mt-1.5">
+							<template v-if="editor.confirmRemoveIndex.value === node.rowIndex">
+								<UButton
+									type="button"
+									size="sm"
+									color="error"
+									variant="soft"
+									icon="i-lucide-check"
+									aria-label="Подтвердить удаление"
+									@click="confirmRemove(node.rowIndex)"
+								/>
+								<UButton
+									type="button"
+									size="sm"
+									color="neutral"
+									variant="ghost"
+									icon="i-lucide-x"
+									aria-label="Отменить удаление"
+									@click="editor.confirmRemoveIndex.value = null"
+								/>
+							</template>
 							<UButton
+								v-else
 								type="button"
 								variant="ghost"
 								color="error"
 								size="sm"
 								icon="i-lucide-trash-2"
 								aria-label="Удалить пункт"
-								@click="emit('remove', node.rowIndex)"
+								@click="editor.confirmRemoveIndex.value = node.rowIndex"
 							/>
 							<button
 								type="button"
@@ -215,7 +258,13 @@ const editor = inject<{
 	isSectionExpanded: (key: string) => boolean
 	dragFromIndex: Ref<number | null>
 	dropTargetIndex: Ref<number | null>
+	confirmRemoveIndex: Ref<number | null>
 }>('requirementTreeEditor')!
+
+function confirmRemove(rowIndex: number) {
+	emit('remove', rowIndex)
+	editor.confirmRemoveIndex.value = null
+}
 
 function onAddSibling(node: RequirementTreeNode) {
 	if (node.rowIndex === undefined) return
