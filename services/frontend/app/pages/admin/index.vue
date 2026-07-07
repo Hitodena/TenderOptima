@@ -23,7 +23,8 @@
 						<div class="space-y-4">
 							<div class="flex items-center justify-between flex-wrap gap-3">
 								<p class="text-sm text-muted">
-									Всего записей: <span class="font-semibold text-highlighted">{{ errorsTotal }}</span>
+									{{ t('admin.errors.totalLabel') }}
+									<span class="font-semibold text-highlighted">{{ errorsTotal }}</span>
 								</p>
 							</div>
 
@@ -32,35 +33,71 @@
 									:data="errors"
 									:columns="errorColumns"
 									:loading="loadingErrors"
-									class="min-w-[700px]"
+									:ui="{
+										td: 'align-top py-3',
+										th: 'whitespace-nowrap',
+									}"
+									class="min-w-[960px] sm:min-w-[1100px] lg:min-w-[1280px]"
 								>
 									<template #empty>
 										<div class="flex flex-col items-center justify-center py-12 gap-3">
 											<UIcon name="i-lucide-check-circle" class="w-10 h-10 text-muted opacity-40" />
-											<p class="text-muted">Ошибок нет</p>
+											<p class="text-muted">{{ t('admin.errors.empty') }}</p>
 										</div>
 									</template>
 
 									<template #created_at-cell="{ row }">
-										<span class="text-xs text-muted whitespace-nowrap">{{ formatDate(row.original.created_at) }}</span>
+										<span class="text-xs text-muted whitespace-nowrap tabular-nums">
+											{{ formatDate(row.original.created_at) }}
+										</span>
+									</template>
+
+									<template #created_time-cell="{ row }">
+										<span class="text-xs text-muted whitespace-nowrap tabular-nums">
+											{{ formatTime(row.original.created_at) }}
+										</span>
 									</template>
 
 									<template #user-cell="{ row }">
-										<div v-if="row.original.user" class="min-w-0">
-											<p class="text-xs font-medium truncate max-w-36">{{ row.original.user.email }}</p>
-											<p v-if="row.original.user.full_name" class="text-xs text-muted truncate max-w-36">{{ row.original.user.full_name }}</p>
+										<div v-if="row.original.user" class="min-w-[8rem] max-w-[12rem] sm:max-w-[14rem]">
+											<p class="text-xs font-medium break-all">{{ row.original.user.email }}</p>
+											<p v-if="row.original.user.full_name" class="text-xs text-muted break-words mt-0.5">
+												{{ row.original.user.full_name }}
+											</p>
 										</div>
 										<span v-else class="text-xs text-muted">—</span>
 									</template>
 
 									<template #page_url-cell="{ row }">
-										<span class="text-xs font-mono text-muted truncate max-w-36 block" :title="row.original.page_url ?? undefined">
-											{{ row.original.page_url ?? '—' }}
-										</span>
+										<div
+											v-if="row.original.page_url"
+											class="min-w-[8rem] max-w-[14rem] sm:max-w-[16rem] lg:max-w-[18rem]"
+										>
+											<p
+												class="text-xs font-mono text-muted break-all"
+												:class="isExpanded('page', row.original.id) ? 'whitespace-pre-wrap' : 'line-clamp-3'"
+											>
+												{{ row.original.page_url }}
+											</p>
+											<UButton
+												v-if="shouldShowToggle(row.original.page_url, 120)"
+												variant="link"
+												color="primary"
+												size="xs"
+												class="px-0 mt-1 h-auto"
+												@click="toggleExpand('page', row.original.id)"
+											>
+												{{ isExpanded('page', row.original.id) ? t('admin.errors.showLess') : t('admin.errors.showMore') }}
+											</UButton>
+										</div>
+										<span v-else class="text-xs text-muted">—</span>
 									</template>
 
 									<template #request-cell="{ row }">
-										<div v-if="row.original.request_method || row.original.request_url" class="min-w-0">
+										<div
+											v-if="row.original.request_method || row.original.request_url"
+											class="min-w-[8rem] max-w-[14rem] sm:max-w-[16rem] lg:max-w-[18rem]"
+										>
 											<UBadge
 												v-if="row.original.request_method"
 												color="neutral"
@@ -70,9 +107,23 @@
 											>
 												{{ row.original.request_method }}
 											</UBadge>
-											<p class="text-xs font-mono text-muted truncate max-w-48" :title="row.original.request_url ?? undefined">
-												{{ row.original.request_url ?? '' }}
+											<p
+												v-if="row.original.request_url"
+												class="text-xs font-mono text-muted break-all"
+												:class="isExpanded('req', row.original.id) ? 'whitespace-pre-wrap' : 'line-clamp-3'"
+											>
+												{{ row.original.request_url }}
 											</p>
+											<UButton
+												v-if="row.original.request_url && shouldShowToggle(row.original.request_url, 120)"
+												variant="link"
+												color="primary"
+												size="xs"
+												class="px-0 mt-1 h-auto"
+												@click="toggleExpand('req', row.original.id)"
+											>
+												{{ isExpanded('req', row.original.id) ? t('admin.errors.showLess') : t('admin.errors.showMore') }}
+											</UButton>
 										</div>
 										<span v-else class="text-xs text-muted">—</span>
 									</template>
@@ -90,40 +141,62 @@
 									</template>
 
 									<template #message-cell="{ row }">
-										<div class="max-w-64">
+										<div class="min-w-[10rem] max-w-[16rem] sm:max-w-[20rem] lg:max-w-[24rem]">
 											<p
-												class="text-xs truncate cursor-pointer hover:text-highlighted transition-colors"
-												:title="row.original.message"
+												class="text-xs break-words"
+												:class="isExpanded('error', row.original.id) ? 'whitespace-pre-wrap' : 'line-clamp-4'"
+											>
+												{{ row.original.message }}
+											</p>
+											<UButton
+												v-if="shouldShowToggle(row.original.message, 160)"
+												variant="link"
+												color="primary"
+												size="xs"
+												class="px-0 mt-1 h-auto"
 												@click="toggleExpand('error', row.original.id)"
 											>
-												{{ row.original.message }}
-											</p>
-											<p
-												v-if="expanded.has(`error:${row.original.id}`)"
-												class="text-xs text-muted mt-1 wrap-break-word whitespace-pre-wrap"
-											>
-												{{ row.original.message }}
-											</p>
+												{{ isExpanded('error', row.original.id) ? t('admin.errors.showLess') : t('admin.errors.showMore') }}
+											</UButton>
 										</div>
 									</template>
 
 									<template #backend_response-cell="{ row }">
-										<div v-if="row.original.backend_response" class="max-w-48">
-											<p
-												class="text-xs truncate cursor-pointer text-muted hover:text-highlighted transition-colors font-mono"
-												:title="row.original.backend_response"
+										<div
+											v-if="row.original.backend_response"
+											class="min-w-[10rem] max-w-[16rem] sm:max-w-[20rem] lg:max-w-[24rem]"
+										>
+											<pre
+												class="text-xs font-mono text-muted break-all whitespace-pre-wrap"
+												:class="isExpanded('resp', row.original.id) ? '' : 'line-clamp-4'"
+											>{{ row.original.backend_response }}</pre>
+											<UButton
+												v-if="shouldShowToggle(row.original.backend_response, 160)"
+												variant="link"
+												color="primary"
+												size="xs"
+												class="px-0 mt-1 h-auto"
 												@click="toggleExpand('resp', row.original.id)"
 											>
-												{{ row.original.backend_response }}
-											</p>
-											<p
-												v-if="expanded.has(`resp:${row.original.id}`)"
-												class="text-xs text-muted mt-1 wrap-break-word whitespace-pre-wrap font-mono"
-											>
-												{{ row.original.backend_response }}
-											</p>
+												{{ isExpanded('resp', row.original.id) ? t('admin.errors.showLess') : t('admin.errors.showMore') }}
+											</UButton>
 										</div>
 										<span v-else class="text-xs text-muted">—</span>
+									</template>
+
+									<template #actions-cell="{ row }">
+										<div class="flex justify-end min-w-[2.5rem]">
+											<UButton
+												size="xs"
+												variant="ghost"
+												color="neutral"
+												icon="i-lucide-copy"
+												:aria-label="t('admin.errors.copyRow')"
+												:title="t('admin.errors.copyRow')"
+												:loading="copyingErrorId === row.original.id"
+												@click="copyErrorRow(row.original)"
+											/>
+										</div>
 									</template>
 								</UTable>
 							</div>
@@ -298,11 +371,13 @@ import type {
 	IdeaSuggestionResponse,
 	UserResponse,
 } from '#shared/types'
+import { t } from '~/constants/translations'
 
 definePageMeta({ layout: 'default' })
 
 const { get, post, del: delReq } = useApi()
-const { formatDate } = useFormatDate()
+const { formatDate, formatTime } = useFormatDate()
+const toast = useToast()
 
 const user = ref<UserResponse | null>(null)
 try {
@@ -326,13 +401,82 @@ const tabs = [
 ]
 
 const expanded = ref<Set<string>>(new Set())
+const copyingErrorId = ref<string | null>(null)
+
+function expandKey(prefix: string, id: string): string {
+	return `${prefix}:${id}`
+}
+
+function isExpanded(prefix: string, id: string): boolean {
+	return expanded.value.has(expandKey(prefix, id))
+}
 
 function toggleExpand(prefix: string, id: string) {
-	const key = `${prefix}:${id}`
+	const key = expandKey(prefix, id)
 	if (expanded.value.has(key)) {
 		expanded.value.delete(key)
 	} else {
 		expanded.value.add(key)
+	}
+}
+
+function shouldShowToggle(text: string, threshold: number): boolean {
+	return text.length > threshold
+}
+
+function serializeErrorRow(row: FrontendErrorLogResponse): string {
+	const payload = {
+		id: row.id,
+		user_id: row.user_id,
+		user: row.user,
+		message: row.message,
+		backend_response: row.backend_response,
+		page_url: row.page_url,
+		request_method: row.request_method,
+		request_url: row.request_url,
+		status_code: row.status_code,
+		created_at: row.created_at,
+	}
+	return JSON.stringify(payload, null, 2)
+}
+
+async function copyTextToClipboard(text: string): Promise<boolean> {
+	if (import.meta.client && navigator.clipboard?.writeText) {
+		try {
+			await navigator.clipboard.writeText(text)
+			return true
+		} catch {
+			// fall through to legacy copy
+		}
+	}
+
+	if (!import.meta.client) return false
+
+	const textarea = document.createElement('textarea')
+	textarea.value = text
+	textarea.setAttribute('readonly', '')
+	textarea.style.position = 'fixed'
+	textarea.style.opacity = '0'
+	document.body.appendChild(textarea)
+	textarea.select()
+	const copied = document.execCommand('copy')
+	document.body.removeChild(textarea)
+	return copied
+}
+
+async function copyErrorRow(row: FrontendErrorLogResponse) {
+	if (copyingErrorId.value) return
+	copyingErrorId.value = row.id
+	try {
+		const copied = await copyTextToClipboard(serializeErrorRow(row))
+		toast.add({
+			title: copied ? t('admin.errors.copyRowSuccess') : t('admin.errors.copyRowError'),
+			color: copied ? 'success' : 'error',
+		})
+	} catch {
+		toast.add({ title: t('admin.errors.copyRowError'), color: 'error' })
+	} finally {
+		copyingErrorId.value = null
 	}
 }
 
@@ -356,13 +500,15 @@ const errorsPage = ref(1)
 const loadingErrors = ref(false)
 
 const errorColumns: TableColumn<FrontendErrorLogResponse>[] = [
-	{ accessorKey: 'created_at', header: 'Дата' },
-	{ accessorKey: 'user', header: 'Пользователь' },
-	{ accessorKey: 'page_url', header: 'Страница' },
-	{ id: 'request', accessorKey: 'request_url', header: 'Метод / URL' },
-	{ accessorKey: 'status_code', header: 'Статус' },
-	{ accessorKey: 'message', header: 'Сообщение' },
-	{ accessorKey: 'backend_response', header: 'Ответ бэкенда' },
+	{ accessorKey: 'created_at', header: t('admin.errors.dateColumn') },
+	{ id: 'created_time', accessorKey: 'created_at', header: t('admin.errors.timeColumn') },
+	{ accessorKey: 'user', header: t('admin.errors.userColumn') },
+	{ accessorKey: 'page_url', header: t('admin.errors.pageColumn') },
+	{ id: 'request', accessorKey: 'request_url', header: t('admin.errors.requestColumn') },
+	{ accessorKey: 'status_code', header: t('admin.errors.statusColumn') },
+	{ accessorKey: 'message', header: t('admin.errors.messageColumn') },
+	{ accessorKey: 'backend_response', header: t('admin.errors.backendResponseColumn') },
+	{ id: 'actions', header: t('admin.errors.actionsColumn') },
 ]
 
 async function fetchErrors() {
@@ -429,8 +575,6 @@ onMounted(() => {
 })
 
 // --- Blacklist tab ---
-
-const toast = useToast()
 
 const blacklist = ref<BlacklistResponse[]>([])
 const loadingBlacklist = ref(false)
