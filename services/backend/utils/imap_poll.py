@@ -41,27 +41,38 @@ def build_poll_mailboxes(
 ) -> list[MailPollMailbox]:
     """Build deduplicated mailbox list: per-user first, then global fallback."""
     cfg = config or get_config()
-    mailboxes: list[MailPollMailbox] = []
-    seen_keys: set[tuple[str, str]] = set()
+    global_creds = resolve_imap_credentials(None, cfg)
+    global_key = (global_creds.host, global_creds.user)
 
+    groups: dict[tuple[str, str], list[tuple[User, ImapCredentials]]] = {}
     for user in imap_users:
         creds = resolve_imap_credentials(user, cfg)
         key = (creds.host, creds.user)
-        if key in seen_keys:
-            continue
-        seen_keys.add(key)
-        mailboxes.append(
-            MailPollMailbox(
-                label=str(user.id),
-                owner_user_id=user.id,
-                creds=creds,
-            )
-        )
+        groups.setdefault(key, []).append((user, creds))
 
-    global_creds = resolve_imap_credentials(None, cfg)
-    global_key = (global_creds.host, global_creds.user)
-    if global_key not in seen_keys:
-        seen_keys.add(global_key)
+    mailboxes: list[MailPollMailbox] = []
+    for key, entries in groups.items():
+        creds = entries[0][1]
+        is_shared = len(entries) > 1 or key == global_key
+        if is_shared:
+            mailboxes.append(
+                MailPollMailbox(
+                    label="global",
+                    owner_user_id=None,
+                    creds=creds,
+                )
+            )
+        else:
+            owner = entries[0][0]
+            mailboxes.append(
+                MailPollMailbox(
+                    label=str(owner.id),
+                    owner_user_id=owner.id,
+                    creds=creds,
+                )
+            )
+
+    if global_key not in groups:
         mailboxes.append(
             MailPollMailbox(
                 label="global",
