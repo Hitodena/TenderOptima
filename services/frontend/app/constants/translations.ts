@@ -126,6 +126,7 @@ export const translations = {
 		insertIntoReply: 'Вставить в ответ',
 		cancel: 'Отмена',
 		openSupplierThread: 'Открыть переписку с поставщиком',
+		correctedManually: '(изменено вручную)',
 		requisitesHint: 'Для лучшей обратной связи всегда оставляйте реквизиты.',
 		businessCardMissing: 'Визитная карточка не настроена',
 		businessCardMissingHint: 'Заполните её в профиле',

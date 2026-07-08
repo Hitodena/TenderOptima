@@ -249,8 +249,7 @@ v-if="comparisonUserCorrected(supplier, req)"
 																supplier.corrected_from?.[req]
 															}}</span>
 															→ {{ supplier.values[req] }}
-															<span class="text-primary/80">(изменено
-																пользователем)</span>
+															<span class="text-primary/80">{{ t('inbox.correctedManually') }}</span>
 														</p>
 														<p
 v-else-if="getOfferValueTrend(supplier.values[req], supplier.previous_values?.[req])"
@@ -601,7 +600,7 @@ class="text-xs"
 												<p v-if="matchUserCorrected(m)" class="text-[10px] text-muted mt-0.5">
 													<span class="line-through">{{ m.corrected_from }}</span>
 													→ {{ m.offer_value }}
-													<span class="text-primary/80">(изменено пользователем)</span>
+													<span class="text-primary/80">{{ t('inbox.correctedManually') }}</span>
 												</p>
 												<p
 v-else-if="matchOfferChanged(m)"
