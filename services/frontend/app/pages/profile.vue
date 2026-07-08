@@ -129,6 +129,36 @@ v-if="profileSuccess" color="success" variant="soft" icon="i-lucide-check"
 							/>
 
 							<UCard v-else :ui="{ body: 'p-5 space-y-6' }">
+								<UFormField
+									:label="t('profile.currentSenderEmail')"
+									:hint="t('profile.currentSenderHint')"
+								>
+									<UInput
+										:model-value="mailSettings?.current_sender_email ?? '—'"
+										class="w-full"
+										icon="i-lucide-mail"
+										disabled
+										readonly
+									/>
+								</UFormField>
+
+								<div class="border-t border-default pt-4">
+									<div class="flex items-center justify-between gap-3 mb-3">
+										<h3 class="text-sm font-semibold">{{ t('profile.customMailboxSection') }}</h3>
+										<UButton
+											size="xs"
+											variant="ghost"
+											color="neutral"
+											:icon="customMailboxOpen ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+											@click="customMailboxOpen = !customMailboxOpen"
+										>
+											{{ customMailboxOpen
+												? t('profile.customMailboxCollapse')
+												: t('profile.customMailboxExpand') }}
+										</UButton>
+									</div>
+
+									<div v-show="customMailboxOpen" class="space-y-6">
 								<p class="text-sm text-muted">{{ t('profile.mailManual') }}</p>
 
 								<div>
@@ -214,6 +244,8 @@ v-if="profileSuccess" color="success" variant="soft" icon="i-lucide-check"
 								>
 									{{ t('profile.saveMail') }}
 								</UButton>
+									</div>
+								</div>
 							</UCard>
 						</div>
 					</template>
@@ -353,6 +385,7 @@ watch(activeTab, (tab) => {
 	}
 })
 
+const customMailboxOpen = ref(false)
 const mailSettings = ref<UserEmailSettingsResponse | null>(null)
 const mailForm = reactive({
 	smtp_host: '',

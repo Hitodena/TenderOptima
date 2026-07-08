@@ -73,7 +73,7 @@
 				<div class="relative flex flex-1 min-h-0 min-w-0 overflow-hidden">
 					<div
 						class="shrink-0 border-r border-default flex flex-col min-h-0"
-						:class="[isMobile && selectedRsId ? 'hidden' : 'flex', 'w-full md:w-64 lg:w-72']"
+						:class="[isMobile && selectedRsId ? 'hidden' : 'flex', 'w-full md:w-72 lg:w-80 xl:w-96']"
 					>
 
 				<div class="px-3 py-2 border-b border-default space-y-2 shrink-0">
@@ -97,14 +97,13 @@ v-else-if="sortedThreads.length === 0"
 						</p>
 					</div>
 
-					<div
-v-for="thread in sortedThreads" :key="thread.rs_id"
-						class="flex items-stretch border-b border-default/50"
-						:class="selectedRsId === thread.rs_id ? 'bg-elevated border-l-2 border-l-primary' : ''">
-						<button
-							type="button"
-							class="flex-1 min-w-0 text-left px-4 py-4 hover:bg-elevated/50 transition-colors cursor-pointer"
-							@click="selectThread(thread.rs_id)">
+					<button
+						v-for="thread in sortedThreads"
+						:key="thread.rs_id"
+						type="button"
+						class="w-full text-left px-4 py-4 border-b border-default/50 hover:bg-elevated/50 transition-colors cursor-pointer"
+						:class="selectedRsId === thread.rs_id ? 'bg-elevated border-l-2 border-l-primary' : ''"
+						@click="selectThread(thread.rs_id)">
 						<div class="flex items-start gap-3">
 							<div
 								class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
@@ -112,7 +111,7 @@ v-for="thread in sortedThreads" :key="thread.rs_id"
 							</div>
 							<div class="flex-1 min-w-0">
 								<div class="flex items-center justify-between gap-2 mb-1">
-									<p class="text-base font-semibold leading-snug line-clamp-2 min-w-0">
+									<p class="text-base font-semibold leading-snug line-clamp-3 min-w-0 break-words">
 										{{ thread.supplier.company_name }}
 									</p>
 									<span v-if="thread.unread" class="w-2 h-2 rounded-full bg-primary shrink-0" />
@@ -136,19 +135,7 @@ v-for="thread in sortedThreads" :key="thread.rs_id"
 								</div>
 							</div>
 						</div>
-						</button>
-						<div class="flex items-center px-2 shrink-0">
-							<UButton
-								size="xs"
-								color="neutral"
-								variant="ghost"
-								leading-icon="i-lucide-database"
-								@click.stop="openSaveToBookmarkModal(thread.supplier)"
-							>
-								В базу
-							</UButton>
-						</div>
-					</div>
+					</button>
 				</div>
 			</div>
 
@@ -208,10 +195,17 @@ v-else-if="comparison.suppliers.length === 0"
 											<th
 v-for="supplier in sortedComparisonSuppliers" :key="supplier.rs_id"
 												class="px-3 py-2.5 text-left text-xs font-semibold min-w-36 max-w-52 wrap-break-word whitespace-normal align-top">
-												<p class="wrap-break-word whitespace-normal">{{ supplier.company_name }}</p>
-												<p class="text-[10px] text-muted font-normal wrap-break-word whitespace-normal">
-													{{ supplier.main_email }}
-												</p>
+												<button
+													type="button"
+													class="text-left w-full rounded-md -mx-1 px-1 py-0.5 hover:bg-elevated/80 hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary transition-colors cursor-pointer"
+													:title="t('inbox.openSupplierThread')"
+													@click="selectThread(supplier.rs_id)"
+												>
+													<p class="wrap-break-word whitespace-normal">{{ supplier.company_name }}</p>
+													<p class="text-[10px] text-muted font-normal wrap-break-word whitespace-normal">
+														{{ supplier.main_email }}
+													</p>
+												</button>
 											</th>
 										</tr>
 									</thead>
@@ -512,8 +506,11 @@ v-for="att in msg.attachments" :key="att.filename" type="button"
 								{{ t('inbox.requisitesHint') }}
 							</p>
 							<UTextarea
-v-model="replyBody" placeholder="Текст сообщения..." :rows="isMobile ? 3 : 4"
-								class="w-full mb-3" />
+v-model="replyBody" :placeholder="t('inbox.replyPlaceholder')" :rows="isMobile ? 5 : 6"
+								autoresize
+								:maxrows="16"
+								class="w-full mb-3"
+								:ui="{ base: 'min-h-[8rem] sm:min-h-[10rem]' }" />
 							<div class="flex items-center justify-between gap-2">
 								<p class="text-xs text-muted hidden md:block">Ответ придёт поставщику на его email</p>
 								<UButton
@@ -659,10 +656,6 @@ block size="sm" variant="outline" leading-icon="i-lucide-mail"
 			</UContainer>
 		</div>
 
-		<AddSupplierModal
-			v-model:open="showSaveToBookmarkModal"
-			:source-supplier="saveToBookmarkSupplier"
-		/>
 		<ImproveConditionsModal
 v-if="modalSupplier" v-model:open="improveModalOpen" :request-id="id"
 			:supplier="modalSupplier" :subscription="subscription" />
@@ -718,7 +711,6 @@ import type {
 	RefreshAllResponse,
 	RequirementMatch,
 	SubscriptionResponse,
-	Supplier,
 	ThreadSummary,
 	TZAnalysisStatus,
 	UserResponse,
@@ -778,15 +770,8 @@ async function fetchSubscription() {
 	}
 }
 
-function openSaveToBookmarkModal(supplier: Supplier) {
-	saveToBookmarkSupplier.value = supplier
-	showSaveToBookmarkModal.value = true
-}
-
 const showParamsPanel = ref(true)
 const mainTab = ref<'thread' | 'comparison'>('thread')
-const showSaveToBookmarkModal = ref(false)
-const saveToBookmarkSupplier = ref<Supplier | null>(null)
 
 const threads = ref<ThreadSummary[]>([])
 const loadingThreads = ref(true)

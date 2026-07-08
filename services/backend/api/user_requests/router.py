@@ -173,7 +173,10 @@ async def launch_mailing(
         )
         request = await get_request_or_404(request_id, session, current_user)
 
-    if request.status != RequestStatus.ACTIVE:
+    if request.status not in (
+        RequestStatus.ACTIVE,
+        RequestStatus.COMPLETED,
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot launch mailing in status '{request.status}'",

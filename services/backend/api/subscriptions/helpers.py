@@ -1,4 +1,3 @@
-from backend.utils.subscription_usage import SubscriptionUsage
 from backend.db.models import Subscription
 from backend.enums import SubscriptionPlan
 from backend.utils.subscription_catalog import (
@@ -6,6 +5,7 @@ from backend.utils.subscription_catalog import (
     resolve_subscription_prices,
     resolve_tz_kp_upload_limit,
 )
+from backend.utils.subscription_usage import SubscriptionUsage
 
 from .schemas import SubscriptionResponse
 

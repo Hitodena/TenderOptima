@@ -423,6 +423,7 @@ function supplierPayload(item: SupplierBookmarkItem): SupplierCreate {
 		phone: normalizePhone(item.phone),
 		source: 'manual',
 		request_id: props.requestId,
+		is_enabled: true,
 	}
 }
 

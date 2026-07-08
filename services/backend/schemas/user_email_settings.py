@@ -18,6 +18,7 @@ class UserEmailSettingsResponse(BaseModel):
     imap_port: int | None = None
     imap_user: str | None = None
     imap_password_configured: bool = False
+    current_sender_email: str | None = None
 
 
 class UserEmailSettingsUpdate(BaseModel):

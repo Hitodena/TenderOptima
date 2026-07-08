@@ -21,6 +21,15 @@ to="/tz-analysis/history" variant="ghost" color="neutral" size="sm"
 							{{ analysis.title || 'Анализ ТЗ' }}
 						</h1>
 						<UBadge :color="statusColor" variant="subtle" size="lg">{{ statusLabel }}</UBadge>
+						<UBadge
+							v-if="pagesRemainingLabel"
+							color="primary"
+							variant="outline"
+							size="lg"
+							class="max-w-full whitespace-normal text-left"
+						>
+							{{ pagesRemainingLabel }}
+						</UBadge>
 					</div>
 					<div class="flex items-center gap-3 text-sm text-muted flex-wrap">
 						<span v-if="analysis.created_at" class="flex items-center gap-1">
@@ -719,9 +728,11 @@ import {
 	isTestPlan,
 	module2UploadLimitHint,
 	module2WorkBlockMessage,
+	pagesAnalysisRemaining,
 	tzKpUploadLimitBytes,
 	formatUploadLimitMb,
 } from '#shared/utils/subscriptionAccess'
+import { t } from '~/constants/translations'
 import { subscriptionProfilePath } from '#shared/utils/subscriptionDisplay'
 import RequirementResultsTree from '~/components/tz-analysis/RequirementResultsTree.vue'
 import RequirementTreeEditor from '~/components/tz-analysis/RequirementTreeEditor.vue'
@@ -763,6 +774,20 @@ const uploadLimitHint = computed(() =>
 		publicConfig.maxTzUploadSize as number,
 	),
 )
+
+const pagesRemainingLabel = computed(() => {
+	const sub = user.value?.subscription
+	if (!sub?.module_2_enabled) return null
+	if (sub.max_pages_analyzed_per_month == null) {
+		return t('subscription.pagesUnlimited')
+	}
+	const remaining = pagesAnalysisRemaining(sub)
+	if (remaining === null) return t('subscription.pagesUnlimited')
+	return t('subscription.pagesRemainingThisMonth').replace(
+		'{count}',
+		remaining.toLocaleString('ru-RU'),
+	)
+})
 
 const loading = ref(true)
 const analysis = ref<TZAnalysisSession | null>(null)

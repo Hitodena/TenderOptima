@@ -1,8 +1,18 @@
 """Shared helpers for per-user SMTP/IMAP settings."""
 
+from backend.core.config import get_config
 from backend.db.models import User
 from backend.schemas.user_email_settings import UserEmailSettingsResponse
 from backend.utils.secret_encryption import decrypt_secret, store_secret
+
+
+def _resolved_sender_email(user: User) -> str | None:
+    """SMTP From address actually used for outgoing mail."""
+    cfg = get_config()
+    password = decrypted_smtp_password(user)
+    if user.smtp_host and user.smtp_user and password:
+        return user.smtp_user
+    return cfg.smtp_user or None
 
 
 def email_settings_response(user: User) -> UserEmailSettingsResponse:
@@ -15,6 +25,7 @@ def email_settings_response(user: User) -> UserEmailSettingsResponse:
         imap_port=user.imap_port,
         imap_user=user.imap_user,
         imap_password_configured=bool(user.imap_password),
+        current_sender_email=_resolved_sender_email(user),
     )
 
 

@@ -5,6 +5,12 @@
 				{{ t('admin.emailRouting.totalLabel') }}
 				<span class="font-semibold text-highlighted text-lg">{{ total }}</span>
 			</p>
+			<USwitch
+				v-model="missingSubjectOnly"
+				:label="t('admin.emailRouting.missingSubjectOnly')"
+				:description="t('admin.emailRouting.missingSubjectHint')"
+				size="md"
+			/>
 		</div>
 
 		<UAlert
@@ -223,6 +229,7 @@ const PAGE_SIZE = 10
 const messages = ref<AdminEmailMessageItem[]>([])
 const total = ref(0)
 const page = ref(1)
+const missingSubjectOnly = ref(true)
 const loading = ref(false)
 const loadError = ref<string | null>(null)
 
@@ -269,7 +276,7 @@ async function fetchMessages() {
 	loadError.value = null
 	try {
 		const data = await get<AdminEmailMessagePage>(
-			`/admin/email-messages?page=${page.value}&size=${PAGE_SIZE}`,
+			`/admin/email-messages?page=${page.value}&size=${PAGE_SIZE}&missing_subject_only=${missingSubjectOnly.value}`,
 		)
 		messages.value = data.items
 		total.value = data.total
@@ -282,6 +289,11 @@ async function fetchMessages() {
 }
 
 watch(page, () => { void fetchMessages() })
+
+watch(missingSubjectOnly, () => {
+	page.value = 1
+	void fetchMessages()
+})
 
 onMounted(() => { void fetchMessages() })
 

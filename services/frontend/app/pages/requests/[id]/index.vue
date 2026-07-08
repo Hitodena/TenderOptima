@@ -47,7 +47,7 @@ v-if="actionError" color="error" variant="soft" icon="i-lucide-circle-alert"
 				:description="actionError" class="mb-6" />
 
 			<UAlert
-				v-if="module1BlockReason && !isTerminalStatus"
+				v-if="module1BlockReason && !isLockedStatus"
 				color="warning"
 				variant="soft"
 				icon="i-lucide-triangle-alert"
@@ -70,13 +70,9 @@ v-if="actionError" color="error" variant="soft" icon="i-lucide-circle-alert"
 				<div>
 					<h2 class="text-lg font-semibold">Найденные поставщики</h2>
 					<p
-v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED && request.status !== RequestStatus.CLOSED && request.status !== RequestStatus.SEARCHING"
+						v-if="supplierActionHint"
 						class="text-sm text-muted mt-0.5">
-						{{
-							suppliers.length
-								? 'Включите нужных и нажмите «Отправить запрос»'
-								: 'Добавьте поставщиков для рассылки'
-						}}
+						{{ supplierActionHint }}
 					</p>
 				</div>
 
@@ -89,13 +85,16 @@ v-if="request.status == RequestStatus.DRAFT" size="lg" variant="outline" color="
 					</UButton>
 
 					<UButton
-v-if="!isTerminalStatus && suppliers.length > 0" size="lg" leading-icon="i-lucide-send"
-						:disabled="!canLaunchMailing" @click="showParamsModal = true">
+						v-if="showSendButton"
+						size="lg"
+						leading-icon="i-lucide-send"
+						:disabled="!canLaunchMailing"
+						@click="showParamsModal = true">
 						Отправить запрос поставщикам
 					</UButton>
 
 					<UButton
-						v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED && request.status !== RequestStatus.CLOSED && request.status !== RequestStatus.SEARCHING"
+						v-if="canManageSuppliers"
 						size="lg" variant="outline" color="neutral" leading-icon="i-lucide-user-plus"
 						:disabled="!canStartModule1"
 						@click="showAddSupplier = true">
@@ -103,7 +102,7 @@ v-if="!isTerminalStatus && suppliers.length > 0" size="lg" leading-icon="i-lucid
 					</UButton>
 
 					<UButton
-						v-if="request.status !== RequestStatus.QUEUED && request.status !== RequestStatus.COMPLETED && request.status !== RequestStatus.CLOSED && request.status !== RequestStatus.SEARCHING && !isTestPlan(subscription)"
+						v-if="canManageSuppliers && !isTestPlan(subscription)"
 						size="lg" variant="outline" color="neutral" leading-icon="i-lucide-database"
 						@click="showBookmarkModal = true">
 						Из базы поставщиков
@@ -128,8 +127,13 @@ size="sm" variant="ghost" :to="`/requests/${id}/responses`" class="ml-auto" colo
 				</div>
 				<div v-else-if="request.status === RequestStatus.COMPLETED">
 					<UAlert
-color="primary" variant="soft" icon="i-lucide-check" class="mb-4"
-						description="Рассылка завершена" />
+						color="primary"
+						variant="soft"
+						icon="i-lucide-check"
+						class="mb-4"
+						:title="t('requests.mailingCompletedHint')"
+						:description="t('requests.mailingCompletedSubhint')"
+					/>
 				</div>
 				<div v-else-if="request.status === RequestStatus.CLOSED">
 					<UAlert
@@ -165,7 +169,7 @@ color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 					class="flex-1 min-w-40 sm:max-w-64"
 					size="lg"
 				/>
-				<template v-if="!isTerminalStatus">
+				<template v-if="canManageMailingSelection">
 					<UButton
 						size="sm"
 						variant="ghost"
@@ -188,7 +192,7 @@ color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 			</div>
 
 				<UAlert
-					v-if="testPlanLockedCount > 0 && !isTerminalStatus"
+					v-if="testPlanLockedCount > 0 && canManageMailingSelection"
 					color="warning"
 					variant="soft"
 					icon="i-lucide-lock"
@@ -206,7 +210,8 @@ color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 									<UIcon name="i-lucide-users" class="w-10 h-10 text-muted" />
 									<p class="text-muted">Поставщики не найдены</p>
 									<UButton
-size="sm" variant="outline" color="primary"
+										v-if="canManageSuppliers"
+										size="sm" variant="outline" color="primary"
 										leading-icon="i-lucide-user-plus" @click="showAddSupplier = true">
 										Добавить поставщика
 									</UButton>
@@ -215,8 +220,9 @@ size="sm" variant="outline" color="primary"
 
 							<template #is_enabled-cell="{ row }">
 								<USwitch
-:model-value="row.original.is_enabled" size="sm"
-									:disabled="updatingToggle || isTerminalStatus || isSupplierRowLocked(row.original)"
+									:model-value="row.original.is_enabled"
+									size="sm"
+									:disabled="updatingToggle || !canToggleSupplier(row.original) || isSupplierRowLocked(row.original)"
 									@update:model-value="(val: any) => handleToggle(row.original, Boolean(val))" />
 							</template>
 
@@ -261,7 +267,7 @@ v-if="row.original.supplier.main_email" target="blank"
 									<span v-else class="text-sm text-muted">—</span>
 
 									<UButton
-v-if="!isTerminalStatus && row.original.supplier.extra_emails?.length > 1"
+										v-if="canManageSuppliers && row.original.supplier.extra_emails?.length > 1"
 										size="xs" color="neutral" variant="ghost" icon="i-lucide-pencil"
 										@click.stop="openEditEmailModal(row.original.supplier)" />
 								</div>
@@ -287,7 +293,7 @@ v-if="!isTerminalStatus && row.original.supplier.extra_emails?.length > 1"
 									>
 										В базу
 									</UButton>
-									<template v-if="!isTerminalStatus">
+									<template v-if="canDeleteSupplier(row.original)">
 										<template v-if="confirmDeleteSupplierId === row.original.id">
 											<UButton
 size="sm" color="error" variant="soft" icon="i-lucide-check"
@@ -309,11 +315,19 @@ v-else size="sm" color="error" variant="ghost" icon="i-lucide-trash-2"
 				</div>
 
 			<div
-v-if="!isTerminalStatus"
+				v-if="canManageMailingSelection"
 				class="px-4 py-3 border-t border-default">
 				<p class="text-sm text-muted">
-					Выбрано <span class="font-semibold text-highlighted">{{ enabledCount }}</span> из
-					{{ filteredSuppliers.length }}
+					<template v-if="isCompletedStatus">
+						К отправке
+						<span class="font-semibold text-highlighted">{{ pendingEnabledCount }}</span>
+						из {{ filteredSuppliers.length }}
+					</template>
+					<template v-else>
+						Выбрано
+						<span class="font-semibold text-highlighted">{{ enabledCount }}</span>
+						из {{ filteredSuppliers.length }}
+					</template>
 					<template v-if="emailQuotaFooter">
 						<span> · {{ emailQuotaFooter }}</span>
 					</template>
@@ -322,8 +336,12 @@ v-if="!isTerminalStatus"
 			</UCard>
 
 			<RequestParamsModal
-v-model:open="showParamsModal" :request="request" :supplier-count="enabledCount"
-				:subscription="subscription" @launched="onLaunched" />
+				v-model:open="showParamsModal"
+				:request="request"
+				:supplier-count="pendingEnabledCount"
+				:subscription="subscription"
+				@launched="onLaunched"
+			/>
 			<AddSupplierModal
 				v-model:open="showAddSupplier"
 				:request-id="id"
@@ -378,6 +396,7 @@ import {
 	TEST_PLAN_MANUAL_SUPPLIER_BONUS,
 } from '#shared/utils/subscriptionAccess'
 import { subscriptionProfilePath } from '#shared/utils/subscriptionDisplay'
+import { t } from '~/constants/translations'
 import type { TableColumn, TableRow } from '@nuxt/ui'
 import SupplierBookmarkModal from '~/components/SupplierBookmarkModal.vue'
 import SupplierInfoHint from '~/components/requests/SupplierInfoHint.vue'
@@ -425,12 +444,58 @@ const supplierSearch = ref('')
 const confirmDeleteSupplierId = ref<string | null>(null)
 const deletingSupplierIds = reactive(new Set<string>())
 
-const isTerminalStatus = computed(() =>
+const isLockedStatus = computed(() =>
 	request.value?.status === RequestStatus.QUEUED ||
-	request.value?.status === RequestStatus.COMPLETED ||
 	request.value?.status === RequestStatus.CLOSED ||
-	request.value?.status === RequestStatus.SEARCHING
+	request.value?.status === RequestStatus.SEARCHING,
 )
+
+const isCompletedStatus = computed(() =>
+	request.value?.status === RequestStatus.COMPLETED,
+)
+
+const canManageSuppliers = computed(() => !isLockedStatus.value)
+
+const canManageMailingSelection = computed(() =>
+	canManageSuppliers.value || isCompletedStatus.value,
+)
+
+function isPendingSupplier(rs: RequestSupplierResponse): boolean {
+	return rs.sent_status === RequestSupplierStatus.PENDING
+}
+
+function canToggleSupplier(rs: RequestSupplierResponse): boolean {
+	if (isLockedStatus.value) return false
+	if (isCompletedStatus.value) return isPendingSupplier(rs)
+	return true
+}
+
+function canDeleteSupplier(rs: RequestSupplierResponse): boolean {
+	if (isLockedStatus.value) return false
+	if (isCompletedStatus.value) return isPendingSupplier(rs)
+	return true
+}
+
+const supplierActionHint = computed(() => {
+	if (isLockedStatus.value) return null
+	if (isCompletedStatus.value) {
+		return pendingEnabledCount.value > 0
+			? t('requests.mailingPendingHint')
+			: t('requests.mailingCompletedSubhint')
+	}
+	return suppliers.value.length
+		? 'Включите нужных и нажмите «Отправить запрос»'
+		: 'Добавьте поставщиков для рассылки'
+})
+
+const pendingEnabledCount = computed(() =>
+	suppliers.value.filter(s => s.is_enabled && isPendingSupplier(s)).length,
+)
+
+const showSendButton = computed(() => {
+	if (isLockedStatus.value || suppliers.value.length === 0) return false
+	return pendingEnabledCount.value > 0
+})
 
 const filteredSuppliers = computed(() => {
 	if (!supplierSearch.value) return suppliers.value
@@ -445,7 +510,8 @@ const filteredSuppliers = computed(() => {
 const enabledCount = computed(() => suppliers.value.filter(s => s.is_enabled).length)
 const emailRemaining = computed(() => emailQuotaRemaining(subscription.value))
 const canLaunchMailing = computed(() =>
-	enabledCount.value > 0 && canSendEmail(subscription.value, enabledCount.value),
+	pendingEnabledCount.value > 0
+		&& canSendEmail(subscription.value, pendingEnabledCount.value),
 )
 const manualSupplierCount = computed(() =>
 	suppliers.value.filter((s) => isManualSupplierSource(s.supplier?.from_source)).length,
@@ -499,7 +565,7 @@ const statusLabel = computed(() => getRequestStatusLabel(request.value?.status ?
 
 const supplierColumns = computed<TableColumn<RequestSupplierResponse>[]>(() => {
 	const cols: TableColumn<RequestSupplierResponse>[] = []
-	if (!isTerminalStatus.value) {
+	if (canManageMailingSelection.value) {
 		cols.push({ accessorKey: 'is_enabled', header: 'Рассылка' })
 	}
 	cols.push({
@@ -507,7 +573,7 @@ const supplierColumns = computed<TableColumn<RequestSupplierResponse>[]>(() => {
 		header: 'Компания',
 		meta: { class: { th: 'min-w-44', td: 'min-w-44 max-w-80 whitespace-normal align-top' } },
 	})
-	if (!isTerminalStatus.value) {
+	if (canManageSuppliers.value) {
 		cols.push({ accessorKey: 'domain', header: 'Домен' })
 	}
 	cols.push({ accessorKey: 'email', header: 'Email' })
@@ -539,7 +605,7 @@ async function fetchSuppliersAndEnforceQuota(silent = false) {
 }
 
 async function trimEnabledToQuota() {
-	if (isTerminalStatus.value) return
+	if (isLockedStatus.value) return
 
 	let maxEnabled = emailRemaining.value
 	if (maxEnabled == null) return
@@ -611,7 +677,7 @@ async function handleToggle(
 	rs: RequestSupplierResponse,
 	newVal: boolean,
 ) {
-	if (suppressToggleEvents.value || rs.is_enabled === newVal || isTerminalStatus.value) return
+	if (suppressToggleEvents.value || rs.is_enabled === newVal || !canToggleSupplier(rs)) return
 
 	if (newVal) {
 		if (isSupplierRowLocked(rs)) {
@@ -656,9 +722,11 @@ async function confirmDeleteSupplier(rsId: string) {
 }
 
 async function toggleAll(enabled: boolean) {
-	if (isTerminalStatus.value) return
+	if (!canManageMailingSelection.value) return
 	if (!enabled) {
-		const ids = suppliers.value.filter(s => s.is_enabled).map(s => s.id)
+		const ids = suppliers.value
+			.filter(s => s.is_enabled && canToggleSupplier(s))
+			.map(s => s.id)
 		if (ids.length) await updateSuppliersEnabled(ids, false)
 		return
 	}
@@ -667,7 +735,7 @@ async function toggleAll(enabled: boolean) {
 	const searchLimit = testPlanVisibleSupplierLimit(subscription.value)
 	const selectableLimit = testPlanSelectableLimit.value
 	let candidates = filteredSuppliers.value.filter(
-		(s) => !s.is_enabled && !isSupplierRowLocked(s),
+		(s) => !s.is_enabled && !isSupplierRowLocked(s) && canToggleSupplier(s),
 	)
 	if (searchLimit != null) {
 		const enabledSearch = suppliers.value.filter(

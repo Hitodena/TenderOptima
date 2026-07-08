@@ -292,11 +292,20 @@ async def list_email_messages(
     _admin: Annotated[User, Depends(get_admin)],
     page: Annotated[int, Query(ge=1)] = 1,
     size: Annotated[int, Query(ge=1, le=100)] = 20,
+    missing_subject_only: Annotated[
+        bool,
+        Query(
+            description=(
+                "When true, only incoming messages with empty subject"
+            ),
+        ),
+    ] = True,
 ) -> AdminEmailMessagePage:
     rows, total = await EmailMessageDAO.list_admin_page(
         session,
         page=page,
         size=size,
+        missing_subject_only=missing_subject_only,
     )
     return AdminEmailMessagePage(
         items=[_email_message_item(row) for row in rows],

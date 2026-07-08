@@ -19,6 +19,15 @@
 					class="mb-4"
 				/>
 
+				<UAlert
+					v-if="pagesRemainingLabel"
+					color="primary"
+					variant="soft"
+					icon="i-lucide-file-stack"
+					:description="pagesRemainingLabel"
+					class="mb-4"
+				/>
+
 				<div class="flex justify-end mb-4">
 					<UButton
 to="/tz-analysis/history" size="lg" variant="outline" color="neutral"
@@ -90,7 +99,9 @@ import {
 	isTestPlan,
 	module2UploadLimitHint,
 	module2WorkBlockMessage,
+	pagesAnalysisRemaining,
 } from '#shared/utils/subscriptionAccess'
+import { t } from '~/constants/translations'
 import { z } from 'zod'
 
 definePageMeta({ layout: 'default' })
@@ -115,6 +126,20 @@ const uploadLimitHint = computed(() =>
 		publicConfig.maxTzUploadSize as number,
 	),
 )
+
+const pagesRemainingLabel = computed(() => {
+	const sub = user.value?.subscription
+	if (!sub?.module_2_enabled) return null
+	if (sub.max_pages_analyzed_per_month == null) {
+		return t('subscription.pagesUnlimited')
+	}
+	const remaining = pagesAnalysisRemaining(sub)
+	if (remaining === null) return t('subscription.pagesUnlimited')
+	return t('subscription.pagesRemainingThisMonth').replace(
+		'{count}',
+		remaining.toLocaleString('ru-RU'),
+	)
+})
 
 const schema = z.object({
 	title: z.string().min(3, 'Минимум 3 символа').max(500, 'Максимум 500 символов'),

@@ -1,7 +1,7 @@
 import uuid
 
 from loguru import logger
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -194,10 +194,24 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
         *,
         page: int = 1,
         size: int = 20,
+        missing_subject_only: bool = False,
     ) -> tuple[list[EmailMessage], int]:
         """Paginated email messages for admin routing UI."""
         offset = max(page - 1, 0) * size
+        filters = []
+        if missing_subject_only:
+            filters.append(
+                cls.model.direction == EmailMessageDirection.INCOMING.value,
+            )
+            filters.append(
+                or_(
+                    cls.model.subject.is_(None),
+                    func.trim(cls.model.subject) == "",
+                )
+            )
         total_stmt = select(func.count()).select_from(cls.model)
+        if filters:
+            total_stmt = total_stmt.where(*filters)
         total = int((await session.execute(total_stmt)).scalar_one())
         stmt = (
             select(cls.model)
@@ -213,6 +227,8 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
             .offset(offset)
             .limit(size)
         )
+        if filters:
+            stmt = stmt.where(*filters)
         rows = list((await session.execute(stmt)).unique().scalars().all())
         return rows, total
 

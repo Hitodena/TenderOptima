@@ -58,6 +58,7 @@ export interface UserEmailSettingsResponse {
 	imap_port: number | null;
 	imap_user: string | null;
 	imap_password_configured: boolean;
+	current_sender_email: string | null;
 }
 
 export interface UserEmailSettingsUpdate {

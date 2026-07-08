@@ -2,9 +2,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.auth.schemas import UserResponse
 from backend.api.subscriptions.helpers import subscription_to_response
-from backend.utils.subscription_usage import SubscriptionUsageDAO
 from backend.db.dao import SubscriptionDAO
 from backend.db.models import User
+from backend.utils.subscription_usage import SubscriptionUsageDAO
 
 
 async def user_to_response(
