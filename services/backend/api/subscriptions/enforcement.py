@@ -2,7 +2,10 @@
 
 from datetime import UTC, datetime
 
-from backend.api.subscriptions.usage import SubscriptionUsageDAO
+from backend.utils.subscription_usage import (
+    SubscriptionUsageDAO,
+    pages_analysis_remaining_for_user,
+)
 from backend.core.config import Config
 from backend.db.dao import SubscriptionDAO
 from backend.db.models import Subscription, User
@@ -75,13 +78,14 @@ async def _get_subscription_or_raise(
 
 def _resolved_limits(
     subscription: Subscription,
-) -> tuple[int | None, int | None, int | None]:
+) -> tuple[int | None, int | None, int | None, int | None]:
     return resolve_subscription_limits(
         plan=subscription.plan,
         geo_code=subscription.geo_code,
         max_searches_per_month=subscription.max_searches_per_month,
         max_emails_per_month=subscription.max_emails_per_month,
         max_kp_processed_per_month=subscription.max_kp_processed_per_month,
+        max_pages_analyzed_per_month=subscription.max_pages_analyzed_per_month,
     )
 
 
@@ -140,7 +144,7 @@ async def ensure_can_search(
     """Module 1: allow queuing one more supplier search this month."""
     subscription = await _get_subscription_or_raise(session, user)
     _ensure_module_enabled(subscription, module=1)
-    max_searches, _, _ = _resolved_limits(subscription)
+    max_searches, _, _, _ = _resolved_limits(subscription)
     usage = await SubscriptionUsageDAO.get_for_user(session, user.id)
     _ensure_quota(
         resource="searches",
@@ -161,7 +165,7 @@ async def ensure_can_send_emails(
         return
     subscription = await _get_subscription_or_raise(session, user)
     _ensure_module_enabled(subscription, module=1)
-    _, max_emails, _ = _resolved_limits(subscription)
+    _, max_emails, _, _ = _resolved_limits(subscription)
     usage = await SubscriptionUsageDAO.get_for_user(session, user.id)
     _ensure_quota(
         resource="emails",
@@ -181,7 +185,7 @@ async def outbound_email_remaining(
         return 0
     if not subscription.module_1_enabled:
         return 0
-    _, max_emails, _ = _resolved_limits(subscription)
+    _, max_emails, _, _ = _resolved_limits(subscription)
     if max_emails is None:
         return None
     usage = await SubscriptionUsageDAO.get_for_user(session, user.id)
@@ -216,16 +220,37 @@ async def ensure_module_2_work_allowed(
     session: AsyncSession,
     user: User,
 ) -> None:
-    """Module 2: allow starting TZ analysis when KP quota is not exhausted."""
+    """Module 2: allow starting TZ analysis when page quota is not exhausted."""
     subscription = await _get_subscription_or_raise(session, user)
     _ensure_module_enabled(subscription, module=2)
-    _, _, max_kp = _resolved_limits(subscription)
+    _, _, _, max_pages = _resolved_limits(subscription)
     usage = await SubscriptionUsageDAO.get_for_user(session, user.id)
     _ensure_quota(
-        resource="kp_processed",
-        limit=max_kp,
-        used=usage.kp_processed,
+        resource="pages_analyzed",
+        limit=max_pages,
+        used=usage.pages_analyzed,
         requested=1,
+    )
+
+
+async def ensure_can_process_pages(
+    session: AsyncSession,
+    user: User,
+    *,
+    page_count: int,
+) -> None:
+    """Module 2: allow processing page_count document pages this month."""
+    if page_count <= 0:
+        return
+    subscription = await _get_subscription_or_raise(session, user)
+    _ensure_module_enabled(subscription, module=2)
+    _, _, _, max_pages = _resolved_limits(subscription)
+    usage = await SubscriptionUsageDAO.get_for_user(session, user.id)
+    _ensure_quota(
+        resource="pages_analyzed",
+        limit=max_pages,
+        used=usage.pages_analyzed,
+        requested=page_count,
     )
 
 
@@ -235,19 +260,16 @@ async def ensure_can_process_kp(
     *,
     kp_count: int,
 ) -> None:
-    """Module 2: allow processing kp_count commercial proposals this month."""
-    if kp_count <= 0:
-        return
-    subscription = await _get_subscription_or_raise(session, user)
-    _ensure_module_enabled(subscription, module=2)
-    _, _, max_kp = _resolved_limits(subscription)
-    usage = await SubscriptionUsageDAO.get_for_user(session, user.id)
-    _ensure_quota(
-        resource="kp_processed",
-        limit=max_kp,
-        used=usage.kp_processed,
-        requested=kp_count,
-    )
+    """Backward-compatible alias: treat each KP as one page minimum."""
+    await ensure_can_process_pages(session, user, page_count=max(kp_count, 1))
+
+
+async def pages_analysis_remaining(
+    session: AsyncSession,
+    user: User,
+) -> int | None:
+    """Document pages left for analysis this month, or None if unlimited."""
+    return await pages_analysis_remaining_for_user(session, user.id)
 
 
 def effective_tz_kp_upload_limit(

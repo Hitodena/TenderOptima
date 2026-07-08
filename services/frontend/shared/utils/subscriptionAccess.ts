@@ -155,20 +155,33 @@ export function module2UploadLimitHint(
 	)
 }
 
-export function isModule2KpQuotaExhausted(
+export function isModule2PagesQuotaExhausted(
 	subscription: SubscriptionResponse | null | undefined,
 ): boolean {
 	if (!subscription) return false
-	const limit = subscription.max_kp_processed_per_month
+	const limit = subscription.max_pages_analyzed_per_month
 	if (limit == null) return false
-	return (subscription.kp_processed_this_month ?? 0) >= limit
+	return (subscription.pages_analyzed_this_month ?? 0) >= limit
+}
+
+/** @deprecated Use isModule2PagesQuotaExhausted */
+export const isModule2KpQuotaExhausted = isModule2PagesQuotaExhausted
+
+export function pagesAnalysisRemaining(
+	subscription: SubscriptionResponse | null | undefined,
+): number | null {
+	if (!subscription?.is_active || !subscription.module_2_enabled) return 0
+	const limit = subscription.max_pages_analyzed_per_month
+	if (limit == null) return subscription.pages_analysis_remaining ?? null
+	const used = subscription.pages_analyzed_this_month ?? 0
+	return Math.max(0, limit - used)
 }
 
 export function canStartModule2Work(
 	subscription: SubscriptionResponse | null | undefined,
 ): boolean {
 	if (!subscription?.is_active || !subscription.module_2_enabled) return false
-	return !isModule2KpQuotaExhausted(subscription)
+	return !isModule2PagesQuotaExhausted(subscription)
 }
 
 export function module2WorkBlockMessage(
@@ -179,11 +192,11 @@ export function module2WorkBlockMessage(
 	if (!subscription.module_2_enabled) {
 		return 'Модуль 2 (анализ ТЗ и КП) не подключён к вашей подписке'
 	}
-	if (isModule2KpQuotaExhausted(subscription)) {
-		const limit = subscription.max_kp_processed_per_month
-		const used = subscription.kp_processed_this_month ?? 0
+	if (isModule2PagesQuotaExhausted(subscription)) {
+		const limit = subscription.max_pages_analyzed_per_month
+		const used = subscription.pages_analyzed_this_month ?? 0
 		if (limit == null) return null
-		return `Лимит подписки: ${used.toLocaleString('ru-RU')} из ${limit.toLocaleString('ru-RU')} КП в этом месяце`
+		return `Лимит подписки: ${used.toLocaleString('ru-RU')} из ${limit.toLocaleString('ru-RU')} страниц в этом месяце`
 	}
 	return null
 }

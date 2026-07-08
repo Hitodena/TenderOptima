@@ -8,11 +8,12 @@
 		:loading="loading"
 		@click="handleInsert"
 	>
-		Вставить реквизиты
+		{{ t('inbox.insertBusinessInfo') }}
 	</UButton>
 </template>
 
 <script lang="ts" setup>
+import { t } from '~/constants/translations'
 const body = defineModel<string>({ required: true })
 
 const emit = defineEmits<{ inserted: [] }>()

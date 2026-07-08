@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_current_user, get_session
 from backend.api.subscriptions.enforcement import (
-    ensure_can_process_kp,
+    ensure_can_process_pages,
     ensure_module_2_work_allowed,
     tz_kp_upload_limit_for_user,
 )
@@ -68,6 +68,7 @@ from backend.services.analysis.docx_export import (
     build_clarification_docx_from_paragraphs,
     build_clarification_preview,
 )
+from backend.utils.page_count import count_pages_in_file, count_pages_in_files
 from backend.utils.requirements_struct import (
     count_requirements,
     normalize_tz_requirements,
@@ -159,10 +160,18 @@ async def _run_kp_for_suppliers(
     suppliers_to_run: list,
     current_user: User,
 ) -> None:
-    await ensure_can_process_kp(
+    page_total = 0
+    if not row.tz_pages_count:
+        tz_path = resolve_tz_only_file(row.id)
+        if tz_path:
+            page_total += count_pages_in_file(tz_path)
+    for supplier in suppliers_to_run:
+        paths = resolve_supplier_kp_files(row.id, supplier.id)
+        page_total += count_pages_in_files(paths)
+    await ensure_can_process_pages(
         session,
         current_user,
-        kp_count=len(suppliers_to_run),
+        page_count=max(page_total, 1),
     )
     _validate_supplier_kp_files(row.id, suppliers_to_run)
     supplier_entries: list[tuple[str, list[str], list[Path]]] = []
@@ -430,11 +439,6 @@ async def run_tz_kp_analysis(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="At least one KP file or supplier is required",
             )
-        await ensure_can_process_kp(
-            session,
-            current_user,
-            kp_count=len(uploads),
-        )
         upload_limit = await tz_kp_upload_limit_for_user(
             session, current_user, config
         )
@@ -462,6 +466,16 @@ async def run_tz_kp_analysis(
                     dest_name=f"kp{idx}{suffix}",
                 )
                 kp_paths.append(kp_path)
+            page_total = count_pages_in_files(kp_paths)
+            if not row.tz_pages_count:
+                tz_path = resolve_tz_only_file(row.id)
+                if tz_path:
+                    page_total += count_pages_in_file(tz_path)
+            await ensure_can_process_pages(
+                session,
+                current_user,
+                page_count=max(page_total, 1),
+            )
             primary_kp = kp_names[0] if kp_names else None
 
             updated = await TZAnalysisDAO.update_fields(

@@ -19,6 +19,7 @@ class SubscriptionResponse(BaseModel):
     max_searches_per_month: int | None
     max_emails_per_month: int | None
     max_kp_processed_per_month: int | None
+    max_pages_analyzed_per_month: int | None
     max_tz_kp_upload_bytes: int | None
     geo_code: str
     currency_code: str
@@ -30,6 +31,8 @@ class SubscriptionResponse(BaseModel):
     searches_used_this_month: int = 0
     emails_sent_this_month: int = 0
     kp_processed_this_month: int = 0
+    pages_analyzed_this_month: int = 0
+    pages_analysis_remaining: int | None = None
 
 
 class SubscriptionUpdate(BaseModel):
@@ -43,6 +46,7 @@ class SubscriptionUpdate(BaseModel):
     max_searches_per_month: int | None = None
     max_emails_per_month: int | None = None
     max_kp_processed_per_month: int | None = None
+    max_pages_analyzed_per_month: int | None = None
     geo_code: str | None = None
     currency_code: str | None = None
     price_module_1_monthly: Decimal | None = None

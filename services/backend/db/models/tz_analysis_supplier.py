@@ -28,6 +28,9 @@ class TZAnalysisSupplier(IDMixinUUID, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, default="pending"
     )
+    kp_pages_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
 
     analysis: Mapped["TZAnalysis"] = relationship(  # noqa: F821
         back_populates="suppliers",

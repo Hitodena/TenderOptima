@@ -1,3 +1,5 @@
+"""Admin queries for user management."""
+
 import uuid
 
 from loguru import logger
@@ -10,6 +12,11 @@ from backend.db.dao.user_dao import UserDAO
 from backend.db.models import Subscription, User
 from backend.enums import SubscriptionPlan
 from backend.utils.subscription_catalog import catalog_for_plan
+from backend.utils.subscription_usage import (
+    SubscriptionUsageDAO,
+    pages_analysis_remaining_for_user,
+)
+from backend.utils.user_email_settings import apply_email_settings_update
 
 
 class SubscriptionDAO(BaseDAO[Subscription]):
@@ -49,6 +56,10 @@ class SubscriptionDAO(BaseDAO[Subscription]):
                     "max_kp_processed_per_month",
                     catalog.max_kp_processed_per_month,
                 ),
+                "max_pages_analyzed_per_month": values.get(
+                    "max_pages_analyzed_per_month",
+                    catalog.max_pages_analyzed_per_month,
+                ),
                 "geo_code": values.get("geo_code", "BY"),
                 "currency_code": values.get("currency_code", "BYN"),
                 "price_module_1_monthly": values.get(
@@ -82,6 +93,9 @@ class SubscriptionDAO(BaseDAO[Subscription]):
                         "max_emails_per_month": catalog.max_emails_per_month,
                         "max_kp_processed_per_month": (
                             catalog.max_kp_processed_per_month
+                        ),
+                        "max_pages_analyzed_per_month": (
+                            catalog.max_pages_analyzed_per_month
                         ),
                         "price_module_1_monthly": catalog.price_module_1_monthly,
                         "price_module_2_monthly": catalog.price_module_2_monthly,
@@ -127,9 +141,11 @@ class UserAdminDAO:
         user_id: uuid.UUID,
         *,
         smtp_host: str | None = None,
+        smtp_port: int | None = None,
         smtp_user: str | None = None,
         smtp_password: str | None = None,
         imap_host: str | None = None,
+        imap_port: int | None = None,
         imap_user: str | None = None,
         imap_password: str | None = None,
         clear_smtp_password: bool = False,
@@ -139,22 +155,19 @@ class UserAdminDAO:
         if user is None:
             raise ValueError(f"User with id {user_id} not found")
 
-        if smtp_host is not None:
-            user.smtp_host = smtp_host or None
-        if smtp_user is not None:
-            user.smtp_user = smtp_user or None
-        if smtp_password:
-            user.smtp_password = smtp_password
-        elif clear_smtp_password:
-            user.smtp_password = None
-        if imap_host is not None:
-            user.imap_host = imap_host or None
-        if imap_user is not None:
-            user.imap_user = imap_user or None
-        if imap_password:
-            user.imap_password = imap_password
-        elif clear_imap_password:
-            user.imap_password = None
+        apply_email_settings_update(
+            user,
+            smtp_host=smtp_host,
+            smtp_port=smtp_port,
+            smtp_user=smtp_user,
+            smtp_password=smtp_password,
+            imap_host=imap_host,
+            imap_port=imap_port,
+            imap_user=imap_user,
+            imap_password=imap_password,
+            clear_smtp_password=clear_smtp_password,
+            clear_imap_password=clear_imap_password,
+        )
 
         session.add(user)
         await session.flush()
@@ -174,3 +187,12 @@ class UserAdminDAO:
         )
         result = await session.execute(stmt)
         return list(result.scalars().all())
+
+    @staticmethod
+    async def usage_snapshot(
+        session: AsyncSession,
+        user_id: uuid.UUID,
+    ) -> tuple[int, int, int | None]:
+        usage = await SubscriptionUsageDAO.get_for_user(session, user_id)
+        remaining = await pages_analysis_remaining_for_user(session, user_id)
+        return usage.emails_sent, usage.pages_analyzed, remaining

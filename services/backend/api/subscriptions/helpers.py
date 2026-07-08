@@ -1,4 +1,4 @@
-from backend.api.subscriptions.usage import SubscriptionUsage
+from backend.utils.subscription_usage import SubscriptionUsage
 from backend.db.models import Subscription
 from backend.enums import SubscriptionPlan
 from backend.utils.subscription_catalog import (
@@ -17,12 +17,13 @@ def subscription_to_response(
 ) -> SubscriptionResponse | None:
     if row is None:
         return None
-    searches, emails, kp = resolve_subscription_limits(
+    searches, emails, kp, pages = resolve_subscription_limits(
         plan=row.plan,
         geo_code=row.geo_code,
         max_searches_per_month=row.max_searches_per_month,
         max_emails_per_month=row.max_emails_per_month,
         max_kp_processed_per_month=row.max_kp_processed_per_month,
+        max_pages_analyzed_per_month=row.max_pages_analyzed_per_month,
     )
     p1, p2, bundle = resolve_subscription_prices(
         plan=row.plan,
@@ -32,6 +33,8 @@ def subscription_to_response(
         price_module_2_monthly=row.price_module_2_monthly,
         price_bundle_monthly=row.price_bundle_monthly,
     )
+    pages_used = usage.pages_analyzed if usage is not None else 0
+    pages_remaining = None if pages is None else max(0, pages - pages_used)
     return SubscriptionResponse(
         id=row.id,
         plan=SubscriptionPlan(row.plan),
@@ -40,6 +43,7 @@ def subscription_to_response(
         max_searches_per_month=searches,
         max_emails_per_month=emails,
         max_kp_processed_per_month=kp,
+        max_pages_analyzed_per_month=pages,
         max_tz_kp_upload_bytes=resolve_tz_kp_upload_limit(
             row.plan,
             row.geo_code,
@@ -58,4 +62,6 @@ def subscription_to_response(
         kp_processed_this_month=(
             usage.kp_processed if usage is not None else 0
         ),
+        pages_analyzed_this_month=pages_used,
+        pages_analysis_remaining=pages_remaining,
     )

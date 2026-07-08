@@ -7,7 +7,7 @@ import {
 	SUBSCRIPTION_PLAN_ORDER,
 	catalogForPlan,
 	formatEmailsFeature,
-	formatKpFeature,
+	formatPagesFeature,
 	formatSearchesFeature,
 } from '#shared/utils/subscriptionDisplay'
 import type { PricingPlanProps } from '@nuxt/ui'
@@ -50,11 +50,11 @@ function planFeatures(plan: SubscriptionPlan) {
 	} else {
 		const searches = formatSearchesFeature(catalog.max_searches_per_month)
 		const emails = formatEmailsFeature(catalog.max_emails_per_month)
-		const kp = formatKpFeature(catalog.max_kp_processed_per_month)
+		const pages = formatPagesFeature(catalog.max_pages_analyzed_per_month)
 
 		if (searches) items.push({ title: searches, icon: 'i-lucide-search' })
 		if (emails) items.push({ title: emails, icon: 'i-lucide-send' })
-		if (kp) items.push({ title: kp, icon: 'i-lucide-file-spreadsheet' })
+		if (pages) items.push({ title: pages, icon: 'i-lucide-file-spreadsheet' })
 	}
 
 	if (catalog.module_1_enabled) {

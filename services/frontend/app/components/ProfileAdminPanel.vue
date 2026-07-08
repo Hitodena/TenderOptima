@@ -34,6 +34,16 @@
 							{{ item.full_name || 'Без имени' }}
 							<span v-if="item.company_name"> · {{ item.company_name }}</span>
 						</p>
+						<p class="text-[11px] text-muted mt-1">
+							{{ t('admin.users.registeredAt') }}: {{ formatDate(item.created_at) }}
+						</p>
+						<p class="text-[11px] text-muted">
+							{{ t('admin.users.emailsSent') }}: {{ item.emails_sent_this_month }}
+							· {{ t('admin.users.pagesAnalyzed') }}: {{ item.pages_analyzed_this_month }}
+							<template v-if="item.pages_analysis_remaining != null">
+								· {{ t('admin.users.pagesRemaining') }}: {{ item.pages_analysis_remaining }}
+							</template>
+						</p>
 					</button>
 				</div>
 			</UCard>
@@ -46,6 +56,16 @@
 							<p class="text-xs text-muted">
 								{{ selectedUser.full_name || 'Без имени' }}
 							</p>
+							<p class="text-xs text-muted mt-1">
+								{{ t('admin.users.registeredAt') }}: {{ formatDate(selectedUser.created_at) }}
+							</p>
+							<div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted mt-2">
+								<span>{{ t('admin.users.emailsSent') }}: {{ selectedUser.emails_sent_this_month }}</span>
+								<span>{{ t('admin.users.pagesAnalyzed') }}: {{ selectedUser.pages_analyzed_this_month }}</span>
+								<span v-if="selectedUser.pages_analysis_remaining != null">
+									{{ t('admin.users.pagesRemaining') }}: {{ selectedUser.pages_analysis_remaining }}
+								</span>
+							</div>
 						</div>
 					</template>
 
@@ -179,9 +199,9 @@
 									placeholder="индивидуально"
 								/>
 							</UFormField>
-							<UFormField label="КП / мес">
+							<UFormField :label="t('admin.users.pagesPerMonth')">
 								<UInput
-									v-model="subscriptionForm.max_kp_processed_per_month"
+									v-model="subscriptionForm.max_pages_analyzed_per_month"
 									type="number"
 									class="w-full"
 									placeholder="индивидуально"
@@ -270,8 +290,10 @@ import type {
 } from '#shared/types'
 import { catalogForPlan } from '#shared/utils/subscriptionDisplay'
 import { getApiErrorDetail } from '#shared/utils/apiError'
+import { t } from '~/constants/translations'
 
 const { get, patch } = useApi()
+const { formatDate } = useFormatDate()
 
 const users = ref<AdminUserListItem[]>([])
 const selectedUserId = ref<string | null>(null)
@@ -293,7 +315,7 @@ const subscriptionForm = reactive({
 	module_2_enabled: false,
 	max_searches_per_month: '',
 	max_emails_per_month: '',
-	max_kp_processed_per_month: '',
+	max_pages_analyzed_per_month: '',
 	geo_code: 'BY',
 	currency_code: 'BYN',
 	price_module_1_monthly: '',
@@ -308,7 +330,7 @@ function applyCatalogToForm(plan: SubscriptionPlan) {
 	const catalog = catalogForPlan(plan)
 	subscriptionForm.max_searches_per_month = catalog.max_searches_per_month?.toString() ?? ''
 	subscriptionForm.max_emails_per_month = catalog.max_emails_per_month?.toString() ?? ''
-	subscriptionForm.max_kp_processed_per_month = catalog.max_kp_processed_per_month?.toString() ?? ''
+	subscriptionForm.max_pages_analyzed_per_month = catalog.max_pages_analyzed_per_month?.toString() ?? ''
 	subscriptionForm.price_module_1_monthly = catalog.price_module_1_monthly ?? ''
 	subscriptionForm.price_module_2_monthly = catalog.price_module_2_monthly ?? ''
 	subscriptionForm.price_bundle_monthly = catalog.price_bundle_monthly ?? ''
@@ -333,7 +355,7 @@ function limitsDifferFromCatalog(
 	const catalog = catalogForPlan(sub.plan)
 	return sub.max_searches_per_month !== catalog.max_searches_per_month
 		|| sub.max_emails_per_month !== catalog.max_emails_per_month
-		|| sub.max_kp_processed_per_month !== catalog.max_kp_processed_per_month
+		|| sub.max_pages_analyzed_per_month !== catalog.max_pages_analyzed_per_month
 		|| !priceEquals(sub.price_module_1_monthly, catalog.price_module_1_monthly)
 		|| !priceEquals(sub.price_module_2_monthly, catalog.price_module_2_monthly)
 		|| !priceEquals(sub.price_bundle_monthly, catalog.price_bundle_monthly)
@@ -395,7 +417,7 @@ function fillForms(detail: AdminUserDetail) {
 	subscriptionForm.module_2_enabled = sub?.module_2_enabled ?? false
 	subscriptionForm.max_searches_per_month = sub?.max_searches_per_month?.toString() ?? ''
 	subscriptionForm.max_emails_per_month = sub?.max_emails_per_month?.toString() ?? ''
-	subscriptionForm.max_kp_processed_per_month = sub?.max_kp_processed_per_month?.toString() ?? ''
+	subscriptionForm.max_pages_analyzed_per_month = sub?.max_pages_analyzed_per_month?.toString() ?? ''
 	subscriptionForm.geo_code = sub?.geo_code ?? 'BY'
 	subscriptionForm.currency_code = sub?.currency_code ?? 'BYN'
 	subscriptionForm.price_module_1_monthly = sub?.price_module_1_monthly != null
@@ -490,8 +512,8 @@ async function saveSubscription() {
 			payload.max_emails_per_month = parseOptionalNumber(
 				subscriptionForm.max_emails_per_month,
 			)
-			payload.max_kp_processed_per_month = parseOptionalNumber(
-				subscriptionForm.max_kp_processed_per_month,
+			payload.max_pages_analyzed_per_month = parseOptionalNumber(
+				subscriptionForm.max_pages_analyzed_per_month,
 			)
 			payload.price_module_1_monthly = parseOptionalPrice(
 				subscriptionForm.price_module_1_monthly,
@@ -506,7 +528,7 @@ async function saveSubscription() {
 			const catalog = catalogForPlan(subscriptionForm.plan)
 			payload.max_searches_per_month = catalog.max_searches_per_month
 			payload.max_emails_per_month = catalog.max_emails_per_month
-			payload.max_kp_processed_per_month = catalog.max_kp_processed_per_month
+			payload.max_pages_analyzed_per_month = catalog.max_pages_analyzed_per_month
 			payload.price_module_1_monthly = catalog.price_module_1_monthly
 			payload.price_module_2_monthly = catalog.price_module_2_monthly
 			payload.price_bundle_monthly = catalog.price_bundle_monthly

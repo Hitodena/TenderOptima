@@ -47,6 +47,9 @@ class TZAnalysis(IDMixinUUID, TimestampMixin, Base):
     tz_requirements_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0
     )
+    tz_pages_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
     llm_model: Mapped[str] = mapped_column(String(128), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
 

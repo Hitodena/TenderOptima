@@ -11,6 +11,7 @@ export type PlanCatalogEntry = {
 	max_searches_per_month: number | null
 	max_emails_per_month: number | null
 	max_kp_processed_per_month: number | null
+	max_pages_analyzed_per_month: number | null
 	price_module_1_monthly: string | null
 	price_module_2_monthly: string | null
 	price_bundle_monthly: string | null
@@ -24,6 +25,7 @@ export const PLAN_CATALOG: Record<SubscriptionPlan, PlanCatalogEntry> = {
 		max_searches_per_month: 5,
 		max_emails_per_month: 11,
 		max_kp_processed_per_month: 2,
+		max_pages_analyzed_per_month: 40,
 		price_module_1_monthly: null,
 		price_module_2_monthly: null,
 		price_bundle_monthly: null,
@@ -31,7 +33,7 @@ export const PLAN_CATALOG: Record<SubscriptionPlan, PlanCatalogEntry> = {
 		module_2_enabled: true,
 		features: [
 			'Модуль 1: поиск и рассылка (ограниченный тест)',
-			'Модуль 2: анализ ТЗ и КП (до 2 КП)',
+			'Модуль 2: анализ ТЗ и КП (до 40 страниц)',
 			'Загрузка файлов до 1 МБ',
 		],
 	},
@@ -39,6 +41,7 @@ export const PLAN_CATALOG: Record<SubscriptionPlan, PlanCatalogEntry> = {
 		max_searches_per_month: 50,
 		max_emails_per_month: 1000,
 		max_kp_processed_per_month: 7,
+		max_pages_analyzed_per_month: 140,
 		price_module_1_monthly: '160',
 		price_module_2_monthly: '220',
 		price_bundle_monthly: '340',
@@ -54,6 +57,7 @@ export const PLAN_CATALOG: Record<SubscriptionPlan, PlanCatalogEntry> = {
 		max_searches_per_month: 150,
 		max_emails_per_month: 2500,
 		max_kp_processed_per_month: 20,
+		max_pages_analyzed_per_month: 400,
 		price_module_1_monthly: '250',
 		price_module_2_monthly: '480',
 		price_bundle_monthly: '690',
@@ -61,7 +65,7 @@ export const PLAN_CATALOG: Record<SubscriptionPlan, PlanCatalogEntry> = {
 		module_2_enabled: true,
 		features: [
 			'Модуль 1 и модуль 2 в одной подписке',
-			'До 150 поисков, 2500 писем, 20 КП в месяц',
+			'До 150 поисков, 2500 писем, 400 страниц в месяц',
 			'Анализ ТЗ/КП, экспорт, письма поставщикам',
 		],
 	},
@@ -69,6 +73,7 @@ export const PLAN_CATALOG: Record<SubscriptionPlan, PlanCatalogEntry> = {
 		max_searches_per_month: null,
 		max_emails_per_month: null,
 		max_kp_processed_per_month: null,
+		max_pages_analyzed_per_month: null,
 		price_module_1_monthly: null,
 		price_module_2_monthly: null,
 		price_bundle_monthly: null,
@@ -145,6 +150,11 @@ export function formatEmailsFeature(value: number | null | undefined): string | 
 export function formatKpFeature(value: number | null | undefined): string | null {
 	if (value == null) return null
 	return `${value.toLocaleString('ru-RU')} КП в месяц`
+}
+
+export function formatPagesFeature(value: number | null | undefined): string | null {
+	if (value == null) return null
+	return `${value.toLocaleString('ru-RU')} страниц в месяц`
 }
 
 export function formatUsageLimit(value: number | null | undefined): string {

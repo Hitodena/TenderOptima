@@ -28,6 +28,7 @@ from backend.services.analysis.tz import (
 )
 from backend.services.extraction.router import UnsupportedFileTypeError
 from backend.utils.ocr import OcrNotAvailableError
+from backend.utils.page_count import count_pages_in_file, count_pages_in_files
 from backend.utils.requirements_struct import (
     count_requirements,
     normalize_tz_requirements,
@@ -315,10 +316,12 @@ async def run_tz_extract(self, analysis_id: str) -> dict:
             return {"error": "not_found", "analysis_id": analysis_id}
         user_id = str(row.user_id)
         tz_filename = row.tz_filename
+        tz_pages = count_pages_in_file(tz_path)
         await TZAnalysisDAO.update_fields(
             session,
             aid,
             tz_filename=tz_filename or tz_path.name,
+            tz_pages_count=tz_pages,
             kp_filename=None,
             kp_filenames=[],
             requirements_tz=requirements_tz,
@@ -804,6 +807,7 @@ async def run_supplier_kp_process(
             session,
             sid,
             status=TZAnalysisSupplierStatus.COMPLETED.value,
+            kp_pages_count=count_pages_in_files(paths),
             primary_kp_filename=(
                 supplier.primary_kp_filename
                 or (

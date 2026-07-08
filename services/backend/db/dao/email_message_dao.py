@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.db.dao.base_dao import BaseDAO
-from backend.db.models import EmailMessage, RequestSupplier
+from backend.db.models import EmailMessage, Request, RequestSupplier
 from backend.enums import EmailMessageDirection
 from backend.schemas.thread import ThreadSummaryRow, is_thread_unread
 
@@ -169,6 +169,52 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
             imap_id=imap_id,
         )
         return result.scalar_one_or_none()
+
+    @classmethod
+    async def get_by_message_id(
+        cls, session: AsyncSession, message_id: str
+    ) -> EmailMessage | None:
+        """Load message by RFC Message-ID header."""
+        stmt = (
+            select(cls.model)
+            .where(cls.model.message_id == message_id)
+            .options(
+                selectinload(cls.model.request_supplier).selectinload(
+                    RequestSupplier.request
+                )
+            )
+        )
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @classmethod
+    async def list_admin_page(
+        cls,
+        session: AsyncSession,
+        *,
+        page: int = 1,
+        size: int = 20,
+    ) -> tuple[list[EmailMessage], int]:
+        """Paginated email messages for admin routing UI."""
+        offset = max(page - 1, 0) * size
+        total_stmt = select(func.count()).select_from(cls.model)
+        total = int((await session.execute(total_stmt)).scalar_one())
+        stmt = (
+            select(cls.model)
+            .options(
+                selectinload(cls.model.request_supplier).selectinload(
+                    RequestSupplier.supplier
+                ),
+                selectinload(cls.model.request_supplier)
+                .selectinload(RequestSupplier.request)
+                .selectinload(Request.user),
+            )
+            .order_by(cls.model.received_at.desc().nulls_last())
+            .offset(offset)
+            .limit(size)
+        )
+        rows = list((await session.execute(stmt)).unique().scalars().all())
+        return rows, total
 
     @classmethod
     async def _count_messages_by_request_supplier(

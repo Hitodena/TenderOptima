@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Text
+from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import JSON, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -22,6 +22,11 @@ class EmailMessage(IDMixinUUID, TimestampMixin, Base):
     in_reply_to: Mapped[str | None] = mapped_column()
 
     imap_id: Mapped[str | None] = mapped_column()
+    from_email: Mapped[str | None] = mapped_column(String(255))
+    to_email: Mapped[str | None] = mapped_column(String(255))
+    mailbox_email: Mapped[str | None] = mapped_column(String(255))
+    matched_by: Mapped[str | None] = mapped_column(String(32))
+    match_confidence: Mapped[str | None] = mapped_column(String(16))
     subject: Mapped[str | None] = mapped_column()
     raw_body: Mapped[str | None] = mapped_column(Text)
     attachments: Mapped[list | None] = mapped_column(JSON)

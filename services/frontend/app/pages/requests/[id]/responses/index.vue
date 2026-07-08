@@ -503,10 +503,14 @@ v-for="att in msg.attachments" :key="att.filename" type="button"
 						</div>
 
 						<div class="border-t border-default px-3 md:px-5 py-4 shrink-0">
-							<div class="flex items-center justify-between gap-2 mb-2">
-								<p class="text-xs text-muted font-medium">Ответить на письмо</p>
+							<div class="flex flex-wrap items-center justify-end gap-2 mb-2">
+								<p class="text-xs text-muted font-medium mr-auto">Ответить на письмо</p>
+								<ReceiptAcknowledgementButton v-model="replyBody" />
 								<InsertBusinessInfoButton v-model="replyBody" />
 							</div>
+							<p class="text-xs sm:text-sm text-muted mb-2">
+								{{ t('inbox.requisitesHint') }}
+							</p>
 							<UTextarea
 v-model="replyBody" placeholder="Текст сообщения..." :rows="isMobile ? 3 : 4"
 								class="w-full mb-3" />
@@ -737,6 +741,7 @@ import ImproveConditionsModal from '~/components/ImproveConditionsModal.vue'
 import ResponseMismatchLetterModal from '~/components/ResponseMismatchLetterModal.vue'
 import WinnerNotificationModal from '~/components/WinnerNotificationModal.vue'
 import { getOfferValueTrend } from '#shared/utils/offerValue'
+import { t } from '~/constants/translations'
 
 definePageMeta({ layout: 'default' })
 

@@ -2,7 +2,6 @@ import email
 import email.message
 import email.utils
 import imaplib
-import re
 import smtplib
 import uuid
 from datetime import UTC, datetime
@@ -33,6 +32,10 @@ from backend.enums import (
     RequestSupplierStatus,
 )
 from backend.services.analysis.email_queue import queue_email_analysis
+from backend.utils.email_matching import (
+    match_incoming_email,
+    parse_email_address,
+)
 from backend.utils.email_utils import (
     build_outbound_subject,
     build_request_email_body,
@@ -45,7 +48,6 @@ from backend.utils.email_utils import (
 from backend.utils.imap_poll import (
     build_mailbox_imap_id,
     build_poll_mailboxes,
-    tracking_belongs_to_mailbox_owner,
 )
 from backend.utils.short_id import generate_tid
 from backend.utils.user_email_credentials import (
@@ -56,8 +58,6 @@ from backend.utils.user_email_credentials import (
 
 config = get_config()
 
-TRACKING_ID_RE = re.compile(r"\[TID-([A-Za-z0-9]{6,12})\]", re.IGNORECASE)
-
 
 class SendResult(NamedTuple):
     rs_id: uuid.UUID
@@ -66,6 +66,7 @@ class SendResult(NamedTuple):
     tracking_id: str | None
     subject: str | None
     body_for_msg: str | None
+    recipient: str | None
 
 
 def _decode_header_value(value: str) -> str:
@@ -326,6 +327,9 @@ async def send_reply(
             raw_body=body,
             attachments=att_data or None,
             received_at=datetime.now(UTC),
+            from_email=smtp_creds.user,
+            to_email=recipient,
+            mailbox_email=smtp_creds.user,
         )
         await _mark_rs_status(
             session,
@@ -446,6 +450,9 @@ async def send_custom_email(
             raw_body=body,
             attachments=att_data or None,
             received_at=datetime.now(UTC),
+            from_email=smtp_creds.user,
+            to_email=recipient,
+            mailbox_email=smtp_creds.user,
         )
         await _mark_rs_status(
             session,
@@ -539,6 +546,7 @@ async def send_emails(self, request_id: str) -> dict:
                             None,
                             None,
                             None,
+                            recipient,
                         )
                     )
                     failed += 1
@@ -589,6 +597,7 @@ async def send_emails(self, request_id: str) -> dict:
                             rs_tracking_id,
                             msg["Subject"],
                             plain_body,
+                            recipient,
                         )
                     )
                     sent += 1
@@ -615,6 +624,7 @@ async def send_emails(self, request_id: str) -> dict:
                             None,
                             None,
                             None,
+                            recipient,
                         )
                     )
                     failed += 1
@@ -650,6 +660,9 @@ async def send_emails(self, request_id: str) -> dict:
                     raw_body=result.body_for_msg,
                     attachments=attachment_data or None,
                     received_at=datetime.now(UTC),
+                    from_email=smtp_creds.user,
+                    to_email=result.recipient,
+                    mailbox_email=smtp_creds.user,
                 )
 
         await RequestDAO.update_fields(
@@ -717,14 +730,8 @@ async def poll_imap(self) -> dict:
                     msg = email.message_from_bytes(msg_data[0][1])  # type: ignore
 
                     subject = _decode_header_value(msg.get("Subject", ""))
-                    match = TRACKING_ID_RE.search(subject)
-                    if not match:
-                        logger.debug(
-                            "No TID in subject, skipping", subject=subject
-                        )
-                        skipped += 1
-                        continue
-
+                    from_email = parse_email_address(msg.get("From"))
+                    to_email = parse_email_address(msg.get("To"))
                     body = _extract_body(msg)
                     attachments = _extract_attachments(msg)
 
@@ -742,7 +749,6 @@ async def poll_imap(self) -> dict:
                             "imap_id": build_mailbox_imap_id(
                                 imap_creds, uid_str
                             ),
-                            "tracking_id": match.group(1),
                             "subject": subject,
                             "body": body,
                             "attachments": attachments,
@@ -753,6 +759,9 @@ async def poll_imap(self) -> dict:
                             "in_reply_to": normalize_message_id(
                                 msg.get("In-Reply-To")
                             ),
+                            "references": msg.get("References"),
+                            "from_email": from_email,
+                            "to_email": to_email,
                         }
                     )
 
@@ -768,31 +777,6 @@ async def poll_imap(self) -> dict:
             async with db_manager.session() as session:
                 for item in parsed:
                     try:
-                        rs = await RequestSupplierDAO.get_by_tracking_id(
-                            session, item["tracking_id"]
-                        )
-                        if not rs:
-                            logger.warning(
-                                "RequestSupplier not found for TID",
-                                tracking_id=str(item["tracking_id"]),
-                            )
-                            skipped += 1
-                            continue
-
-                        if not tracking_belongs_to_mailbox_owner(
-                            mailbox.owner_user_id,
-                            rs.request.user_id,
-                        ):
-                            logger.warning(
-                                "TID belongs to another user mailbox",
-                                tracking_id=str(item["tracking_id"]),
-                                mailbox=mailbox_label,
-                                request_user_id=str(rs.request.user_id),
-                                mailbox_owner_id=str(mailbox.owner_user_id),
-                            )
-                            skipped += 1
-                            continue
-
                         existing = await EmailMessageDAO.get_by_imap_id(
                             session, item["imap_id"]
                         )
@@ -800,8 +784,35 @@ async def poll_imap(self) -> dict:
                             skipped += 1
                             continue
 
-                        email_body_text = _parse_email_body(item["body"])
+                        if item.get("message_id"):
+                            by_mid = await EmailMessageDAO.get_by_message_id(
+                                session, item["message_id"]
+                            )
+                            if by_mid:
+                                skipped += 1
+                                continue
 
+                        match = await match_incoming_email(
+                            session,
+                            subject=item.get("subject"),
+                            body=item.get("body"),
+                            from_email=item.get("from_email"),
+                            to_email=item.get("to_email"),
+                            in_reply_to=item.get("in_reply_to"),
+                            references=item.get("references"),
+                            mailbox_owner_id=mailbox.owner_user_id,
+                        )
+                        if not match:
+                            logger.debug(
+                                "No thread match for incoming message",
+                                imap_id=item["imap_id"],
+                                from_email=item.get("from_email"),
+                            )
+                            skipped += 1
+                            continue
+
+                        rs = match.request_supplier
+                        email_body_text = _parse_email_body(item["body"])
                         processed_attachments: list[dict] = []
                         raw_attachments: list[dict] = (
                             item.get("attachments") or []
@@ -905,6 +916,11 @@ async def poll_imap(self) -> dict:
                             attachments=processed_attachments or None,
                             extracted_text=item["body"],
                             received_at=item["received_at"],
+                            from_email=item.get("from_email"),
+                            to_email=item.get("to_email"),
+                            mailbox_email=imap_creds.user,
+                            matched_by=match.matched_by,
+                            match_confidence=match.match_confidence,
                         )
                         request = await RequestDAO.get_by_id(
                             session, rs.request_id
@@ -924,7 +940,7 @@ async def poll_imap(self) -> dict:
                         processed += 1
                         logger.info(
                             "Reply processed",
-                            tracking_id=str(item["tracking_id"]),
+                            matched_by=match.matched_by,
                             rs_id=str(rs.id),
                             attachments=len(item["attachments"]),
                         )

@@ -7,6 +7,10 @@ from dataclasses import dataclass
 
 from backend.core.config import Config, get_config
 from backend.db.models import User
+from backend.utils.user_email_settings import (
+    decrypted_imap_password,
+    decrypted_smtp_password,
+)
 
 
 @dataclass(frozen=True)
@@ -31,12 +35,13 @@ def resolve_smtp_credentials(
 ) -> SmtpCredentials:
     """Return user SMTP settings when complete, else global config."""
     cfg = config or get_config()
-    if user and user.smtp_host and user.smtp_user and user.smtp_password:
+    password = decrypted_smtp_password(user) if user else None
+    if user and user.smtp_host and user.smtp_user and password:
         return SmtpCredentials(
             host=user.smtp_host,
             port=cfg.smtp_port,
             user=user.smtp_user,
-            password=user.smtp_password,
+            password=password,
         )
     return SmtpCredentials(
         host=cfg.smtp_host,
@@ -52,12 +57,13 @@ def resolve_imap_credentials(
 ) -> ImapCredentials:
     """Return user IMAP settings when complete, else global config."""
     cfg = config or get_config()
-    if user and user.imap_host and user.imap_user and user.imap_password:
+    password = decrypted_imap_password(user) if user else None
+    if user and user.imap_host and user.imap_user and password:
         return ImapCredentials(
             host=user.imap_host,
             port=cfg.imap_port,
             user=user.imap_user,
-            password=user.imap_password,
+            password=password,
         )
     return ImapCredentials(
         host=cfg.imap_host,
@@ -107,4 +113,6 @@ def smtp_connection(
 
 
 def user_has_imap_config(user: User) -> bool:
-    return bool(user.imap_host and user.imap_user and user.imap_password)
+    return bool(
+        user.imap_host and user.imap_user and decrypted_imap_password(user)
+    )

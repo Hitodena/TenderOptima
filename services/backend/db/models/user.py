@@ -20,10 +20,12 @@ class User(IDMixinUUID, TimestampMixin, Base):
     business_info: Mapped[str | None] = mapped_column(Text)
 
     smtp_host: Mapped[str | None] = mapped_column()
+    smtp_port: Mapped[int | None] = mapped_column()
     smtp_user: Mapped[str | None] = mapped_column()
     smtp_password: Mapped[str | None] = mapped_column()
 
     imap_host: Mapped[str | None] = mapped_column()
+    imap_port: Mapped[int | None] = mapped_column()
     imap_user: Mapped[str | None] = mapped_column()
     imap_password: Mapped[str | None] = mapped_column()
 

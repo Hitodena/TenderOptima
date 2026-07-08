@@ -114,6 +114,110 @@ v-if="profileSuccess" color="success" variant="soft" icon="i-lucide-check"
 						</div>
 					</template>
 
+					<template #mail>
+						<div>
+							<h2 class="text-base font-semibold mb-0.5">{{ t('profile.mailTitle') }}</h2>
+							<p class="text-sm text-muted mb-5">{{ t('profile.mailDescription') }}</p>
+
+							<UAlert
+								v-if="mailLoadError"
+								color="error"
+								variant="soft"
+								icon="i-lucide-circle-alert"
+								:description="mailLoadError"
+								class="mb-4"
+							/>
+
+							<UCard v-else :ui="{ body: 'p-5 space-y-6' }">
+								<p class="text-sm text-muted">{{ t('profile.mailManual') }}</p>
+
+								<div>
+									<h3 class="text-sm font-semibold mb-3">{{ t('profile.smtpSection') }}</h3>
+									<div class="grid gap-3 sm:grid-cols-2">
+										<UFormField :label="t('profile.smtpHost')">
+											<UInput v-model="mailForm.smtp_host" class="w-full" placeholder="smtp.example.com" />
+										</UFormField>
+										<UFormField :label="t('profile.smtpUser')">
+											<UInput v-model="mailForm.smtp_user" class="w-full" />
+										</UFormField>
+										<UFormField
+											:label="t('profile.smtpPassword')"
+											class="sm:col-span-2"
+											:hint="mailSettings?.smtp_password_configured ? t('profile.passwordConfiguredHint') : undefined"
+										>
+											<UInput
+												v-model="mailForm.smtp_password"
+												type="password"
+												class="w-full"
+												autocomplete="new-password"
+											/>
+										</UFormField>
+										<UCheckbox
+											v-if="mailSettings?.smtp_password_configured"
+											v-model="mailForm.clear_smtp_password"
+											:label="t('profile.clearPassword')"
+											class="sm:col-span-2"
+										/>
+									</div>
+								</div>
+
+								<div>
+									<h3 class="text-sm font-semibold mb-3">{{ t('profile.imapSection') }}</h3>
+									<div class="grid gap-3 sm:grid-cols-2">
+										<UFormField :label="t('profile.imapHost')">
+											<UInput v-model="mailForm.imap_host" class="w-full" placeholder="imap.example.com" />
+										</UFormField>
+										<UFormField :label="t('profile.imapUser')">
+											<UInput v-model="mailForm.imap_user" class="w-full" />
+										</UFormField>
+										<UFormField
+											:label="t('profile.imapPassword')"
+											class="sm:col-span-2"
+											:hint="mailSettings?.imap_password_configured ? t('profile.passwordConfiguredHint') : undefined"
+										>
+											<UInput
+												v-model="mailForm.imap_password"
+												type="password"
+												class="w-full"
+												autocomplete="new-password"
+											/>
+										</UFormField>
+										<UCheckbox
+											v-if="mailSettings?.imap_password_configured"
+											v-model="mailForm.clear_imap_password"
+											:label="t('profile.clearPassword')"
+											class="sm:col-span-2"
+										/>
+									</div>
+								</div>
+
+								<UAlert
+									v-if="mailError"
+									color="error"
+									variant="soft"
+									icon="i-lucide-circle-alert"
+									:description="mailError"
+								/>
+								<UAlert
+									v-if="mailSuccess"
+									color="success"
+									variant="soft"
+									icon="i-lucide-check"
+									:description="t('profile.mailSaved')"
+								/>
+
+								<UButton
+									block
+									:loading="savingMail"
+									leading-icon="i-lucide-save"
+									@click="saveMailSettings"
+								>
+									{{ t('profile.saveMail') }}
+								</UButton>
+							</UCard>
+						</div>
+					</template>
+
 					<template #contact>
 						<div>
 							<h2 class="text-base font-semibold mb-0.5">Контактная информация</h2>
@@ -187,8 +291,9 @@ v-if="profileSuccess" color="success" variant="soft" icon="i-lucide-check"
 </template>
 
 <script lang="ts" setup>
-import type { UserResponse, UserUpdate } from '#shared/types'
+import type { UserResponse, UserUpdate, UserEmailSettingsResponse, UserEmailSettingsUpdate } from '#shared/types'
 import { getApiErrorDetail } from '#shared/utils/apiError'
+import { t } from '~/constants/translations'
 
 definePageMeta({ layout: 'default' })
 
@@ -215,8 +320,9 @@ const form = reactive({
 const tabs = computed(() => [
 	{ label: 'Акты', slot: 'acts', value: 'acts', icon: 'i-lucide-file-text' },
 	{ label: 'Визитная карточка', slot: 'business_card', value: 'business_card', icon: 'i-lucide-id-card' },
+	{ label: t('profile.mailTab'), slot: 'mail', value: 'mail', icon: 'i-lucide-mail' },
 	{ label: 'Профиль', slot: 'profile', value: 'profile', icon: 'i-lucide-user' },
-	{ label: 'Свяжитесь с нами', slot: 'contact', value: 'contact', icon: 'i-lucide-mail' },
+	{ label: 'Свяжитесь с нами', slot: 'contact', value: 'contact', icon: 'i-lucide-headphones' },
 ])
 
 const tabFromQuery = computed(() => {
@@ -232,6 +338,9 @@ watch(
 		if (tab && tabs.value.some((item) => item.value === tab)) {
 			activeTab.value = tab
 		}
+		if (tab === 'mail') {
+			void loadMailSettings()
+		}
 	},
 	{ immediate: true },
 )
@@ -239,7 +348,81 @@ watch(
 watch(activeTab, (tab) => {
 	if (route.query.tab === tab) return
 	navigateTo({ path: '/profile', query: { tab } }, { replace: true })
+	if (tab === 'mail' && !mailSettings.value && !mailLoadError.value) {
+		void loadMailSettings()
+	}
 })
+
+const mailSettings = ref<UserEmailSettingsResponse | null>(null)
+const mailForm = reactive({
+	smtp_host: '',
+	smtp_user: '',
+	smtp_password: '',
+	clear_smtp_password: false,
+	imap_host: '',
+	imap_user: '',
+	imap_password: '',
+	clear_imap_password: false,
+})
+const savingMail = ref(false)
+const mailError = ref<string | null>(null)
+const mailSuccess = ref(false)
+const mailLoadError = ref<string | null>(null)
+
+function fillMailForm(settings: UserEmailSettingsResponse) {
+	mailForm.smtp_host = settings.smtp_host ?? ''
+	mailForm.smtp_user = settings.smtp_user ?? ''
+	mailForm.smtp_password = ''
+	mailForm.clear_smtp_password = false
+	mailForm.imap_host = settings.imap_host ?? ''
+	mailForm.imap_user = settings.imap_user ?? ''
+	mailForm.imap_password = ''
+	mailForm.clear_imap_password = false
+}
+
+async function loadMailSettings() {
+	mailLoadError.value = null
+	try {
+		mailSettings.value = await get<UserEmailSettingsResponse>('/auth/me/email-settings')
+		fillMailForm(mailSettings.value)
+	} catch (e: unknown) {
+		mailLoadError.value = getApiErrorDetail(e) ?? t('profile.mailLoadError')
+	}
+}
+
+async function saveMailSettings() {
+	if (savingMail.value) return
+	savingMail.value = true
+	mailError.value = null
+	mailSuccess.value = false
+	try {
+		const payload: UserEmailSettingsUpdate = {
+			smtp_host: mailForm.smtp_host.trim() || null,
+			smtp_user: mailForm.smtp_user.trim() || null,
+			imap_host: mailForm.imap_host.trim() || null,
+			imap_user: mailForm.imap_user.trim() || null,
+			clear_smtp_password: mailForm.clear_smtp_password,
+			clear_imap_password: mailForm.clear_imap_password,
+		}
+		if (mailForm.smtp_password.trim()) {
+			payload.smtp_password = mailForm.smtp_password
+		}
+		if (mailForm.imap_password.trim()) {
+			payload.imap_password = mailForm.imap_password
+		}
+		mailSettings.value = await patch<UserEmailSettingsResponse>(
+			'/auth/me/email-settings',
+			payload,
+		)
+		fillMailForm(mailSettings.value)
+		mailSuccess.value = true
+		setTimeout(() => { mailSuccess.value = false }, 3000)
+	} catch (e: unknown) {
+		mailError.value = getApiErrorDetail(e) ?? t('profile.mailSaveError')
+	} finally {
+		savingMail.value = false
+	}
+}
 
 const savingCard = ref(false)
 const cardError = ref<string | null>(null)

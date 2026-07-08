@@ -33,6 +33,7 @@ class Subscription(IDMixinUUID, TimestampMixin, Base):
     max_searches_per_month: Mapped[int | None] = mapped_column(Integer)
     max_emails_per_month: Mapped[int | None] = mapped_column(Integer)
     max_kp_processed_per_month: Mapped[int | None] = mapped_column(Integer)
+    max_pages_analyzed_per_month: Mapped[int | None] = mapped_column(Integer)
 
     geo_code: Mapped[str] = mapped_column(
         String(8), default=SubscriptionGeo.BY.value, nullable=False

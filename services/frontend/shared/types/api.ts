@@ -33,6 +33,7 @@ export interface SubscriptionResponse {
 	max_searches_per_month: number | null;
 	max_emails_per_month: number | null;
 	max_kp_processed_per_month: number | null;
+	max_pages_analyzed_per_month: number | null;
 	max_tz_kp_upload_bytes: number | null;
 	geo_code: string;
 	currency_code: string;
@@ -44,23 +45,29 @@ export interface SubscriptionResponse {
 	searches_used_this_month?: number;
 	emails_sent_this_month?: number;
 	kp_processed_this_month?: number;
+	pages_analyzed_this_month?: number;
+	pages_analysis_remaining?: number | null;
 }
 
 export interface UserEmailSettingsResponse {
 	smtp_host: string | null;
+	smtp_port: number | null;
 	smtp_user: string | null;
 	smtp_password_configured: boolean;
 	imap_host: string | null;
+	imap_port: number | null;
 	imap_user: string | null;
 	imap_password_configured: boolean;
 }
 
 export interface UserEmailSettingsUpdate {
 	smtp_host?: string | null;
+	smtp_port?: number | null;
 	smtp_user?: string | null;
 	smtp_password?: string | null;
 	clear_smtp_password?: boolean;
 	imap_host?: string | null;
+	imap_port?: number | null;
 	imap_user?: string | null;
 	imap_password?: string | null;
 	clear_imap_password?: boolean;
@@ -126,6 +133,7 @@ export interface SubscriptionUpdate {
 	max_searches_per_month?: number | null;
 	max_emails_per_month?: number | null;
 	max_kp_processed_per_month?: number | null;
+	max_pages_analyzed_per_month?: number | null;
 	geo_code?: string | null;
 	currency_code?: string | null;
 	price_module_1_monthly?: string | null;
@@ -141,8 +149,12 @@ export interface AdminUserListItem {
 	full_name: string | null;
 	company_name: string | null;
 	is_admin: boolean;
+	created_at: string;
 	smtp_password_configured: boolean;
 	imap_password_configured: boolean;
+	emails_sent_this_month: number;
+	pages_analyzed_this_month: number;
+	pages_analysis_remaining: number | null;
 	subscription: SubscriptionResponse | null;
 }
 
@@ -152,8 +164,49 @@ export interface AdminUserDetail {
 	full_name: string | null;
 	company_name: string | null;
 	is_admin: boolean;
+	created_at: string;
 	email_settings: UserEmailSettingsResponse;
+	emails_sent_this_month: number;
+	pages_analyzed_this_month: number;
+	pages_analysis_remaining: number | null;
 	subscription: SubscriptionResponse | null;
+}
+
+export interface AdminEmailMessageItem {
+	id: string;
+	direction: string;
+	subject: string | null;
+	from_email: string | null;
+	to_email: string | null;
+	mailbox_email: string | null;
+	imap_id: string | null;
+	message_id: string | null;
+	matched_by: string | null;
+	match_confidence: string | null;
+	received_at: string | null;
+	request_supplier_id: string;
+	request_id: string | null;
+	tracking_id: string | null;
+	supplier_email: string | null;
+	supplier_company: string | null;
+	supplier_domain: string | null;
+	user_email: string | null;
+	user_id: string | null;
+}
+
+export interface AdminEmailMessagePage {
+	items: AdminEmailMessageItem[];
+	total: number;
+	page: number;
+	size: number;
+}
+
+export interface AdminEmailMessageLinkUpdate {
+	request_supplier_id: string;
+}
+
+export interface AdminRequestSupplierRecipientUpdate {
+	sent_to_email: string;
 }
 
 export interface RegisterCreate {

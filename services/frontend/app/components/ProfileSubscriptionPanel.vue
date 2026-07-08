@@ -14,6 +14,8 @@ import {
 
 } from '#shared/utils/subscriptionDisplay'
 
+import { t } from '~/constants/translations'
+
 
 
 const props = defineProps<{
@@ -137,16 +139,22 @@ const planLabel = computed(() =>
 
 				</div>
 
-				<div class="flex justify-between gap-3 text-sm">
-
-					<span class="text-muted">КП в месяц</span>
-
-					<span class="font-medium tabular-nums">
-
-						{{ formatUsage(subscription.kp_processed_this_month, subscription.max_kp_processed_per_month) }}
-
-					</span>
-
+				<div class="space-y-3 text-sm">
+					<div class="flex justify-between gap-3">
+						<span class="text-muted">{{ t('subscription.pagesPerMonth') }}</span>
+						<span class="font-medium tabular-nums">
+							{{ formatUsage(subscription.pages_analyzed_this_month, subscription.max_pages_analyzed_per_month) }}
+						</span>
+					</div>
+					<div
+						v-if="subscription.pages_analysis_remaining != null"
+						class="flex justify-between gap-3"
+					>
+						<span class="text-muted">{{ t('subscription.pagesRemaining') }}</span>
+						<span class="font-medium tabular-nums">
+							{{ subscription.pages_analysis_remaining.toLocaleString('ru-RU') }}
+						</span>
+					</div>
 				</div>
 
 			</UCard>

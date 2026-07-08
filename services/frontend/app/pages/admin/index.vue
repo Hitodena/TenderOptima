@@ -19,6 +19,10 @@
 					<ProfileAdminPanel />
 				</template>
 
+				<template #email>
+					<AdminEmailRoutingPanel />
+				</template>
+
 				<template #errors>
 						<div class="space-y-4">
 							<div class="flex items-center justify-between flex-wrap gap-3">
@@ -395,6 +399,7 @@ const PAGE_SIZE = 20
 const activeTab = ref('users')
 const tabs = [
 	{ label: 'Пользователи', slot: 'users', value: 'users', icon: 'i-lucide-users' },
+	{ label: t('admin.emailRouting.tabLabel'), slot: 'email', value: 'email', icon: 'i-lucide-mail' },
 	{ label: 'Ошибки', slot: 'errors', value: 'errors', icon: 'i-lucide-bug' },
 	{ label: 'Идеи', slot: 'ideas', value: 'ideas', icon: 'i-lucide-lightbulb' },
 	{ label: 'Блэклист', slot: 'blacklist', value: 'blacklist', icon: 'i-lucide-shield-ban' },

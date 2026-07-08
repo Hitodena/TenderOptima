@@ -35,6 +35,7 @@ const RESOURCE_LABELS: Record<string, string> = {
 	searches: 'поисков',
 	emails: 'писем',
 	kp_processed: 'КП',
+	pages_analyzed: 'страниц',
 }
 
 const SUBSCRIPTION_CODES = new Set<string>([
