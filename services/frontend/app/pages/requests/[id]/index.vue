@@ -228,10 +228,10 @@ color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 
 							<template #company_name-cell="{ row }">
 								<div
-									class="min-w-0 py-0.5"
+									class="min-w-0 max-w-full py-0.5"
 									:class="lockedRowContentClass(row.original)">
 									<span
-										class="font-medium text-sm leading-snug line-clamp-2 wrap-break-word block"
+										class="font-medium text-sm leading-snug line-clamp-2 wrap-break-word overflow-hidden block"
 										:title="row.original.supplier?.company_name ?? undefined">
 										{{ row.original.supplier?.company_name }}
 									</span>
@@ -576,8 +576,8 @@ const supplierColumns = computed<TableColumn<RequestSupplierResponse>[]>(() => {
 		header: 'Компания',
 		meta: {
 			class: {
-				th: 'min-w-80 sm:min-w-96 lg:min-w-[28rem]',
-				td: 'min-w-80 sm:min-w-96 lg:min-w-[28rem] max-w-none whitespace-normal align-top',
+				th: 'min-w-80 sm:min-w-96 lg:min-w-[28rem] max-w-[28rem]',
+				td: 'min-w-80 sm:min-w-96 lg:min-w-[28rem] max-w-[28rem] whitespace-normal align-top',
 			},
 		},
 	})

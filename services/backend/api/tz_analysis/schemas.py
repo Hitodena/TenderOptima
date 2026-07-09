@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated
 
+from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from backend.enums import (
@@ -219,7 +220,20 @@ class TZAnalysisDetailResponse(TZAnalysisSessionResult):
 
 
 def row_to_session(row, *, suppliers=None) -> TZAnalysisDetailResponse:
-    items = [TZAnalysisItem(**item) for item in (row.items or [])]
+    items: list[TZAnalysisItem] = []
+    for raw in row.items or []:
+        if not isinstance(raw, dict):
+            continue
+        try:
+            items.append(TZAnalysisItem(**raw))
+        except Exception:
+            # Skip malformed historical rows so overrides/status updates
+            # still return a usable session payload.
+            logger.warning(
+                "Skipping invalid TZ analysis item in response",
+                analysis_id=str(getattr(row, "id", "")),
+            )
+            continue
     kp_filenames = row.kp_filenames or []
     if not kp_filenames and row.kp_filename:
         kp_filenames = [row.kp_filename]
