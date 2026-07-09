@@ -68,6 +68,7 @@ class TZAnalysisStatus(StrEnum):
     PARTIAL = "partial"
     MISSING = "missing"
     NOT_FOUND = "not_found"
+    NOT_COMPARE = "not_compare"  # manual only; excluded from supplier letters
 
 
 class TZAnalysisSupplierStatus(StrEnum):

@@ -1,7 +1,9 @@
+import asyncio
 import email
 import email.message
 import email.utils
 import imaplib
+import random
 import smtplib
 import uuid
 from datetime import UTC, datetime
@@ -518,7 +520,7 @@ async def send_emails(self, request_id: str) -> dict:
 
     try:
         with smtp_connection(smtp_creds) as smtp:
-            for rs in pending:
+            for index, rs in enumerate(pending):
                 async with db_manager.session() as quota_session:
                     if not await worker_can_send_emails(
                         quota_session, user, count=1
@@ -550,84 +552,93 @@ async def send_emails(self, request_id: str) -> dict:
                         )
                     )
                     failed += 1
-                    continue
-
-                user = rs.request.user
-                rs_tracking_id = generate_tid()
-                plain_body = build_request_email_body(request, user)
-                outbound_subject = build_outbound_subject(
-                    request,
-                    rs_tracking_id,
-                )
-
-                if attachment_data:
-                    msg = MIMEMultipart()
-                    msg.attach(MIMEText(plain_body, "plain", "utf-8"))
-                    for att in attachment_data:
-                        part = MIMEBase("application", "octet-stream")
-                        part.set_payload(att["data"])
-                        encoders.encode_base64(part)
-                        part.add_header(
-                            "Content-Disposition",
-                            f'attachment; filename="{att["filename"]}"',
-                        )
-                        msg.attach(part)
                 else:
-                    msg = MIMEText(plain_body, "plain", "utf-8")
-                msg["From"] = (
-                    f"{user.company_name or 'TenderOptima'} <{smtp_creds.user}>"
-                )
-                msg["To"] = recipient
-                msg["Subject"] = outbound_subject
-                outbound_message_id = make_message_id(smtp_creds.user)
-                msg["Message-ID"] = outbound_message_id
+                    user = rs.request.user
+                    rs_tracking_id = generate_tid()
+                    plain_body = build_request_email_body(request, user)
+                    outbound_subject = build_outbound_subject(
+                        request,
+                        rs_tracking_id,
+                    )
 
-                try:
-                    smtp_recipient = encode_recipient_for_smtp(recipient)
-                    smtp.sendmail(
-                        smtp_creds.user,
-                        smtp_recipient,
-                        msg.as_string(),
+                    if attachment_data:
+                        msg = MIMEMultipart()
+                        msg.attach(MIMEText(plain_body, "plain", "utf-8"))
+                        for att in attachment_data:
+                            part = MIMEBase("application", "octet-stream")
+                            part.set_payload(att["data"])
+                            encoders.encode_base64(part)
+                            part.add_header(
+                                "Content-Disposition",
+                                f'attachment; filename="{att["filename"]}"',
+                            )
+                            msg.attach(part)
+                    else:
+                        msg = MIMEText(plain_body, "plain", "utf-8")
+                    msg["From"] = (
+                        f"{user.company_name or 'TenderOptima'} "
+                        f"<{smtp_creds.user}>"
                     )
-                    results.append(
-                        SendResult(
-                            rs.id,
-                            RequestSupplierStatus.SENT,
-                            outbound_message_id,
-                            rs_tracking_id,
-                            msg["Subject"],
-                            plain_body,
-                            recipient,
+                    msg["To"] = recipient
+                    msg["Subject"] = outbound_subject
+                    outbound_message_id = make_message_id(smtp_creds.user)
+                    msg["Message-ID"] = outbound_message_id
+
+                    try:
+                        smtp_recipient = encode_recipient_for_smtp(recipient)
+                        smtp.sendmail(
+                            smtp_creds.user,
+                            smtp_recipient,
+                            msg.as_string(),
                         )
-                    )
-                    sent += 1
-                    logger.info(
-                        "Email sent",
-                        domain=supplier.domain,
-                        recipient=recipient,
-                    )
-                except (
-                    smtplib.SMTPException,
-                    UnicodeEncodeError,
-                    ValueError,
-                ) as exc:
-                    logger.error(
-                        "Failed to send email",
-                        domain=supplier.domain,
-                        error=str(exc),
-                    )
-                    results.append(
-                        SendResult(
-                            rs.id,
-                            RequestSupplierStatus.FAILED,
-                            None,
-                            None,
-                            None,
-                            None,
-                            recipient,
+                        results.append(
+                            SendResult(
+                                rs.id,
+                                RequestSupplierStatus.SENT,
+                                outbound_message_id,
+                                rs_tracking_id,
+                                msg["Subject"],
+                                plain_body,
+                                recipient,
+                            )
                         )
+                        sent += 1
+                        logger.info(
+                            "Email sent",
+                            domain=supplier.domain,
+                            recipient=recipient,
+                        )
+                    except (
+                        smtplib.SMTPException,
+                        UnicodeEncodeError,
+                        ValueError,
+                    ) as exc:
+                        logger.error(
+                            "Failed to send email",
+                            domain=supplier.domain,
+                            error=str(exc),
+                        )
+                        results.append(
+                            SendResult(
+                                rs.id,
+                                RequestSupplierStatus.FAILED,
+                                None,
+                                None,
+                                None,
+                                None,
+                                recipient,
+                            )
+                        )
+                        failed += 1
+
+                if index < len(pending) - 1:
+                    delay = random.uniform(1, 2)
+                    logger.debug(
+                        "Bulk send pause",
+                        delay_seconds=round(delay, 3),
+                        request_id=request_id,
                     )
-                    failed += 1
+                    await asyncio.sleep(delay)
     except smtplib.SMTPException as exc:
         logger.exception("SMTP connection failed", error=str(exc))
         raise self.retry(exc=exc) from exc  # noqa: B904

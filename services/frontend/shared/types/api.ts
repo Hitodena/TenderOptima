@@ -388,7 +388,12 @@ export interface ReplyPayload {
 	body: string;
 }
 
-export type TZAnalysisStatus = 'met' | 'partial' | 'missing' | 'not_found';
+export type TZAnalysisStatus =
+	| 'met'
+	| 'partial'
+	| 'missing'
+	| 'not_found'
+	| 'not_compare';
 
 export interface TZAnalysisKpStats {
 	match_score: number;

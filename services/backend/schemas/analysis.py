@@ -82,7 +82,9 @@ def compute_tz_stats(items: list[TZAnalysisItem]) -> dict[str, int]:
     partial = sum(1 for i in items if i.status == TZAnalysisStatus.PARTIAL)
     missing = sum(1 for i in items if i.status == TZAnalysisStatus.MISSING)
     not_found = sum(1 for i in items if i.status == TZAnalysisStatus.NOT_FOUND)
-    total = len(items)
+    # Exclude manual "not_compare" from the match-score denominator.
+    scored = [i for i in items if i.status != TZAnalysisStatus.NOT_COMPARE]
+    total = len(scored)
     if total == 0:
         score = 0
     else:

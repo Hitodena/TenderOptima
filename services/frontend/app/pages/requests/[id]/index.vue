@@ -235,7 +235,7 @@ color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 										<UIcon name="i-lucide-building-2" class="w-3.5 h-3.5 text-muted" />
 									</div>
 									<span
-										class="font-medium text-sm leading-snug line-clamp-2 wrap-break-word min-w-36"
+										class="font-medium text-sm leading-snug line-clamp-2 wrap-break-word min-w-0"
 										:title="row.original.supplier?.company_name ?? undefined">
 										{{ row.original.supplier?.company_name }}
 									</span>
@@ -566,12 +566,26 @@ const statusLabel = computed(() => getRequestStatusLabel(request.value?.status ?
 const supplierColumns = computed<TableColumn<RequestSupplierResponse>[]>(() => {
 	const cols: TableColumn<RequestSupplierResponse>[] = []
 	if (canManageMailingSelection.value) {
-		cols.push({ accessorKey: 'is_enabled', header: 'Рассылка' })
+		cols.push({
+			accessorKey: 'is_enabled',
+			header: 'Рассылка',
+			meta: {
+				class: {
+					th: 'w-20 min-w-20 max-w-24 text-center px-2',
+					td: 'w-20 min-w-20 max-w-24 text-center px-2',
+				},
+			},
+		})
 	}
 	cols.push({
 		accessorKey: 'company_name',
 		header: 'Компания',
-		meta: { class: { th: 'min-w-44', td: 'min-w-44 max-w-80 whitespace-normal align-top' } },
+		meta: {
+			class: {
+				th: 'min-w-56 sm:min-w-64',
+				td: 'min-w-56 sm:min-w-64 max-w-none whitespace-normal align-top',
+			},
+		},
 	})
 	if (canManageSuppliers.value) {
 		cols.push({ accessorKey: 'domain', header: 'Домен' })

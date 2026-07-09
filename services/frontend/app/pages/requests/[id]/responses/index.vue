@@ -108,8 +108,14 @@ v-else-if="sortedThreads.length === 0"
 							@click="selectThread(thread.rs_id)">
 						<div class="flex items-start gap-3">
 							<div
-								class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-								<UIcon name="i-lucide-building-2" class="w-5 h-5 text-primary" />
+								class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
+								:class="thread.message_count > 0 ? 'bg-primary/10' : 'bg-elevated'"
+							>
+								<UIcon
+									name="i-lucide-building-2"
+									class="w-5 h-5"
+									:class="thread.message_count > 0 ? 'text-primary' : 'text-muted'"
+								/>
 							</div>
 							<div class="flex-1 min-w-0">
 								<div class="flex items-center justify-between gap-2 mb-1">

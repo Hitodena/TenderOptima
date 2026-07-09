@@ -113,6 +113,7 @@ export const TZ_ITEM_STATUS_COLOR: Record<TZAnalysisStatus, BadgeColor> = {
 	partial: 'warning',
 	missing: 'error',
 	not_found: 'neutral',
+	not_compare: 'neutral',
 };
 
 export const TZ_ITEM_STATUS_LABEL: Record<TZAnalysisStatus, string> = {
@@ -120,6 +121,7 @@ export const TZ_ITEM_STATUS_LABEL: Record<TZAnalysisStatus, string> = {
 	partial: 'Частично',
 	missing: 'Не соответствует',
 	not_found: 'Не найдено',
+	not_compare: 'Не сравнивать',
 };
 
 export function getTzItemStatusColor(s: TZAnalysisStatus): BadgeColor {

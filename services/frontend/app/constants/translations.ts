@@ -128,6 +128,9 @@ export const translations = {
 			'Анализ КП для «{name}» выполняется…',
 		kpSupplierProcessingHint:
 			'Ожидайте. Страница обновится автоматически.',
+		statusNotCompare: 'Не сравнивать',
+		statusNotCompareHint:
+			'Статус ставится только вручную и не попадает в письмо поставщику',
 	},
 	inbox: {
 		insertBusinessInfo: 'Вставить реквизиты',

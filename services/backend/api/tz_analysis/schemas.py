@@ -262,4 +262,5 @@ STATUS_LABELS = {
     TZAnalysisStatus.PARTIAL: "Частично",
     TZAnalysisStatus.MISSING: "Не соответствует",
     TZAnalysisStatus.NOT_FOUND: "Не найдено",
+    TZAnalysisStatus.NOT_COMPARE: "Не сравнивать",
 }

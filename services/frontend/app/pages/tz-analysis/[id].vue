@@ -869,6 +869,7 @@ const tzFilterOptions = [
 	{ label: 'Частично', value: 'partial' },
 	{ label: 'Не соответствует', value: 'missing' },
 	{ label: 'Не найдено', value: 'not_found' },
+	{ label: t('tzAnalysis.statusNotCompare'), value: 'not_compare' },
 ]
 
 type TZItemView = TZAnalysisItem & { _index: number }
@@ -1531,7 +1532,8 @@ function computeStatsFromItems(items: TZAnalysisItem[]): TZAnalysisKpStats {
 	const partial = items.filter((item) => item.status === 'partial').length
 	const missing = items.filter((item) => item.status === 'missing').length
 	const not_found = items.filter((item) => item.status === 'not_found').length
-	const total = items.length
+	const scored = items.filter((item) => item.status !== 'not_compare')
+	const total = scored.length
 	return {
 		match_score: total === 0 ? 0 : Math.round((met + 0.5 * partial) / total * 100),
 		met_count: met,

@@ -117,6 +117,7 @@ import type { TZAnalysisItem, TZAnalysisStatus } from '#shared/types'
 import { getTzItemStatusColor, getTzItemStatusLabel } from '#shared/types'
 import type { RequirementsHierarchy } from '#shared/utils/requirementsStruct'
 import { formatTzSourceRefLink, formatKpSourceRefLink } from '#shared/utils/tzRequirementDisplay'
+import { t } from '~/constants/translations'
 import TzRequirementDualText from '~/components/tz-analysis/TzRequirementDualText.vue'
 
 type TZItemView = TZAnalysisItem & { _index: number }
@@ -143,6 +144,7 @@ const statusOptions = [
 	{ label: 'Частично', value: 'partial' },
 	{ label: 'Не соответствует', value: 'missing' },
 	{ label: 'Не найдено', value: 'not_found' },
+	{ label: t('tzAnalysis.statusNotCompare'), value: 'not_compare' },
 ]
 
 const analysisFiles = inject<{
@@ -171,6 +173,7 @@ function matchBorderClass(status: TZAnalysisStatus) {
 	if (status === 'met') return 'border-l-4 border-success'
 	if (status === 'partial') return 'border-l-4 border-warning'
 	if (status === 'missing') return 'border-l-4 border-error'
+	if (status === 'not_compare') return 'border-l-4 border-muted'
 	return 'border-l-4 border-neutral-300 dark:border-neutral-600'
 }
 </script>
