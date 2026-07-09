@@ -141,7 +141,7 @@ export const translations = {
 		cancel: 'Отмена',
 		openSupplierThread: 'Открыть переписку с поставщиком',
 		saveToDatabase: 'Сохранить в базу',
-		incomingCountTitle: 'Входящих писем: {count}',
+		incomingCountLabel: 'Входящие: {count}',
 		you: 'Вы',
 		quickReplyTemplates: 'Быстрые ответы',
 		quickReplyTemplatesSettings: 'Настройка быстрых ответов',

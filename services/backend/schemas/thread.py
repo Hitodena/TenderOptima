@@ -89,6 +89,7 @@ class ThreadSummaryRow(BaseModel):
         message_count: int,
         *,
         has_outgoing: bool = False,
+        unread: bool | None = None,
     ) -> "ThreadSummaryRow":
         """Build a row from the latest message (must have request_supplier.supplier loaded)."""
         rs = message.request_supplier
@@ -100,6 +101,10 @@ class ThreadSummaryRow(BaseModel):
             supplier=SupplierSnapshot.model_validate(rs.supplier),
             last_message=LastMessagePreviewRow.from_message(message),
             message_count=message_count,
-            unread=is_thread_unread(message, rs.thread_read_at),
+            unread=(
+                unread
+                if unread is not None
+                else is_thread_unread(message, rs.thread_read_at)
+            ),
             has_outgoing=has_outgoing,
         )

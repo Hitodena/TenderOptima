@@ -286,16 +286,22 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
         cls,
         session: AsyncSession,
         request_id: uuid.UUID,
+        *,
+        incoming_only: bool = False,
     ) -> list[EmailMessage]:
-        """One latest incoming message per enabled request-supplier."""
+        """One latest message per enabled request-supplier (any or incoming)."""
+        conditions = [
+            RequestSupplier.request_id == request_id,
+            RequestSupplier.is_enabled.is_(True),
+        ]
+        if incoming_only:
+            conditions.append(
+                cls.model.direction == EmailMessageDirection.INCOMING.value,
+            )
         stmt = (
             select(cls.model)
             .join(cls.model.request_supplier)
-            .where(
-                RequestSupplier.request_id == request_id,
-                RequestSupplier.is_enabled.is_(True),
-                cls.model.direction == EmailMessageDirection.INCOMING.value,
-            )
+            .where(*conditions)
             .distinct(cls.model.request_supplier_id)
             .order_by(
                 cls.model.request_supplier_id,
@@ -314,40 +320,55 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
     async def get_threads_summary(
         cls, session: AsyncSession, request_id: uuid.UUID
     ) -> list[ThreadSummaryRow]:
-        """Enabled request-suppliers with >=1 message: preview, count, unread flag."""
+        """Enabled request-suppliers with >=1 message (incoming or outgoing)."""
         logger.debug(
             "Getting thread summaries by request",
             model=cls.model,
             request_id=request_id,
         )
         try:
-            counts = await cls._count_messages_by_request_supplier(
+            incoming_counts = await cls._count_messages_by_request_supplier(
                 session, request_id
             )
-            if not counts:
-                return []
-
             outgoing_ids = await cls._outgoing_rs_ids_by_request(
                 session, request_id
             )
-            latest_messages = await cls._latest_message_per_request_supplier(
-                session, request_id
+            latest_any = await cls._latest_message_per_request_supplier(
+                session, request_id, incoming_only=False
             )
+            if not latest_any:
+                return []
+
+            latest_incoming = await cls._latest_message_per_request_supplier(
+                session, request_id, incoming_only=True
+            )
+            incoming_by_rs = {
+                message.request_supplier_id: message
+                for message in latest_incoming
+                if message.request_supplier_id is not None
+            }
 
             summaries: list[ThreadSummaryRow] = []
-            for message in latest_messages:
+            for message in latest_any:
                 rs_id = message.request_supplier_id
                 if rs_id is None:
                     continue
-                count = counts.get(rs_id, 0)
-                if count == 0:
+                rs = message.request_supplier
+                if rs is None:
                     continue
+                incoming_msg = incoming_by_rs.get(rs_id)
+                unread = (
+                    is_thread_unread(incoming_msg, rs.thread_read_at)
+                    if incoming_msg is not None
+                    else False
+                )
                 try:
                     summaries.append(
                         ThreadSummaryRow.from_message(
                             message,
-                            count,
+                            incoming_counts.get(rs_id, 0),
                             has_outgoing=rs_id in outgoing_ids,
+                            unread=unread,
                         )
                     )
                 except ValueError:
@@ -357,11 +378,13 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
                     )
                     continue
 
+            # Threads with incoming replies first, then by latest activity desc.
             summaries.sort(
                 key=lambda row: (
+                    row.message_count > 0,
                     row.last_message.received_at.timestamp()
                     if row.last_message.received_at
-                    else 0.0
+                    else 0.0,
                 ),
                 reverse=True,
             )

@@ -125,11 +125,11 @@ v-else-if="sortedThreads.length === 0"
 								</p>
 								<div class="flex items-center justify-between gap-2">
 									<span
-										class="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-primary text-inverted text-[11px] font-semibold tabular-nums"
-										:title="incomingCountTitle(thread.message_count)"
-										:aria-label="incomingCountTitle(thread.message_count)"
+										class="text-xs text-primary/80 tabular-nums"
+										:title="incomingCountLabel(thread.message_count)"
+										:aria-label="incomingCountLabel(thread.message_count)"
 									>
-										{{ thread.message_count }}
+										{{ incomingCountLabel(thread.message_count) }}
 									</span>
 									<span class="text-xs text-muted whitespace-nowrap shrink-0">
 										{{ thread.last_message?.received_at
@@ -932,9 +932,9 @@ const sortedThreads = computed(() => {
 	if (threadSort.value === 'unread_first') {
 		return list.sort((a, b) => {
 			if (a.unread !== b.unread) return a.unread ? -1 : 1
-			const aOut = Boolean(a.has_outgoing)
-			const bOut = Boolean(b.has_outgoing)
-			if (aOut !== bOut) return aOut ? -1 : 1
+			const aHasIncoming = a.message_count > 0
+			const bHasIncoming = b.message_count > 0
+			if (aHasIncoming !== bHasIncoming) return aHasIncoming ? -1 : 1
 			const da = a.last_message?.received_at
 				? new Date(a.last_message.received_at).getTime()
 				: 0
@@ -1569,8 +1569,8 @@ function formatBytes(b: number) {
 	return `${(b / 1048576).toFixed(1)} МБ`
 }
 
-function incomingCountTitle(count: number) {
-	return t('inbox.incomingCountTitle').replace('{count}', String(count))
+function incomingCountLabel(count: number) {
+	return t('inbox.incomingCountLabel').replace('{count}', String(count))
 }
 
 function fileIcon(t: string | null) {
