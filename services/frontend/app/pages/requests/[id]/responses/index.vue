@@ -1187,22 +1187,28 @@ const analysisNotReady = ref(false)
 const editingMatchIdx = ref<number | null>(null)
 const editingMatchValue = ref('')
 
+const UNIT_PRICE_REQUIREMENT = 'Цена за единицу без НДС'
+
 const comparison = ref<ComparisonResponse | null>(null)
 const loadingComparison = ref(false)
 const exportingComparison = ref(false)
-const comparisonSortBy = ref<string | null>(null)
+const comparisonSortBy = ref<string | null>(UNIT_PRICE_REQUIREMENT)
 const comparisonSortAsc = ref(true)
 
-const priceRequirements = computed(() =>
-	comparison.value?.price_requirements?.length
-		? comparison.value.price_requirements
-		: (comparison.value?.requirements ?? []).filter((req) =>
-			[
-				'Цена за единицу без НДС',
-				'Общая стоимость без НДС',
-			].includes(req),
-		),
-)
+const priceRequirements = computed(() => {
+	const fromApi = comparison.value?.price_requirements ?? []
+	const fromRequirements = (comparison.value?.requirements ?? []).filter((req) =>
+		[UNIT_PRICE_REQUIREMENT, 'Общая стоимость без НДС'].includes(req),
+	)
+	const list = fromApi.length ? [...fromApi] : [...fromRequirements]
+	if (list.includes(UNIT_PRICE_REQUIREMENT)) {
+		return [
+			UNIT_PRICE_REQUIREMENT,
+			...list.filter((req) => req !== UNIT_PRICE_REQUIREMENT),
+		]
+	}
+	return list
+})
 
 const sortedComparisonSuppliers = computed((): ComparisonSupplier[] => {
 	const list = comparison.value?.suppliers ?? []
@@ -1537,17 +1543,14 @@ async function fetchComparison() {
 		comparison.value = await get<ComparisonResponse>(
 			`/requests/${id}/analysis/comparison`,
 		)
-		if (
+		const available = priceRequirements.value
+		if (available.includes(UNIT_PRICE_REQUIREMENT)) {
+			comparisonSortBy.value = UNIT_PRICE_REQUIREMENT
+		} else if (
 			!comparisonSortBy.value
-			&& (comparison.value.price_requirements?.length
-				|| priceRequirements.value.length)
+			|| !available.includes(comparisonSortBy.value)
 		) {
-			const unitPrice = 'Цена за единицу без НДС'
-			comparisonSortBy.value = priceRequirements.value.includes(unitPrice)
-				? unitPrice
-				: (comparison.value.price_requirements?.[0]
-					?? priceRequirements.value[0]
-					?? null)
+			comparisonSortBy.value = available[0] ?? null
 		}
 	} catch {
 		comparison.value = null

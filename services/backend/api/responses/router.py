@@ -110,6 +110,12 @@ async def _build_comparison(
 ) -> ComparisonResponse:
     requirements = _requirements_list(request)
     price_requirements = [r for r in requirements if is_price_requirement(r)]
+    # Prefer unit price as the primary sort key in the UI.
+    unit_price = "Цена за единицу без НДС"
+    if unit_price in price_requirements:
+        price_requirements = [unit_price] + [
+            r for r in price_requirements if r != unit_price
+        ]
     suppliers_rows: list[ComparisonSupplier] = []
     enabled = await RequestSupplierDAO.get_enabled_by_request(
         session, request.id
