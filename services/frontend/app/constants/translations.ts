@@ -119,11 +119,21 @@ export const translations = {
 		receivedLettersStats:
 			'Получено {emails} {emailsLabel} от {suppliers} {suppliersLabel}',
 	},
+	tzAnalysis: {
+		kpProcessingBanner:
+			'Анализ коммерческих предложений выполняется. Уже готовые поставщики доступны для изучения.',
+		kpProcessingBannerHint:
+			'Ожидайте до 2 часов. Страница обновится автоматически.',
+		kpSupplierProcessing:
+			'Анализ КП для «{name}» выполняется…',
+		kpSupplierProcessingHint:
+			'Ожидайте. Страница обновится автоматически.',
+	},
 	inbox: {
 		insertBusinessInfo: 'Вставить реквизиты',
 		receiptAcknowledgement: 'Ответ о получении',
 		receiptModalTitle: 'Ответ о получении',
-		receiptIntro: 'Благодарим за предоставленную информацию. Мы обработаем ваше коммерческое предложение и направим ответ в ближайшее время.',
+		receiptIntro: 'Благодарим за предоставление информации. Мы обработаем ваше коммерческое предложение и направим ответ в ближайшее время.',
 		receiptTemplateTitle: 'Ответ о получении',
 		receiptTemplateSubject: 'Подтверждение получения',
 		replyPlaceholder: 'Текст сообщения...',
@@ -131,6 +141,8 @@ export const translations = {
 		cancel: 'Отмена',
 		openSupplierThread: 'Открыть переписку с поставщиком',
 		saveToDatabase: 'Сохранить в базу',
+		incomingCountTitle: 'Входящих писем: {count}',
+		you: 'Вы',
 		quickReplyTemplates: 'Быстрые ответы',
 		quickReplyTemplatesSettings: 'Настройка быстрых ответов',
 		letterTemplates: 'Шаблоны писем',

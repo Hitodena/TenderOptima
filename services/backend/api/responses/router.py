@@ -156,6 +156,12 @@ async def _build_comparison(
                     numeric_values[req] = match_numeric[req]
                 if req in prev_map and prev_map[req] is not None:
                     previous_values[req] = str(prev_map[req])
+        has_extracted = any(
+            value is not None and str(value).strip()
+            for value in values.values()
+        )
+        if not has_extracted:
+            continue
         suppliers_rows.append(
             ComparisonSupplier(
                 rs_id=str(rs.id),

@@ -372,6 +372,7 @@ export interface ThreadSummary {
 	} | null;
 	message_count: number;
 	unread: boolean;
+	has_outgoing?: boolean;
 }
 
 export interface Message {

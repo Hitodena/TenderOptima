@@ -73,7 +73,6 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
             select(cls.model)
             .where(
                 cls.model.request_supplier_id == request_supplier_id,
-                cls.model.direction == EmailMessageDirection.INCOMING.value,
             )
             .order_by(cls.model.received_at.asc())
         )
@@ -263,6 +262,26 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
         return {row[0]: int(row[1]) for row in rows}
 
     @classmethod
+    async def _outgoing_rs_ids_by_request(
+        cls,
+        session: AsyncSession,
+        request_id: uuid.UUID,
+    ) -> set[uuid.UUID]:
+        """Request-supplier ids that have at least one outgoing message."""
+        stmt = (
+            select(cls.model.request_supplier_id)
+            .join(RequestSupplier)
+            .where(
+                RequestSupplier.request_id == request_id,
+                RequestSupplier.is_enabled.is_(True),
+                cls.model.direction == EmailMessageDirection.OUTGOING.value,
+            )
+            .distinct()
+        )
+        rows = (await session.execute(stmt)).all()
+        return {row[0] for row in rows if row[0] is not None}
+
+    @classmethod
     async def _latest_message_per_request_supplier(
         cls,
         session: AsyncSession,
@@ -308,6 +327,9 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
             if not counts:
                 return []
 
+            outgoing_ids = await cls._outgoing_rs_ids_by_request(
+                session, request_id
+            )
             latest_messages = await cls._latest_message_per_request_supplier(
                 session, request_id
             )
@@ -322,7 +344,11 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
                     continue
                 try:
                     summaries.append(
-                        ThreadSummaryRow.from_message(message, count)
+                        ThreadSummaryRow.from_message(
+                            message,
+                            count,
+                            has_outgoing=rs_id in outgoing_ids,
+                        )
                     )
                 except ValueError:
                     logger.warning(

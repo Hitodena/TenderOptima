@@ -76,8 +76,14 @@ class Config(BaseSettings):
     # OpenAI
     openai_api_key: str
     openai_model: str
+    openai_model_tz: str = ""
     openai_model_kp: str = ""
     openai_base_url: str
+
+    def openai_model_for_tz(self) -> str:
+        """TZ extraction model; falls back to ``openai_model`` when unset."""
+        tz = self.openai_model_tz.strip()
+        return tz if tz else self.openai_model
 
     def openai_model_for_kp(self) -> str:
         """KP analysis model; falls back to ``openai_model`` when unset."""

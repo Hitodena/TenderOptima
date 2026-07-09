@@ -319,11 +319,11 @@ v-if="isTzReviewPhase && !isAnalysisClosed"
 										<div class="flex items-center gap-3">
 											<UIcon name="i-lucide-loader" class="w-5 h-5 animate-spin text-warning shrink-0" />
 											<p class="text-sm">
-												Анализ коммерческих предложений выполняется. Раздел ТЗ доступен для просмотра.
+												{{ t('tzAnalysis.kpProcessingBanner') }}
 											</p>
 										</div>
 										<p class="text-xs pl-8">
-											Ожидайте до 2 часов. Страница обновится автоматически.
+											{{ t('tzAnalysis.kpProcessingBannerHint') }}
 										</p>
 									</div>
 								</UCard>
@@ -351,6 +351,20 @@ color="warning" variant="solid" :loading="kpAnalyzing"
 									<UAlert
 color="neutral" variant="soft" icon="i-lucide-archive"
 										description="Сравнение с КП не выполнялось. Анализ завершён — запуск сравнения недоступен." />
+								</template>
+
+								<template v-else-if="showSelectedSupplierProcessing">
+									<div
+										class="flex flex-col items-center justify-center gap-3 min-h-[40vh] text-muted rounded-xl border border-default/60 bg-elevated/20"
+									>
+										<UIcon name="i-lucide-loader" class="w-8 h-8 animate-spin text-warning" />
+										<p class="text-sm text-center px-4">
+											{{ selectedSupplierProcessingLabel }}
+										</p>
+										<p class="text-xs text-center px-4">
+											{{ t('tzAnalysis.kpSupplierProcessingHint') }}
+										</p>
+									</div>
 								</template>
 
 								<template v-else-if="showComparisonResultsCard">
@@ -1602,9 +1616,28 @@ const displayedTzCount = computed(() =>
 )
 const showComparisonResultsCard = computed(() =>
 	hasComparisonResults.value
-	&& !isKpProcessing.value
 	&& visibleKpItemGroups.value.length > 0,
 )
+
+const showSelectedSupplierProcessing = computed(() => {
+	if (showComparisonResultsCard.value) return false
+	if (!isTzConfirmed.value || isAnalysisClosed.value) return false
+	const supplier = selectedSupplier.value
+	if (!supplier) {
+		return isKpProcessing.value && !hasComparisonResults.value
+	}
+	if (visibleKpItemGroups.value.length > 0) return false
+	return (
+		supplier.status === TZAnalysisSupplierStatus.PROCESSING
+		|| (isKpProcessing.value && supplier.status === TZAnalysisSupplierStatus.PENDING)
+	)
+})
+
+const selectedSupplierProcessingLabel = computed(() => {
+	const name = selectedSupplier.value?.name
+	if (!name) return t('tzAnalysis.kpProcessingBanner')
+	return t('tzAnalysis.kpSupplierProcessing').replace('{name}', name)
+})
 
 function requirementRowsSignature(rows: EditableRequirementRow[]): string {
 	return JSON.stringify(

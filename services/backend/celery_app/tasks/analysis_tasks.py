@@ -335,7 +335,7 @@ async def run_tz_extract(self, analysis_id: str) -> dict:
             partial_count=0,
             missing_count=0,
             not_found_count=0,
-            llm_model=config.openai_model,
+            llm_model=config.openai_model_for_tz(),
             status=TZAnalysisRunStatus.ACTIVE.value,
         )
     logger.info(

@@ -113,7 +113,7 @@ v-else-if="sortedThreads.length === 0"
 							</div>
 							<div class="flex-1 min-w-0">
 								<div class="flex items-center justify-between gap-2 mb-1">
-									<p class="text-base font-semibold leading-snug line-clamp-3 min-w-0 break-words">
+									<p class="text-sm font-semibold leading-snug line-clamp-3 min-w-0 break-words">
 										{{ thread.supplier.company_name }}
 									</p>
 									<span v-if="thread.unread" class="w-2 h-2 rounded-full bg-primary shrink-0" />
@@ -124,11 +124,13 @@ v-else-if="sortedThreads.length === 0"
 										: 'Нет сообщений' }}
 								</p>
 								<div class="flex items-center justify-between gap-2">
-									<UBadge
-										color="primary"
-										variant="subtle" size="sm">
-										{{ thread.message_count }} {{ messageCountLabel(thread.message_count) }}
-									</UBadge>
+									<span
+										class="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-primary text-inverted text-[11px] font-semibold tabular-nums"
+										:title="incomingCountTitle(thread.message_count)"
+										:aria-label="incomingCountTitle(thread.message_count)"
+									>
+										{{ thread.message_count }}
+									</span>
 									<span class="text-xs text-muted whitespace-nowrap shrink-0">
 										{{ thread.last_message?.received_at
 											? formatDateShort(thread.last_message.received_at)
@@ -421,7 +423,7 @@ size="sm" variant="outline" leading-icon="i-lucide-download"
 					<template v-else>
 						<div class="px-3 md:px-5 py-2.5 border-b border-default flex items-center gap-2 shrink-0">
 							<div class="min-w-0 flex-1">
-								<p class="font-semibold truncate text-sm md:text-base">
+								<p class="font-semibold truncate text-sm">
 									{{ selectedThread?.supplier.company_name }}
 								</p>
 								<p
@@ -445,19 +447,38 @@ v-if="!showParamsPanel" size="xs" variant="ghost" color="neutral"
 
 							<template v-else-if="messages.length">
 								<div
-	v-for="msg in messages" :key="msg.id" class="flex gap-2 md:gap-3">
-
+									v-for="msg in messages"
+									:key="msg.id"
+									class="flex gap-2 md:gap-3"
+									:class="msg.direction === 'outgoing' ? 'flex-row-reverse' : ''"
+								>
 									<div
-	class="w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center shrink-0 mt-1 bg-primary/10">
+										class="w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center shrink-0 mt-1"
+										:class="msg.direction === 'outgoing'
+											? 'bg-primary text-inverted'
+											: 'bg-primary/10'"
+									>
 										<UIcon
-											name="i-lucide-building-2"
-											class="w-3.5 h-3.5 md:w-4 md:h-4 text-primary" />
+											:name="msg.direction === 'outgoing'
+												? 'i-lucide-send'
+												: 'i-lucide-building-2'"
+											class="w-3.5 h-3.5 md:w-4 md:h-4"
+											:class="msg.direction === 'outgoing' ? '' : 'text-primary'"
+										/>
 									</div>
 
-									<div class="flex-1 min-w-0 max-w-[85%] md:max-w-[75%]">
-										<div class="flex items-center gap-2 mb-1">
+									<div
+										class="flex-1 min-w-0 max-w-[85%] md:max-w-[75%]"
+										:class="msg.direction === 'outgoing' ? 'flex flex-col items-end' : ''"
+									>
+										<div
+											class="flex items-center gap-2 mb-1"
+											:class="msg.direction === 'outgoing' ? 'flex-row-reverse' : ''"
+										>
 											<span class="text-xs font-medium">
-												{{ selectedThread?.supplier.company_name }}
+												{{ msg.direction === 'outgoing'
+													? t('inbox.you')
+													: selectedThread?.supplier.company_name }}
 											</span>
 											<span class="text-xs text-muted">
 												{{ msg.received_at ? formatDateTime(msg.received_at) : '' }}
@@ -465,26 +486,42 @@ v-if="!showParamsPanel" size="xs" variant="ghost" color="neutral"
 										</div>
 
 										<div
-	class="rounded-xl rounded-tl-md px-3.5 py-2.5 text-sm shadow-sm bg-elevated border border-default/60">
+											class="rounded-xl px-3.5 py-2.5 text-sm shadow-sm border"
+											:class="msg.direction === 'outgoing'
+												? 'rounded-tr-md bg-primary/10 border-primary/20'
+												: 'rounded-tl-md bg-elevated border-default/60'"
+										>
 											<p
-v-if="msg.subject"
-												class="text-[10px] text-muted mb-1.5 font-medium tracking-tight">
+												v-if="msg.subject"
+												class="text-[10px] text-muted mb-1.5 font-medium tracking-tight"
+											>
 												{{ msg.subject }}
 											</p>
 											<pre
-												class="whitespace-pre-wrap font-sans text-[13px] md:text-sm leading-relaxed">{{ msg.raw_body }}</pre>
+												class="whitespace-pre-wrap font-sans text-[13px] md:text-sm leading-relaxed"
+											>{{ msg.raw_body }}</pre>
 										</div>
 
-										<div v-if="msg.attachments?.length" class="flex flex-wrap gap-2 mt-2">
+										<div
+											v-if="msg.attachments?.length"
+											class="flex flex-wrap gap-2 mt-2"
+											:class="msg.direction === 'outgoing' ? 'justify-end' : ''"
+										>
 											<button
-v-for="att in msg.attachments" :key="att.filename" type="button"
+												v-for="att in msg.attachments"
+												:key="att.filename"
+												type="button"
 												class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-default transition-colors text-xs"
 												:class="att.path
 													? 'hover:bg-elevated cursor-pointer'
-													: 'opacity-50 cursor-not-allowed'" :disabled="!att.path" @click="downloadAttachment(att)">
+													: 'opacity-50 cursor-not-allowed'"
+												:disabled="!att.path"
+												@click="downloadAttachment(att)"
+											>
 												<UIcon
-:name="fileIcon(att.content_type)"
-													class="w-3.5 h-3.5 text-primary" />
+													:name="fileIcon(att.content_type)"
+													class="w-3.5 h-3.5 text-primary"
+												/>
 												<span class="truncate max-w-28 md:max-w-36">{{ att.filename }}</span>
 												<span v-if="att.size" class="text-muted shrink-0">{{
 													formatBytes(att.size) }}</span>
@@ -510,11 +547,14 @@ v-for="att in msg.attachments" :key="att.filename" type="button"
 								{{ t('inbox.requisitesHint') }}
 							</p>
 							<UTextarea
-v-model="replyBody" :placeholder="t('inbox.replyPlaceholder')" :rows="isMobile ? 5 : 6"
+								v-model="replyBody"
+								:placeholder="t('inbox.replyPlaceholder')"
+								:rows="2"
 								autoresize
 								:maxrows="16"
 								class="w-full mb-3"
-								:ui="{ base: 'min-h-[8rem] sm:min-h-[10rem]' }" />
+								:ui="{ base: 'min-h-[3.25rem] resize-none' }"
+							/>
 							<div class="flex items-center justify-between gap-2">
 								<p class="text-xs text-muted hidden md:block">Ответ придёт поставщику на его email</p>
 								<UButton
@@ -794,7 +834,7 @@ const threads = ref<ThreadSummary[]>([])
 const loadingThreads = ref(true)
 const refreshingAll = ref(false)
 const threadSearch = ref('')
-const threadSort = ref('date_desc')
+const threadSort = ref('unread_first')
 const selectedRsId = ref<string | null>(null)
 
 const threadSortOptions = [
@@ -892,6 +932,9 @@ const sortedThreads = computed(() => {
 	if (threadSort.value === 'unread_first') {
 		return list.sort((a, b) => {
 			if (a.unread !== b.unread) return a.unread ? -1 : 1
+			const aOut = Boolean(a.has_outgoing)
+			const bOut = Boolean(b.has_outgoing)
+			if (aOut !== bOut) return aOut ? -1 : 1
 			const da = a.last_message?.received_at
 				? new Date(a.last_message.received_at).getTime()
 				: 0
@@ -1007,6 +1050,7 @@ async function sendReply() {
 		replyBody.value = ''
 		toast.add({ title: 'Ответ отправлен', color: 'success', icon: 'i-lucide-mail-check' })
 		await fetchThreads()
+		await fetchMessages(rsId, { silent: true })
 		await fetchSubscription()
 	} catch (e: unknown) {
 		const detail = (e as { response?: { data?: { detail?: string } } })
@@ -1525,10 +1569,8 @@ function formatBytes(b: number) {
 	return `${(b / 1048576).toFixed(1)} МБ`
 }
 
-function messageCountLabel(n: number) {
-	if (n % 10 === 1 && n % 100 !== 11) return 'письмо'
-	if ([2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100)) return 'письма'
-	return 'писем'
+function incomingCountTitle(count: number) {
+	return t('inbox.incomingCountTitle').replace('{count}', String(count))
 }
 
 function fileIcon(t: string | null) {

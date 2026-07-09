@@ -182,7 +182,7 @@ async def _llm_extract_tz_chunk(
             raw = await llm_client.complete(
                 system,
                 user,
-                model=config.openai_model,
+                model=config.openai_model_for_tz(),
             )
             coerced = _coerce_llm_payload(raw, result_key)
             parsed = result_model(**coerced)
@@ -367,7 +367,7 @@ async def fill_empty_headings(
         raw = await llm_client.complete(
             system,
             user,
-            model=config.openai_model,
+            model=config.openai_model_for_tz(),
         )
         parsed = HeadingNamesResult(**raw)
         names = {

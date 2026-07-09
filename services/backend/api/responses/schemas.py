@@ -133,6 +133,7 @@ class ThreadSummary(BaseModel):
     last_message: LastMessagePreview
     message_count: int
     unread: bool
+    has_outgoing: bool = False
 
     @classmethod
     def from_row(cls, row: ThreadSummaryRow) -> "ThreadSummary":
@@ -142,6 +143,7 @@ class ThreadSummary(BaseModel):
             last_message=LastMessagePreview.from_row(row.last_message),
             message_count=row.message_count,
             unread=row.unread,
+            has_outgoing=row.has_outgoing,
         )
 
 
