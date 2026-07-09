@@ -127,6 +127,51 @@ export function parseApiError(error: unknown): ParsedApiError | null {
 	return null
 }
 
+export type SubscriptionLimitInfo = {
+	code?: SubscriptionErrorCode
+	resource?: string
+	limit?: number
+	used?: number
+	requested?: number
+	module?: number
+	remaining?: number
+}
+
+export function getSubscriptionLimitInfo(
+	error: unknown,
+): SubscriptionLimitInfo | null {
+	const detail = extractDetail(error)
+	if (!detail || typeof detail !== 'object' || Array.isArray(detail)) {
+		return null
+	}
+	const subscriptionDetail = detail as SubscriptionLimitDetail
+	const code = subscriptionDetail.code
+	if (!code || !SUBSCRIPTION_CODES.has(code)) return null
+	const limit = subscriptionDetail.limit
+	const used = subscriptionDetail.used
+	const remaining =
+		typeof limit === 'number' && typeof used === 'number'
+			? Math.max(0, limit - used)
+			: undefined
+	return {
+		code: code as SubscriptionErrorCode,
+		resource: subscriptionDetail.resource,
+		limit,
+		used,
+		requested: subscriptionDetail.requested,
+		module: subscriptionDetail.module,
+		remaining,
+	}
+}
+
+export function isPagesQuotaExceededError(error: unknown): boolean {
+	const info = getSubscriptionLimitInfo(error)
+	return (
+		info?.code === 'subscription_limit'
+		&& info.resource === 'pages_analyzed'
+	)
+}
+
 export function getApiErrorDetail(error: unknown): string | undefined {
 	return parseApiError(error)?.message
 }

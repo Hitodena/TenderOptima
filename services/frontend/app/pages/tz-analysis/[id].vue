@@ -403,6 +403,10 @@ color="neutral" variant="soft" icon="i-lucide-archive"
 										<UBadge color="neutral" variant="subtle">
 											{{ selectedSupplierStats.not_found_count }} не найдено
 										</UBadge>
+										<UBadge color="neutral" variant="outline">
+											{{ selectedSupplierStats.not_compare_count }}
+											{{ t('tzAnalysis.statusNotCompareShort') }}
+										</UBadge>
 									</div>
 
 									<UCard class="shadow-sm w-full">
@@ -668,6 +672,35 @@ v-for="tab in letterPreviewTabs" :key="tab.value" type="button" block
 			</template>
 		</UModal>
 
+		<UModal
+			v-model:open="showPagesQuotaModal"
+			:title="t('tzAnalysis.pagesQuotaModalTitle')"
+		>
+			<template #body>
+				<p class="text-sm text-muted">
+					{{ pagesQuotaModalDescription }}
+				</p>
+			</template>
+			<template #footer>
+				<div class="flex flex-wrap justify-end gap-2 w-full">
+					<UButton
+						color="neutral"
+						variant="ghost"
+						@click="showPagesQuotaModal = false"
+					>
+						{{ t('tzAnalysis.pagesQuotaModalClose') }}
+					</UButton>
+					<UButton
+						color="primary"
+						leading-icon="i-lucide-credit-card"
+						@click="openSubscriptionFromPagesQuota"
+					>
+						{{ t('tzAnalysis.pagesQuotaModalSubscription') }}
+					</UButton>
+				</div>
+			</template>
+		</UModal>
+
 		<Teleport to="body">
 			<div
 				v-if="showTzConfirmBar"
@@ -735,7 +768,7 @@ import {
 	formatLetterRequirementRef,
 	getTzRequirementDisplay,
 } from '#shared/utils/tzRequirementDisplay'
-import { getApiErrorDetail, isSubscriptionApiError } from '#shared/utils/apiError'
+import { getApiErrorDetail, isPagesQuotaExceededError, isSubscriptionApiError, getSubscriptionLimitInfo } from '#shared/utils/apiError'
 import { EMAIL_LETTER_MODAL_FOOTER_CLASS, EMAIL_LETTER_MODAL_UI } from '#shared/constants/emailModal'
 import {
 	canStartModule2Work,
@@ -767,6 +800,12 @@ const toast = useToast()
 function openSubscriptionProfile(): void {
 	void navigateTo(subscriptionProfilePath())
 }
+
+function openSubscriptionFromPagesQuota(): void {
+	showPagesQuotaModal.value = false
+	openSubscriptionProfile()
+}
+
 const { formatDate } = useFormatDate()
 const { public: publicConfig } = useRuntimeConfig()
 
@@ -843,6 +882,20 @@ const tzPolling = ref(false)
 const tzStatusFilter = ref('all')
 const tzRequirementSearch = ref('')
 const showLetterModal = ref(false)
+const showPagesQuotaModal = ref(false)
+const pagesQuotaInfo = ref<{
+	requested: number
+	remaining: number
+	limit: number
+} | null>(null)
+const pagesQuotaModalDescription = computed(() => {
+	const info = pagesQuotaInfo.value
+	if (!info) return t('tzAnalysis.pagesQuotaModalTitle')
+	return t('tzAnalysis.pagesQuotaModalBody')
+		.replace('{requested}', info.requested.toLocaleString('ru-RU'))
+		.replace('{remaining}', info.remaining.toLocaleString('ru-RU'))
+		.replace('{limit}', info.limit.toLocaleString('ru-RU'))
+})
 const tzSelectedIndices = ref<number[]>([])
 const letterPreviewTab = ref<'mismatch' | 'not_found' | 'partial'>('mismatch')
 const processingPhase = ref<'tz' | 'kp'>('tz')
@@ -1532,6 +1585,7 @@ function computeStatsFromItems(items: TZAnalysisItem[]): TZAnalysisKpStats {
 	const partial = items.filter((item) => item.status === 'partial').length
 	const missing = items.filter((item) => item.status === 'missing').length
 	const not_found = items.filter((item) => item.status === 'not_found').length
+	const not_compare = items.filter((item) => item.status === 'not_compare').length
 	const scored = items.filter((item) => item.status !== 'not_compare')
 	const total = scored.length
 	return {
@@ -1540,6 +1594,7 @@ function computeStatsFromItems(items: TZAnalysisItem[]): TZAnalysisKpStats {
 		partial_count: partial,
 		missing_count: missing,
 		not_found_count: not_found,
+		not_compare_count: not_compare,
 	}
 }
 
@@ -2397,6 +2452,16 @@ async function runTzAnalysis() {
 			tzPolling.value = true
 		}
 	} catch (e: unknown) {
+		if (isPagesQuotaExceededError(e)) {
+			const info = getSubscriptionLimitInfo(e)
+			pagesQuotaInfo.value = {
+				requested: info?.requested ?? 0,
+				remaining: info?.remaining ?? 0,
+				limit: info?.limit ?? 0,
+			}
+			showPagesQuotaModal.value = true
+			return
+		}
 		toast.add({
 			title: getApiErrorDetail(e) ?? 'Ошибка запуска анализа',
 			description: isSubscriptionApiError(e)

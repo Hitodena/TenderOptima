@@ -131,6 +131,11 @@ export const translations = {
 		statusNotCompare: 'Не сравнивать',
 		statusNotCompareHint:
 			'Статус ставится только вручную и не попадает в письмо поставщику',
+		pagesQuotaModalTitle: 'Не хватает страниц в тарифе',
+		pagesQuotaModalBody:
+			'В загруженном ТЗ {requested} стр., а в текущем тарифе осталось {remaining} из {limit}. Уменьшите объём файла или смените тариф.',
+		pagesQuotaModalClose: 'Закрыть',
+		pagesQuotaModalSubscription: 'Подписка',
 	},
 	inbox: {
 		insertBusinessInfo: 'Вставить реквизиты',

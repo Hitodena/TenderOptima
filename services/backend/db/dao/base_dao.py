@@ -159,6 +159,9 @@ class BaseDAO[T: Base]:
             await session.execute(stmt)
             await session.flush()
             await session.commit()
+            # Core UPDATE bypasses the identity map; with expire_on_commit=False
+            # a cached instance would otherwise keep stale attribute values.
+            session.expire_all()
             updated = await cls.get_by_id(session, id)
             logger.info(
                 "Updated instance fields",

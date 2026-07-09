@@ -343,6 +343,12 @@ async def run_tz_analysis(
             limit=upload_limit,
         )
         tz_name = tz_file.filename or tz_path.name
+        page_count = count_pages_in_file(tz_path)
+        await ensure_can_process_pages(
+            session,
+            current_user,
+            page_count=max(page_count, 1),
+        )
 
         updated = await TZAnalysisDAO.update_fields(
             session,

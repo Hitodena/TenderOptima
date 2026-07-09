@@ -264,7 +264,13 @@ async def update_user_subscription(
         plan = payload.get("plan")
         if plan is not None:
             payload["plan"] = plan.value if hasattr(plan, "value") else plan
-        await SubscriptionDAO.upsert_for_user(session, user_id, **payload)
+        updated_sub = await SubscriptionDAO.upsert_for_user(
+            session, user_id, **payload
+        )
+        # Ensure the user.subscription relationship reflects the upsert result
+        # even if a prior selectinload left a stale instance in the session.
+        await session.refresh(updated_sub)
+        user.subscription = updated_sub
     refreshed = await UserAdminDAO.get_with_subscription(session, user_id)
     if not refreshed:
         raise HTTPException(
