@@ -154,7 +154,8 @@ export const translations = {
 		you: 'Вы',
 		quickReplyTemplates: 'Быстрые ответы',
 		quickReplyTemplatesSettings: 'Настройка быстрых ответов',
-		quickReplySelectHint: 'Нажмите на шаблон, чтобы подставить его в ответ.',
+		quickReplySelectHint:
+			'Кнопка «Быстрые ответы» вставляет основной шаблон. Здесь можно выбрать другой, сделать основным или отредактировать.',
 		letterTemplates: 'Шаблоны писем',
 		templatesAdd: 'Добавить',
 		templatesEmpty: 'Нет шаблонов',

@@ -1,5 +1,4 @@
 <script lang="ts" setup>
-import type { DropdownMenuItem } from '@nuxt/ui'
 import type { EmailTemplate } from '#shared/types'
 import { EmailTemplateCategory } from '#shared/types'
 import { EMAIL_LETTER_MODAL_UI } from '#shared/constants/emailModal'
@@ -47,6 +46,15 @@ async function fetchTemplates(force = false) {
 	}
 }
 
+function resolveDefaultTemplate(): EmailTemplate | null {
+	if (!templates.value.length) return null
+	return (
+		templates.value.find((item) => item.is_primary)
+		?? templates.value[0]
+		?? null
+	)
+}
+
 async function insertTemplate(template: EmailTemplate) {
 	loading.value = true
 	try {
@@ -74,60 +82,47 @@ async function insertTemplate(template: EmailTemplate) {
 	}
 }
 
+async function insertDefaultQuickReply() {
+	await fetchTemplates()
+	const template = resolveDefaultTemplate()
+	if (!template) {
+		toast.add({
+			title: t('inbox.templatesEmpty'),
+			description: t('inbox.quickReplyTemplatesSettings'),
+			color: 'warning',
+		})
+		return
+	}
+	await insertTemplate(template)
+}
+
 async function onSettingsSelect(template: EmailTemplate) {
 	await insertTemplate(template)
 }
 
-async function openQuickReplyMenu() {
-	await fetchTemplates()
-}
-
-const menuItems = computed((): DropdownMenuItem[][] => {
-	if (!templates.value.length) {
-		return [[{
-			label: t('inbox.templatesEmpty'),
-			disabled: true,
-		}]]
-	}
-	return [
-		templates.value.map((template) => ({
-			label: template.is_primary
-				? `${template.title} · ${t('inbox.templatesPrimary')}`
-				: template.title,
-			description: template.body.slice(0, 80),
-			onSelect: () => {
-				void insertTemplate(template)
-			},
-		})),
-	]
-})
-
 watch(settingsOpen, (open) => {
-	if (!open) {
-		// Refresh list after manage modal closes so new templates appear in the menu.
+	if (open) {
 		void fetchTemplates(true)
+		return
 	}
+	// Refresh after manage modal closes so primary changes apply on next insert.
+	void fetchTemplates(true)
 })
 </script>
 
 <template>
 	<div class="inline-flex items-center gap-0.5">
-		<UDropdownMenu
-			:items="menuItems"
-			:ui="{ content: 'min-w-56 max-w-80' }"
-			@update:open="(open: boolean) => { if (open) void openQuickReplyMenu() }"
+		<UButton
+			type="button"
+			color="neutral"
+			variant="outline"
+			size="sm"
+			leading-icon="i-lucide-mail-check"
+			:loading="loading"
+			@click="insertDefaultQuickReply"
 		>
-			<UButton
-				type="button"
-				color="neutral"
-				variant="outline"
-				size="sm"
-				leading-icon="i-lucide-mail-check"
-				:loading="loading"
-			>
-				{{ t('inbox.quickReplyTemplates') }}
-			</UButton>
-		</UDropdownMenu>
+			{{ t('inbox.quickReplyTemplates') }}
+		</UButton>
 		<UButton
 			type="button"
 			color="neutral"
