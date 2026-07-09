@@ -49,3 +49,11 @@ export const TZAnalysisSupplierStatus = {
 
 export type TZAnalysisSupplierStatus =
 	(typeof TZAnalysisSupplierStatus)[keyof typeof TZAnalysisSupplierStatus];
+
+export const EmailTemplateCategory = {
+	QUICK_REPLY: 'quick_reply',
+	LETTER: 'letter',
+} as const;
+
+export type EmailTemplateCategory =
+	(typeof EmailTemplateCategory)[keyof typeof EmailTemplateCategory];

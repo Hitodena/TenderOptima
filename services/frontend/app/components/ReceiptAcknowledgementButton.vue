@@ -1,9 +1,7 @@
 <script lang="ts" setup>
 import type { EmailTemplate } from '#shared/types'
-import {
-	EMAIL_LETTER_MODAL_FOOTER_CLASS,
-	EMAIL_LETTER_MODAL_UI,
-} from '#shared/constants/emailModal'
+import { EmailTemplateCategory } from '#shared/types'
+import { EMAIL_LETTER_MODAL_UI } from '#shared/constants/emailModal'
 import { appendBusinessInfoToBody } from '#shared/utils/businessInfo'
 import { t } from '~/constants/translations'
 import EmailTemplateSidebar from '~/components/EmailTemplateSidebar.vue'
@@ -12,37 +10,37 @@ const body = defineModel<string>({ required: true })
 
 const emit = defineEmits<{ inserted: [] }>()
 
+const { get } = useApi()
 const { ensureLoaded } = useBusinessInfo()
 const toast = useToast()
 
-const isOpen = ref(false)
-const draftBody = ref('')
+const settingsOpen = ref(false)
 const loading = ref(false)
+const quickReplyBody = ref<string | null>(null)
 
-function defaultBody(): string {
-	return t('inbox.receiptIntro')
+const RECEIPT_TEMPLATE_TITLE = 'Ответ о получении'
+
+async function resolveQuickReplyBody(): Promise<string> {
+	if (quickReplyBody.value !== null) return quickReplyBody.value
+	try {
+		const templates = await get<EmailTemplate[]>(
+			`/email-templates?category=${EmailTemplateCategory.QUICK_REPLY}`,
+		)
+		const preferred = templates.find(
+			(item) => item.title === RECEIPT_TEMPLATE_TITLE,
+		) ?? templates[0]
+		quickReplyBody.value = preferred?.body ?? t('inbox.receiptIntro')
+	} catch {
+		quickReplyBody.value = t('inbox.receiptIntro')
+	}
+	return quickReplyBody.value
 }
 
-function resetDraft() {
-	draftBody.value = defaultBody()
+function invalidateQuickReplyCache() {
+	quickReplyBody.value = null
 }
 
-function openModal() {
-	resetDraft()
-	isOpen.value = true
-}
-
-function closeModal() {
-	isOpen.value = false
-}
-
-function applyTemplate(template: EmailTemplate) {
-	draftBody.value = template.body
-}
-
-async function insertIntoReply() {
-	const text = draftBody.value.trim()
-	if (!text) return
+async function handleInsert() {
 	loading.value = true
 	try {
 		const businessText = (await ensureLoaded()).trim()
@@ -59,73 +57,56 @@ async function insertIntoReply() {
 			return
 		}
 
+		const text = (await resolveQuickReplyBody()).trim()
 		const parts = [text, '', businessText]
-		const template = parts.join('\n')
-		body.value = appendBusinessInfoToBody(body.value, template)
+		body.value = appendBusinessInfoToBody(body.value, parts.join('\n'))
 		emit('inserted')
-		closeModal()
 	} finally {
 		loading.value = false
 	}
 }
 
-watch(isOpen, (open) => {
-	if (open) resetDraft()
+watch(settingsOpen, (open) => {
+	if (!open) invalidateQuickReplyCache()
 })
 </script>
 
 <template>
-	<UButton
-		type="button"
-		color="neutral"
-		variant="outline"
-		size="sm"
-		leading-icon="i-lucide-mail-check"
-		@click="openModal"
-	>
-		{{ t('inbox.receiptAcknowledgement') }}
-	</UButton>
+	<div class="inline-flex items-center gap-0.5">
+		<UButton
+			type="button"
+			color="neutral"
+			variant="outline"
+			size="sm"
+			leading-icon="i-lucide-mail-check"
+			:loading="loading"
+			@click="handleInsert"
+		>
+			{{ t('inbox.receiptAcknowledgement') }}
+		</UButton>
+		<UButton
+			type="button"
+			color="neutral"
+			variant="ghost"
+			size="sm"
+			icon="i-lucide-settings"
+			:title="t('inbox.quickReplyTemplatesSettings')"
+			:aria-label="t('inbox.quickReplyTemplatesSettings')"
+			@click="settingsOpen = true"
+		/>
+	</div>
 
 	<UModal
-		v-model:open="isOpen"
-		:title="t('inbox.receiptModalTitle')"
+		v-model:open="settingsOpen"
+		:title="t('inbox.quickReplyTemplatesSettings')"
 		:ui="EMAIL_LETTER_MODAL_UI"
 	>
 		<template #body>
-			<div class="flex flex-col min-h-[min(70vh,40rem)]">
-				<div class="flex-1 min-h-0 overflow-y-auto pr-1 pb-4">
-					<div class="flex flex-col md:flex-row gap-4">
-						<div class="flex-1 min-w-0 flex flex-col gap-4">
-							<UFormField :label="t('inbox.receiptModalTitle')">
-								<UTextarea
-									v-model="draftBody"
-									:rows="12"
-									class="w-full"
-									autoresize
-									:maxrows="20"
-									:ui="{ base: 'min-h-[min(36vh,20rem)] resize-y' }"
-								/>
-							</UFormField>
-						</div>
-						<div class="w-full md:w-72 shrink-0 min-h-64 md:min-h-0">
-							<EmailTemplateSidebar @select="applyTemplate" />
-						</div>
-					</div>
-				</div>
-
-				<div :class="EMAIL_LETTER_MODAL_FOOTER_CLASS">
-					<UButton color="neutral" variant="ghost" @click="closeModal">
-						{{ t('inbox.cancel') }}
-					</UButton>
-					<UButton
-						leading-icon="i-lucide-check"
-						:loading="loading"
-						:disabled="!draftBody.trim()"
-						@click="insertIntoReply"
-					>
-						{{ t('inbox.insertIntoReply') }}
-					</UButton>
-				</div>
+			<div class="min-h-[min(60vh,32rem)]">
+				<EmailTemplateSidebar
+					:category="EmailTemplateCategory.QUICK_REPLY"
+					mode="manage"
+				/>
 			</div>
 		</template>
 	</UModal>

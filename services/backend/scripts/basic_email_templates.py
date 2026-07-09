@@ -7,12 +7,14 @@ from sqlalchemy import select
 
 from backend.core.config import get_config
 from backend.db.models.email_template import EmailTemplate
+from backend.enums import EmailTemplateCategory
 from backend.services.db_service import db_manager
 
 BASIC_EMAIL_TEMPLATES: list[dict[str, str]] = [
     {
         "title": "Ответ о получении",
         "subject": "Подтверждение получения",
+        "category": EmailTemplateCategory.QUICK_REPLY.value,
         "body": (
             "Благодарим за предоставленную информацию. Мы обработаем ваше "
             "коммерческое предложение и направим ответ в ближайшее время."
@@ -21,6 +23,7 @@ BASIC_EMAIL_TEMPLATES: list[dict[str, str]] = [
     {
         "title": "Запрос на улучшение условий",
         "subject": "Предложение об улучшении условий",
+        "category": EmailTemplateCategory.LETTER.value,
         "body": (
             "Добрый день.\n"
             "В рамках текущей закупки мы получили ряд предложений. "
@@ -36,6 +39,7 @@ BASIC_EMAIL_TEMPLATES: list[dict[str, str]] = [
     {
         "title": "Дожим",
         "subject": "Уточнение условий закупки",
+        "category": EmailTemplateCategory.LETTER.value,
         "body": (
             "Добрый день.\n\n"
             "Мы проводим финальный раунд переговоров.\n\n"
@@ -52,6 +56,7 @@ BASIC_EMAIL_TEMPLATES: list[dict[str, str]] = [
     {
         "title": "Уведомление победителю",
         "subject": "Поздравляем! Ваше предложение признано лучшим",
+        "category": EmailTemplateCategory.LETTER.value,
         "body": (
             "Добрый день.\n\n"
             "Поздравляем! Ваше коммерческое предложение признано лучшим "
@@ -91,6 +96,7 @@ async def seed_basic_email_templates() -> None:
                         title=tpl["title"],
                         subject=tpl["subject"],
                         body=tpl["body"],
+                        category=tpl["category"],
                     )
                 )
                 logger.info("Seeded global email template", title=tpl["title"])

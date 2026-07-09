@@ -9,7 +9,8 @@ from backend.api.email_templates.schemas import (
 )
 from backend.db.dao import EmailTemplateDAO
 from backend.db.models import User
-from fastapi import APIRouter, Depends, HTTPException, status
+from backend.enums import EmailTemplateCategory
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/email-templates", tags=["Email Templates"])
@@ -29,8 +30,16 @@ def _can_modify(template, user: User) -> bool:
 async def list_email_templates(
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
+    category: Annotated[
+        EmailTemplateCategory | None,
+        Query(description="Filter by template category"),
+    ] = None,
 ) -> list[EmailTemplateResponse]:
-    items = await EmailTemplateDAO.list_for_user(session, current_user.id)
+    items = await EmailTemplateDAO.list_for_user(
+        session,
+        current_user.id,
+        category=category,
+    )
     return [EmailTemplateResponse.model_validate(item) for item in items]
 
 
@@ -58,6 +67,7 @@ async def create_email_template(
         subject=body.subject.strip(),
         body=body.body.strip(),
         is_global=body.is_global,
+        category=body.category.value,
     )
     return EmailTemplateResponse.model_validate(instance)
 

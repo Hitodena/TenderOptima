@@ -1,4 +1,5 @@
 import type {
+	EmailTemplateCategory,
 	RequestStatus,
 	RequestSupplierStatus,
 	TZAnalysisHistoryGroup,
@@ -458,6 +459,7 @@ export interface EmailTemplate {
 	subject: string;
 	body: string;
 	is_global: boolean;
+	category: EmailTemplateCategory;
 	created_at: string;
 	updated_at: string;
 }

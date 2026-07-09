@@ -37,6 +37,13 @@ class EmailMessageDirection(StrEnum):
     OUTGOING = "outgoing"
 
 
+class EmailTemplateCategory(StrEnum):
+    """Template scope: quick inbox replies vs outbound supplier letters."""
+
+    QUICK_REPLY = "quick_reply"
+    LETTER = "letter"
+
+
 class TZAnalysisHistoryGroup(StrEnum):
     """Tab groups for the TZ analysis history page."""
 

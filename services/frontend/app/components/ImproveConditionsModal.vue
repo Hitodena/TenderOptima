@@ -55,7 +55,11 @@
 							</div>
 						</div>
 						<div class="w-full md:w-72 shrink-0 min-h-64 md:min-h-0">
-							<EmailTemplateSidebar @select="applyTemplate" />
+							<EmailTemplateSidebar
+								:category="EmailTemplateCategory.LETTER"
+								mode="manage"
+								@select="applyTemplate"
+							/>
 						</div>
 					</div>
 				</div>
@@ -97,6 +101,7 @@
 
 <script lang="ts" setup>
 import type { Attachment, ComparisonSupplier, EmailTemplate, SubscriptionResponse } from '#shared/types'
+import { EmailTemplateCategory } from '#shared/types'
 import {
 	EMAIL_LETTER_MODAL_FOOTER_CLASS,
 	EMAIL_LETTER_MODAL_UI,
