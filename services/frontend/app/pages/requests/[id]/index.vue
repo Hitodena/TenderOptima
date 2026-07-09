@@ -288,11 +288,11 @@ v-if="row.original.supplier.main_email" target="blank"
 										size="sm"
 										color="neutral"
 										variant="ghost"
-										leading-icon="i-lucide-database"
+										icon="i-lucide-database"
+										:title="t('inbox.saveToDatabase')"
+										:aria-label="t('inbox.saveToDatabase')"
 										@click.stop="openSaveToBookmarkModal(row.original.supplier)"
-									>
-										В базу
-									</UButton>
+									/>
 									<template v-if="canDeleteSupplier(row.original)">
 										<template v-if="confirmDeleteSupplierId === row.original.id">
 											<UButton
@@ -582,8 +582,8 @@ const supplierColumns = computed<TableColumn<RequestSupplierResponse>[]>(() => {
 		header: 'Компания',
 		meta: {
 			class: {
-				th: 'min-w-56 sm:min-w-64',
-				td: 'min-w-56 sm:min-w-64 max-w-none whitespace-normal align-top',
+				th: 'min-w-64 sm:min-w-80',
+				td: 'min-w-64 sm:min-w-80 max-w-none whitespace-normal align-top',
 			},
 		},
 	})
@@ -597,8 +597,8 @@ const supplierColumns = computed<TableColumn<RequestSupplierResponse>[]>(() => {
 		header: '',
 		meta: {
 			class: {
-				th: 'sticky right-0 z-10 bg-default min-w-40',
-				td: 'sticky right-0 z-10 bg-default min-w-40',
+				th: 'sticky right-0 z-10 bg-default w-20 min-w-20',
+				td: 'sticky right-0 z-10 bg-default w-20 min-w-20',
 			},
 		},
 	})
