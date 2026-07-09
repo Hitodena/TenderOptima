@@ -99,10 +99,10 @@ color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 					<p v-if="module2BlockReason" class="text-xs text-muted mt-2">
 						{{ module2BlockReason }}
 						<ULink
-							:to="subscriptionProfilePath()"
+							:to="subscriptionPlansPath()"
 							class="text-primary hover:underline underline-offset-2 ml-1"
 						>
-							Подписка
+							{{ t('subscription.upgradeCta') }}
 						</ULink>
 					</p>
 				</UCard>
@@ -695,7 +695,7 @@ v-for="tab in letterPreviewTabs" :key="tab.value" type="button" block
 						leading-icon="i-lucide-credit-card"
 						@click="openSubscriptionFromPagesQuota"
 					>
-						{{ t('tzAnalysis.pagesQuotaModalSubscription') }}
+						{{ t('subscription.upgradeCta') }}
 					</UButton>
 				</div>
 			</template>
@@ -780,7 +780,7 @@ import {
 	formatUploadLimitMb,
 } from '#shared/utils/subscriptionAccess'
 import { t } from '~/constants/translations'
-import { subscriptionProfilePath } from '#shared/utils/subscriptionDisplay'
+import { subscriptionPlansPath } from '#shared/utils/subscriptionDisplay'
 import RequirementResultsTree from '~/components/tz-analysis/RequirementResultsTree.vue'
 import RequirementTreeEditor from '~/components/tz-analysis/RequirementTreeEditor.vue'
 import TzAnalysisSuppliersPanel from '~/components/tz-analysis/TzAnalysisSuppliersPanel.vue'
@@ -797,13 +797,13 @@ const { get, post, patch } = useApi()
 const { $axios } = useNuxtApp()
 const toast = useToast()
 
-function openSubscriptionProfile(): void {
-	void navigateTo(subscriptionProfilePath())
+function openSubscriptionPage(): void {
+	void navigateTo(subscriptionPlansPath())
 }
 
 function openSubscriptionFromPagesQuota(): void {
 	showPagesQuotaModal.value = false
-	openSubscriptionProfile()
+	openSubscriptionPage()
 }
 
 const { formatDate } = useFormatDate()
@@ -2471,8 +2471,8 @@ async function runTzAnalysis() {
 			icon: 'i-lucide-circle-alert',
 			actions: isSubscriptionApiError(e)
 				? [{
-					label: 'Подписка',
-					onClick: openSubscriptionProfile,
+					label: t('subscription.upgradeCta'),
+					onClick: openSubscriptionPage,
 				}]
 				: undefined,
 		})
@@ -2576,8 +2576,8 @@ async function runKpAnalysis() {
 			icon: 'i-lucide-circle-alert',
 			actions: isSubscriptionApiError(e)
 				? [{
-					label: 'Подписка',
-					onClick: openSubscriptionProfile,
+					label: t('subscription.upgradeCta'),
+					onClick: openSubscriptionPage,
 				}]
 				: undefined,
 		})

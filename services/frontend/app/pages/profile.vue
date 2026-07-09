@@ -25,27 +25,32 @@
 
 					<template #business_card>
 						<div>
-							<h2 class="text-base font-semibold mb-0.5">Визитная карточка</h2>
+							<h2 class="text-base font-semibold mb-0.5">{{ t('profile.businessCardTitle') }}</h2>
 							<p class="text-sm text-muted mb-5">
-								Настройте вашу визитную карточку, которая добавляется ко всем письмам
+								{{ t('profile.businessCardDescription') }}
 							</p>
 
 							<UCard :ui="{ body: 'p-5' }">
-								<h3 class="font-semibold text-highlighted mb-1">Настройка визитной карточки</h3>
+								<h3 class="font-semibold text-highlighted mb-1">
+									{{ t('profile.businessCardSettingsTitle') }}
+								</h3>
 								<p class="text-sm text-muted mb-5">
-									Добавьте информацию, которая будет отображаться в конце писем, отправляемых
-									поставщикам
+									{{ t('profile.businessCardSettingsDescription') }}
 								</p>
 
-								<UFormField label="Текст визитной карточки" class="mb-2">
+								<UFormField :label="t('profile.businessCardTextLabel')" class="mb-2">
 									<UTextarea
-v-model="form.business_info" :rows="5" class="w-full"
-										placeholder="С Уважением,&#10;специалист отдела закупок&#10;Иван Иванов&#10;(Email для связи: ivan@corp.ru)" />
+										v-model="form.business_info"
+										:rows="5"
+										:maxrows="14"
+										class="w-full"
+										:placeholder="t('profile.businessCardPlaceholder')"
+										autoresize
+									/>
 								</UFormField>
 
 								<p class="text-xs text-primary mb-5">
-									Этот текст будет добавлен в конце писем, отправляемых поставщикам. Включите все
-									необходимые контактные данные.
+									{{ t('profile.businessCardHint') }}
 								</p>
 
 								<UAlert
@@ -54,12 +59,12 @@ v-if="cardError" color="error" variant="soft" icon="i-lucide-circle-alert"
 
 								<UAlert
 v-if="cardSuccess" color="success" variant="soft" icon="i-lucide-check"
-									description="Визитная карточка сохранена" class="mb-4" />
+									:description="t('profile.businessCardSaved')" class="mb-4" />
 
 								<UButton
 block :loading="savingCard" leading-icon="i-lucide-save"
 									@click="saveBusinessCard">
-									Сохранить
+									{{ t('profile.save') }}
 								</UButton>
 							</UCard>
 						</div>

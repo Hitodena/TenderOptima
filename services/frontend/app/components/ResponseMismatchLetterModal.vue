@@ -21,36 +21,26 @@
 							</UFormField>
 							<UFormField label="Сообщение" class="flex-1 min-h-0">
 								<div class="flex flex-col gap-2">
-									<InsertBusinessInfoButton v-model="body" class="self-start" />
+									<div class="flex flex-wrap items-center gap-2">
+										<InsertBusinessInfoButton v-model="body" />
+										<LetterAttachButton
+											:count="filesToUpload.length"
+											@click="attachmentsField?.open()"
+										/>
+									</div>
 									<UTextarea
-									v-model="body"
-									:rows="20"
-									class="w-full"
-									:ui="{ base: 'min-h-[min(40vh,24rem)] resize-y' }"
-									autoresize
-								/>
+										v-model="body"
+										:rows="20"
+										class="w-full"
+										:ui="{ base: 'min-h-[min(40vh,24rem)] resize-y' }"
+										autoresize
+									/>
 								</div>
 							</UFormField>
-							<div>
-								<p class="text-sm font-semibold mb-1">Вложения</p>
-								<p class="text-xs text-muted mb-2">(договор, спецификация и др.)</p>
-								<UFileUpload
-									:model-value="filesToUpload"
-									multiple
-									accept=".pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp"
-									:interactive="false"
-									layout="list"
-									class="w-full"
-									@update:model-value="onFilesUpdate"
-								>
-									<template #actions="{ open }">
-										<UButton type="button" variant="outline" size="sm" @click="open()">
-											<UIcon name="i-lucide-paperclip" class="w-4 h-4" />
-											Добавить файлы
-										</UButton>
-									</template>
-								</UFileUpload>
-							</div>
+							<LetterAttachmentsField
+								ref="attachmentsField"
+								v-model="filesToUpload"
+							/>
 						</div>
 						<div class="w-full md:w-72 shrink-0 min-h-64 md:min-h-0">
 							<EmailTemplateSidebar
@@ -110,6 +100,8 @@ import {
 	emailQuotaBlockMessage,
 } from '#shared/utils/subscriptionAccess'
 import EmailTemplateSidebar from '~/components/EmailTemplateSidebar.vue'
+import LetterAttachButton from '~/components/LetterAttachButton.vue'
+import LetterAttachmentsField from '~/components/LetterAttachmentsField.vue'
 import SupplierLetterReadonlyEmail from '~/components/SupplierLetterReadonlyEmail.vue'
 
 const props = defineProps<{
@@ -127,15 +119,12 @@ const toast = useToast()
 const subject = ref('Уточнение коммерческого предложения')
 const body = ref('')
 const filesToUpload = ref<File[]>([])
+const attachmentsField = ref<{ open: () => void } | null>(null)
 const sending = ref(false)
 const error = ref('')
 
 const canSend = computed(() => canSendEmail(props.subscription, 1))
 const quotaMessage = computed(() => emailQuotaBlockMessage(props.subscription, 1))
-
-function onFilesUpdate(newFiles: File[] | null | undefined) {
-	filesToUpload.value = newFiles ?? []
-}
 
 function resetForm() {
 	subject.value = 'Уточнение коммерческого предложения'

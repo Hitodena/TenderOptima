@@ -1,6 +1,7 @@
 <script lang="ts" setup>
 import { parseApiError } from '#shared/utils/apiError'
-import { subscriptionProfilePath } from '#shared/utils/subscriptionDisplay'
+import { subscriptionPlansPath } from '#shared/utils/subscriptionDisplay'
+import { t } from '~/constants/translations'
 
 const props = defineProps<{
 	error: unknown
@@ -13,12 +14,12 @@ const message = computed(
 	() => parsed.value?.message ?? props.fallback ?? 'Произошла ошибка',
 )
 
-const showProfileLink = computed(
+const showSubscriptionLink = computed(
 	() => parsed.value?.isSubscription ?? false,
 )
 
-const profilePath = computed(
-	() => parsed.value?.profilePath ?? subscriptionProfilePath(),
+const subscriptionPath = computed(
+	() => parsed.value?.subscriptionPath ?? subscriptionPlansPath(),
 )
 </script>
 
@@ -28,11 +29,11 @@ const profilePath = computed(
 			<div class="space-y-2">
 				<p>{{ message }}</p>
 				<ULink
-					v-if="showProfileLink"
-					:to="profilePath"
+					v-if="showSubscriptionLink"
+					:to="subscriptionPath"
 					class="text-sm font-medium text-primary hover:underline underline-offset-2"
 				>
-					Открыть подписку в профиле
+					{{ t('subscription.upgradeCta') }}
 				</ULink>
 			</div>
 		</template>

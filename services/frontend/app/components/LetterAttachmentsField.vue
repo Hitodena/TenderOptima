@@ -1,11 +1,11 @@
 <template>
 	<div
 		ref="rootEl"
-		class="min-w-0 max-w-full overflow-hidden rounded-xl border border-dashed border-primary/40 bg-primary/5 p-3 sm:p-4 space-y-3"
+		class="relative isolate min-w-0 max-w-full overflow-hidden rounded-2xl border-2 border-dashed border-primary/60 bg-primary/10 p-3 shadow-sm ring-1 ring-primary/15 sm:p-4 space-y-3"
 	>
 		<div class="flex items-start gap-3 min-w-0">
 			<div
-				class="rounded-lg bg-primary/10 text-primary p-2 shrink-0"
+				class="rounded-xl bg-primary/15 text-primary p-2.5 shrink-0 ring-1 ring-primary/20"
 				aria-hidden="true"
 			>
 				<UIcon name="i-lucide-paperclip" class="w-4 h-4" />
@@ -61,23 +61,23 @@
 				class="w-full min-w-0 max-w-full"
 				:ui="{
 					root: 'min-w-0 max-w-full',
-					base: 'min-w-0 max-w-full overflow-hidden',
+					base: 'min-w-0 max-w-full overflow-hidden border-primary/40 bg-default shadow-xs',
 					wrapper: 'min-w-0 max-w-full',
 					files: 'min-w-0 max-w-full overflow-hidden',
-					file: 'min-w-0 max-w-full overflow-hidden',
+					file: 'min-w-0 max-w-full overflow-hidden bg-default',
 					fileWrapper: 'min-w-0 overflow-hidden',
 					fileName: 'truncate min-w-0',
 				}"
 				@update:model-value="onFilesUpdate"
 			>
-				<template #actions="{ open }">
+				<template #actions="{ open: openDialog }">
 					<UButton
 						type="button"
 						variant="soft"
 						color="primary"
 						size="sm"
 						leading-icon="i-lucide-paperclip"
-						@click="open()"
+						@click="openDialog()"
 					>
 						{{ t('inbox.letterAttachmentsAdd') }}
 					</UButton>
@@ -108,10 +108,10 @@ function onNativeFilesSelected(event: Event) {
 	input.value = ''
 }
 
-function open() {
+function openAttachments() {
 	rootEl.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
 	fileInput.value?.click()
 }
 
-defineExpose({ open })
+defineExpose({ open: openAttachments })
 </script>

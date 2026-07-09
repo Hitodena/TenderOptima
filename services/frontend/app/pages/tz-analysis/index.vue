@@ -49,10 +49,10 @@ to="/tz-analysis/history" size="lg" variant="outline" color="neutral"
 								<div class="space-y-2">
 									<p>{{ module2BlockReason }}</p>
 									<ULink
-										to="/profile?tab=acts"
+										:to="subscriptionPlansPath()"
 										class="text-sm font-medium text-primary hover:underline underline-offset-2"
 									>
-										Открыть профиль
+										{{ t('subscription.upgradeCta') }}
 									</ULink>
 								</div>
 							</template>
@@ -101,6 +101,7 @@ import {
 	module2WorkBlockMessage,
 	pagesAnalysisRemaining,
 } from '#shared/utils/subscriptionAccess'
+import { subscriptionPlansPath } from '#shared/utils/subscriptionDisplay'
 import { t } from '~/constants/translations'
 import { z } from 'zod'
 

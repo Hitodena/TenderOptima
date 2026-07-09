@@ -57,10 +57,10 @@ v-if="actionError" color="error" variant="soft" icon="i-lucide-circle-alert"
 					<div class="space-y-2">
 						<p>{{ module1BlockReason }}</p>
 						<NuxtLink
-							:to="subscriptionProfilePath('subscription')"
+							:to="subscriptionPlansPath()"
 							class="text-sm font-medium text-primary hover:underline underline-offset-2"
 						>
-							Перейти к подписке
+							{{ t('subscription.upgradeCta') }}
 						</NuxtLink>
 					</div>
 				</template>
@@ -390,7 +390,7 @@ import {
 	testPlanVisibleSupplierLimit,
 	TEST_PLAN_MANUAL_SUPPLIER_BONUS,
 } from '#shared/utils/subscriptionAccess'
-import { subscriptionProfilePath } from '#shared/utils/subscriptionDisplay'
+import { subscriptionPlansPath } from '#shared/utils/subscriptionDisplay'
 import { t } from '~/constants/translations'
 import type { TableColumn, TableRow } from '@nuxt/ui'
 import SupplierBookmarkModal from '~/components/SupplierBookmarkModal.vue'

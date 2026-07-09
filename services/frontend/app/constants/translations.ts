@@ -80,6 +80,19 @@ export const translations = {
 		},
 	},
 	profile: {
+		businessCardTitle: 'Визитная карточка',
+		businessCardDescription:
+			'Настройте вашу визитную карточку, которая добавляется ко всем письмам',
+		businessCardSettingsTitle: 'Настройка визитной карточки',
+		businessCardSettingsDescription:
+			'Добавьте информацию, которая будет отображаться в конце писем, отправляемых поставщикам',
+		businessCardTextLabel: 'Текст визитной карточки',
+		businessCardPlaceholder:
+			'С Уважением,\nспециалист отдела закупок\nИван Иванов\n(Email для связи: ivan@corp.ru)',
+		businessCardHint:
+			'Качественно заполните реквизиты вашей организации. Это увеличивает конверсию ответов и позволяет получать корректно оформленные КП от поставщиков.',
+		businessCardSaved: 'Визитная карточка сохранена',
+		save: 'Сохранить',
 		mailTab: 'Почта',
 		mailTitle: 'Настройки почты',
 		mailDescription: 'Письма будут отправляться от указанного ящика. Для входящих ответов настройте IMAP.',
@@ -105,6 +118,7 @@ export const translations = {
 		mailLoadError: 'Не удалось загрузить настройки почты',
 	},
 	subscription: {
+		upgradeCta: 'Перейдите на расширенный план.',
 		pagesPerMonth: 'Страниц в месяц',
 		pagesRemaining: 'Страниц осталось',
 		pagesRemainingThisMonth: 'Осталось {count} страниц анализа в этом месяце',

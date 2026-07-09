@@ -28,7 +28,7 @@ export type ParsedApiError = {
 	message: string
 	isSubscription: boolean
 	subscriptionCode?: SubscriptionErrorCode
-	profilePath: string
+	subscriptionPath: string
 }
 
 const RESOURCE_LABELS: Record<string, string> = {
@@ -82,7 +82,7 @@ export function parseApiError(error: unknown): ParsedApiError | null {
 		return {
 			message: error.message,
 			isSubscription: false,
-			profilePath: '/profile?tab=acts',
+			subscriptionPath: '/subscription',
 		}
 	}
 
@@ -91,7 +91,7 @@ export function parseApiError(error: unknown): ParsedApiError | null {
 		return {
 			message: detail,
 			isSubscription: false,
-			profilePath: '/profile?tab=acts',
+			subscriptionPath: '/subscription',
 		}
 	}
 
@@ -106,7 +106,7 @@ export function parseApiError(error: unknown): ParsedApiError | null {
 				subscriptionCode: SUBSCRIPTION_CODES.has(code ?? '')
 					? (code as SubscriptionErrorCode)
 					: undefined,
-				profilePath: '/profile?tab=acts',
+				subscriptionPath: '/subscription',
 			}
 		}
 	}
@@ -119,7 +119,7 @@ export function parseApiError(error: unknown): ParsedApiError | null {
 			return {
 				message: messages.join(', '),
 				isSubscription: false,
-				profilePath: '/profile?tab=acts',
+				subscriptionPath: '/subscription',
 			}
 		}
 	}

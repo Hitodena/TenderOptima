@@ -1,5 +1,6 @@
 import type { UserResponse } from '#shared/types'
 import { appendBusinessInfoToBody, resolveBusinessInfo } from '#shared/utils/businessInfo'
+import { t } from '~/constants/translations'
 
 let cachedUser: UserResponse | null = null
 let loadPromise: Promise<UserResponse | null> | null = null
@@ -31,11 +32,11 @@ export function useBusinessInfo() {
 		const text = (businessText ?? businessInfo.value).trim()
 		if (!text) {
 			toast.add({
-				title: 'Визитная карточка не настроена',
-				description: 'Заполните её в профиле',
+				title: t('inbox.businessCardMissing'),
+				description: t('inbox.businessCardMissingHint'),
 				color: 'warning',
 				actions: [{
-					label: 'Профиль',
+					label: t('inbox.profileLink'),
 					onClick: () => { navigateTo('/profile?tab=business_card') },
 				}],
 			})

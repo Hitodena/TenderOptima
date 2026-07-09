@@ -30,10 +30,10 @@ to="/requests/history" size="lg" variant="outline" color="neutral"
 								<div class="space-y-2">
 									<p>{{ module1BlockReason }}</p>
 									<NuxtLink
-										:to="subscriptionProfilePath()"
+										:to="subscriptionPlansPath()"
 										class="text-sm font-medium text-primary hover:underline underline-offset-2"
 									>
-										Перейти к профилю
+										{{ t('subscription.upgradeCta') }}
 									</NuxtLink>
 								</div>
 							</template>
@@ -80,7 +80,8 @@ import {
 	canStartModule1Work,
 	module1WorkBlockMessage,
 } from '#shared/utils/subscriptionAccess'
-import { subscriptionProfilePath } from '#shared/utils/subscriptionDisplay'
+import { subscriptionPlansPath } from '#shared/utils/subscriptionDisplay'
+import { t } from '~/constants/translations'
 import SearchQueryRulesHint from '~/components/requests/SearchQueryRulesHint.vue'
 
 const { post } = useApi()
