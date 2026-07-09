@@ -70,6 +70,7 @@ class SearchRequest(BaseModel):
     elements: int
     user_id: str
     region: str
+    excluded_domains: list[str] = []
 
 
 class SearchResponse(BaseModel):
@@ -108,7 +109,7 @@ async def search_endpoint(request: SearchRequest) -> SearchResponse:
             region_name=request.region,
             yandex_api_key=YANDEX_API_KEY,
             yandex_folder_id=YANDEX_FOLDER_ID,
-            excluded_domains=[],
+            excluded_domains=request.excluded_domains,
         )
     except HTTPException:
         raise

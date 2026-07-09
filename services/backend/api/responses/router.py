@@ -1,10 +1,8 @@
-import csv
-import io
 import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +17,7 @@ from backend.api.responses.schemas import (
     ReplyPayload,
     ThreadSummary,
 )
+from backend.api.subscriptions.enforcement import ensure_can_send_emails
 from backend.celery_app.tasks.email_tasks import send_custom_email, send_reply
 from backend.db.dao import (
     EmailMessageDAO,
@@ -28,6 +27,16 @@ from backend.db.models import Request, User
 from backend.enums import TZAnalysisRunStatus
 from backend.schemas.analysis import EmailAnalysisResult
 from backend.services.analysis.email_queue import queue_email_analysis
+from backend.utils.comparison_price import (
+    compute_percent_vs_min,
+    compute_row_minima,
+    is_price_requirement,
+    resolve_numeric_value,
+)
+from backend.utils.xlsx_export import (
+    build_comparison_workbook,
+    workbook_to_bytes,
+)
 
 router = APIRouter(prefix="/requests", tags=["Responses"])
 
@@ -48,20 +57,36 @@ def _requirements_list(request: Request) -> list[str]:
 
 def _match_maps_from_analysis(
     raw: dict | None,
-) -> tuple[dict[str, str | None], dict[str, str | None]]:
+) -> tuple[
+    dict[str, str | None],
+    dict[str, str | None],
+    dict[str, str | None],
+    dict[str, str | None],
+    dict[str, float | None],
+]:
     if not raw:
-        return {}, {}
+        return {}, {}, {}, {}, {}
     try:
         result = EmailAnalysisResult(**raw)
     except Exception:
-        return {}, {}
+        return {}, {}, {}, {}, {}
     values: dict[str, str | None] = {}
     statuses: dict[str, str | None] = {}
+    explanations: dict[str, str | None] = {}
+    corrected_from: dict[str, str | None] = {}
+    numeric_values: dict[str, float | None] = {}
     for match in result.matches:
         req = match.requirement.strip()
         values[req] = match.offer_value
         statuses[req] = match.status.value
-    return values, statuses
+        explanations[req] = match.explanation
+        corrected_from[req] = match.corrected_from
+        numeric_values[req] = resolve_numeric_value(
+            req,
+            match.offer_value,
+            match.numeric_value,
+        )
+    return values, statuses, explanations, corrected_from, numeric_values
 
 
 async def _latest_analyzed_incoming(session, rs_id: uuid.UUID):
@@ -84,6 +109,7 @@ async def _build_comparison(
     request: Request,
 ) -> ComparisonResponse:
     requirements = _requirements_list(request)
+    price_requirements = [r for r in requirements if is_price_requirement(r)]
     suppliers_rows: list[ComparisonSupplier] = []
     enabled = await RequestSupplierDAO.get_enabled_by_request(
         session, request.id
@@ -97,11 +123,24 @@ async def _build_comparison(
             req: None for req in requirements
         }
         statuses: dict[str, str | None] = {req: None for req in requirements}
+        explanations: dict[str, str | None] = {
+            req: None for req in requirements
+        }
+        corrected_from: dict[str, str | None] = {
+            req: None for req in requirements
+        }
+        numeric_values: dict[str, float | None] = {
+            req: None for req in requirements
+        }
         if analyzed and analyzed.analysis:
             analysis = analyzed.analysis
-            match_values, match_statuses = _match_maps_from_analysis(
-                analysis.raw_llm_response
-            )
+            (
+                match_values,
+                match_statuses,
+                match_explanations,
+                match_corrected,
+                match_numeric,
+            ) = _match_maps_from_analysis(analysis.raw_llm_response)
             prev = analysis.previous_parameters
             prev_map = prev if isinstance(prev, dict) else {}
             for req in requirements:
@@ -109,6 +148,12 @@ async def _build_comparison(
                     values[req] = match_values[req]
                 if req in match_statuses:
                     statuses[req] = match_statuses[req]
+                if req in match_explanations:
+                    explanations[req] = match_explanations[req]
+                if req in match_corrected:
+                    corrected_from[req] = match_corrected[req]
+                if req in match_numeric:
+                    numeric_values[req] = match_numeric[req]
                 if req in prev_map and prev_map[req] is not None:
                     previous_values[req] = str(prev_map[req])
         suppliers_rows.append(
@@ -116,13 +161,32 @@ async def _build_comparison(
                 rs_id=str(rs.id),
                 company_name=rs.supplier.company_name,
                 main_email=rs.supplier.main_email,
+                is_winner=bool(rs.is_winner),
                 values=values,
                 previous_values=previous_values,
+                explanations=explanations,
+                corrected_from=corrected_from,
                 statuses=statuses,
+                numeric_values=numeric_values,
             )
         )
+
+    row_minima = compute_row_minima(
+        requirements,
+        [dict(s.numeric_values) for s in suppliers_rows],
+    )
+    for supplier in suppliers_rows:
+        percent_vs_min: dict[str, float | None] = {}
+        for req in price_requirements:
+            percent_vs_min[req] = compute_percent_vs_min(
+                supplier.numeric_values.get(req),
+                row_minima.get(req),
+            )
+        supplier.percent_vs_min = percent_vs_min
+
     return ComparisonResponse(
         requirements=requirements,
+        price_requirements=price_requirements,
         suppliers=suppliers_rows,
     )
 
@@ -185,6 +249,32 @@ async def list_thread_messages(
 
 
 @router.post(
+    "/{request_id}/suppliers/{rs_id}/mark-read",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Mark supplier thread as read",
+)
+async def mark_supplier_thread_read(
+    request_id: uuid.UUID,
+    rs_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> Response:
+    """Record that the user opened and read the supplier email thread."""
+    await get_request_or_404(request_id, session, current_user)
+    updated = await RequestSupplierDAO.mark_thread_read(
+        session,
+        request_id,
+        rs_id,
+    )
+    if updated is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Request supplier not found for this request",
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
     "/{request_id}/suppliers/{rs_id}/reply",
     status_code=status.HTTP_202_ACCEPTED,
     summary="Queue an outgoing reply in the thread",
@@ -210,6 +300,8 @@ async def post_reply(
             status_code=400, detail="Reply body cannot be empty"
         )
 
+    await ensure_can_send_emails(session, current_user, pending_count=1)
+
     send_reply.delay(str(rs_id), payload.body, None)  # type: ignore
     return {"status": "queued", "rs_id": str(rs_id)}
 
@@ -234,6 +326,8 @@ async def _queue_custom_supplier_email(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Subject and body cannot be empty",
         )
+
+    await ensure_can_send_emails(session, current_user, pending_count=1)
 
     send_custom_email.delay(  # type: ignore[attr-defined]
         str(rs_id),
@@ -275,9 +369,26 @@ async def post_winner_notification(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> dict:
     """Queue Celery task to send a winner notification in the thread."""
-    return await _queue_custom_supplier_email(
+    result = await _queue_custom_supplier_email(
         request_id, rs_id, payload, session, current_user
     )
+    await RequestSupplierDAO.set_winner(session, request_id, rs_id)
+    return result
+
+
+@router.delete(
+    "/{request_id}/winner",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Clear confirmed winner for the request",
+)
+async def delete_winner(
+    request_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> None:
+    """Allow choosing another winner after clearing the current selection."""
+    await get_request_or_404(request_id, session, current_user)
+    await RequestSupplierDAO.clear_winner(session, request_id)
 
 
 @router.get(
@@ -295,43 +406,29 @@ async def get_analysis_comparison(
 
 
 @router.get(
-    "/{request_id}/analysis/comparison.csv",
-    summary="Export supplier comparison as CSV",
+    "/{request_id}/analysis/comparison.xlsx",
+    summary="Export supplier comparison as XLSX",
 )
-async def export_analysis_comparison_csv(
+async def export_analysis_comparison_xlsx(
     request_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
-) -> StreamingResponse:
+) -> Response:
     request = await get_request_or_404(request_id, session, current_user)
     comparison = await _build_comparison(session, request)
 
-    buffer = io.StringIO()
-    writer = csv.writer(buffer)
-    header = ["Требование"] + [
-        f"{s.company_name} ({s.main_email})" for s in comparison.suppliers
-    ]
-    writer.writerow(header)
+    wb = build_comparison_workbook(
+        requirements=comparison.requirements,
+        suppliers=comparison.suppliers,
+        status_labels=STATUS_LABELS,
+    )
 
-    for req in comparison.requirements:
-        row = [req]
-        for supplier in comparison.suppliers:
-            value = supplier.values.get(req)
-            status_key = supplier.statuses.get(req)
-            status_label = (
-                STATUS_LABELS.get(status_key, status_key) if status_key else ""
-            )
-            cell = value or ""
-            if status_label:
-                cell = f"{cell} [{status_label}]" if cell else status_label
-            row.append(cell)
-        writer.writerow(row)
-
-    buffer.seek(0)
-    filename = f"request_{request_id}_comparison.csv"
-    return StreamingResponse(
-        iter([buffer.getvalue()]),
-        media_type="text/csv; charset=utf-8",
+    filename = f"request_{request_id}_comparison.xlsx"
+    return Response(
+        content=workbook_to_bytes(wb),
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 

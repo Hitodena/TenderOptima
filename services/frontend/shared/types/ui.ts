@@ -18,10 +18,10 @@ type BadgeColor =
 export const REQUEST_STATUS_COLOR: Record<RequestStatus, BadgeColor> = {
 	[RequestStatus.DRAFT]: 'neutral',
 	[RequestStatus.SEARCHING]: 'warning',
-	[RequestStatus.ACTIVE]: 'success',
+	[RequestStatus.ACTIVE]: 'primary',
 	[RequestStatus.QUEUED]: 'warning',
-	[RequestStatus.COMPLETED]: 'success',
-	[RequestStatus.CLOSED]: 'neutral',
+	[RequestStatus.COMPLETED]: 'primary',
+	[RequestStatus.CLOSED]: 'primary',
 };
 
 export const REQUEST_STATUS_LABEL: Record<RequestStatus, string> = {
@@ -37,7 +37,7 @@ export const SUPPLIER_STATUS_COLOR: Record<RequestSupplierStatus, BadgeColor> =
 	{
 		[RequestSupplierStatus.PENDING]: 'neutral',
 		[RequestSupplierStatus.SENT]: 'primary',
-		[RequestSupplierStatus.REPLIED]: 'success',
+		[RequestSupplierStatus.REPLIED]: 'primary',
 		[RequestSupplierStatus.FAILED]: 'error',
 	};
 
@@ -58,9 +58,9 @@ export function getRequestStatusLabel(s: string): string {
 
 export const TZ_RUN_STATUS_COLOR: Record<TZAnalysisRunStatus, BadgeColor> = {
 	[TZAnalysisRunStatus.DRAFT]: 'neutral',
-	[TZAnalysisRunStatus.ACTIVE]: 'success',
+	[TZAnalysisRunStatus.ACTIVE]: 'primary',
 	[TZAnalysisRunStatus.PROCESSING]: 'warning',
-	[TZAnalysisRunStatus.COMPLETED]: 'neutral',
+	[TZAnalysisRunStatus.COMPLETED]: 'primary',
 	[TZAnalysisRunStatus.FAILED]: 'error',
 };
 
@@ -86,7 +86,7 @@ export const TZ_SUPPLIER_STATUS_COLOR: Record<
 > = {
 	[TZAnalysisSupplierStatus.PENDING]: 'neutral',
 	[TZAnalysisSupplierStatus.PROCESSING]: 'warning',
-	[TZAnalysisSupplierStatus.COMPLETED]: 'success',
+	[TZAnalysisSupplierStatus.COMPLETED]: 'primary',
 	[TZAnalysisSupplierStatus.FAILED]: 'error',
 };
 

@@ -11,32 +11,37 @@
 			</div>
 
 			<UCard class="shadow-lg">
-				<UTabs :items="tabs" class="w-full" :ui="{ list: 'mb-4' }">
+				<UTabs v-model="activeTab" :items="tabs" class="w-full" :ui="{ list: 'mb-4' }">
 
 					<template #login>
-						<UForm :schema="loginSchema" :state="loginForm" @submit="handleLogin" class="space-y-4">
+						<UForm :schema="loginSchema" :state="loginForm" class="space-y-4" @submit="handleLogin">
 
 							<UFormField label="Email" name="email" required>
-								<UInput v-model="loginForm.email" type="email" placeholder="you@company.com"
+								<UInput
+v-model="loginForm.email" type="email" placeholder="you@company.com"
 									icon="i-lucide-mail" class="w-full" autocomplete="email" />
 							</UFormField>
 
 							<UFormField label="Пароль" name="password" required>
-								<UInput v-model="loginForm.password" :type="showLoginPassword ? 'text' : 'password'"
+								<UInput
+v-model="loginForm.password" :type="showLoginPassword ? 'text' : 'password'"
 									placeholder="••••••••" icon="i-lucide-lock" class="w-full"
 									autocomplete="current-password" @keydown.enter="handleLogin">
 									<template #trailing>
-										<button type="button"
+										<button
+type="button"
 											class="flex items-center text-muted hover:text-default cursor-pointer transition-colors"
 											@click="showLoginPassword = !showLoginPassword">
-											<UIcon :name="showLoginPassword ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+											<UIcon
+:name="showLoginPassword ? 'i-lucide-eye-off' : 'i-lucide-eye'"
 												class="w-4 h-4" />
 										</button>
 									</template>
 								</UInput>
 							</UFormField>
 
-							<UAlert v-if="loginError" color="error" variant="soft" icon="i-lucide-circle-alert"
+							<UAlert
+v-if="loginError" color="error" variant="soft" icon="i-lucide-circle-alert"
 								:description="loginError" />
 
 							<UButton type="submit" class="w-full justify-center" size="lg" :loading="loginLoading">
@@ -47,36 +52,47 @@
 					</template>
 
 					<template #register>
-						<UForm :schema="registerSchema" :state="registerForm" @submit="handleRegister"
-							class="space-y-4">
+						<UForm
+:schema="registerSchema" :state="registerForm" class="space-y-4"
+							@submit="handleRegister">
 
 							<UFormField label="Email" name="email" required>
-								<UInput v-model="registerForm.email" type="email" placeholder="you@company.com"
+								<UInput
+v-model="registerForm.email" type="email" placeholder="you@company.com"
 									icon="i-lucide-mail" class="w-full" autocomplete="email" />
 							</UFormField>
 
 							<div class="grid grid-cols-2 gap-3">
 								<UFormField label="Полное имя" name="full_name" required>
-									<UInput v-model="registerForm.full_name" placeholder="Иван Иванов"
+									<UInput
+v-model="registerForm.full_name" placeholder="Иван Иванов"
 										icon="i-lucide-user" class="w-full" autocomplete="name" />
 								</UFormField>
 
 								<UFormField label="Компания" name="company_name">
-									<UInput v-model="registerForm.company_name" placeholder="ООО Ромашка"
+									<UInput
+v-model="registerForm.company_name" placeholder="ООО Ромашка"
 										icon="i-lucide-building-2" class="w-full" autocomplete="organization" />
 								</UFormField>
 							</div>
 
+							<UFormField label="Телефон" name="phone" required>
+								<PhoneNumberInput v-model="registerForm.phone" default-country="BY" />
+							</UFormField>
+
 							<UFormField label="Пароль" name="password" required hint="Минимум 8 символов">
-								<UInput v-model="registerForm.password"
+								<UInput
+v-model="registerForm.password"
 									:type="showRegisterPassword ? 'text' : 'password'" placeholder="••••••••"
 									icon="i-lucide-lock" class="w-full" autocomplete="new-password"
 									@keydown.enter="handleRegister">
 									<template #trailing>
-										<button type="button"
+										<button
+type="button"
 											class="flex items-center text-muted hover:text-default cursor-pointer transition-colors"
 											@click="showRegisterPassword = !showRegisterPassword">
-											<UIcon :name="showRegisterPassword ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+											<UIcon
+:name="showRegisterPassword ? 'i-lucide-eye-off' : 'i-lucide-eye'"
 												class="w-4 h-4" />
 										</button>
 									</template>
@@ -89,12 +105,14 @@
 										<template #label>
 											<span class="text-sm">
 												Я принимаю
-												<ULink to="#"
+												<ULink
+to="#"
 													class="text-primary underline underline-offset-2 hover:opacity-80">
 													условия использования
 												</ULink>
 												и
-												<ULink to="#"
+												<ULink
+to="#"
 													class="text-primary underline underline-offset-2 hover:opacity-80">
 													политику конфиденциальности
 												</ULink>
@@ -114,10 +132,12 @@
 								</UFormField>
 							</div>
 
-							<UAlert v-if="registerError" color="error" variant="soft" icon="i-lucide-circle-alert"
+							<UAlert
+v-if="registerError" color="error" variant="soft" icon="i-lucide-circle-alert"
 								:description="registerError" />
 
-							<UButton type="submit" class="w-full justify-center" size="lg" :loading="registerLoading"
+							<UButton
+type="submit" class="w-full justify-center" size="lg" :loading="registerLoading"
 								:disabled="!registerForm.agree_terms">
 								Создать аккаунт
 							</UButton>
@@ -134,6 +154,7 @@
 <script lang="ts" setup>
 import type { RegisterCreate, TokenResponse } from '#shared/types'
 import { getApiErrorDetail } from '#shared/utils/apiError'
+import { isValidPhoneNumber } from 'libphonenumber-js'
 import { z } from 'zod'
 
 definePageMeta({ layout: 'auth' })
@@ -147,9 +168,14 @@ onMounted(() => {
 	}
 })
 
+const route = useRoute()
+const activeTab = ref(
+	route.query.tab === 'register' ? 'register' : 'login',
+)
+
 const tabs = [
-	{ label: 'Войти', slot: 'login', icon: 'i-lucide-log-in' },
-	{ label: 'Регистрация', slot: 'register', icon: 'i-lucide-user-plus' },
+	{ label: 'Войти', slot: 'login', icon: 'i-lucide-log-in', value: 'login' },
+	{ label: 'Регистрация', slot: 'register', icon: 'i-lucide-user-plus', value: 'register' },
 ]
 
 const loginSchema = z.object({
@@ -161,6 +187,10 @@ const registerSchema = z.object({
 	email: z.string().email('Неверный формат email'),
 	full_name: z.string().min(2, 'Минимум 2 символа'),
 	company_name: z.string().optional(),
+	phone: z
+		.string()
+		.min(1, 'Введите номер телефона')
+		.refine((val) => isValidPhoneNumber(val), 'Введите корректный номер телефона'),
 	password: z.string().min(8, 'Минимум 8 символов'),
 	agree_terms: z.boolean().optional(),
 	agree_marketing: z.boolean().optional(),
@@ -196,6 +226,7 @@ const registerForm = reactive({
 	password: '',
 	full_name: '',
 	company_name: '',
+	phone: '',
 	agree_terms: false,
 	agree_marketing: false,
 })
@@ -213,6 +244,7 @@ async function handleRegister() {
 			password: registerForm.password,
 			full_name: registerForm.full_name,
 			company_name: registerForm.company_name || null,
+			phone: registerForm.phone,
 			agree_terms: registerForm.agree_terms,
 			agree_marketing: registerForm.agree_marketing,
 		}

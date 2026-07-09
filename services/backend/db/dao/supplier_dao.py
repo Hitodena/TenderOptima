@@ -1,7 +1,8 @@
 import uuid
+from datetime import UTC, datetime
 
 from loguru import logger
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -11,7 +12,7 @@ from backend.db.models import (
     RequestSupplier,
     Supplier,
 )
-from backend.enums import RequestSupplierStatus
+from backend.enums import RequestSupplierStatus, SupplierSource
 
 
 class RequestSupplierDAO(BaseDAO[RequestSupplier]):
@@ -68,8 +69,10 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
             tracking_id=tracking_id,
         )
         try:
-            stmt = select(cls.model).where(
-                cls.model.tracking_id == tracking_id
+            stmt = (
+                select(cls.model)
+                .where(cls.model.tracking_id == tracking_id)
+                .options(selectinload(cls.model.request))
             )
             result = await session.execute(stmt)
             instance = result.scalar_one_or_none()
@@ -234,8 +237,20 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
         try:
             stmt = (
                 select(cls.model)
+                .join(Supplier, cls.model.supplier_id == Supplier.id)
                 .where(cls.model.request_id == request_id)
                 .options(selectinload(cls.model.supplier))
+                .order_by(
+                    case(
+                        (
+                            Supplier.from_source
+                            == SupplierSource.MANUAL.value,
+                            0,
+                        ),
+                        else_=1,
+                    ),
+                    cls.model.created_at,
+                )
             )
             result = await session.execute(stmt)
             instances = list(result.scalars().all())
@@ -304,6 +319,80 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
             raise
 
     @classmethod
+    async def set_winner(
+        cls,
+        session: AsyncSession,
+        request_id: uuid.UUID,
+        rs_id: uuid.UUID,
+    ) -> None:
+        """Mark one supplier as winner and clear winner flag on others."""
+        logger.debug(
+            "Setting winner for request",
+            model=cls.model,
+            request_id=request_id,
+            rs_id=rs_id,
+        )
+        try:
+            stmt = select(cls.model).where(cls.model.request_id == request_id)
+            result = await session.execute(stmt)
+            instances = list(result.scalars().all())
+            for instance in instances:
+                instance.is_winner = instance.id == rs_id
+            await session.flush()
+            await session.commit()
+            logger.info(
+                "Winner set for request",
+                model=cls.model,
+                request_id=request_id,
+                rs_id=rs_id,
+            )
+        except Exception as exc:
+            await session.rollback()
+            logger.exception(
+                "Failed to set winner",
+                error=str(exc),
+                model=cls.model,
+                request_id=request_id,
+                rs_id=rs_id,
+            )
+            raise
+
+    @classmethod
+    async def clear_winner(
+        cls,
+        session: AsyncSession,
+        request_id: uuid.UUID,
+    ) -> None:
+        """Clear winner flag on all suppliers for the request."""
+        logger.debug(
+            "Clearing winner for request",
+            model=cls.model,
+            request_id=request_id,
+        )
+        try:
+            stmt = select(cls.model).where(cls.model.request_id == request_id)
+            result = await session.execute(stmt)
+            instances = list(result.scalars().all())
+            for instance in instances:
+                instance.is_winner = False
+            await session.flush()
+            await session.commit()
+            logger.info(
+                "Winner cleared for request",
+                model=cls.model,
+                request_id=request_id,
+            )
+        except Exception as exc:
+            await session.rollback()
+            logger.exception(
+                "Failed to clear winner",
+                error=str(exc),
+                model=cls.model,
+                request_id=request_id,
+            )
+            raise
+
+    @classmethod
     async def get_enabled_by_request(
         cls, session: AsyncSession, request_id: uuid.UUID
     ) -> list[RequestSupplier]:
@@ -337,6 +426,57 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
                 error=str(exc),
                 model=cls.model,
                 request_id=request_id,
+            )
+            raise
+
+    @classmethod
+    async def mark_thread_read(
+        cls,
+        session: AsyncSession,
+        request_id: uuid.UUID,
+        rs_id: uuid.UUID,
+        read_at: datetime | None = None,
+    ) -> RequestSupplier | None:
+        """Persist thread read timestamp for a request-supplier link."""
+        logger.debug(
+            "Marking request-supplier thread as read",
+            model=cls.model,
+            request_id=request_id,
+            rs_id=rs_id,
+        )
+        try:
+            stmt = select(cls.model).where(
+                cls.model.id == rs_id,
+                cls.model.request_id == request_id,
+            )
+            result = await session.execute(stmt)
+            instance = result.scalar_one_or_none()
+            if instance is None:
+                logger.info(
+                    "Request supplier not found for mark-read",
+                    model=cls.model,
+                    request_id=request_id,
+                    rs_id=rs_id,
+                )
+                return None
+            instance.thread_read_at = read_at or datetime.now(UTC)
+            await session.flush()
+            await session.commit()
+            logger.info(
+                "Request-supplier thread marked read",
+                model=cls.model,
+                request_id=request_id,
+                rs_id=rs_id,
+            )
+            return instance
+        except Exception as exc:
+            await session.rollback()
+            logger.exception(
+                "Failed to mark request-supplier thread read",
+                error=str(exc),
+                model=cls.model,
+                request_id=request_id,
+                rs_id=rs_id,
             )
             raise
 

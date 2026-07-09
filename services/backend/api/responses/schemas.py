@@ -178,15 +178,21 @@ class ComparisonSupplier(BaseModel):
     rs_id: str
     company_name: str
     main_email: str
+    is_winner: bool = False
     values: dict[str, str | None]
     previous_values: dict[str, str | None]
+    explanations: dict[str, str | None] = {}
+    corrected_from: dict[str, str | None] = {}
     statuses: dict[str, str | None]
+    numeric_values: dict[str, float | None] = {}
+    percent_vs_min: dict[str, float | None] = {}
 
 
 class ComparisonResponse(BaseModel):
     """Horizontal comparison of requirements across suppliers."""
 
     requirements: list[str]
+    price_requirements: list[str] = []
     suppliers: list[ComparisonSupplier]
 
 

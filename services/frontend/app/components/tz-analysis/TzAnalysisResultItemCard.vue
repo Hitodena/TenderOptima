@@ -13,9 +13,12 @@
 					@click="emit('toggle-expand')"
 				/>
 				<button type="button" class="flex-1 min-w-0 text-left" @click="emit('toggle-expand')">
-					<p class="text-sm font-medium whitespace-pre-wrap leading-relaxed">
-						{{ item.requirement }}
-					</p>
+					<TzRequirementDualText
+						:requirement="item.requirement"
+						:requirement-ref="item.requirement_ref"
+						:source-ref="item.ref"
+						:source-ref-value="item.ref_value"
+					/>
 				</button>
 				<USelect
 					v-if="editable"
@@ -42,14 +45,6 @@
 					class="w-3.5 h-3.5 shrink-0 text-muted"
 					title="Изменено вручную"
 				/>
-				<UCheckbox
-					v-if="showCheckbox"
-					:model-value="isSelected"
-					:color="getTzItemStatusColor(item.status)"
-					class="shrink-0 mt-0.5"
-					@click.stop
-					@update:model-value="(v) => emit('toggle-select', v === true)"
-				/>
 			</div>
 
 			<div
@@ -60,20 +55,23 @@
 					<p class="text-xs font-semibold uppercase tracking-wide text-muted">
 						Полное требование
 					</p>
-					<p class="text-sm whitespace-pre-wrap leading-relaxed">
-						{{ item.requirement }}
-					</p>
-					<p v-if="item.requirement_ref" class="text-xs text-muted">
+					<TzRequirementDualText
+						:requirement="item.requirement"
+						:requirement-ref="item.requirement_ref"
+						:source-ref="item.ref"
+						:source-ref-value="item.ref_value"
+					/>
+					<p v-if="tzSourceRef" class="text-xs text-muted">
 						<span class="font-medium text-default/70">Ссылка:</span>
 						<button
 							v-if="analysisFiles"
 							type="button"
-							class="ml-1 text-primary hover:underline text-left"
+							class="ml-1 text-primary hover:underline text-left whitespace-pre-wrap"
 							@click.stop="analysisFiles.openTzFile()"
 						>
-							{{ item.requirement_ref }}
+							{{ tzSourceRef }}
 						</button>
-						<span v-else class="ml-1">{{ item.requirement_ref }}</span>
+						<span v-else class="ml-1 whitespace-pre-wrap">{{ tzSourceRef }}</span>
 					</p>
 				</div>
 
@@ -87,7 +85,7 @@
 					<p v-else class="text-sm text-muted italic">
 						Не указано в КП
 					</p>
-					<p v-if="item.offer_ref" class="text-xs text-muted">
+					<p v-if="kpSourceRef" class="text-xs text-muted">
 						<span class="font-medium text-default/70">Ссылка:</span>
 						<button
 							v-if="analysisFiles && itemKpFilename"
@@ -95,9 +93,9 @@
 							class="ml-1 text-primary hover:underline text-left"
 							@click.stop="analysisFiles.openKpFile(itemKpFilename)"
 						>
-							{{ item.offer_ref }}
+							{{ kpSourceRef }}
 						</button>
-						<span v-else class="ml-1">{{ item.offer_ref }}</span>
+						<span v-else class="ml-1">{{ kpSourceRef }}</span>
 					</p>
 				</div>
 
@@ -117,25 +115,26 @@
 <script lang="ts" setup>
 import type { TZAnalysisItem, TZAnalysisStatus } from '#shared/types'
 import { getTzItemStatusColor, getTzItemStatusLabel } from '#shared/types'
+import type { RequirementsHierarchy } from '#shared/utils/requirementsStruct'
+import { formatTzSourceRefLink, formatKpSourceRefLink } from '#shared/utils/tzRequirementDisplay'
+import TzRequirementDualText from '~/components/tz-analysis/TzRequirementDualText.vue'
 
 type TZItemView = TZAnalysisItem & { _index: number }
 
 const props = withDefaults(defineProps<{
 	item: TZItemView
 	isExpanded: boolean
-	isSelected: boolean
-	showCheckbox: boolean
 	defaultKpFilename?: string | null
 	editable?: boolean
 	isOverridden?: boolean
 }>(), {
+	defaultKpFilename: null,
 	editable: false,
 	isOverridden: false,
 })
 
 const emit = defineEmits<{
 	'toggle-expand': []
-	'toggle-select': [checked: boolean]
 	'status-change': [status: TZAnalysisStatus]
 }>()
 
@@ -151,8 +150,21 @@ const analysisFiles = inject<{
 	openKpFile: (displayName: string) => Promise<void>
 } | null>('tzAnalysisFiles', null)
 
+const requirementsTz = inject<Ref<RequirementsHierarchy | null | undefined>>(
+	'tzRequirementsHierarchy',
+	ref(null),
+)
+
+const tzSourceRef = computed(() =>
+	formatTzSourceRefLink(props.item, requirementsTz.value),
+)
+
 const itemKpFilename = computed(() =>
 	props.item.kp_name || props.defaultKpFilename || null,
+)
+
+const kpSourceRef = computed(() =>
+	formatKpSourceRefLink(props.item, props.item.ref),
 )
 
 function matchBorderClass(status: TZAnalysisStatus) {

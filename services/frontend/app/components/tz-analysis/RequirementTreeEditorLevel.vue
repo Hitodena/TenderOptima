@@ -4,6 +4,8 @@
 			v-for="node in nodes"
 			:key="`${scopeId}-${node.key}-${node.rowIndex ?? 'h'}`"
 			class="space-y-3"
+			:data-row-key="node.rowIndex !== undefined ? `${scopeId}:${node.key}` : undefined"
+			:data-row-index="node.rowIndex !== undefined ? `${scopeId}:${node.rowIndex}` : undefined"
 		>
 			<template v-if="node.isHeading || node.children.length > 0">
 				<div
@@ -44,12 +46,6 @@
 						</span>
 						<div class="flex-1 min-w-0">
 							<div v-if="node.rowIndex !== undefined" class="space-y-2">
-								<p
-									v-if="node.isHeading && showHeadingHint"
-									class="text-xs font-medium text-muted uppercase tracking-wide"
-								>
-									Заголовок раздела · не анализируется в КП
-								</p>
 								<UTextarea
 									v-if="rowsRef[node.rowIndex]"
 									v-model="rowsRef[node.rowIndex]!.text"
@@ -59,7 +55,6 @@
 									:rows="1"
 									:maxrows="20"
 									:autoresize-delay="50"
-									:placeholder="node.isHeading ? 'Название раздела (необязательно)' : undefined"
 									:readonly="readonly"
 									autoresize
 								/>
@@ -70,29 +65,58 @@
 									<span v-else class="text-muted font-normal">Раздел</span>
 								</p>
 							</div>
-							<RequirementNodeRail
-								v-if="!readonly"
-								:show-remove="node.rowIndex !== undefined"
-								@add-child="emit('add-child', node.key)"
-								@add-heading="emit('add-heading', node.key)"
-								@add-sibling="onAddSibling(node)"
-								@remove="node.rowIndex !== undefined && emit('remove', node.rowIndex)"
-							/>
+						<RequirementNodeRail
+							v-if="!readonly"
+							@add-child="emit('add-child', node.key)"
+							@add-heading="emit('add-heading', node.key)"
+							@add-sibling="onAddSibling(node)"
+						/>
 						</div>
-						<button
-							v-if="!readonly && node.rowIndex !== undefined"
-							type="button"
-							class="shrink-0 mt-2 p-1 rounded hover:bg-elevated/60 cursor-grab active:cursor-grabbing touch-none"
-							draggable="true"
-							aria-label="Перетащить пункт"
-							@dragstart="onDragStart($event, node.rowIndex!)"
-							@dragend="onDragEnd"
-						>
-							<UIcon
-								name="i-lucide-grip-vertical"
-								class="w-5 h-5 text-muted"
+						<div v-if="!readonly && node.rowIndex !== undefined" class="flex shrink-0 items-start gap-0.5 mt-1.5">
+							<template v-if="editor.confirmRemoveIndex.value === node.rowIndex">
+								<UButton
+									type="button"
+									size="sm"
+									color="error"
+									variant="soft"
+									icon="i-lucide-check"
+									aria-label="Подтвердить удаление"
+									@click="confirmRemove(node.rowIndex!)"
+								/>
+								<UButton
+									type="button"
+									size="sm"
+									color="neutral"
+									variant="ghost"
+									icon="i-lucide-x"
+									aria-label="Отменить удаление"
+									@click="editor.confirmRemoveIndex.value = null"
+								/>
+							</template>
+							<UButton
+								v-else
+								type="button"
+								variant="ghost"
+								color="error"
+								size="sm"
+								icon="i-lucide-trash-2"
+								aria-label="Удалить пункт"
+								@click="editor.confirmRemoveIndex.value = node.rowIndex!"
 							/>
-						</button>
+							<button
+								type="button"
+								class="p-1 rounded hover:bg-elevated/60 cursor-grab active:cursor-grabbing touch-none"
+								draggable="true"
+								aria-label="Перетащить пункт"
+								@dragstart="onDragStart($event, node.rowIndex!)"
+								@dragend="onDragEnd"
+							>
+								<UIcon
+									name="i-lucide-grip-vertical"
+									class="w-5 h-5 text-muted"
+								/>
+							</button>
+						</div>
 					</div>
 				</div>
 
@@ -147,28 +171,58 @@
 								:readonly="readonly"
 								autoresize
 							/>
-							<RequirementNodeRail
-								v-if="!readonly"
-								@add-child="emit('add-child', node.key)"
-								@add-heading="emit('add-heading', node.key)"
-								@add-sibling="onAddSibling(node)"
-								@remove="emit('remove', node.rowIndex)"
-							/>
-						</div>
-						<button
+						<RequirementNodeRail
 							v-if="!readonly"
-							type="button"
-							class="shrink-0 mt-2 p-1 rounded hover:bg-elevated/60 cursor-grab active:cursor-grabbing touch-none"
-							draggable="true"
-							aria-label="Перетащить пункт"
-							@dragstart="onDragStart($event, node.rowIndex)"
-							@dragend="onDragEnd"
-						>
-							<UIcon
-								name="i-lucide-grip-vertical"
-								class="w-5 h-5 text-muted"
+							@add-child="emit('add-child', node.key)"
+							@add-heading="emit('add-heading', node.key)"
+							@add-sibling="onAddSibling(node)"
+						/>
+						</div>
+						<div v-if="!readonly" class="flex shrink-0 items-start gap-0.5 mt-1.5">
+							<template v-if="editor.confirmRemoveIndex.value === node.rowIndex">
+								<UButton
+									type="button"
+									size="sm"
+									color="error"
+									variant="soft"
+									icon="i-lucide-check"
+									aria-label="Подтвердить удаление"
+									@click="confirmRemove(node.rowIndex)"
+								/>
+								<UButton
+									type="button"
+									size="sm"
+									color="neutral"
+									variant="ghost"
+									icon="i-lucide-x"
+									aria-label="Отменить удаление"
+									@click="editor.confirmRemoveIndex.value = null"
+								/>
+							</template>
+							<UButton
+								v-else
+								type="button"
+								variant="ghost"
+								color="error"
+								size="sm"
+								icon="i-lucide-trash-2"
+								aria-label="Удалить пункт"
+								@click="editor.confirmRemoveIndex.value = node.rowIndex"
 							/>
-						</button>
+							<button
+								type="button"
+								class="p-1 rounded hover:bg-elevated/60 cursor-grab active:cursor-grabbing touch-none"
+								draggable="true"
+								aria-label="Перетащить пункт"
+								@dragstart="onDragStart($event, node.rowIndex)"
+								@dragend="onDragEnd"
+							>
+								<UIcon
+									name="i-lucide-grip-vertical"
+									class="w-5 h-5 text-muted"
+								/>
+							</button>
+						</div>
 					</div>
 				</div>
 			</template>
@@ -204,7 +258,13 @@ const editor = inject<{
 	isSectionExpanded: (key: string) => boolean
 	dragFromIndex: Ref<number | null>
 	dropTargetIndex: Ref<number | null>
+	confirmRemoveIndex: Ref<number | null>
 }>('requirementTreeEditor')!
+
+function confirmRemove(rowIndex: number) {
+	emit('remove', rowIndex)
+	editor.confirmRemoveIndex.value = null
+}
 
 function onAddSibling(node: RequirementTreeNode) {
 	if (node.rowIndex === undefined) return

@@ -4,6 +4,7 @@ from backend.enums import SubscriptionPlan
 from backend.utils.subscription_catalog import (
     resolve_subscription_limits,
     resolve_subscription_prices,
+    resolve_tz_kp_upload_limit,
 )
 
 from .schemas import SubscriptionResponse
@@ -39,6 +40,10 @@ def subscription_to_response(
         max_searches_per_month=searches,
         max_emails_per_month=emails,
         max_kp_processed_per_month=kp,
+        max_tz_kp_upload_bytes=resolve_tz_kp_upload_limit(
+            row.plan,
+            row.geo_code,
+        ),
         geo_code=row.geo_code,
         currency_code=row.currency_code,
         price_module_1_monthly=p1,

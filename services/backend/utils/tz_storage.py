@@ -15,7 +15,6 @@ def supplier_dir(analysis_id: uuid.UUID, supplier_id: uuid.UUID) -> Path:
 
 _MIME_BY_EXT = {
     ".pdf": "application/pdf",
-    ".doc": "application/msword",
     ".docx": (
         "application/vnd.openxmlformats-officedocument"
         ".wordprocessingml.document"

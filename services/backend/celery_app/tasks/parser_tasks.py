@@ -18,6 +18,15 @@ from backend.schemas import ParserResult
 
 config = get_config()
 
+PARSER_QUERY_SUFFIX = "от производителя оптом"
+
+
+def _append_to_query_parts(query: str, suffix: str) -> str:
+    parts = [q.strip() for q in query.split(",") if q.strip()]
+    if not parts:
+        return query
+    return ", ".join(f"{q} {suffix}" for q in parts)
+
 
 @app.task(
     name="parser.search",
@@ -34,18 +43,32 @@ async def run_parser_search(self, request_id: str) -> dict:
     parser_query: str | None = None
     user_uuid: uuid.UUID | None = None
     delivery_region: str | None = None
+    excluded_domains: list[str] = []
     async with db_manager.session() as session:
         request = await RequestDAO.get_by_id(session, req_uuid)
         if not request:
             return {"error": "not_found"}
-        parser_query = request.query
+        parser_query = _append_to_query_parts(
+            request.query, PARSER_QUERY_SUFFIX
+        )
         if request.delivery_region:
             parser_query = f"{parser_query} {request.delivery_region}"
         user_uuid = request.user_id
         delivery_region = request.delivery_region
+        excluded_domains = (
+            await BlacklistedDomainDAO.get_excluded_domain_names(
+                session, user_uuid
+            )
+        )
         await RequestDAO.update_fields(
             session, req_uuid, status=RequestStatus.SEARCHING.value
         )
+
+    logger.info(
+        "Parser search starting",
+        request_id=request_id,
+        excluded_domains=len(excluded_domains),
+    )
 
     try:
         async with httpx.AsyncClient(timeout=600.0) as client:
@@ -56,6 +79,7 @@ async def run_parser_search(self, request_id: str) -> dict:
                     "elements": 100,
                     "user_id": str(user_uuid),
                     "region": delivery_region,
+                    "excluded_domains": excluded_domains,
                 },
             )
             resp.raise_for_status()
@@ -81,10 +105,7 @@ async def run_parser_search(self, request_id: str) -> dict:
             request_id=request_id,
         )
 
-        async with db_manager.session() as session:
-            blacklisted = await BlacklistedDomainDAO.get_domains_set(
-                session, user_uuid
-            )
+        blacklisted_names = {d.lower() for d in excluded_domains}
 
         saved = 0
         skipped_blacklisted = 0
@@ -92,7 +113,7 @@ async def run_parser_search(self, request_id: str) -> dict:
 
         candidates: list[tuple[str, ParserResult]] = []
         for result in results:
-            if result.domain in blacklisted:
+            if (result.domain or "").lower() in blacklisted_names:
                 logger.debug(
                     "Domain blacklisted, skipping", domain=result.domain
                 )
@@ -130,6 +151,7 @@ async def run_parser_search(self, request_id: str) -> dict:
                         supplier_id=supplier.id,
                         sent_to_email=result.emails[0],
                         sent_status=RequestSupplierStatus.PENDING,
+                        is_enabled=False,
                     )
                     saved += 1
 

@@ -30,20 +30,25 @@
 					</a>
 				</div>
 
-				<div class="space-y-0.5">
-					<p class="text-xs font-medium text-muted uppercase tracking-wide">Email</p>
-					<p class="text-default break-all">{{ supplier.main_email }}</p>
-					<p
-						v-for="email in extraEmails"
-						:key="email"
-						class="text-muted break-all"
-					>
-						{{ email }}
-					</p>
-				</div>
+			<div class="space-y-0.5">
+				<p class="text-xs font-medium text-muted uppercase tracking-wide">Email</p>
+				<p class="text-default break-all">{{ supplier.main_email }}</p>
+				<p
+					v-for="email in extraEmails"
+					:key="email"
+					class="text-muted break-all"
+				>
+					{{ email }}
+				</p>
 			</div>
-		</template>
-	</UPopover>
+
+			<div v-if="supplier.phone" class="space-y-0.5">
+				<p class="text-xs font-medium text-muted uppercase tracking-wide">Телефон</p>
+				<p class="text-default">{{ supplier.phone }}</p>
+			</div>
+		</div>
+	</template>
+</UPopover>
 </template>
 
 <script lang="ts" setup>

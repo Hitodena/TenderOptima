@@ -37,16 +37,21 @@ from backend.utils.email_utils import (
     build_outbound_subject,
     build_request_email_body,
     build_threading_headers,
+    encode_recipient_for_smtp,
     make_message_id,
     normalize_message_id,
     resolve_reply_subject,
 )
+from backend.utils.imap_poll import (
+    build_mailbox_imap_id,
+    build_poll_mailboxes,
+    tracking_belongs_to_mailbox_owner,
+)
 from backend.utils.short_id import generate_tid
 from backend.utils.user_email_credentials import (
-    ImapCredentials,
     SmtpCredentials,
-    resolve_imap_credentials,
     resolve_smtp_credentials,
+    smtp_connection,
 )
 
 config = get_config()
@@ -203,18 +208,9 @@ def _send_mime(
     recipient: str,
     smtp_creds: SmtpCredentials,
 ) -> None:
-    smtp = smtplib.SMTP(smtp_creds.host, smtp_creds.port)
-    try:
-        smtp.ehlo()
-        smtp.starttls()
-        smtp.ehlo()
-        smtp.login(smtp_creds.user, smtp_creds.password)
-        smtp.sendmail(smtp_creds.user, recipient, msg.as_string())
-    finally:
-        try:
-            smtp.quit()
-        except Exception:
-            pass
+    smtp_recipient = encode_recipient_for_smtp(recipient)
+    with smtp_connection(smtp_creds) as smtp:
+        smtp.sendmail(smtp_creds.user, smtp_recipient, msg.as_string())
 
 
 async def _mark_rs_status(
@@ -260,6 +256,16 @@ async def send_reply(
 
     user = rs.request.user
     request = rs.request
+
+    async with db_manager.session() as session:
+        from backend.api.subscriptions.enforcement import (
+            worker_can_send_emails,
+        )
+
+        if not await worker_can_send_emails(session, user, count=1):
+            logger.warning("Email quota exhausted for reply", rs_id=rs_id)
+            return {"status": "error", "reason": "subscription_limit"}
+
     smtp_creds = resolve_smtp_credentials(user, config)
 
     att_data = _prepare_attachments(attachment_paths)
@@ -303,7 +309,7 @@ async def send_reply(
     try:
         _send_mime(msg, recipient, smtp_creds)
         logger.info("Reply sent via SMTP", rs_id=rs_id, recipient=recipient)
-    except smtplib.SMTPException as exc:
+    except (smtplib.SMTPException, UnicodeEncodeError, ValueError) as exc:
         logger.exception(
             "SMTP send failed for reply", rs_id=rs_id, error=str(exc)
         )
@@ -364,6 +370,19 @@ async def send_custom_email(
         return {"status": "error", "reason": "no_recipient"}
 
     user = rs.request.user
+    request = rs.request
+
+    async with db_manager.session() as session:
+        from backend.api.subscriptions.enforcement import (
+            worker_can_send_emails,
+        )
+
+        if not await worker_can_send_emails(session, user, count=1):
+            logger.warning(
+                "Email quota exhausted for custom email", rs_id=rs_id
+            )
+            return {"status": "error", "reason": "subscription_limit"}
+
     smtp_creds = resolve_smtp_credentials(user, config)
     att_data = _prepare_attachments(attachment_paths)
     if att_data:
@@ -383,12 +402,14 @@ async def send_custom_email(
 
     msg["From"] = f"{user.company_name or 'TenderOptima'} <{smtp_creds.user}>"
     msg["To"] = recipient
-    msg["Subject"] = subject
 
     async with db_manager.session() as session:
         thread = await EmailMessageDAO.get_thread_by_request_supplier_id(
             session, rs_uuid
         )
+
+    resolved_subject = resolve_reply_subject(request, rs.tracking_id, thread)
+    msg["Subject"] = resolved_subject
 
     in_reply_to, references = build_threading_headers(
         thread, rs.smtp_message_id
@@ -408,7 +429,7 @@ async def send_custom_email(
             rs_id=rs_id,
             recipient=recipient,
         )
-    except smtplib.SMTPException as exc:
+    except (smtplib.SMTPException, UnicodeEncodeError, ValueError) as exc:
         logger.exception(
             "SMTP send failed for custom email", rs_id=rs_id, error=str(exc)
         )
@@ -421,7 +442,7 @@ async def send_custom_email(
             direction=EmailMessageDirection.OUTGOING,
             message_id=outbound_message_id,
             in_reply_to=in_reply_to,
-            subject=subject,
+            subject=resolved_subject,
             raw_body=body,
             attachments=att_data or None,
             received_at=datetime.now(UTC),
@@ -436,6 +457,7 @@ async def send_custom_email(
         "status": "sent",
         "rs_id": rs_id,
         "message_id": outbound_message_id,
+        "subject": resolved_subject,
     }
 
 
@@ -458,7 +480,28 @@ async def send_emails(self, request_id: str) -> dict:
             logger.warning("No pending suppliers", request_id=request_id)
             return {"sent": 0, "failed": 0}
 
+        from backend.api.subscriptions.enforcement import (
+            outbound_email_remaining,
+            worker_can_send_emails,
+        )
+
         user = request.user
+        remaining = await outbound_email_remaining(session, user)
+        if remaining == 0:
+            logger.warning(
+                "Email quota exhausted for bulk send",
+                request_id=request_id,
+            )
+            return {"sent": 0, "failed": 0, "error": "subscription_limit"}
+        if remaining is not None and len(pending) > remaining:
+            logger.warning(
+                "Capping bulk send to remaining quota",
+                request_id=request_id,
+                pending=len(pending),
+                remaining=remaining,
+            )
+            pending = pending[:remaining]
+
         smtp_creds = resolve_smtp_credentials(user, config)
 
     sent = 0
@@ -467,101 +510,117 @@ async def send_emails(self, request_id: str) -> dict:
     attachment_data = _prepare_attachments(request.attachment_paths)
 
     try:
-        smtp = smtplib.SMTP(smtp_creds.host, smtp_creds.port)
-        smtp.ehlo()
-        smtp.starttls()
-        smtp.ehlo()
-        smtp.login(smtp_creds.user, smtp_creds.password)
+        with smtp_connection(smtp_creds) as smtp:
+            for rs in pending:
+                async with db_manager.session() as quota_session:
+                    if not await worker_can_send_emails(
+                        quota_session, user, count=1
+                    ):
+                        logger.warning(
+                            "Email quota exhausted mid-bulk send",
+                            request_id=request_id,
+                        )
+                        break
+
+                supplier = rs.supplier
+                recipient = rs.sent_to_email or supplier.main_email
+
+                if not recipient:
+                    logger.warning(
+                        "Supplier has no email, skipping",
+                        supplier_id=str(supplier.id),
+                        domain=supplier.domain,
+                    )
+                    results.append(
+                        SendResult(
+                            rs.id,
+                            RequestSupplierStatus.FAILED,
+                            None,
+                            None,
+                            None,
+                            None,
+                        )
+                    )
+                    failed += 1
+                    continue
+
+                user = rs.request.user
+                rs_tracking_id = generate_tid()
+                plain_body = build_request_email_body(request, user)
+                outbound_subject = build_outbound_subject(
+                    request,
+                    rs_tracking_id,
+                )
+
+                if attachment_data:
+                    msg = MIMEMultipart()
+                    msg.attach(MIMEText(plain_body, "plain", "utf-8"))
+                    for att in attachment_data:
+                        part = MIMEBase("application", "octet-stream")
+                        part.set_payload(att["data"])
+                        encoders.encode_base64(part)
+                        part.add_header(
+                            "Content-Disposition",
+                            f'attachment; filename="{att["filename"]}"',
+                        )
+                        msg.attach(part)
+                else:
+                    msg = MIMEText(plain_body, "plain", "utf-8")
+                msg["From"] = (
+                    f"{user.company_name or 'TenderOptima'} <{smtp_creds.user}>"
+                )
+                msg["To"] = recipient
+                msg["Subject"] = outbound_subject
+                outbound_message_id = make_message_id(smtp_creds.user)
+                msg["Message-ID"] = outbound_message_id
+
+                try:
+                    smtp_recipient = encode_recipient_for_smtp(recipient)
+                    smtp.sendmail(
+                        smtp_creds.user,
+                        smtp_recipient,
+                        msg.as_string(),
+                    )
+                    results.append(
+                        SendResult(
+                            rs.id,
+                            RequestSupplierStatus.SENT,
+                            outbound_message_id,
+                            rs_tracking_id,
+                            msg["Subject"],
+                            plain_body,
+                        )
+                    )
+                    sent += 1
+                    logger.info(
+                        "Email sent",
+                        domain=supplier.domain,
+                        recipient=recipient,
+                    )
+                except (
+                    smtplib.SMTPException,
+                    UnicodeEncodeError,
+                    ValueError,
+                ) as exc:
+                    logger.error(
+                        "Failed to send email",
+                        domain=supplier.domain,
+                        error=str(exc),
+                    )
+                    results.append(
+                        SendResult(
+                            rs.id,
+                            RequestSupplierStatus.FAILED,
+                            None,
+                            None,
+                            None,
+                            None,
+                        )
+                    )
+                    failed += 1
     except smtplib.SMTPException as exc:
         logger.exception("SMTP connection failed", error=str(exc))
         raise self.retry(exc=exc) from exc  # noqa: B904
-
-    try:
-        for rs in pending:
-            supplier = rs.supplier
-            recipient = rs.sent_to_email or supplier.main_email
-
-            if not recipient:
-                logger.warning(
-                    "Supplier has no email, skipping",
-                    supplier_id=str(supplier.id),
-                    domain=supplier.domain,
-                )
-                results.append(
-                    SendResult(
-                        rs.id,
-                        RequestSupplierStatus.FAILED,
-                        None,
-                        None,
-                        None,
-                        None,
-                    )
-                )
-                failed += 1
-                continue
-
-            user = rs.request.user
-            rs_tracking_id = generate_tid()
-            plain_body = build_request_email_body(request, user)
-            outbound_subject = build_outbound_subject(request, rs_tracking_id)
-
-            if attachment_data:
-                msg = MIMEMultipart()
-                msg.attach(MIMEText(plain_body, "plain", "utf-8"))
-                for att in attachment_data:
-                    part = MIMEBase("application", "octet-stream")
-                    part.set_payload(att["data"])
-                    encoders.encode_base64(part)
-                    part.add_header(
-                        "Content-Disposition",
-                        f'attachment; filename="{att["filename"]}"',
-                    )
-                    msg.attach(part)
-            else:
-                msg = MIMEText(plain_body, "plain", "utf-8")
-            msg["From"] = (
-                f"{user.company_name or 'TenderOptima'} <{smtp_creds.user}>"
-            )
-            msg["To"] = recipient
-            msg["Subject"] = outbound_subject
-            outbound_message_id = make_message_id(smtp_creds.user)
-            msg["Message-ID"] = outbound_message_id
-
-            try:
-                smtp.sendmail(smtp_creds.user, recipient, msg.as_string())
-                results.append(
-                    SendResult(
-                        rs.id,
-                        RequestSupplierStatus.SENT,
-                        outbound_message_id,
-                        rs_tracking_id,
-                        msg["Subject"],
-                        plain_body,
-                    )
-                )
-                sent += 1
-                logger.info(
-                    "Email sent", domain=supplier.domain, recipient=recipient
-                )
-            except smtplib.SMTPException as exc:
-                logger.error(
-                    "Failed to send email",
-                    domain=supplier.domain,
-                    error=str(exc),
-                )
-                results.append(
-                    SendResult(
-                        rs.id,
-                        RequestSupplierStatus.FAILED,
-                        None,
-                        None,
-                        None,
-                        None,
-                    )
-                )
-                failed += 1
-    finally:
-        smtp.quit()
 
     async with db_manager.session() as session:
         for result in results:
@@ -616,21 +675,11 @@ async def poll_imap(self) -> dict:
     async with db_manager.session() as session:
         imap_users = await UserAdminDAO.list_imap_configured_users(session)
 
-    mailboxes: list[tuple[str, ImapCredentials]] = []
-    seen_mailbox_keys: set[tuple[str, str]] = set()
-    for user in imap_users:
-        creds = resolve_imap_credentials(user, config)
-        key = (creds.host, creds.user)
-        if key in seen_mailbox_keys:
-            continue
-        seen_mailbox_keys.add(key)
-        mailboxes.append((str(user.id), creds))
+    mailboxes = build_poll_mailboxes(imap_users, config)
 
-    if not mailboxes:
-        global_creds = resolve_imap_credentials(None, config)
-        mailboxes.append(("global", global_creds))
-
-    for mailbox_label, imap_creds in mailboxes:
+    for mailbox in mailboxes:
+        mailbox_label = mailbox.label
+        imap_creds = mailbox.creds
         try:
             imap = imaplib.IMAP4_SSL(imap_creds.host, imap_creds.port)
             imap.login(imap_creds.user, imap_creds.password)
@@ -690,6 +739,9 @@ async def poll_imap(self) -> dict:
                         {
                             "uid": uid,
                             "uid_str": uid_str,
+                            "imap_id": build_mailbox_imap_id(
+                                imap_creds, uid_str
+                            ),
                             "tracking_id": match.group(1),
                             "subject": subject,
                             "body": body,
@@ -707,7 +759,7 @@ async def poll_imap(self) -> dict:
                 except Exception as exc:
                     logger.exception(
                         "Failed to parse message",
-                        imap_id=uid_str,
+                        imap_id=build_mailbox_imap_id(imap_creds, uid_str),
                         error=str(exc),
                     )
                     skipped += 1
@@ -727,8 +779,22 @@ async def poll_imap(self) -> dict:
                             skipped += 1
                             continue
 
+                        if not tracking_belongs_to_mailbox_owner(
+                            mailbox.owner_user_id,
+                            rs.request.user_id,
+                        ):
+                            logger.warning(
+                                "TID belongs to another user mailbox",
+                                tracking_id=str(item["tracking_id"]),
+                                mailbox=mailbox_label,
+                                request_user_id=str(rs.request.user_id),
+                                mailbox_owner_id=str(mailbox.owner_user_id),
+                            )
+                            skipped += 1
+                            continue
+
                         existing = await EmailMessageDAO.get_by_imap_id(
-                            session, item["uid_str"]
+                            session, item["imap_id"]
                         )
                         if existing:
                             skipped += 1
@@ -833,7 +899,7 @@ async def poll_imap(self) -> dict:
                             direction=EmailMessageDirection.INCOMING,
                             message_id=item.get("message_id"),
                             in_reply_to=item.get("in_reply_to"),
-                            imap_id=item["uid_str"],
+                            imap_id=item["imap_id"],
                             subject=item["subject"],
                             raw_body=email_body_text,
                             attachments=processed_attachments or None,
@@ -866,7 +932,7 @@ async def poll_imap(self) -> dict:
                     except Exception as exc:
                         logger.exception(
                             "Failed to save message",
-                            imap_id=item["uid_str"],
+                            imap_id=item["imap_id"],
                             error=str(exc),
                         )
                         skipped += 1

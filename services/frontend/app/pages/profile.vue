@@ -17,15 +17,11 @@
 
 				<UTabs v-model="activeTab" :items="tabs" :ui="{ list: 'mb-6' }">
 
-					<template #subscription>
-						<div>
-							<h2 class="text-base font-semibold mb-0.5">Статус подписки</h2>
-							<p class="text-sm text-muted mb-5">
-								Текущий тариф и лимиты вашей учётной записи
-							</p>
-							<ProfileSubscriptionPanel :subscription="user?.subscription" />
-						</div>
-					</template>
+				<template #acts>
+					<div class="space-y-8">
+						<ProfileBillingPanel />
+					</div>
+				</template>
 
 					<template #business_card>
 						<div>
@@ -42,7 +38,8 @@
 								</p>
 
 								<UFormField label="Текст визитной карточки" class="mb-2">
-									<UTextarea v-model="form.business_info" :rows="5" class="w-full"
+									<UTextarea
+v-model="form.business_info" :rows="5" class="w-full"
 										placeholder="С Уважением,&#10;специалист отдела закупок&#10;Иван Иванов&#10;(Email для связи: ivan@corp.ru)" />
 								</UFormField>
 
@@ -51,13 +48,16 @@
 									необходимые контактные данные.
 								</p>
 
-								<UAlert v-if="cardError" color="error" variant="soft" icon="i-lucide-circle-alert"
+								<UAlert
+v-if="cardError" color="error" variant="soft" icon="i-lucide-circle-alert"
 									:description="cardError" class="mb-4" />
 
-								<UAlert v-if="cardSuccess" color="success" variant="soft" icon="i-lucide-check"
+								<UAlert
+v-if="cardSuccess" color="success" variant="soft" icon="i-lucide-check"
 									description="Визитная карточка сохранена" class="mb-4" />
 
-								<UButton block :loading="savingCard" leading-icon="i-lucide-save"
+								<UButton
+block :loading="savingCard" leading-icon="i-lucide-save"
 									@click="saveBusinessCard">
 									Сохранить
 								</UButton>
@@ -72,24 +72,37 @@
 
 							<div class="space-y-4">
 								<UFormField label="Полное имя" name="full_name">
-									<UInput v-model="form.full_name" placeholder="Иван Иванов" icon="i-lucide-user"
+									<UInput
+v-model="form.full_name" placeholder="Иван Иванов" icon="i-lucide-user"
 										class="w-full" />
 								</UFormField>
 
 								<UFormField label="Название компании" name="company_name">
-									<UInput v-model="form.company_name" placeholder="ООО «Ваша компания»"
+									<UInput
+v-model="form.company_name" placeholder="ООО «Ваша компания»"
 										icon="i-lucide-building-2" class="w-full" />
 								</UFormField>
 
 								<UFormField label="Контактный email" name="contact_email">
-									<UInput v-model="form.contact_email" type="email" placeholder="sales@company.ru"
+									<UInput
+v-model="form.contact_email" type="email" placeholder="sales@company.ru"
 										icon="i-lucide-mail" class="w-full" />
 								</UFormField>
 
-								<UAlert v-if="profileError" color="error" variant="soft" icon="i-lucide-circle-alert"
+								<UFormField
+label="Телефон" name="phone"
+									hint="Указан при регистрации, изменить нельзя">
+									<UInput
+:model-value="user?.phone || 'Не указан'" icon="i-lucide-phone"
+										class="w-full" disabled />
+								</UFormField>
+
+								<UAlert
+v-if="profileError" color="error" variant="soft" icon="i-lucide-circle-alert"
 									:description="profileError" />
 
-								<UAlert v-if="profileSuccess" color="success" variant="soft" icon="i-lucide-check"
+								<UAlert
+v-if="profileSuccess" color="success" variant="soft" icon="i-lucide-check"
 									description="Профиль обновлён" />
 
 								<div class="flex justify-end">
@@ -114,7 +127,8 @@
 									</div>
 									<div>
 										<p class="text-xs text-muted mb-0.5">Email</p>
-										<a :href="`mailto:${publicConfig.contactEmail}`"
+										<a
+:href="`mailto:${publicConfig.contactEmail}`"
 											class="text-sm font-medium text-primary hover:underline underline-offset-2 transition-opacity hover:opacity-80">
 											{{ publicConfig.contactEmail }}
 										</a>
@@ -128,7 +142,8 @@
 									</div>
 									<div>
 										<p class="text-xs text-muted mb-0.5">Телефон</p>
-										<a :href="`tel:${publicConfig.contactPhone}`"
+										<a
+:href="`tel:${publicConfig.contactPhone}`"
 											class="text-sm font-medium text-primary hover:underline underline-offset-2 transition-opacity hover:opacity-80">
 											{{ publicConfig.contactPhone }}
 										</a>
@@ -138,11 +153,7 @@
 						</div>
 					</template>
 
-					<template v-if="user?.is_admin" #admin>
-						<ProfileAdminPanel />
-					</template>
-
-				</UTabs>
+			</UTabs>
 			</UCard>
 
 			<UCard>
@@ -201,30 +212,19 @@ const form = reactive({
 	contact_email: user.value?.contact_email ?? '',
 })
 
-const tabs = computed(() => {
-	const items = [
-		{ label: 'Статус подписки', slot: 'subscription', value: 'subscription', icon: 'i-lucide-credit-card' },
-		{ label: 'Визитная карточка', slot: 'business_card', value: 'business_card', icon: 'i-lucide-id-card' },
-		{ label: 'Профиль', slot: 'profile', value: 'profile', icon: 'i-lucide-user' },
-		{ label: 'Свяжитесь с нами', slot: 'contact', value: 'contact', icon: 'i-lucide-mail' },
-	]
-	if (user.value?.is_admin) {
-		items.push({
-			label: 'Админка',
-			slot: 'admin',
-			value: 'admin',
-			icon: 'i-lucide-shield',
-		})
-	}
-	return items
-})
+const tabs = computed(() => [
+	{ label: 'Акты', slot: 'acts', value: 'acts', icon: 'i-lucide-file-text' },
+	{ label: 'Визитная карточка', slot: 'business_card', value: 'business_card', icon: 'i-lucide-id-card' },
+	{ label: 'Профиль', slot: 'profile', value: 'profile', icon: 'i-lucide-user' },
+	{ label: 'Свяжитесь с нами', slot: 'contact', value: 'contact', icon: 'i-lucide-mail' },
+])
 
 const tabFromQuery = computed(() => {
 	const raw = route.query.tab
 	return typeof raw === 'string' ? raw : null
 })
 
-const activeTab = ref('subscription')
+const activeTab = ref('acts')
 
 watch(
 	tabFromQuery,

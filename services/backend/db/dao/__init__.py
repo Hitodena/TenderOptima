@@ -1,10 +1,17 @@
 from .base_dao import BaseDAO
 from .blacklisted_domain_dao import BlacklistedDomainDAO
+from .consultation_dao import ConsultationDAO
 from .email_message_dao import EmailMessageDAO
 from .email_template_dao import EmailTemplateDAO
+from .frontend_error_log_dao import FrontendErrorLogDAO
+from .idea_suggestion_dao import IdeaSuggestionDAO
 from .request_dao import RequestDAO
 from .response_analysis_dao import ResponseAnalysisDAO
 from .search_dao import SearchHistoryDAO
+from .subscription_billing_dao import (
+    SubscriptionBillingDocumentDAO,
+    SubscriptionBillingProfileDAO,
+)
 from .subscription_dao import SubscriptionDAO, UserAdminDAO
 from .supplier_bookmark_dao import (
     SupplierBookmarkItemDAO,
@@ -17,6 +24,9 @@ from .user_dao import UserDAO
 
 __all__ = [
     "BaseDAO",
+    "ConsultationDAO",
+    "FrontendErrorLogDAO",
+    "IdeaSuggestionDAO",
     "RequestDAO",
     "RequestSupplier",
     "RequestSupplierDAO",
@@ -32,5 +42,7 @@ __all__ = [
     "TZAnalysisSupplierDAO",
     "ResponseAnalysisDAO",
     "SubscriptionDAO",
+    "SubscriptionBillingDocumentDAO",
+    "SubscriptionBillingProfileDAO",
     "UserAdminDAO",
 ]

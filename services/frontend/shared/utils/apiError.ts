@@ -81,7 +81,7 @@ export function parseApiError(error: unknown): ParsedApiError | null {
 		return {
 			message: error.message,
 			isSubscription: false,
-			profilePath: '/profile?tab=subscription',
+			profilePath: '/profile?tab=acts',
 		}
 	}
 
@@ -90,7 +90,7 @@ export function parseApiError(error: unknown): ParsedApiError | null {
 		return {
 			message: detail,
 			isSubscription: false,
-			profilePath: '/profile?tab=subscription',
+			profilePath: '/profile?tab=acts',
 		}
 	}
 
@@ -105,7 +105,7 @@ export function parseApiError(error: unknown): ParsedApiError | null {
 				subscriptionCode: SUBSCRIPTION_CODES.has(code ?? '')
 					? (code as SubscriptionErrorCode)
 					: undefined,
-				profilePath: '/profile?tab=subscription',
+				profilePath: '/profile?tab=acts',
 			}
 		}
 	}
@@ -118,7 +118,7 @@ export function parseApiError(error: unknown): ParsedApiError | null {
 			return {
 				message: messages.join(', '),
 				isSubscription: false,
-				profilePath: '/profile?tab=subscription',
+				profilePath: '/profile?tab=acts',
 			}
 		}
 	}

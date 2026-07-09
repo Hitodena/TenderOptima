@@ -20,41 +20,24 @@
 <script lang="ts" setup>
 import type { DropdownMenuItem } from '@nuxt/ui'
 
-const props = withDefaults(
-	defineProps<{
-		showRemove?: boolean
-	}>(),
-	{ showRemove: true },
-)
-
 const emit = defineEmits<{
 	'add-child': []
 	'add-heading': []
 	'add-sibling': []
-	remove: []
 }>()
 
-const menuItems = computed((): DropdownMenuItem[][] => {
-	const items: DropdownMenuItem[] = [
+const menuItems = computed((): DropdownMenuItem[][] => [
+	[
+		{
+			label: 'Раздел',
+			icon: 'i-lucide-folder-plus',
+			onSelect: () => emit('add-sibling'),
+		},
 		{
 			label: 'Подпункт',
 			icon: 'i-lucide-list-plus',
 			onSelect: () => emit('add-child'),
 		},
-		{
-			label: 'Заголовок',
-			icon: 'i-lucide-heading',
-			onSelect: () => emit('add-heading'),
-		},
-	]
-	if (props.showRemove) {
-		items.push({
-			label: 'Удалить',
-			icon: 'i-lucide-trash-2',
-			color: 'error',
-			onSelect: () => emit('remove'),
-		})
-	}
-	return [items]
-})
+	],
+])
 </script>

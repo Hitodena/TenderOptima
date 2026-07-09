@@ -1,4 +1,7 @@
 import type {
+	ConsultationRequestType,
+	ConsultationRole,
+	ConsultationStatus,
 	RequestStatus,
 	RequestSupplierStatus,
 	TZAnalysisHistoryGroup,
@@ -11,18 +14,56 @@ export interface TokenResponse {
 	token_type: string;
 }
 
+export interface ConsultationCreate {
+	name: string;
+	email: string;
+	phone: string;
+	request_type: ConsultationRequestType;
+	company?: string;
+	role?: ConsultationRole;
+	comment?: string | null;
+	consent: boolean;
+	agree_marketing?: boolean;
+	utm_source?: string | null;
+	utm_medium?: string | null;
+	utm_campaign?: string | null;
+	utm_content?: string | null;
+	page_url?: string | null;
+	honeypot?: string;
+}
+
+export interface ConsultationResponse {
+	id: string;
+	name: string;
+	company: string;
+	email: string;
+	phone: string;
+	role: ConsultationRole;
+	request_type: ConsultationRequestType;
+	comment: string | null;
+	agree_marketing: boolean;
+	status: ConsultationStatus;
+	utm_source: string | null;
+	utm_medium: string | null;
+	utm_campaign: string | null;
+	utm_content: string | null;
+	page_url: string | null;
+	created_at: string;
+}
+
 export interface UserResponse {
 	id: string;
 	email: string;
 	full_name: string | null;
 	company_name?: string | null;
+	phone?: string | null;
 	contact_email?: string | null;
 	business_info?: string | null;
 	is_admin?: boolean;
 	subscription?: SubscriptionResponse | null;
 }
 
-export type SubscriptionPlan = 'basic' | 'advanced' | 'corporate';
+export type SubscriptionPlan = 'test' | 'basic' | 'advanced' | 'corporate';
 
 export interface SubscriptionResponse {
 	id: string;
@@ -32,6 +73,7 @@ export interface SubscriptionResponse {
 	max_searches_per_month: number | null;
 	max_emails_per_month: number | null;
 	max_kp_processed_per_month: number | null;
+	max_tz_kp_upload_bytes: number | null;
 	geo_code: string;
 	currency_code: string;
 	price_module_1_monthly: string | null;
@@ -62,6 +104,59 @@ export interface UserEmailSettingsUpdate {
 	imap_user?: string | null;
 	imap_password?: string | null;
 	clear_imap_password?: boolean;
+}
+
+export interface BillingProfileResponse {
+	country: string | null;
+	organization_form: string | null;
+	inn: string | null;
+	organization_name: string | null;
+	kpp: string | null;
+	ogrn: string | null;
+	legal_address: string | null;
+	postal_address: string | null;
+	director_name: string | null;
+	bik: string | null;
+	bank_name: string | null;
+	settlement_account: string | null;
+	correspondent_account: string | null;
+	contact_person: string | null;
+	contact_full_name: string | null;
+	contact_email: string | null;
+	contact_phone: string | null;
+}
+
+export type BillingProfileUpdate = Partial<BillingProfileResponse>;
+
+export interface BillingDocumentLineItem {
+	name: string;
+	amount: string;
+}
+
+export interface BillingDocumentResponse {
+	id: string;
+	receipt_id: string;
+	plan: string;
+	period_start: string;
+	period_end: string;
+	currency_code: string;
+	total_amount: string;
+	line_items: BillingDocumentLineItem[];
+	email_status: string;
+	sent_at: string | null;
+	recipient_email: string | null;
+	created_at: string;
+}
+
+export interface BillingGenerateRequest {
+	period_year?: number | null;
+	period_month?: number | null;
+	send_email?: boolean;
+}
+
+export interface BillingGenerateResponse {
+	document: BillingDocumentResponse;
+	email_queued: boolean;
 }
 
 export interface SubscriptionUpdate {
@@ -106,6 +201,7 @@ export interface RegisterCreate {
 	password: string;
 	full_name: string;
 	company_name?: string | null;
+	phone: string;
 	agree_terms: boolean;
 	agree_marketing: boolean;
 }
@@ -147,6 +243,9 @@ export interface RequestResponse {
 	email_message: string | null;
 	email_subject: string | null;
 	attachment_paths: string[] | null;
+	supplier_messages_total?: number;
+	supplier_messages_incoming?: number;
+	supplier_messages_unread?: number;
 }
 
 export interface RequestSupplierResponse {
@@ -182,8 +281,11 @@ export interface SupplierCreate {
 	company_name: string;
 	email: string;
 	extra_emails?: string[] | null;
+	phone?: string | null;
+	comments?: string | null;
 	source?: string | null;
 	request_id?: string | null;
+	is_enabled?: boolean;
 }
 
 export interface Supplier {
@@ -192,6 +294,17 @@ export interface Supplier {
 	company_name: string;
 	main_email: string;
 	extra_emails: string[];
+	phone?: string | null;
+	comments?: string | null;
+	from_source?: string | null;
+}
+
+export interface SupplierUpdate {
+	company_name?: string | null;
+	domain?: string | null;
+	phone?: string | null;
+	extra_emails?: string[] | null;
+	comments?: string | null;
 }
 
 export interface SupplierEmailUpdate {
@@ -210,12 +323,14 @@ export interface SupplierResponseResponse {
 export interface BlacklistCreate {
 	domain: string;
 	reason?: string | null;
+	is_global?: boolean;
 }
 
 export interface BlacklistResponse {
 	id: string;
 	domain: string;
 	reason: string | null;
+	is_global: boolean;
 	created_at: string;
 }
 
@@ -231,9 +346,11 @@ export interface ThreadSummary {
 	rs_id: string;
 	supplier: Supplier;
 	last_message: {
+		id: string;
 		body: string | null;
 		received_at: string | null;
 		direction: 'incoming' | 'outgoing';
+		subject?: string | null;
 	} | null;
 	message_count: number;
 	unread: boolean;
@@ -278,8 +395,11 @@ export interface TZAnalysisSupplierCreateRequest {
 export interface RequirementMatch {
 	requirement: string;
 	offer_value: string | null;
+	numeric_value?: number | null;
+	currency?: string | null;
 	explanation: string | null;
 	status: TZAnalysisStatus;
+	corrected_from?: string | null;
 }
 
 export interface EmailAnalysisResponse {
@@ -294,13 +414,19 @@ export interface ComparisonSupplier {
 	rs_id: string;
 	company_name: string;
 	main_email: string;
+	is_winner?: boolean;
 	values: Record<string, string | null>;
 	previous_values: Record<string, string | null>;
+	explanations?: Record<string, string | null>;
+	corrected_from?: Record<string, string | null>;
 	statuses: Record<string, string | null>;
+	numeric_values?: Record<string, number | null>;
+	percent_vs_min?: Record<string, number | null>;
 }
 
 export interface ComparisonResponse {
 	requirements: string[];
+	price_requirements?: string[];
 	suppliers: ComparisonSupplier[];
 }
 
@@ -330,6 +456,7 @@ export interface SupplierBookmarkItem {
 	company_name: string;
 	email: string;
 	domain: string | null;
+	phone: string | null;
 	notes: string | null;
 	created_at: string;
 	updated_at: string;
@@ -354,12 +481,23 @@ export interface SupplierBookmarkItemCreate {
 	company_name: string;
 	email: string;
 	domain?: string | null;
+	phone?: string | null;
+	notes?: string | null;
+}
+
+export interface SupplierBookmarkItemUpdate {
+	company_name?: string;
+	email?: string;
+	domain?: string | null;
+	phone?: string | null;
 	notes?: string | null;
 }
 
 export interface RequirementNode {
 	text: string;
 	children: Record<string, RequirementNode>;
+	ref_value?: string;
+	ref?: string;
 }
 
 export type RequirementsHierarchy = Record<string, RequirementNode>;
@@ -367,6 +505,8 @@ export type RequirementsHierarchy = Record<string, RequirementNode>;
 export interface TZAnalysisItem {
 	requirement: string;
 	requirement_ref: string | null;
+	ref?: string | null;
+	ref_value?: string | null;
 	offer_value: string | null;
 	offer_ref: string | null;
 	explanation: string;
@@ -462,4 +602,58 @@ export interface TZAnalysisPreviewResponse {
 	title: string;
 	paragraphs: string[];
 	has_issues: boolean;
+}
+
+export interface UserBrief {
+	id: string;
+	email: string;
+	full_name: string | null;
+}
+
+export interface FrontendErrorLogCreate {
+	message: string;
+	backend_response?: string | null;
+	page_url?: string | null;
+	request_method?: string | null;
+	request_url?: string | null;
+	status_code?: number | null;
+}
+
+export interface FrontendErrorLogResponse {
+	id: string;
+	user_id: string | null;
+	user: UserBrief | null;
+	message: string;
+	backend_response: string | null;
+	page_url: string | null;
+	request_method: string | null;
+	request_url: string | null;
+	status_code: number | null;
+	created_at: string;
+}
+
+export interface FrontendErrorLogPageResponse {
+	items: FrontendErrorLogResponse[];
+	page: number;
+	size: number;
+	total: number;
+}
+
+export interface IdeaSuggestionCreate {
+	message: string;
+}
+
+export interface IdeaSuggestionResponse {
+	id: string;
+	user_id: string;
+	user: UserBrief | null;
+	message: string;
+	created_at: string;
+}
+
+export interface IdeaSuggestionPageResponse {
+	items: IdeaSuggestionResponse[];
+	page: number;
+	size: number;
+	total: number;
 }

@@ -31,7 +31,7 @@ async def get_blacklist(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[BlacklistResponse]:
     """
-    Returns all domains blacklisted by the currently authenticated user.
+    Returns user-specific and global blacklisted domains visible to the user.
     """
     items = await BlacklistedDomainDAO.get_domains_set(
         session, current_user.id
@@ -47,6 +47,9 @@ async def get_blacklist(
     responses={
         201: {"description": "Domain successfully added to the blacklist"},
         401: {"description": "Missing or invalid authentication credentials"},
+        403: {
+            "description": "Only admins can create global blacklist entries"
+        },
         422: {"description": "Validation error in request payload"},
     },
 )
@@ -56,13 +59,20 @@ async def add_to_blacklist(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> BlacklistResponse:
     """
-    Adds a domain to the current user's blacklist.
-    The domain is normalized (lowercased and stripped).
+    Adds a domain to the blacklist.
+    Global entries require admin privileges.
     """
+    if body.is_global and not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can create global blacklist entries",
+        )
+
     instance = await BlacklistedDomainDAO.create(
         session,
         domain=body.domain.lower().strip(),
         reason=body.reason,
+        is_global=body.is_global,
         added_by_user_id=current_user.id,
     )
     return BlacklistResponse.model_validate(instance)
@@ -76,7 +86,7 @@ async def add_to_blacklist(
         204: {"description": "Domain successfully removed from the blacklist"},
         401: {"description": "Missing or invalid authentication credentials"},
         404: {
-            "description": "Domain not found or does not belong to the current user"  # noqa: E501
+            "description": "Domain not found or not allowed for the current user"  # noqa: E501
         },
     },
 )
@@ -86,10 +96,13 @@ async def remove_from_blacklist(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> None:
     """
-    Deletes a specific blacklist entry if it belongs to the current user.
+    Deletes a blacklist entry owned by the user or a global entry when admin.
     """
     deleted = await BlacklistedDomainDAO.delete_by_id(
-        session, domain_id, current_user.id
+        session,
+        domain_id,
+        current_user.id,
+        is_admin=current_user.is_admin,
     )
     if not deleted:
         raise HTTPException(

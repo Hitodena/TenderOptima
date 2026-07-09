@@ -25,7 +25,7 @@
 					<p class="font-medium text-default">Выбирайте одну группу товара.</p>
 					<div class="space-y-1.5 pl-1">
 						<p>
-							<span class="text-success font-medium">Правильно: </span>
+							<span class="text-primary font-medium">Правильно: </span>
 							<span class="text-muted">картон купить от производителя</span>
 						</p>
 						<p>

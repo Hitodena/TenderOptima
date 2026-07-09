@@ -83,7 +83,7 @@ class CeleryConfig:
         "queue_order_strategy": "priority",
         "priority_steps": list(range(10)),
         "sep": ":",
-        "visibility_timeout": 7500,
+        "visibility_timeout": 23400,
     }
     task_default_priority = 0
 
@@ -166,12 +166,27 @@ class CeleryConfig:
             "queue": "analysis",
             "routing_key": "analysis",
         },
+        "billing.send_document_email": {
+            "queue": "mail_send",
+            "routing_key": "mail.send",
+        },
+        "consultation.notify_admin": {
+            "queue": "mail_send",
+            "routing_key": "mail.send",
+        },
+        "consultation.send_autoreply": {
+            "queue": "mail_send",
+            "routing_key": "mail.send",
+        },
     }
 
     include = [
         "backend.celery_app.tasks.email_tasks",
+        "backend.celery_app.tasks.billing_tasks",
         "backend.celery_app.tasks.parser_tasks",
         "backend.celery_app.tasks.analysis_tasks",
+        "backend.celery_app.tasks.security_tasks",
+        "backend.celery_app.tasks.consultation_tasks",
     ]
 
     # Logging

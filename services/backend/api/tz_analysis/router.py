@@ -1,5 +1,3 @@
-import csv
-import io
 import tempfile
 import uuid
 from pathlib import Path
@@ -15,7 +13,7 @@ from fastapi import (
     UploadFile,
     status,
 )
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, Response
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +21,7 @@ from backend.api.deps import get_current_user, get_session
 from backend.api.subscriptions.enforcement import (
     ensure_can_process_kp,
     ensure_module_2_work_allowed,
+    tz_kp_upload_limit_for_user,
 )
 from backend.api.tz_analysis.schemas import (
     STATUS_LABELS,
@@ -89,6 +88,10 @@ from backend.utils.tz_storage import (
     save_supplier_kp_files,
     save_tz_only_file,
 )
+from backend.utils.xlsx_export import (
+    build_tz_analysis_workbook,
+    workbook_to_bytes,
+)
 
 router = APIRouter(prefix="/tz-analysis", tags=["TZ Analysis"])
 config = get_config()
@@ -150,6 +153,46 @@ async def _queue_supplier_kp_tasks(
         )
 
 
+async def _run_kp_for_suppliers(
+    session: AsyncSession,
+    row,
+    suppliers_to_run: list,
+    current_user: User,
+) -> None:
+    await ensure_can_process_kp(
+        session,
+        current_user,
+        kp_count=len(suppliers_to_run),
+    )
+    _validate_supplier_kp_files(row.id, suppliers_to_run)
+    supplier_entries: list[tuple[str, list[str], list[Path]]] = []
+    for supplier in suppliers_to_run:
+        paths = resolve_supplier_kp_files(row.id, supplier.id)
+        supplier_entries.append(
+            (supplier.name, list(supplier.kp_filenames), paths)
+        )
+    kp_payload = flatten_supplier_kp_entries(supplier_entries)
+    new_kp_names = [name for name, _ in kp_payload]
+    merged_filenames = list(row.kp_filenames or [])
+    for name in new_kp_names:
+        if name not in merged_filenames:
+            merged_filenames.append(name)
+    updated = await TZAnalysisDAO.update_fields(
+        session,
+        row.id,
+        kp_filenames=merged_filenames,
+        kp_filename=row.kp_filename
+        or (new_kp_names[0] if new_kp_names else None),
+        status=TZAnalysisRunStatus.ACTIVE.value,
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found",
+        )
+    await _queue_supplier_kp_tasks(session, row.id, suppliers_to_run)
+
+
 async def _session_response(
     session: AsyncSession,
     row,
@@ -176,6 +219,7 @@ async def _save_upload(
     upload: UploadFile,
     dest_dir: Path,
     *,
+    limit: int,
     dest_name: str | None = None,
 ) -> Path:
     if not upload.filename and not dest_name:
@@ -183,7 +227,6 @@ async def _save_upload(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="File name is required",
         )
-    limit = config.max_tz_upload_size
     if upload.size and upload.size > limit:
         limit_mb = limit // (1024 * 1024)
         raise HTTPException(
@@ -279,9 +322,17 @@ async def run_tz_analysis(
 
     await ensure_module_2_work_allowed(session, current_user)
 
+    upload_limit = await tz_kp_upload_limit_for_user(
+        session, current_user, config
+    )
+
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
-        tz_path = await _save_upload(tz_file, tmp_path)
+        tz_path = await _save_upload(
+            tz_file,
+            tmp_path,
+            limit=upload_limit,
+        )
         tz_name = tz_file.filename or tz_path.name
 
         updated = await TZAnalysisDAO.update_fields(
@@ -369,38 +420,9 @@ async def run_tz_kp_analysis(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No new suppliers to analyze",
             )
-        await ensure_can_process_kp(
-            session,
-            current_user,
-            kp_count=len(suppliers_to_run),
+        await _run_kp_for_suppliers(
+            session, row, suppliers_to_run, current_user
         )
-        _validate_supplier_kp_files(row.id, suppliers_to_run)
-        supplier_entries: list[tuple[str, list[str], list[Path]]] = []
-        for supplier in suppliers_to_run:
-            paths = resolve_supplier_kp_files(row.id, supplier.id)
-            supplier_entries.append(
-                (supplier.name, list(supplier.kp_filenames), paths)
-            )
-        kp_payload = flatten_supplier_kp_entries(supplier_entries)
-        new_kp_names = [name for name, _ in kp_payload]
-        merged_filenames = list(row.kp_filenames or [])
-        for name in new_kp_names:
-            if name not in merged_filenames:
-                merged_filenames.append(name)
-        updated = await TZAnalysisDAO.update_fields(
-            session,
-            row.id,
-            kp_filenames=merged_filenames,
-            kp_filename=row.kp_filename
-            or (new_kp_names[0] if new_kp_names else None),
-            status=TZAnalysisRunStatus.ACTIVE.value,
-        )
-        if not updated:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Analysis not found",
-            )
-        await _queue_supplier_kp_tasks(session, row.id, suppliers_to_run)
     else:
         uploads = kp_files or []
         if not uploads:
@@ -412,6 +434,9 @@ async def run_tz_kp_analysis(
             session,
             current_user,
             kp_count=len(uploads),
+        )
+        upload_limit = await tz_kp_upload_limit_for_user(
+            session, current_user, config
         )
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -433,6 +458,7 @@ async def run_tz_kp_analysis(
                 kp_path = await _save_upload(
                     kp_upload,
                     tmp_path,
+                    limit=upload_limit,
                     dest_name=f"kp{idx}{suffix}",
                 )
                 kp_paths.append(kp_path)
@@ -865,6 +891,10 @@ async def create_tz_analysis_supplier(
         status=TZAnalysisSupplierStatus.PENDING.value,
     )
 
+    upload_limit = await tz_kp_upload_limit_for_user(
+        session, current_user, config
+    )
+
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
         raw_names = [
@@ -886,6 +916,7 @@ async def create_tz_analysis_supplier(
                 await _save_upload(
                     upload,
                     tmp_path,
+                    limit=upload_limit,
                     dest_name=f"kp{idx}{suffix}",
                 )
             )
@@ -908,6 +939,74 @@ async def create_tz_analysis_supplier(
         user_id=str(current_user.id),
     )
     return TZAnalysisSupplierItem.model_validate(updated)
+
+
+@router.post(
+    "/{analysis_id}/suppliers/{supplier_id}/run-kp",
+    response_model=TZAnalysisDetailResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Queue KP analysis for a single supplier",
+)
+async def run_tz_supplier_kp_analysis(
+    analysis_id: uuid.UUID,
+    supplier_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> TZAnalysisDetailResponse:
+    """Run KP extraction and comparison for one supplier only."""
+    row = await _get_owned_analysis(session, analysis_id, current_user.id)
+    if row.status != TZAnalysisRunStatus.ACTIVE.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Analysis is not ready for KP upload",
+        )
+    if not requirements_nonempty(row.requirements_tz):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one TZ requirement is required",
+        )
+    if not row.confirmed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Confirm TZ requirements before KP analysis",
+        )
+
+    supplier = await TZAnalysisSupplierDAO.get_by_id_and_analysis(
+        session, supplier_id, analysis_id
+    )
+    if not supplier:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Supplier not found",
+        )
+
+    runnable = {
+        TZAnalysisSupplierStatus.PENDING.value,
+        TZAnalysisSupplierStatus.FAILED.value,
+    }
+    if not supplier.kp_filenames or supplier.status not in runnable:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Supplier is not ready for KP analysis",
+        )
+
+    await _run_kp_for_suppliers(session, row, [supplier], current_user)
+
+    logger.info(
+        "TZ supplier KP compare queued",
+        analysis_id=str(analysis_id),
+        supplier_id=str(supplier_id),
+        user_id=str(current_user.id),
+    )
+    refreshed = await TZAnalysisDAO.get_by_id_and_user(
+        session, analysis_id, current_user.id
+    )
+    if not refreshed:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found",
+        )
+    return await _session_response(session, refreshed)
 
 
 @router.patch(
@@ -1227,14 +1326,14 @@ async def download_kp_analysis_file(
 
 
 @router.get(
-    "/{analysis_id}/export.csv",
-    summary="Export TZ analysis as CSV",
+    "/{analysis_id}/export.xlsx",
+    summary="Export TZ analysis as XLSX",
 )
-async def export_tz_analysis_csv(
+async def export_tz_analysis_xlsx(
     analysis_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
-) -> StreamingResponse:
+) -> Response:
     row = await TZAnalysisDAO.get_by_id_and_user(
         session, analysis_id, current_user.id
     )
@@ -1257,39 +1356,14 @@ async def export_tz_analysis_csv(
         [TZAnalysisItem(**item) for item in (row.items or [])],
         getattr(row, "items_overrides", None),
     )
-    buffer = io.StringIO()
-    writer = csv.writer(buffer)
-    writer.writerow(
-        [
-            "№",
-            "КП",
-            "Требование",
-            "Ссылка ТЗ",
-            "Предложение",
-            "Ссылка КП",
-            "Статус",
-            "Объяснение",
-        ]
-    )
-    for idx, item in enumerate(items, start=1):
-        writer.writerow(
-            [
-                idx,
-                item.kp_name or "",
-                item.requirement,
-                item.requirement_ref or "",
-                item.offer_value or "",
-                item.offer_ref or "",
-                STATUS_LABELS.get(item.status, item.status.value),
-                item.explanation,
-            ]
-        )
+    wb = build_tz_analysis_workbook(items, STATUS_LABELS)
 
-    buffer.seek(0)
-    filename = f"tz_analysis_{analysis_id}.csv"
-    return StreamingResponse(
-        iter([buffer.getvalue()]),
-        media_type="text/csv; charset=utf-8",
+    filename = f"tz_analysis_{analysis_id}.xlsx"
+    return Response(
+        content=workbook_to_bytes(wb),
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 

@@ -9,15 +9,26 @@
 					</p>
 				</div>
 
+				<UAlert
+					v-if="isTestPlan(user?.subscription)"
+					color="info"
+					variant="soft"
+					icon="i-lucide-info"
+					title="Лимит загрузки по подписке"
+					:description="uploadLimitHint"
+					class="mb-4"
+				/>
+
 				<div class="flex justify-end mb-4">
-					<UButton to="/tz-analysis/history" size="lg" variant="outline" color="neutral"
+					<UButton
+to="/tz-analysis/history" size="lg" variant="outline" color="neutral"
 						leading-icon="i-lucide-history">
 						История анализов
 					</UButton>
 				</div>
 
 				<UCard class="shadow-sm mb-4">
-					<UForm :schema="schema" :state="form" @submit="handleCreate" class="space-y-5">
+					<UForm :schema="schema" :state="form" class="space-y-5" @submit="handleCreate">
 						<UAlert
 							v-if="module2BlockReason"
 							color="warning"
@@ -29,10 +40,10 @@
 								<div class="space-y-2">
 									<p>{{ module2BlockReason }}</p>
 									<ULink
-										to="/profile?tab=subscription"
+										to="/profile?tab=acts"
 										class="text-sm font-medium text-primary hover:underline underline-offset-2"
 									>
-										Открыть подписку в профиле
+										Открыть профиль
 									</ULink>
 								</div>
 							</template>
@@ -73,33 +84,36 @@
 </template>
 
 <script lang="ts" setup>
-import type { TZAnalysisSession, UserResponse } from '#shared/types'
+import type { TZAnalysisSession } from '#shared/types'
 import {
 	canStartModule2Work,
+	isTestPlan,
+	module2UploadLimitHint,
 	module2WorkBlockMessage,
 } from '#shared/utils/subscriptionAccess'
 import { z } from 'zod'
 
 definePageMeta({ layout: 'default' })
 
-const { get, post } = useApi()
+const { post } = useApi()
+const { public: publicConfig } = useRuntimeConfig()
+const { user, loaded, ensureLoaded } = useCurrentUser()
 
-const user = ref<UserResponse | null>(null)
-
-onMounted(async () => {
-	try {
-		user.value = await get<UserResponse>('/auth/me')
-	} catch {
-		user.value = null
-	}
-})
+onMounted(() => ensureLoaded())
 
 const canCreateAnalysis = computed(() =>
 	canStartModule2Work(user.value?.subscription),
 )
 
 const module2BlockReason = computed(() =>
-	module2WorkBlockMessage(user.value?.subscription),
+	loaded.value ? module2WorkBlockMessage(user.value?.subscription) : null,
+)
+
+const uploadLimitHint = computed(() =>
+	module2UploadLimitHint(
+		user.value?.subscription,
+		publicConfig.maxTzUploadSize as number,
+	),
 )
 
 const schema = z.object({

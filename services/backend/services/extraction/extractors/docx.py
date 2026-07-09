@@ -1,3 +1,4 @@
+import shutil
 from collections.abc import Generator
 from io import BytesIO
 from pathlib import Path
@@ -8,9 +9,13 @@ from docx.oxml.table import CT_Tbl
 from docx.oxml.text.paragraph import CT_P
 from docx.table import Table
 from docx.text.paragraph import Paragraph
+from loguru import logger
 from PIL import Image
 
-from backend.services.extraction.base import BaseExtractor, ExtractedDocument
+from backend.schemas.extracted_document import ExtractedDocument
+from backend.services.extraction.base import BaseExtractor
+from backend.services.extraction.docx_to_pdf import convert_docx_to_pdf
+from backend.services.extraction.extractors.pdf import PdfExtractor
 from backend.utils.ocr import recognize
 
 
@@ -20,6 +25,33 @@ class DocxExtractor(BaseExtractor):
         if not file_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
 
+        pdf_path = convert_docx_to_pdf(file_path)
+        if pdf_path is not None:
+            try:
+                extracted = PdfExtractor.extract(pdf_path)
+                logger.info(
+                    "DOCX extracted via PDF render",
+                    path=str(file_path),
+                    pages=extracted.text.count("--- Страница"),
+                )
+                return extracted
+            except Exception as exc:
+                logger.warning(
+                    "DOCX PDF render extraction failed, falling back",
+                    path=str(file_path),
+                    error=str(exc),
+                )
+            finally:
+                shutil.rmtree(pdf_path.parent, ignore_errors=True)
+
+        logger.info(
+            "DOCX extracted without page markers",
+            path=str(file_path),
+        )
+        return cls._extract_without_pages(file_path)
+
+    @classmethod
+    def _extract_without_pages(cls, file_path: Path) -> ExtractedDocument:
         doc = Document(str(file_path))
         text_parts: list[str] = []
         tables: list[str] = []

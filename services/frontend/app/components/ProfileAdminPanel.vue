@@ -20,7 +20,7 @@
 				<template #header>
 					<p class="font-semibold">Пользователи</p>
 				</template>
-				<div class="max-h-[28rem] overflow-y-auto divide-y divide-default">
+				<div class="max-h-112 overflow-y-auto divide-y divide-default">
 					<button
 						v-for="item in users"
 						:key="item.id"
@@ -140,6 +140,7 @@
 									v-model="subscriptionForm.plan"
 									:items="planOptions"
 									class="w-full"
+									@update:model-value="onPlanChange"
 								/>
 							</UFormField>
 							<UFormField label="Статус">
@@ -154,6 +155,11 @@
 						<div class="flex flex-wrap gap-4">
 							<UCheckbox v-model="subscriptionForm.module_1_enabled" label="Модуль 1" />
 							<UCheckbox v-model="subscriptionForm.module_2_enabled" label="Модуль 2" />
+							<UCheckbox
+								v-model="useCustomLimits"
+								label="Кастомные лимиты и цены"
+								@update:model-value="onCustomLimitsToggle"
+							/>
 						</div>
 
 						<div class="grid gap-3 sm:grid-cols-3">
@@ -262,6 +268,7 @@ import type {
 	SubscriptionUpdate,
 	UserEmailSettingsUpdate,
 } from '#shared/types'
+import { catalogForPlan } from '#shared/utils/subscriptionDisplay'
 import { getApiErrorDetail } from '#shared/utils/apiError'
 
 const { get, patch } = useApi()
@@ -295,8 +302,56 @@ const subscriptionForm = reactive({
 })
 
 const subscriptionActive = ref<'active' | 'inactive'>('active')
+const useCustomLimits = ref(false)
+
+function applyCatalogToForm(plan: SubscriptionPlan) {
+	const catalog = catalogForPlan(plan)
+	subscriptionForm.max_searches_per_month = catalog.max_searches_per_month?.toString() ?? ''
+	subscriptionForm.max_emails_per_month = catalog.max_emails_per_month?.toString() ?? ''
+	subscriptionForm.max_kp_processed_per_month = catalog.max_kp_processed_per_month?.toString() ?? ''
+	subscriptionForm.price_module_1_monthly = catalog.price_module_1_monthly ?? ''
+	subscriptionForm.price_module_2_monthly = catalog.price_module_2_monthly ?? ''
+	subscriptionForm.price_bundle_monthly = catalog.price_bundle_monthly ?? ''
+	subscriptionForm.module_1_enabled = catalog.module_1_enabled
+	subscriptionForm.module_2_enabled = catalog.module_2_enabled
+}
+
+function priceEquals(
+	stored: string | number | null | undefined,
+	catalog: string | null,
+): boolean {
+	const left = stored == null || stored === '' ? null : Number(stored)
+	const right = catalog == null || catalog === '' ? null : Number(catalog)
+	if (left == null && right == null) return true
+	if (left == null || right == null) return false
+	return left === right
+}
+
+function limitsDifferFromCatalog(
+	sub: NonNullable<AdminUserDetail['subscription']>,
+): boolean {
+	const catalog = catalogForPlan(sub.plan)
+	return sub.max_searches_per_month !== catalog.max_searches_per_month
+		|| sub.max_emails_per_month !== catalog.max_emails_per_month
+		|| sub.max_kp_processed_per_month !== catalog.max_kp_processed_per_month
+		|| !priceEquals(sub.price_module_1_monthly, catalog.price_module_1_monthly)
+		|| !priceEquals(sub.price_module_2_monthly, catalog.price_module_2_monthly)
+		|| !priceEquals(sub.price_bundle_monthly, catalog.price_bundle_monthly)
+}
+
+function onPlanChange(plan: SubscriptionPlan) {
+	useCustomLimits.value = false
+	applyCatalogToForm(plan)
+}
+
+function onCustomLimitsToggle(enabled: boolean | 'indeterminate') {
+	if (enabled === true) return
+	const plan = subscriptionForm.plan
+	applyCatalogToForm(plan)
+}
 
 const planOptions = [
+	{ label: 'Тестовый', value: 'test' },
 	{ label: 'Базовый', value: 'basic' },
 	{ label: 'Расширенный', value: 'advanced' },
 	{ label: 'Корпоративный', value: 'corporate' },
@@ -353,6 +408,7 @@ function fillForms(detail: AdminUserDetail) {
 		? String(sub.price_bundle_monthly)
 		: ''
 	subscriptionActive.value = sub?.is_active === false ? 'inactive' : 'active'
+	useCustomLimits.value = sub ? limitsDifferFromCatalog(sub) : false
 }
 
 async function loadUsers() {
@@ -423,27 +479,37 @@ async function saveSubscription() {
 			plan: subscriptionForm.plan,
 			module_1_enabled: subscriptionForm.module_1_enabled,
 			module_2_enabled: subscriptionForm.module_2_enabled,
-			max_searches_per_month: parseOptionalNumber(
-				subscriptionForm.max_searches_per_month,
-			),
-			max_emails_per_month: parseOptionalNumber(
-				subscriptionForm.max_emails_per_month,
-			),
-			max_kp_processed_per_month: parseOptionalNumber(
-				subscriptionForm.max_kp_processed_per_month,
-			),
 			geo_code: subscriptionForm.geo_code || 'BY',
 			currency_code: subscriptionForm.currency_code || 'BYN',
-			price_module_1_monthly: parseOptionalPrice(
-				subscriptionForm.price_module_1_monthly,
-			),
-			price_module_2_monthly: parseOptionalPrice(
-				subscriptionForm.price_module_2_monthly,
-			),
-			price_bundle_monthly: parseOptionalPrice(
-				subscriptionForm.price_bundle_monthly,
-			),
 			is_active: subscriptionActive.value === 'active',
+		}
+		if (useCustomLimits.value) {
+			payload.max_searches_per_month = parseOptionalNumber(
+				subscriptionForm.max_searches_per_month,
+			)
+			payload.max_emails_per_month = parseOptionalNumber(
+				subscriptionForm.max_emails_per_month,
+			)
+			payload.max_kp_processed_per_month = parseOptionalNumber(
+				subscriptionForm.max_kp_processed_per_month,
+			)
+			payload.price_module_1_monthly = parseOptionalPrice(
+				subscriptionForm.price_module_1_monthly,
+			)
+			payload.price_module_2_monthly = parseOptionalPrice(
+				subscriptionForm.price_module_2_monthly,
+			)
+			payload.price_bundle_monthly = parseOptionalPrice(
+				subscriptionForm.price_bundle_monthly,
+			)
+		} else {
+			const catalog = catalogForPlan(subscriptionForm.plan)
+			payload.max_searches_per_month = catalog.max_searches_per_month
+			payload.max_emails_per_month = catalog.max_emails_per_month
+			payload.max_kp_processed_per_month = catalog.max_kp_processed_per_month
+			payload.price_module_1_monthly = catalog.price_module_1_monthly
+			payload.price_module_2_monthly = catalog.price_module_2_monthly
+			payload.price_bundle_monthly = catalog.price_bundle_monthly
 		}
 		selectedUser.value = await patch<AdminUserDetail>(
 			`/admin/users/${selectedUserId.value}/subscription`,

@@ -1,4 +1,3 @@
-import { proxyRequest } from 'h3';
 
 /**
  * Proxy browser /api/* requests to the FastAPI backend.

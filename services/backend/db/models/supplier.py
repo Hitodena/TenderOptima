@@ -17,6 +17,8 @@ class Supplier(IDMixinUUID, TimestampMixin, Base):
 
     main_email: Mapped[str] = mapped_column(nullable=False)
     extra_emails: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    comments: Mapped[str | None] = mapped_column(Text, nullable=True)
     from_source: Mapped[str | None] = mapped_column()
 
     added_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -52,7 +54,12 @@ class RequestSupplier(IDMixinUUID, TimestampMixin, Base):
     body_text: Mapped[str | None] = mapped_column(Text)
     sent_status: Mapped[str] = mapped_column(nullable=False)  # aka Enum
 
-    is_enabled: Mapped[bool] = mapped_column(default=True)
+    is_enabled: Mapped[bool] = mapped_column(default=False)
+    is_winner: Mapped[bool] = mapped_column(default=False)
+    thread_read_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     smtp_message_id: Mapped[str | None] = mapped_column()
 

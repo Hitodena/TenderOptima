@@ -1,5 +1,8 @@
 """Resolve per-user SMTP/IMAP credentials with global env fallback."""
 
+import smtplib
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 from backend.core.config import Config, get_config
@@ -62,6 +65,45 @@ def resolve_imap_credentials(
         user=cfg.imap_user,
         password=cfg.imap_password,
     )
+
+
+def _uses_implicit_tls(port: int) -> bool:
+    """Port 465 uses SMTPS (implicit TLS), not STARTTLS."""
+    return port == 465
+
+
+@contextmanager
+def smtp_connection(
+    creds: SmtpCredentials,
+    *,
+    timeout: float = 30,
+) -> Iterator[smtplib.SMTP]:
+    """Open an authenticated SMTP session (SSL on 465, STARTTLS otherwise)."""
+    if _uses_implicit_tls(creds.port):
+        smtp = smtplib.SMTP_SSL(creds.host, creds.port, timeout=timeout)
+        try:
+            smtp.ehlo()
+            smtp.login(creds.user, creds.password)
+            yield smtp
+        finally:
+            try:
+                smtp.quit()
+            except Exception:
+                pass
+        return
+
+    smtp = smtplib.SMTP(creds.host, creds.port, timeout=timeout)
+    try:
+        smtp.ehlo()
+        smtp.starttls()
+        smtp.ehlo()
+        smtp.login(creds.user, creds.password)
+        yield smtp
+    finally:
+        try:
+            smtp.quit()
+        except Exception:
+            pass
 
 
 def user_has_imap_config(user: User) -> bool:

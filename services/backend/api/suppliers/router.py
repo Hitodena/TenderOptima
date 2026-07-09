@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_current_user, get_request_or_404, get_session
+from backend.api.subscriptions.enforcement import ensure_module_1_access
 from backend.api.suppliers.schemas import (
     BulkToggleSuppliersRequest,
     BulkToggleSuppliersResponse,
@@ -13,6 +14,7 @@ from backend.api.suppliers.schemas import (
     SupplierMainEmailUpdate,
     SupplierRemoveResponse,
     SupplierResponse,
+    SupplierUpdate,
 )
 from backend.db.dao import RequestDAO, RequestSupplierDAO, SupplierDAO
 from backend.db.models import User
@@ -78,12 +80,15 @@ async def create_supplier(
             company_name=body.company_name,
             main_email=normalized_email,
             extra_emails=extra_emails,
+            phone=body.phone.strip() if body.phone else None,
+            comments=body.comments.strip() if body.comments else None,
             from_source=body.source,
             added_by_user_id=current_user.id,
         )
         is_new = True
 
     if body.request_id is not None:
+        await ensure_module_1_access(session, current_user)
         request = await RequestDAO.get_by_id(session, body.request_id)
         if not request or request.user_id != current_user.id:
             raise HTTPException(
@@ -101,6 +106,7 @@ async def create_supplier(
                 supplier_id=supplier.id,
                 sent_to_email=normalized_email,
                 sent_status=RequestSupplierStatus.PENDING,
+                is_enabled=body.is_enabled,
             )
 
     if not is_new and body.request_id is None:
@@ -165,6 +171,68 @@ async def update_supplier_main_email(
     return SupplierResponse.model_validate(updated)
 
 
+@router.patch(
+    "/{supplier_id}",
+    response_model=SupplierResponse,
+    summary="Update editable supplier fields",
+    responses={
+        200: {"description": "Supplier updated successfully"},
+        401: {"description": "Missing or invalid authentication credentials"},
+        404: {"description": "Supplier not found"},
+        422: {"description": "Validation error in request payload"},
+    },
+)
+async def update_supplier(
+    supplier_id: uuid.UUID,
+    body: SupplierUpdate,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> SupplierResponse:
+    """Update company_name, domain, phone, extra_emails, or comments.
+
+    Only the owner (added_by_user_id) can edit manually-added suppliers.
+    Parser-sourced suppliers without an owner can be edited by any user.
+    """
+    supplier = await SupplierDAO.get_by_id(session, supplier_id)
+    if not supplier:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Supplier not found",
+        )
+
+    if (
+        supplier.added_by_user_id
+        and supplier.added_by_user_id != current_user.id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Supplier not found or does not belong to you",
+        )
+
+    fields: dict = {}
+    if body.company_name is not None:
+        fields["company_name"] = body.company_name
+    if body.domain is not None:
+        fields["domain"] = body.domain.lower().strip()
+    if body.phone is not None:
+        fields["phone"] = body.phone.strip() or None
+    if body.extra_emails is not None:
+        normalized_main = supplier.main_email.lower()
+        fields["extra_emails"] = [
+            e.lower().strip()
+            for e in body.extra_emails
+            if e.lower().strip() != normalized_main
+        ] or None
+    if body.comments is not None:
+        fields["comments"] = body.comments.strip() or None
+
+    if fields:
+        supplier = await SupplierDAO.update_fields(
+            session, supplier_id, **fields
+        )
+    return SupplierResponse.model_validate(supplier)
+
+
 @request_suppliers_router.get(
     "/{request_id}/suppliers",
     response_model=list[RequestSupplierResponse],
@@ -203,6 +271,7 @@ async def toggle_suppliers_bulk(
 ) -> BulkToggleSuppliersResponse:
     """Enable or disable multiple request-supplier rows in one transaction."""
     await get_request_or_404(request_id, session, current_user)
+    await ensure_module_1_access(session, current_user)
     updated = await RequestSupplierDAO.set_enabled_bulk(
         session, request_id, body.ids, body.is_enabled
     )

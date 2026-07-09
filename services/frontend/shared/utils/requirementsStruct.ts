@@ -1,6 +1,8 @@
 export interface RequirementNode {
 	text: string
 	children: Record<string, RequirementNode>
+	ref_value?: string
+	ref?: string
 }
 
 export type RequirementsHierarchy = Record<string, RequirementNode>
@@ -56,6 +58,12 @@ function normalizeNode(node: unknown): RequirementNode {
 	return {
 		text: String(record.text ?? '').trim(),
 		children,
+		...(String(record.ref_value ?? '').trim()
+			? { ref_value: String(record.ref_value).trim() }
+			: {}),
+		...(String(record.ref ?? '').trim()
+			? { ref: normalizeRequirementKey(String(record.ref)) }
+			: {}),
 	}
 }
 
@@ -71,6 +79,12 @@ function mergeNode(existing: RequirementNode, incoming: RequirementNode): Requir
 	return {
 		text: (incoming.text || existing.text || '').trim(),
 		children: mergedChildren,
+		...(incoming.ref_value || existing.ref_value
+			? { ref_value: (incoming.ref_value || existing.ref_value || '').trim() }
+			: {}),
+		...(incoming.ref || existing.ref
+			? { ref: (incoming.ref || existing.ref || '').trim() }
+			: {}),
 	}
 }
 
@@ -122,13 +136,183 @@ function canonicalizeHierarchy(hierarchy: RequirementsHierarchy): RequirementsHi
 	return result
 }
 
+function parentRequirementKey(key: string): string | null {
+	const normalized = normalizeRequirementKey(key)
+	const segments = normalized.split('.')
+	if (segments.length <= 1) return null
+	return segments.slice(0, -1).join('.')
+}
+
+function findNodeByKey(
+	data: RequirementsHierarchy | null | undefined,
+	key: string,
+): RequirementNode | null {
+	if (!data) return null
+	const hierarchy = normalizeTzRequirements(data)
+	const normalized = normalizeRequirementKey(key)
+	const segments = normalized.split('.')
+	const top = segments[0]
+	if (!top || !hierarchy[top]) return null
+
+	let current = normalizeNode(hierarchy[top])
+	if (segments.length === 1) return current
+
+	for (let index = 1; index < segments.length; index++) {
+		const path = segments.slice(0, index + 1).join('.')
+		const child = current.children[path]
+		if (!child) return null
+		current = normalizeNode(child)
+	}
+	return current
+}
+
+function isSplitParent(node: RequirementNode): boolean {
+	const children = Object.keys(node.children)
+	if (!children.length) return false
+	return Boolean(node.ref_value?.trim()) || !node.text.trim()
+}
+
+function enrichHierarchyRefs(hierarchy: RequirementsHierarchy): RequirementsHierarchy {
+	function enrichNodes(nodes: RequirementsHierarchy): RequirementsHierarchy {
+		const result: RequirementsHierarchy = {}
+		for (const key of Object.keys(nodes).sort(compareVersionKeys)) {
+			const node = normalizeNode(nodes[key])
+			const text = node.text.trim()
+			let refValue = node.ref_value?.trim() || ''
+			const children = enrichNodes(node.children)
+			if (!refValue && text) refValue = text
+
+			const enriched: RequirementNode = { text, children }
+			if (refValue) enriched.ref_value = refValue
+			if (node.ref) enriched.ref = node.ref
+
+			if (isSplitParent(enriched)) {
+				const parentRefValue = enriched.ref_value || enriched.text
+				if (parentRefValue) enriched.ref_value = parentRefValue
+				for (const child of Object.values(children)) {
+					if (!child.ref) child.ref = key
+					if (parentRefValue) child.ref_value = parentRefValue
+				}
+			}
+
+			result[key] = enriched
+		}
+		return result
+	}
+
+	return enrichNodes(hierarchy)
+}
+
+export function resolveLetterTzFields(
+	item: {
+		requirement: string
+		ref?: string | null
+		ref_value?: string | null
+	},
+	hierarchy?: RequirementsHierarchy | null,
+): { ref: string | null; refValue: string | null } {
+	const leafKey = extractRequirementKey(item)
+	let ref = item.ref?.trim() || null
+	let refValue = item.ref_value?.trim() || null
+
+	if (hierarchy && leafKey) {
+		const node = findNodeByKey(hierarchy, leafKey)
+		if (node) {
+			ref = ref || node.ref?.trim() || null
+			refValue = refValue || node.ref_value?.trim() || null
+
+			if (ref) {
+				const parent = findNodeByKey(hierarchy, ref)
+				const parentRefValue = parent?.ref_value?.trim() || parent?.text.trim() || null
+				if (parentRefValue) refValue = parentRefValue
+			} else {
+				const parentKey = parentRequirementKey(leafKey)
+				if (parentKey) {
+					const parent = findNodeByKey(hierarchy, parentKey)
+					if (parent && isSplitParent(parent)) {
+						ref = parentKey
+						refValue = refValue
+							|| parent.ref_value?.trim()
+							|| parent.text.trim()
+							|| null
+					}
+				}
+			}
+		}
+	}
+
+	if (!refValue && leafKey) {
+		const parts = item.requirement.trim().split('. ')
+		refValue = parts.length > 1 ? parts.slice(1).join('. ') : item.requirement.trim()
+	}
+	if (!ref) ref = leafKey
+
+	return { ref, refValue }
+}
+
+export type LetterItemGrouping = {
+	groupKey: string
+	parentKey: string | null
+	tzVerbatim: string | null
+	isSplitChild: boolean
+}
+
+/** Group key and verbatim TZ text for letter sidebar / DOCX (no numbering in tzVerbatim). */
+export function resolveLetterItemGrouping(
+	item: {
+		requirement: string
+		requirement_ref: string | null
+		ref?: string | null
+		ref_value?: string | null
+	},
+	hierarchy: RequirementsHierarchy | null | undefined,
+	fallbackGroupKey: string,
+): LetterItemGrouping {
+	const leafKey = extractRequirementKey(item)
+
+	if (leafKey && hierarchy) {
+		const parentKey = parentRequirementKey(leafKey)
+		if (parentKey) {
+			const parent = findNodeByKey(hierarchy, parentKey)
+			if (parent && isSplitParent(parent)) {
+				const tzVerbatim = parent.ref_value?.trim()
+					|| parent.text.trim()
+					|| null
+				return {
+					groupKey: `parent:${parentKey}`,
+					parentKey,
+					tzVerbatim,
+					isSplitChild: true,
+				}
+			}
+		}
+	}
+
+	const { ref, refValue } = resolveLetterTzFields(item, hierarchy)
+	if (ref) {
+		return {
+			groupKey: `ref:${ref}`,
+			parentKey: ref,
+			tzVerbatim: refValue,
+			isSplitChild: false,
+		}
+	}
+
+	return {
+		groupKey: fallbackGroupKey,
+		parentKey: leafKey,
+		tzVerbatim: refValue,
+		isSplitChild: false,
+	}
+}
+
 export function normalizeTzRequirements(data: RequirementsHierarchy | null | undefined): RequirementsHierarchy {
 	if (!data || typeof data !== 'object' || Array.isArray(data)) return {}
 	const normalized: RequirementsHierarchy = {}
 	for (const [key, value] of Object.entries(data)) {
 		normalized[key] = normalizeNode(value)
 	}
-	return canonicalizeHierarchy(normalized)
+	return enrichHierarchyRefs(canonicalizeHierarchy(normalized))
 }
 
 export function normalizeRequirementsKp(
@@ -336,13 +520,6 @@ function normalizeRequirementKey(key: string): string {
 	return key.trim().replace(/\//g, '.')
 }
 
-function parentRequirementKey(key: string): string | null {
-	const normalized = normalizeRequirementKey(key)
-	const segments = normalized.split('.')
-	if (segments.length <= 1) return null
-	return segments.slice(0, -1).join('.')
-}
-
 export function isTopLevelSectionKey(key: string): boolean {
 	return !normalizeRequirementKey(key).includes('.')
 }
@@ -480,6 +657,25 @@ export function moveRequirementRowBlock(
 	return without
 }
 
+/**
+ * A brand-new sibling row with a blank key/text is invisible: `buildTreeFromRows`
+ * drops any row that has no key, no text, and isn't a heading (see its skip
+ * condition), so it would never be picked up by the following
+ * `renumberRequirementRows` pass and would silently disappear. Assigning it a
+ * real (temporary, non-colliding) key in the same parent scope keeps it in the
+ * tree immediately; the exact numeric value doesn't matter since
+ * `renumberRequirementRows` reassigns sequential keys from array order right
+ * after insertion.
+ */
+function siblingPlaceholderKey(
+	rows: EditableRequirementRow[],
+	anchorIndex: number,
+): string {
+	const anchorKey = normalizeRequirementKey(rows[anchorIndex]?.key ?? '')
+	const parentKey = parentRequirementKey(anchorKey)
+	return parentKey ? nextChildKey(parentKey, rows) : nextTopLevelKey(rows)
+}
+
 export function insertSiblingAfterRow(
 	rows: EditableRequirementRow[],
 	afterIndex: number,
@@ -488,7 +684,53 @@ export function insertSiblingAfterRow(
 	const [, end] = getRowSubtreeRange(rows, afterIndex)
 	const next = [...rows]
 	next.splice(end + 1, 0, {
-		key: '',
+		key: siblingPlaceholderKey(rows, afterIndex),
+		text: '',
+		isHeading: options?.isHeading,
+	})
+	return next
+}
+
+export function insertSiblingBeforeRow(
+	rows: EditableRequirementRow[],
+	beforeIndex: number,
+	options?: { isHeading?: boolean },
+): EditableRequirementRow[] {
+	const [start] = getRowSubtreeRange(rows, beforeIndex)
+	const next = [...rows]
+	next.splice(start, 0, {
+		key: siblingPlaceholderKey(rows, beforeIndex),
+		text: '',
+		isHeading: options?.isHeading,
+	})
+	return next
+}
+
+/**
+ * Insert a new child row immediately after the parent row (as first child),
+ * so it appears at the top of the parent's children list instead of appended
+ * at the end of the flat array.
+ *
+ * The new row is given the key that `nextChildKey` would assign for the parent,
+ * so the tree builder knows it belongs to the parent. After insertion the caller
+ * should run `renumberRequirementRows` to reassign all keys in tree order.
+ */
+export function insertChildAfterParentRow(
+	rows: EditableRequirementRow[],
+	parentKey: string,
+	options?: { isHeading?: boolean },
+): EditableRequirementRow[] {
+	const normalizedParent = parentKey.trim().replace(/\//g, '.')
+	const parentIndex = rows.findIndex(
+		(row) => normalizeRequirementKey(row.key) === normalizedParent,
+	)
+	const childKey = nextChildKey(parentKey, rows)
+	if (parentIndex === -1) {
+		return [...rows, { key: childKey, text: '', isHeading: options?.isHeading }]
+	}
+	const next = [...rows]
+	next.splice(parentIndex + 1, 0, {
+		key: childKey,
 		text: '',
 		isHeading: options?.isHeading,
 	})
@@ -539,7 +781,10 @@ function collectHierarchyKeys(hierarchy: RequirementsHierarchy): Set<string> {
 export function extractRequirementKey(item: {
 	requirement_ref: string | null
 	requirement: string
+	ref?: string | null
 }): string | null {
+	if (item.ref?.trim()) return normalizeRequirementKey(item.ref.trim())
+
 	if (item.requirement_ref) {
 		const refMatch = item.requirement_ref.match(/п\.\s*([\d./]+)/i)
 		if (refMatch?.[1]) return normalizeRequirementKey(refMatch[1])
@@ -549,6 +794,33 @@ export function extractRequirementKey(item: {
 	if (reqMatch?.[1]) return normalizeRequirementKey(reqMatch[1])
 
 	return null
+}
+
+/** Leaf requirement label from confirmed TZ hierarchy: «key. text». */
+export function findRequirementLabelByKey(
+	data: RequirementsHierarchy | null | undefined,
+	key: string | null,
+): string | null {
+	if (!key) return null
+	const hierarchy = normalizeTzRequirements(data)
+	const targetKey = normalizeRequirementKey(key)
+
+	function walk(nodes: RequirementsHierarchy): string | null {
+		for (const nodeKey of Object.keys(nodes).sort(compareVersionKeys)) {
+			const node = normalizeNode(nodes[nodeKey])
+			const nk = normalizeRequirementKey(nodeKey)
+			const hasChildren = Object.keys(node.children).length > 0
+			if (hasChildren) {
+				const found = walk(node.children)
+				if (found) return found
+			} else if (nk === targetKey && node.text.trim()) {
+				return `${nk}. ${node.text.trim()}`
+			}
+		}
+		return null
+	}
+
+	return walk(hierarchy)
 }
 
 export function buildResultTree(

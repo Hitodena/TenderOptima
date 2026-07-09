@@ -1,38 +1,92 @@
 <template>
 	<UModal
 		v-model:open="isOpen"
-		:title="`Составить письмо — ${supplier.company_name}`"
-		:ui="{ content: 'max-w-5xl' }"
+		:ui="EMAIL_LETTER_MODAL_UI"
 	>
+		<template #header>
+			<div class="min-w-0">
+				<p class="text-lg font-semibold text-highlighted min-w-0 truncate">
+					Запросить отсутствующие параметры — {{ supplier.company_name }}
+				</p>
+			</div>
+		</template>
 		<template #body>
-			<div class="flex flex-col md:flex-row gap-4 min-h-96">
-				<div class="flex-1 min-w-0 space-y-4">
-					<UFormField label="Email">
-						<UInput :model-value="supplier.main_email" readonly class="w-full" />
-					</UFormField>
-					<UFormField label="Тема">
-						<UInput v-model="subject" class="w-full" />
-					</UFormField>
-					<UFormField label="Сообщение">
-						<UTextarea v-model="body" :rows="14" class="w-full" autoresize />
-					</UFormField>
-					<UAlert v-if="error" color="error" variant="soft" :description="error" />
-					<div class="flex justify-end gap-2 pt-2">
-						<UButton variant="outline" color="neutral" @click="close">
-							Отмена
-						</UButton>
-						<UButton
-							leading-icon="i-lucide-send"
-							:loading="sending"
-							:disabled="!subject.trim() || !body.trim()"
-							@click="send"
-						>
-							Отправить
-						</UButton>
+			<div class="flex flex-col min-h-[min(70vh,40rem)]">
+				<div class="flex-1 min-h-0 overflow-y-auto pr-1 pb-4">
+					<div class="flex flex-col md:flex-row gap-4">
+						<div class="flex-1 min-w-0 flex flex-col gap-4">
+							<SupplierLetterReadonlyEmail :email="supplier.main_email" />
+							<UFormField label="Тема">
+								<UInput v-model="subject" class="w-full" />
+							</UFormField>
+							<UFormField label="Сообщение" class="flex-1 min-h-0">
+								<div class="flex flex-col gap-2">
+									<InsertBusinessInfoButton v-model="body" class="self-start" />
+									<UTextarea
+									v-model="body"
+									:rows="20"
+									class="w-full"
+									:ui="{ base: 'min-h-[min(40vh,24rem)] resize-y' }"
+									autoresize
+								/>
+								</div>
+							</UFormField>
+							<div>
+								<p class="text-sm font-semibold mb-1">Вложения</p>
+								<p class="text-xs text-muted mb-2">(договор, спецификация и др.)</p>
+								<UFileUpload
+									:model-value="filesToUpload"
+									multiple
+									accept=".pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp"
+									:interactive="false"
+									layout="list"
+									class="w-full"
+									@update:model-value="onFilesUpdate"
+								>
+									<template #actions="{ open }">
+										<UButton type="button" variant="outline" size="sm" @click="open()">
+											<UIcon name="i-lucide-paperclip" class="w-4 h-4" />
+											Добавить файлы
+										</UButton>
+									</template>
+								</UFileUpload>
+							</div>
+						</div>
+						<div class="w-full md:w-72 shrink-0 min-h-64 md:min-h-0">
+							<EmailTemplateSidebar @select="applyTemplate" />
+						</div>
 					</div>
 				</div>
-				<div class="w-full md:w-72 shrink-0 min-h-64 md:min-h-0">
-					<EmailTemplateSidebar @select="applyTemplate" />
+
+				<UAlert
+					v-if="quotaMessage && !canSend"
+					color="warning"
+					variant="soft"
+					icon="i-lucide-mail"
+					:description="quotaMessage"
+					class="shrink-0"
+				/>
+
+				<UAlert
+					v-if="error"
+					color="error"
+					variant="soft"
+					:description="error"
+					class="shrink-0"
+				/>
+
+				<div :class="EMAIL_LETTER_MODAL_FOOTER_CLASS">
+					<UButton color="neutral" variant="ghost" @click="close">
+						Отмена
+					</UButton>
+					<UButton
+						leading-icon="i-lucide-send"
+						:loading="sending"
+						:disabled="!subject.trim() || !body.trim() || !canSend"
+						@click="send"
+					>
+						Отправить
+					</UButton>
 				</div>
 			</div>
 		</template>
@@ -40,13 +94,24 @@
 </template>
 
 <script lang="ts" setup>
-import type { ComparisonSupplier, EmailTemplate } from '#shared/types'
+import type { Attachment, ComparisonSupplier, EmailTemplate, SubscriptionResponse } from '#shared/types'
+import {
+	EMAIL_LETTER_MODAL_FOOTER_CLASS,
+	EMAIL_LETTER_MODAL_UI,
+} from '#shared/constants/emailModal'
+import { getApiErrorDetail } from '#shared/utils/apiError'
+import {
+	canSendEmail,
+	emailQuotaBlockMessage,
+} from '#shared/utils/subscriptionAccess'
 import EmailTemplateSidebar from '~/components/EmailTemplateSidebar.vue'
+import SupplierLetterReadonlyEmail from '~/components/SupplierLetterReadonlyEmail.vue'
 
 const props = defineProps<{
 	requestId: string
 	supplier: ComparisonSupplier
 	initialBody: string
+	subscription?: SubscriptionResponse | null
 }>()
 
 const isOpen = defineModel<boolean>('open', { default: false })
@@ -56,12 +121,21 @@ const toast = useToast()
 
 const subject = ref('Уточнение коммерческого предложения')
 const body = ref('')
+const filesToUpload = ref<File[]>([])
 const sending = ref(false)
 const error = ref('')
+
+const canSend = computed(() => canSendEmail(props.subscription, 1))
+const quotaMessage = computed(() => emailQuotaBlockMessage(props.subscription, 1))
+
+function onFilesUpdate(newFiles: File[] | null | undefined) {
+	filesToUpload.value = newFiles ?? []
+}
 
 function resetForm() {
 	subject.value = 'Уточнение коммерческого предложения'
 	body.value = props.initialBody
+	filesToUpload.value = []
 	error.value = ''
 }
 
@@ -78,14 +152,34 @@ function close() {
 }
 
 async function send() {
+	if (!canSend.value) {
+		error.value = quotaMessage.value ?? 'Лимит исходящих писем исчерпан'
+		return
+	}
 	sending.value = true
 	error.value = ''
 	try {
+		let attachmentPaths: string[] | undefined
+		if (filesToUpload.value.length > 0) {
+			const uploadFormData = new FormData()
+			for (const file of filesToUpload.value) {
+				uploadFormData.append('files', file)
+			}
+			const uploaded = await post<Attachment[]>(
+				`/requests/${props.requestId}/attachments`,
+				uploadFormData,
+			)
+			attachmentPaths = uploaded
+				.map((a) => a.path)
+				.filter((p): p is string => Boolean(p))
+		}
+
 		await post(
 			`/requests/${props.requestId}/suppliers/${props.supplier.rs_id}/improvement-request`,
 			{
 				subject: subject.value.trim(),
 				body: body.value.trim(),
+				attachment_paths: attachmentPaths ?? null,
 			},
 		)
 		toast.add({
@@ -95,9 +189,7 @@ async function send() {
 		})
 		close()
 	} catch (e: unknown) {
-		const detail = (e as { response?: { data?: { detail?: string } } })
-			?.response?.data?.detail
-		error.value = typeof detail === 'string' ? detail : 'Не удалось отправить письмо'
+		error.value = getApiErrorDetail(e) ?? 'Не удалось отправить письмо'
 	} finally {
 		sending.value = false
 	}

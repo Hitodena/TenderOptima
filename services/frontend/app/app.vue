@@ -6,6 +6,10 @@
 			</NuxtLayout>
 		</UMain>
 
-		<AppFooter />
+		<ConsultationModal />
 	</UApp>
 </template>
+
+<script lang="ts" setup>
+useUtmParams().captureFromRoute()
+</script>

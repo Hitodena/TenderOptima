@@ -24,6 +24,8 @@ def build_email_prompt(
             {
                 "requirement": match.requirement,
                 "offer_value": match.offer_value,
+                "numeric_value": match.numeric_value,
+                "currency": match.currency,
                 "status": match.status.value,
                 "explanation": match.explanation,
             }
@@ -97,6 +99,11 @@ def build_email_prompt(
 4. "explanation" — только при status "partial" или "missing"; для "met" и "not_found" — null
 5. Не пиши в explanation фразы вроде «сохранено из предыдущего» или «как в первом письме»
 6. Поле "parameters" всегда возвращай как пустой объект {{}}
+7. Для ценового требования «Цена за единицу без НДС» дополнительно заполняй:
+   - "numeric_value" — только число без валюты и текста (например 14 или 1250.5); \
+если цены нет — null
+   - "currency" — код или символ валюты, если явно указан (BYN, USD, ₽); иначе null
+   - "offer_value" — человекочитаемый текст как в письме (например «14 рублей без НДС»)
 
 Статусы (всегда относительно изначального ТЗ заказчика):
 - "met"        — предложение закрывает требование ТЗ
@@ -111,6 +118,8 @@ def build_email_prompt(
     {{
       "requirement": "формулировка требования",
       "offer_value": "значение или null",
+      "numeric_value": null,
+      "currency": null,
       "explanation": "пояснение или null",
       "status": "met|partial|missing|not_found"
     }}

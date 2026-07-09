@@ -110,6 +110,49 @@ class RequestResponse(BaseModel):
             description="Creation timestamp", examples=["2025-01-15T10:30:00Z"]
         ),
     ]
+    supplier_messages_total: Annotated[
+        int,
+        Field(
+            default=0,
+            description="Total supplier email messages for the request",
+        ),
+    ] = 0
+    supplier_messages_incoming: Annotated[
+        int,
+        Field(
+            default=0,
+            description="Incoming supplier email messages for the request",
+        ),
+    ] = 0
+    supplier_messages_unread: Annotated[
+        int,
+        Field(
+            default=0,
+            description=(
+                "Threads with unread incoming supplier replies "
+                "(not opened since the last incoming message)"
+            ),
+        ),
+    ] = 0
+
+    @classmethod
+    def from_model(
+        cls,
+        request: object,
+        *,
+        supplier_messages_total: int = 0,
+        supplier_messages_incoming: int = 0,
+        supplier_messages_unread: int = 0,
+    ) -> "RequestResponse":
+        """Build response from ORM row plus optional message aggregates."""
+        base = cls.model_validate(request)
+        return base.model_copy(
+            update={
+                "supplier_messages_total": supplier_messages_total,
+                "supplier_messages_incoming": supplier_messages_incoming,
+                "supplier_messages_unread": supplier_messages_unread,
+            }
+        )
 
 
 class Attachment(BaseModel):

@@ -25,6 +25,7 @@ from backend.api.deps import (
 from backend.api.subscriptions.enforcement import (
     ensure_can_search,
     ensure_can_send_emails,
+    ensure_module_1_access,
 )
 from backend.api.user_requests.schemas import (
     Attachment,
@@ -39,12 +40,32 @@ from backend.api.user_requests.schemas import (
 from backend.celery_app.tasks.email_tasks import send_emails
 from backend.celery_app.tasks.parser_tasks import run_parser_search
 from backend.core.config import ALLOWED_CONTENT_TYPES, Config
-from backend.db.dao import RequestDAO, RequestSupplierDAO
+from backend.db.dao import EmailMessageDAO, RequestDAO, RequestSupplierDAO
 from backend.db.models import User
 from backend.enums import RequestStatus
 from backend.utils.email_utils import build_request_email_body
 
 router = APIRouter(prefix="/requests", tags=["Requests"])
+
+
+async def _request_responses_with_stats(
+    session: AsyncSession,
+    requests: list,
+) -> list[RequestResponse]:
+    """Attach supplier message aggregates to request list rows."""
+    if not requests:
+        return []
+    ids = [r.id for r in requests]
+    stats = await EmailMessageDAO.get_message_stats_for_requests(session, ids)
+    return [
+        RequestResponse.from_model(
+            r,
+            supplier_messages_total=stats.get(r.id, (0, 0, 0))[0],
+            supplier_messages_incoming=stats.get(r.id, (0, 0, 0))[1],
+            supplier_messages_unread=stats.get(r.id, (0, 0, 0))[2],
+        )
+        for r in requests
+    ]
 
 
 def _resolve_and_validate_attachment_path(
@@ -82,6 +103,7 @@ async def create_request(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> RequestResponse:
     """Create a draft request with query and delivery region."""
+    await ensure_module_1_access(session, current_user)
     request = await RequestDAO.create(
         session,
         user_id=current_user.id,
@@ -190,7 +212,7 @@ async def get_requests(
         user_id=current_user.id,
         order_by=RequestDAO.model.created_at.desc(),
     )
-    return [RequestResponse.model_validate(r) for r in requests]
+    return await _request_responses_with_stats(session, requests)
 
 
 @router.get(
@@ -205,7 +227,8 @@ async def get_request(
 ) -> RequestResponse:
     """Return one request by id if it belongs to the current user."""
     request = await get_request_or_404(request_id, session, current_user)
-    return RequestResponse.model_validate(request)
+    rows = await _request_responses_with_stats(session, [request])
+    return rows[0]
 
 
 @router.patch(

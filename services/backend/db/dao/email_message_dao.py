@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 from backend.db.dao.base_dao import BaseDAO
 from backend.db.models import EmailMessage, RequestSupplier
 from backend.enums import EmailMessageDirection
-from backend.schemas import ThreadSummaryRow
+from backend.schemas.thread import ThreadSummaryRow, is_thread_unread
 
 
 class EmailMessageDAO(BaseDAO[EmailMessage]):
@@ -155,7 +155,7 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
     async def get_by_imap_id(
         cls, session: AsyncSession, imap_id: str
     ) -> EmailMessage | None:
-        """Load an email message by its IMAP ID."""
+        """Load an email message by mailbox-scoped polling id (host:user:uid)."""
         logger.debug(
             "Getting email message by IMAP ID",
             model=cls.model,
@@ -284,3 +284,92 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
                 request_id=request_id,
             )
             raise
+
+    @classmethod
+    async def get_message_stats_for_requests(
+        cls,
+        session: AsyncSession,
+        request_ids: list[uuid.UUID],
+    ) -> dict[uuid.UUID, tuple[int, int, int]]:
+        """Return (total, incoming, unread_threads) per request id.
+
+        unread_threads = supplier links whose latest incoming message is newer
+        than thread_read_at (or never marked read).
+        """
+        if not request_ids:
+            return {}
+
+        totals: dict[uuid.UUID, int] = dict.fromkeys(request_ids, 0)
+        incoming: dict[uuid.UUID, int] = dict.fromkeys(request_ids, 0)
+        unread: dict[uuid.UUID, int] = dict.fromkeys(request_ids, 0)
+
+        def _count_stmt(*, incoming_only: bool = False):
+            stmt = (
+                select(
+                    RequestSupplier.request_id,
+                    func.count(cls.model.id).label("message_count"),
+                )
+                .select_from(cls.model)
+                .join(
+                    RequestSupplier,
+                    cls.model.request_supplier_id == RequestSupplier.id,
+                )
+                .where(RequestSupplier.request_id.in_(request_ids))
+                .group_by(RequestSupplier.request_id)
+            )
+            if incoming_only:
+                stmt = stmt.where(
+                    cls.model.direction == EmailMessageDirection.INCOMING.value
+                )
+            return stmt
+
+        for request_id, count in await session.execute(_count_stmt()):
+            totals[request_id] = int(count)
+
+        for request_id, count in await session.execute(
+            _count_stmt(incoming_only=True)
+        ):
+            incoming[request_id] = int(count)
+
+        latest_messages = await cls._latest_messages_for_requests(
+            session, request_ids
+        )
+        for message in latest_messages:
+            rs = message.request_supplier
+            if rs is None:
+                continue
+            if is_thread_unread(message, rs.thread_read_at):
+                unread[rs.request_id] = unread.get(rs.request_id, 0) + 1
+
+        return {
+            req_id: (
+                totals.get(req_id, 0),
+                incoming.get(req_id, 0),
+                unread.get(req_id, 0),
+            )
+            for req_id in request_ids
+        }
+
+    @classmethod
+    async def _latest_messages_for_requests(
+        cls,
+        session: AsyncSession,
+        request_ids: list[uuid.UUID],
+    ) -> list[EmailMessage]:
+        """Latest message per request-supplier for the given requests."""
+        stmt = (
+            select(cls.model)
+            .join(
+                RequestSupplier,
+                cls.model.request_supplier_id == RequestSupplier.id,
+            )
+            .where(RequestSupplier.request_id.in_(request_ids))
+            .distinct(cls.model.request_supplier_id)
+            .order_by(
+                cls.model.request_supplier_id,
+                cls.model.received_at.desc().nulls_last(),
+            )
+            .options(selectinload(cls.model.request_supplier))
+        )
+        result = await session.execute(stmt)
+        return list(result.scalars().all())

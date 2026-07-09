@@ -14,6 +14,9 @@ from backend.services.db_service import db_manager
 from backend.utils.jwt_utils import decode_access_token
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
+oauth2_scheme_optional = OAuth2PasswordBearer(
+    tokenUrl="/api/auth/token", auto_error=False
+)
 
 
 async def get_session() -> AsyncGenerator[AsyncSession]:
@@ -64,6 +67,23 @@ async def get_request_or_404(
             detail="Request not found",
         )
     return request
+
+
+async def get_current_user_optional(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    token: Annotated[str | None, Depends(oauth2_scheme_optional)],
+) -> User | None:
+    """Return the current user from JWT or None if missing/invalid."""
+    if not token:
+        return None
+    try:
+        payload = decode_access_token(token)
+        email: str | None = payload.get("sub")
+        if not email:
+            return None
+        return await UserDAO.get_by_email(session, email)
+    except Exception:
+        return None
 
 
 async def get_admin(user: Annotated[User, Depends(get_current_user)]):

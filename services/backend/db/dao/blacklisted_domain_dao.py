@@ -1,7 +1,7 @@
 import uuid
 
 from loguru import logger
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.dao.base_dao import BaseDAO
@@ -15,12 +15,12 @@ class BlacklistedDomainDAO(BaseDAO[BlacklistedDomain]):
     async def get_domains_set(
         cls, session: AsyncSession, user_id: uuid.UUID
     ) -> set[BlacklistedDomain]:
-        """Load all blacklisted domains for the given user."""
+        """Load user blacklist entries and global blacklist for parser exclusion."""
         logger.debug("Getting domains set", model=cls.model, user_id=user_id)
         try:
             stmt = select(cls.model).where(
                 (cls.model.added_by_user_id == user_id)
-                | (cls.model.added_by_user_id.is_(None))
+                | (cls.model.is_global.is_(True))
             )
             result = await session.execute(stmt)
             domains = set(result.scalars().all())
@@ -42,29 +42,54 @@ class BlacklistedDomainDAO(BaseDAO[BlacklistedDomain]):
             raise
 
     @classmethod
+    async def get_excluded_domain_names(
+        cls, session: AsyncSession, user_id: uuid.UUID
+    ) -> list[str]:
+        """User and global blacklist domain names for parser exclusion."""
+        domains = await cls.get_domains_set(session, user_id)
+        return sorted({d.domain.lower() for d in domains})
+
+    @classmethod
     async def delete_by_id(
-        cls, session: AsyncSession, id: uuid.UUID, user_id: uuid.UUID
+        cls,
+        session: AsyncSession,
+        id: uuid.UUID,
+        user_id: uuid.UUID,
+        *,
+        is_admin: bool = False,
     ) -> bool:
-        """Delete a blacklist row by id when it belongs to the given user."""
+        """Delete a blacklist row owned by the user or global when admin."""
         logger.debug(
             "Deleting domain by id",
             model=cls.model,
             id=id,
             user_id=user_id,
+            is_admin=is_admin,
         )
         try:
-            stmt = select(cls.model).where(
-                cls.model.id == id,
-                or_(
-                    cls.model.added_by_user_id == user_id,
-                    cls.model.added_by_user_id.is_(None),
-                ),
-            )
+            stmt = select(cls.model).where(cls.model.id == id)
             result = await session.execute(stmt)
             instance = result.scalar_one_or_none()
             if not instance:
                 logger.info(
                     "Domain not found for delete",
+                    model=cls.model,
+                    id=id,
+                    user_id=user_id,
+                )
+                return False
+            if instance.is_global:
+                if not is_admin:
+                    logger.info(
+                        "Global domain delete denied",
+                        model=cls.model,
+                        id=id,
+                        user_id=user_id,
+                    )
+                    return False
+            elif instance.added_by_user_id != user_id:
+                logger.info(
+                    "Domain not owned by user",
                     model=cls.model,
                     id=id,
                     user_id=user_id,

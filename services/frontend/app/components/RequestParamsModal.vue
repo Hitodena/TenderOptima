@@ -1,23 +1,35 @@
 <template>
-    <UModal v-model:open="isOpen" :title="step === 'params'
-        ? 'Параметры письма поставщикам'
-        : 'Редактирование письма'
-        " :description="step === 'params'
-            ? 'Заполните описание и укажите дополнительные параметры'
-            : 'Проверьте и отредактируйте письмо перед отправкой'
-            " :ui="{ content: 'max-w-5xl' }">
+    <UModal v-model:open="isOpen" :ui="EMAIL_LETTER_MODAL_UI">
+        <template #header>
+            <div class="min-w-0">
+                <p class="text-lg font-semibold text-highlighted">
+                    {{ step === 'params'
+                        ? 'Параметры письма поставщикам'
+                        : 'Редактирование письма'
+                    }}
+                </p>
+                <p class="text-sm text-muted mt-0.5">
+                    {{ step === 'params'
+                        ? 'Заполните описание и укажите дополнительные параметры'
+                        : 'Проверьте и отредактируйте письмо перед отправкой'
+                    }}
+                </p>
+            </div>
+        </template>
         <template #body>
-            <div v-if="step === 'params'" class="flex flex-col max-h-[min(80vh,42rem)]">
-                <div class="flex-1 min-h-0 overflow-y-auto space-y-6 pr-1">
+            <div v-if="step === 'params'" class="flex flex-col min-h-[min(80vh,42rem)]">
+                <div class="flex-1 min-h-0 overflow-y-auto space-y-6 pr-1 pb-4">
                     <UFormField label="Тема письма" :required="false">
-                        <UInput v-model="form.emailSubject" placeholder="Запрос коммерческого предложения — ..."
+                        <UInput
+v-model="form.emailSubject" placeholder="Запрос коммерческого предложения — ..."
                             class="w-full" size="lg" :class="errors.emailSubject ? 'ring-2 ring-error rounded-lg' : ''"
                             maxlength="255" />
                         <p v-if="errors.emailSubject" class="text-xs text-error mt-1">{{ errors.emailSubject }}</p>
                     </UFormField>
 
                     <UFormField label="Описание товара/услуги" required>
-                        <UTextarea v-model="form.description"
+                        <UTextarea
+v-model="form.description"
                             placeholder="Опишите детально товар или услугу, технические характеристики, объёмы..."
                             :rows="6" class="w-full" size="lg"
                             :class="errors.description ? 'ring-2 ring-error rounded-lg' : ''" />
@@ -29,75 +41,130 @@
 
                     <div>
                         <p class="text-sm font-semibold mb-1">Дополнительные параметры</p>
-                        <p class="text-xs text-muted mb-3">
-                            Укажите что должен указать поставщик в ответе
+                        <p class="text-xs text-muted mb-2">
+                            Укажите, что должен указать поставщик в ответе
                         </p>
 
                         <div>
-                            <div class="space-y-2 max-h-60 overflow-y-auto">
-                                <div v-for="(label, idx) in form.labels" :key="idx"
-                                    class="flex items-center gap-2 py-1 px-2 rounded-lg hover:bg-elevated/50 transition-colors">
-                                    <span class="text-sm flex-1 truncate">{{ label }}</span>
-                                    <button type="button"
-                                        class="w-8 h-8 flex items-center justify-center rounded text-muted hover:text-error hover:bg-elevated transition-colors shrink-0"
-                                        @click="removeLabel(idx)">
-                                        <UIcon name="i-lucide-x" class="w-4 h-4" />
+                            <div class="flex flex-wrap gap-1.5 mb-3 min-h-8">
+                                <UBadge
+                                    v-for="(label, idx) in form.labels"
+                                    :key="idx"
+                                    size="md"
+                                    variant="soft"
+                                    color="primary"
+                                    class="gap-1.5 pr-1 cursor-default"
+                                >
+                                    {{ label }}
+                                    <button
+                                        type="button"
+                                        class="ml-0.5 text-primary/60 hover:text-error transition-colors"
+                                        @click="removeLabel(idx)"
+                                    >
+                                        <UIcon name="i-lucide-x" class="w-3 h-3" />
                                     </button>
-                                </div>
+                                </UBadge>
+                                <span
+                                    v-if="!form.labels.length"
+                                    class="text-xs text-muted italic self-center"
+                                >
+                                    Нет параметров
+                                </span>
                             </div>
 
-                            <div class="flex gap-2 mt-3 items-center px-2">
-                                <UInput v-model="form.newLabel" placeholder="Требование (цена, сроки, условия...)"
-                                    class="flex-1" size="lg" @keyup.enter="addLabel" />
-                                <button type="button"
-                                    class="w-8 h-8 flex items-center justify-center rounded text-muted hover:text-primary hover:bg-elevated transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                                    :disabled="!form.newLabel.trim()" @click="addLabel">
-                                    <UIcon name="i-lucide-plus" class="w-4 h-4" />
-                                </button>
+                            <div class="flex gap-2">
+                                <UInput
+                                    v-model="form.newLabel"
+                                    placeholder="Требование (цена, сроки, условия...)"
+                                    class="flex-1"
+                                    size="lg"
+                                    @keyup.enter="addLabel"
+                                />
+                                <UButton
+                                    icon="i-lucide-plus"
+                                    variant="outline"
+                                    color="neutral"
+                                    size="lg"
+                                    :disabled="!form.newLabel.trim()"
+                                    @click="addLabel"
+                                />
                             </div>
                         </div>
                     </div>
 
                     <div>
                         <p class="text-sm font-semibold mb-1">Визитная карточка</p>
-                        <p class="text-xs text-muted mb-3">
-                            Добавляется в конце письма. Изменения сохранятся в профиле.
+                        <p class="text-xs text-muted mb-2">
+                            Добавляется в конце письма.
                         </p>
-                        <UTextarea v-model="form.businessInfo"
+                        <p class="mb-3 text-xs leading-relaxed text-primary">
+                            <UIcon name="i-lucide-info" class="mr-1 inline size-3.5 align-[-2px]" />
+                            Постоянный шаблон можно отредактировать в
+                            <ULink
+                                to="/profile?tab=business_card"
+                                class="font-semibold underline underline-offset-2 hover:opacity-80"
+                            >
+                                личном кабинете
+                            </ULink>.
+                        </p>
+                        <UTextarea
+v-model="form.businessInfo"
                             placeholder="С Уважением, специалист отдела закупок, Иван Иванов" :rows="4"
                             class="w-full" />
                     </div>
+
+                    <div>
+                        <p class="text-sm font-semibold mb-1">Вложения</p>
+                        <p class="text-xs text-muted mb-2">{{ uploadDescription }}</p>
+                        <UFileUpload
+:model-value="filesToUpload" multiple
+                            accept=".pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp" :interactive="false"
+                            layout="list" class="w-full" @update:model-value="handleFilesUpdate">
+                            <template #actions="{ open }">
+                                <UButton type="button" variant="outline" size="sm" @click="open()">
+                                    <UIcon name="i-lucide-paperclip" class="w-4 h-4" />
+                                    Выбрать файлы
+                                </UButton>
+                            </template>
+                        </UFileUpload>
+                    </div>
                 </div>
+
+                <UAlert
+v-if="error" color="error" variant="soft" icon="i-lucide-circle-alert" :description="error"
+                    class="shrink-0" />
 
                 <div
-                    class="shrink-0 sticky bottom-0 z-10 -mx-4 border-t border-default bg-default/95 px-4 pt-3 pb-2 backdrop-blur-sm sm:-mx-6 sm:px-6">
-                    <UFileUpload :model-value="filesToUpload" multiple
-                        accept=".pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp" :interactive="false"
-                        :description="uploadDescription" layout="list" class="w-full min-h-28" position="inside"
-                        @update:model-value="handleFilesUpdate">
-                        <template #actions="{ open }">
-                            <UButton type="button" variant="outline" @click="open()">
-                                <UIcon name="i-lucide-paperclip" class="w-4 h-4 mr-2" />
-                                Выбрать файлы
-                            </UButton>
-                        </template>
-                    </UFileUpload>
-                </div>
-
-                <UAlert v-if="error" color="error" variant="soft" icon="i-lucide-circle-alert" :description="error"
-                    class="mt-4 shrink-0" />
-
-                <div class="flex shrink-0 justify-end gap-2 pt-4">
-                    <UButton color="neutral" variant="ghost" @click="close">Отмена</UButton>
-                    <UButton leading-icon="i-lucide-arrow-right" :loading="loadingMessage" @click="goToConfirm">
+                    class="sticky bottom-0 shrink-0 -mx-1 mt-auto border-t border-default bg-default/95
+                        backdrop-blur-sm px-1 pt-3 flex items-center justify-end gap-2"
+                >
+                    <UButton color="neutral" variant="ghost" @click="close">
+                        Отмена
+                    </UButton>
+                    <UButton
+                        leading-icon="i-lucide-arrow-right"
+                        :loading="loadingMessage"
+                        @click="goToConfirm"
+                    >
                         Далее
                     </UButton>
                 </div>
             </div>
 
-            <div v-else-if="step === 'confirm'" class="space-y-4">
-                <UAlert v-if="props.supplierCount" color="info" variant="soft" icon="i-lucide-info" class="mb-4"
-                    :description="`Запрос будет отправлен на ${props.supplierCount} ${getSupplierWord(props.supplierCount)}`" />
+            <div v-else-if="step === 'confirm'" class="flex flex-col min-h-[min(80vh,42rem)]">
+                <div class="flex-1 min-h-0 overflow-y-auto space-y-4 pr-1 pb-4">
+                <UAlert
+v-if="props.supplierCount" color="info" variant="soft" icon="i-lucide-info" class="mb-4"
+                    :description="`Запрос будет отправлен на ${props.supplierCount} ${pluralizeSuppliers(props.supplierCount ?? 0)}`" />
+
+                <UAlert
+                    v-if="emailQuotaConfirmHint"
+                    color="warning"
+                    variant="soft"
+                    icon="i-lucide-mail"
+                    class="mb-4"
+                    :description="emailQuotaConfirmHint"
+                />
 
                 <div class="flex items-center gap-2 text-sm text-muted mb-4">
                     Письмо сформировано на основе ваших параметров. Вы можете
@@ -112,7 +179,8 @@
 
                 <div>
                     <p class="text-sm font-semibold mb-1">Тело письма</p>
-                    <UTextarea v-model="form.emailMessage" :rows="20" class="w-full font-mono text-sm"
+                    <UTextarea
+v-model="form.emailMessage" :rows="20" class="w-full font-mono text-sm"
                         placeholder="Текст письма загружается..." />
                 </div>
 
@@ -121,7 +189,8 @@
                         Вложения ({{ uploadedAttachments.length }}/2)
                     </p>
                     <div class="space-y-2">
-                        <div v-for="(att, idx) in uploadedAttachments" :key="idx"
+                        <div
+v-for="(att, idx) in uploadedAttachments" :key="idx"
                             class="flex items-center gap-2 text-sm p-2 bg-elevated/50 rounded-lg">
                             <UIcon name="i-lucide-paperclip" class="w-4 h-4 text-primary shrink-0" />
                             <span class="flex-1 truncate">{{ att.filename }}</span>
@@ -133,10 +202,18 @@
                 </div>
 
                 <UAlert v-if="error" color="error" variant="soft" icon="i-lucide-circle-alert" :description="error" />
+                </div>
 
-                <div class="flex justify-between pt-2">
-                    <UButton color="neutral" variant="ghost" leading-icon="i-lucide-arrow-left"
-                        @click="step = 'params'">
+                <div
+                    class="sticky bottom-0 shrink-0 -mx-1 mt-auto border-t border-default bg-default/95
+                        backdrop-blur-sm px-1 pt-3 flex items-center justify-end gap-2"
+                >
+                    <UButton
+                        color="neutral"
+                        variant="ghost"
+                        leading-icon="i-lucide-arrow-left"
+                        @click="step = 'params'"
+                    >
                         Назад
                     </UButton>
                     <UButton leading-icon="i-lucide-send" :loading="loading" @click="handleLaunch">
@@ -153,14 +230,19 @@ import type {
     AttachmentInfo,
     RequestResponse,
     RequestUpdate,
+    SubscriptionResponse,
     UserResponse,
     UserUpdate,
 } from "#shared/types"
+import { EMAIL_LETTER_MODAL_UI } from "#shared/constants/emailModal"
 import { getApiErrorDetail } from "#shared/utils/apiError"
+import { pluralizeSuppliers } from "#shared/utils/textFormat"
+import { emailQuotaBlockMessage, emailQuotaRemaining, effectiveEmailLimit } from "#shared/utils/subscriptionAccess"
 
 const props = defineProps<{
     request?: RequestResponse | null
     supplierCount?: number
+    subscription?: SubscriptionResponse | null
 }>()
 const isOpen = defineModel<boolean>("open", { default: false })
 const emit = defineEmits<{ launched: [] }>()
@@ -206,18 +288,18 @@ const { public: publicConfig } = useRuntimeConfig()
 const MAX_UPLOAD_FILES = publicConfig.maxUploadFiles as number
 const MAX_UPLOAD_SIZE = publicConfig.maxRequestUploadSize as number
 
-function getSupplierWord(count: number): string {
-    const n = count % 100
-    const n2 = n % 10
-    if (n >= 11 && n <= 19) return "поставщиков"
-    if (n2 >= 2 && n2 <= 4) return "поставщика"
-    if (n2 >= 1) return "поставщик"
-    return "поставщиков"
-}
-
 const uploadDescription = computed(() => {
     const sizeMb = Math.round(MAX_UPLOAD_SIZE / 1024 / 1024)
-    return `Добавьте до ${MAX_UPLOAD_FILES} файлов (PDF, DOC/DOCX, XLS/XLSX, TXT, JPG/PNG/WEBP). Максимум ${MAX_UPLOAD_FILES} файла, до ${sizeMb} МБ каждый`
+    return `До ${MAX_UPLOAD_FILES} файлов (PDF, DOCX, XLS/XLSX, TXT, JPG/PNG/WEBP), до ${sizeMb} МБ каждый`
+})
+
+const emailQuotaConfirmHint = computed(() => {
+    const sub = props.subscription
+    const limit = effectiveEmailLimit(sub)
+    if (limit == null) return null
+    const remaining = emailQuotaRemaining(sub)
+    if (remaining == null) return null
+    return `Остаток лимита писем в этом месяце: ${remaining.toLocaleString("ru-RU")} из ${limit.toLocaleString("ru-RU")}`
 })
 
 function loadFromRequest() {
@@ -387,10 +469,17 @@ async function goToConfirm() {
 
 async function handleLaunch() {
     if (!props.request) return
+    const quotaMsg = emailQuotaBlockMessage(
+        props.subscription,
+        props.supplierCount ?? 1,
+    )
+    if (quotaMsg) {
+        error.value = quotaMsg
+        return
+    }
     loading.value = true
     error.value = null
     try {
-        // defensive: ensure subject persisted before launch (sends email_message if edited)
         const emailPayload: {
             email_subject: string | null
             email_message?: string

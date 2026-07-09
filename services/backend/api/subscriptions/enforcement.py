@@ -3,9 +3,13 @@
 from datetime import UTC, datetime
 
 from backend.api.subscriptions.usage import SubscriptionUsageDAO
+from backend.core.config import Config
 from backend.db.dao import SubscriptionDAO
 from backend.db.models import Subscription, User
-from backend.utils.subscription_catalog import resolve_subscription_limits
+from backend.utils.subscription_catalog import (
+    resolve_subscription_limits,
+    resolve_tz_kp_upload_limit,
+)
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -120,6 +124,15 @@ def _ensure_quota(
         )
 
 
+async def ensure_module_1_access(
+    session: AsyncSession,
+    user: User,
+) -> None:
+    """Module 1: active subscription with module 1 enabled."""
+    subscription = await _get_subscription_or_raise(session, user)
+    _ensure_module_enabled(subscription, module=1)
+
+
 async def ensure_can_search(
     session: AsyncSession,
     user: User,
@@ -156,6 +169,38 @@ async def ensure_can_send_emails(
         used=usage.emails_sent,
         requested=pending_count,
     )
+
+
+async def outbound_email_remaining(
+    session: AsyncSession,
+    user: User,
+) -> int | None:
+    """Outbound emails left this month, or None if unlimited."""
+    subscription = await SubscriptionDAO.get_by_user_id(session, user.id)
+    if subscription is None or not _subscription_is_usable(subscription):
+        return 0
+    if not subscription.module_1_enabled:
+        return 0
+    _, max_emails, _ = _resolved_limits(subscription)
+    if max_emails is None:
+        return None
+    usage = await SubscriptionUsageDAO.get_for_user(session, user.id)
+    return max(0, max_emails - usage.emails_sent)
+
+
+async def worker_can_send_emails(
+    session: AsyncSession,
+    user: User,
+    *,
+    count: int = 1,
+) -> bool:
+    """Non-HTTP quota check for Celery tasks."""
+    if count <= 0:
+        return True
+    remaining = await outbound_email_remaining(session, user)
+    if remaining is None:
+        return True
+    return count <= remaining
 
 
 async def ensure_module_2_access(
@@ -203,3 +248,27 @@ async def ensure_can_process_kp(
         used=usage.kp_processed,
         requested=kp_count,
     )
+
+
+def effective_tz_kp_upload_limit(
+    subscription: Subscription,
+    config: Config,
+) -> int:
+    """Effective TZ/KP upload size cap for a subscription."""
+    plan_limit = resolve_tz_kp_upload_limit(
+        subscription.plan,
+        subscription.geo_code,
+    )
+    if plan_limit is None:
+        return config.max_tz_upload_size
+    return min(plan_limit, config.max_tz_upload_size)
+
+
+async def tz_kp_upload_limit_for_user(
+    session: AsyncSession,
+    user: User,
+    config: Config,
+) -> int:
+    """Resolve TZ/KP upload limit for the current user."""
+    subscription = await _get_subscription_or_raise(session, user)
+    return effective_tz_kp_upload_limit(subscription, config)

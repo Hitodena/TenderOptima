@@ -11,6 +11,26 @@ from backend.enums import EmailMessageDirection
 PREVIEW_BODY_MAX_LEN = 280
 
 
+def message_activity_at(message: EmailMessage) -> datetime | None:
+    """Timestamp used for unread comparisons (received_at with created_at fallback)."""
+    return message.received_at or message.created_at
+
+
+def is_thread_unread(
+    message: EmailMessage,
+    thread_read_at: datetime | None,
+) -> bool:
+    """Thread is unread when the latest message is incoming and newer than read mark."""
+    if message.direction != EmailMessageDirection.INCOMING.value:
+        return False
+    activity = message_activity_at(message)
+    if thread_read_at is None:
+        return True
+    if activity is None:
+        return False
+    return activity > thread_read_at
+
+
 class SupplierSnapshot(BaseModel):
     """Supplier fields embedded in a thread list row."""
 
@@ -75,5 +95,5 @@ class ThreadSummaryRow(BaseModel):
             supplier=SupplierSnapshot.model_validate(rs.supplier),
             last_message=LastMessagePreviewRow.from_message(message),
             message_count=message_count,
-            unread=message.direction == EmailMessageDirection.INCOMING.value,
+            unread=is_thread_unread(message, rs.thread_read_at),
         )

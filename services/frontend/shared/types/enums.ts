@@ -49,3 +49,30 @@ export const TZAnalysisSupplierStatus = {
 
 export type TZAnalysisSupplierStatus =
 	(typeof TZAnalysisSupplierStatus)[keyof typeof TZAnalysisSupplierStatus];
+
+export const ConsultationRole = {
+	PROCUREMENT_MANAGER: 'procurement_manager',
+	TENDER_SPECIALIST: 'tender_specialist',
+	TECH_SPECIALIST: 'tech_specialist',
+	DIRECTOR: 'director',
+	OTHER: 'other',
+} as const;
+
+export type ConsultationRole = (typeof ConsultationRole)[keyof typeof ConsultationRole];
+
+export const ConsultationRequestType = {
+	DEMO: 'demo',
+	TRIAL: 'trial',
+} as const;
+
+export type ConsultationRequestType =
+	(typeof ConsultationRequestType)[keyof typeof ConsultationRequestType];
+
+export const ConsultationStatus = {
+	NEW: 'new',
+	IN_PROGRESS: 'in_progress',
+	DONE: 'done',
+	REJECTED: 'rejected',
+} as const;
+
+export type ConsultationStatus = (typeof ConsultationStatus)[keyof typeof ConsultationStatus];

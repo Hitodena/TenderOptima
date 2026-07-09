@@ -1,122 +1,215 @@
 <script lang="ts" setup>
+
 import type { SubscriptionResponse } from '#shared/types'
-import { PLAN_LABELS } from '#shared/utils/subscriptionDisplay'
+
+import { effectiveEmailLimit } from '#shared/utils/subscriptionAccess'
+
+import {
+
+	PLAN_LABELS,
+
+	formatUsageLimit,
+
+	subscriptionPlansPath,
+
+} from '#shared/utils/subscriptionDisplay'
+
+
 
 const props = defineProps<{
+
 	subscription: SubscriptionResponse | null | undefined
+
 }>()
+
+
 
 const planLabels = PLAN_LABELS
 
+const emailLimit = computed(() => effectiveEmailLimit(props.subscription))
+
+
+
 function formatUsage(used: number | undefined, limit: number | null | undefined) {
+
 	const usedLabel = (used ?? 0).toLocaleString('ru-RU')
-	if (limit == null) return `${usedLabel} / индивидуально`
+
+	if (limit == null) return `${usedLabel} / ${formatUsageLimit(limit)}`
+
 	return `${usedLabel} / ${limit.toLocaleString('ru-RU')}`
+
 }
 
-function formatPrice(value: string | null | undefined, currency: string) {
-	if (!value) return 'индивидуально'
-	return `${value} ${currency}/мес`
-}
+
 
 const planLabel = computed(() =>
+
 	props.subscription ? planLabels[props.subscription.plan] ?? props.subscription.plan : null,
+
 )
+
 </script>
 
+
+
 <template>
-	<div v-if="subscription" class="space-y-5">
+
+	<div v-if="subscription" class="space-y-6">
+
 		<div class="flex flex-wrap items-center gap-2">
+
 			<UBadge
-				:color="subscription.is_active ? 'success' : 'neutral'"
-				variant="subtle"
-				:label="subscription.is_active ? 'Активна' : 'Неактивна'"
-			/>
+:color="subscription.is_active ? 'success' : 'neutral'" variant="subtle"
+
+				:label="subscription.is_active ? 'Активна' : 'Неактивна'" />
+
 			<UBadge color="primary" variant="subtle" :label="planLabel ?? subscription.plan" />
-			<UBadge
-				v-if="subscription.module_1_enabled"
-				color="neutral"
-				variant="outline"
-				label="Модуль 1"
-			/>
-			<UBadge
-				v-if="subscription.module_2_enabled"
-				color="neutral"
-				variant="outline"
-				label="Модуль 2"
-			/>
+
+			<UBadge v-if="subscription.module_1_enabled" color="neutral" variant="outline" label="Модуль 1" />
+
+			<UBadge v-if="subscription.module_2_enabled" color="neutral" variant="outline" label="Модуль 2" />
+
 		</div>
+
+
 
 		<div class="grid gap-4 sm:grid-cols-2">
-			<UCard :ui="{ body: 'p-4 space-y-2' }">
-				<p class="text-xs font-semibold uppercase tracking-wide text-muted">
-					Модуль 1
-				</p>
-				<p class="text-sm">
-					Поиски:
-					<span class="font-medium">
-						{{ formatUsage(subscription.searches_used_this_month, subscription.max_searches_per_month) }}
-					</span>
-				</p>
-				<p class="text-sm">
-					Email:
-					<span class="font-medium">
-						{{ formatUsage(subscription.emails_sent_this_month, subscription.max_emails_per_month) }}
-					</span>
-				</p>
-				<p class="text-sm text-muted">
-					ИИ-обработка входящих, сравнительная таблица, доп. письма — включено
-				</p>
+
+			<UCard :ui="{ body: 'p-5 space-y-3' }">
+
+				<div class="flex items-center gap-2">
+
+					<div class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+
+						<UIcon name="i-lucide-mail" class="w-4 h-4 text-primary" />
+
+					</div>
+
+					<p class="text-sm font-semibold">Модуль 1 — использование</p>
+
+				</div>
+
+				<div class="grid gap-2 text-sm">
+
+					<div class="flex justify-between gap-3">
+
+						<span class="text-muted">Поиски</span>
+
+						<span class="font-medium tabular-nums">
+
+							{{ formatUsage(subscription.searches_used_this_month, subscription.max_searches_per_month)
+
+							}}
+
+						</span>
+
+					</div>
+
+					<div class="flex justify-between gap-3">
+
+						<span class="text-muted">Email</span>
+
+						<span class="font-medium tabular-nums">
+
+							{{ formatUsage(subscription.emails_sent_this_month, emailLimit) }}
+
+						</span>
+
+					</div>
+
+				</div>
+
 			</UCard>
 
-			<UCard :ui="{ body: 'p-4 space-y-2' }">
-				<p class="text-xs font-semibold uppercase tracking-wide text-muted">
-					Модуль 2
-				</p>
-				<p class="text-sm">
-					КП в месяц:
-					<span class="font-medium">
+
+
+			<UCard :ui="{ body: 'p-5 space-y-3' }">
+
+				<div class="flex items-center gap-2">
+
+					<div class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+
+						<UIcon name="i-lucide-file-search" class="w-4 h-4 text-primary" />
+
+					</div>
+
+					<p class="text-sm font-semibold">Модуль 2 — использование</p>
+
+				</div>
+
+				<div class="flex justify-between gap-3 text-sm">
+
+					<span class="text-muted">КП в месяц</span>
+
+					<span class="font-medium tabular-nums">
+
 						{{ formatUsage(subscription.kp_processed_this_month, subscription.max_kp_processed_per_month) }}
+
 					</span>
-				</p>
-				<p class="text-sm text-muted">
-					Технический анализ КП, доп. письма и шаблоны — включено
-				</p>
+
+				</div>
+
 			</UCard>
+
 		</div>
 
-		<UCard :ui="{ body: 'p-4' }">
-			<p class="text-xs font-semibold uppercase tracking-wide text-muted mb-3">
-				Стоимость без НДС
+
+
+		<div class="flex flex-wrap items-center gap-3 pt-1">
+
+			<p class="text-sm text-muted">
+
+				Подробное сравнение тарифов и способы оплаты — на отдельной странице.
+
 			</p>
-			<div class="grid gap-2 sm:grid-cols-3 text-sm">
-				<p>
-					Модуль 1:
-					<span class="font-medium">
-						{{ formatPrice(subscription.price_module_1_monthly, subscription.currency_code) }}
-					</span>
-				</p>
-				<p>
-					Модуль 2:
-					<span class="font-medium">
-						{{ formatPrice(subscription.price_module_2_monthly, subscription.currency_code) }}
-					</span>
-				</p>
-				<p>
-					Модуль 1+2:
-					<span class="font-medium">
-						{{ formatPrice(subscription.price_bundle_monthly, subscription.currency_code) }}
-					</span>
-				</p>
-			</div>
-			<p class="text-xs text-muted mt-3">
-				Geo: {{ subscription.geo_code }} · Валюта: {{ subscription.currency_code }}
-			</p>
-		</UCard>
+
+			<UButton
+
+				:to="subscriptionPlansPath()"
+
+				variant="soft"
+
+				color="primary"
+
+				size="sm"
+
+				trailing-icon="i-lucide-arrow-right"
+
+				label="Подробнее о тарифах"
+
+			/>
+
+		</div>
+
 	</div>
 
-	<div v-else class="flex flex-col items-center justify-center py-16 gap-3">
-		<UIcon name="i-lucide-credit-card" class="w-10 h-10 text-muted opacity-40" />
-		<p class="text-muted">Подписка не назначена</p>
+
+
+	<div v-else class="space-y-6">
+
+		<div class="flex flex-col items-center justify-center py-10 gap-3">
+
+			<UIcon name="i-lucide-credit-card" class="w-10 h-10 text-muted opacity-40" />
+
+			<p class="text-muted">Подписка не назначена</p>
+
+		</div>
+
+		<UButton
+
+			:to="subscriptionPlansPath()"
+
+			variant="soft"
+
+			color="primary"
+
+			trailing-icon="i-lucide-arrow-right"
+
+			label="Посмотреть тарифы"
+
+		/>
+
 	</div>
+
 </template>
+

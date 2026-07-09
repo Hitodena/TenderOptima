@@ -4,14 +4,11 @@
 		mode="slideover"
 		:menu="{ side: 'right' }"
 		:toggle="auth.isAuthenticated.value || isLandingPage"
-		class="h-20 border-b border-default"
+		class="sticky top-0 z-50 h-20 border-b border-default bg-default/95 backdrop-blur supports-backdrop-filter:bg-default/80"
+		:ui="headerUi"
 	>
 		<template #left>
-			<ULink to="/"
-				class="flex items-center gap-2 font-bold text-2xl text-highlighted hover:opacity-80 transition-opacity">
-				<UIcon name="i-lucide-package-search" class="w-8 h-8 text-primary" />
-				TenderOptima
-			</ULink>
+			<AppLogo />
 		</template>
 
 		<UNavigationMenu
@@ -22,7 +19,7 @@
 		<UNavigationMenu
 			v-else-if="isLandingPage"
 			:items="landingNavItems"
-			class="w-full justify-center"
+			class="hidden w-full min-w-0 justify-center lg:flex"
 		/>
 
 		<template #body>
@@ -38,13 +35,59 @@
 				orientation="vertical"
 				class="-mx-2.5"
 			/>
+			<div v-if="!auth.isAuthenticated.value" class="mt-4 flex flex-col gap-2">
+				<UButton
+					block
+					size="lg"
+					leading-icon="i-lucide-play-circle"
+					:label="landingCtaLabel"
+					class="landing-btn-primary"
+					@click="consultation.open()"
+				/>
+				<UButton
+					to="/auth"
+					color="neutral"
+					variant="outline"
+					leading-icon="i-lucide-log-in"
+					label="Войти"
+					block
+					size="lg"
+				/>
+			</div>
 		</template>
 
 		<template #right>
-			<div class="flex items-center gap-2">
+			<div class="flex shrink-0 items-center justify-end gap-1 sm:gap-1.5 lg:gap-2">
 				<UColorModeButton />
-				<UButton v-if="!auth.isAuthenticated.value" to="/auth" color="neutral" variant="outline"
-					leading-icon="i-lucide-log-in" label="Войти" size="lg" />
+				<UButton
+					v-if="auth.isAuthenticated.value"
+					color="neutral"
+					variant="ghost"
+					icon="i-lucide-lightbulb"
+					size="lg"
+					title="Предложить идею"
+					@click="ideaModalOpen = true"
+				/>
+				<UButton
+					v-if="!auth.isAuthenticated.value"
+					to="/auth"
+					color="neutral"
+					variant="outline"
+					icon="i-lucide-log-in"
+					size="lg"
+					title="Войти"
+					aria-label="Войти"
+					class="hidden sm:inline-flex"
+				/>
+				<UButton
+					v-if="!auth.isAuthenticated.value && isLandingPage"
+					size="lg"
+					icon="i-lucide-play-circle"
+					:title="landingCtaLabel"
+					:aria-label="landingCtaLabel"
+					class="hidden sm:inline-flex landing-btn-primary"
+					@click="consultation.open()"
+				/>
 				<UDropdownMenu v-else :items="userMenuItems" :ui="{ content: 'w-48' }">
 					<UButton color="neutral" variant="ghost" trailing-icon="i-lucide-chevron-down" size="lg">
 						<span class="max-w-28 truncate text-base">{{ user?.full_name || user?.email }}</span>
@@ -54,49 +97,99 @@
 		</template>
 	</UHeader>
 
-		<slot />
+		<div class="flex-1">
+			<slot />
+		</div>
+		<AppFooter />
+		<IdeaSuggestionModal v-model:open="ideaModalOpen" />
 	</div>
 </template>
 
 
 <script lang="ts" setup>
-import type { UserResponse } from '#shared/types'
 import type { DropdownMenuItem, NavigationMenuItem } from '@nuxt/ui'
 import {
 	subscriptionModulesSummary,
 	subscriptionNavBadge,
-	subscriptionProfilePath,
+	subscriptionPlansPath,
 } from '#shared/utils/subscriptionDisplay'
+import { LANDING_CTA_LABEL } from '#shared/constants/landing'
 
 const auth = useAuthStore()
-const { get } = useApi()
+const consultation = useConsultationModal()
 const route = useRoute()
+const landingCtaLabel = LANDING_CTA_LABEL
 
-const user = ref<UserResponse | null>(null)
+const ideaModalOpen = ref(false)
+const { user, ensureLoaded } = useCurrentUser()
 
 if (auth.isAuthenticated.value) {
-	try {
-		user.value = await get<UserResponse>('/auth/me')
-	} catch {
-		user.value = null
-	}
+	await ensureLoaded()
 }
 
-const isLandingPage = computed(() => route.path === '/')
+const MARKETING_ROUTES = new Set(['/', '/product', '/security', '/contacts', '/faq', '/pricing', '/cases'])
+const isLandingPage = computed(() => MARKETING_ROUTES.has(route.path))
+
+const headerUi = computed(() => {
+	const isLandingGuest = isLandingPage.value && !auth.isAuthenticated.value
+
+	if (!isLandingGuest) {
+		return {}
+	}
+
+	return {
+		root: 'landing-site-header',
+		container: 'flex w-full items-center gap-2 sm:gap-3 lg:gap-4',
+		left: 'shrink-0',
+		center: 'flex min-w-0 flex-1 justify-center',
+		right: 'flex shrink-0 items-center justify-end gap-1 sm:gap-1.5 lg:gap-2',
+	}
+})
 
 const isRequestsActive = computed(() => route.path.startsWith('/requests'))
 const isTzAnalysisActive = computed(() => route.path.startsWith('/tz-analysis'))
 const isProfileSubscriptionActive = computed(
-	() => route.path === '/profile' && route.query.tab === 'subscription',
+	() =>
+		route.path === '/subscription'
+		|| (route.path === '/profile' && (route.query.tab === 'subscription' || route.query.tab === 'acts')),
 )
-
 const subscriptionBadge = computed(() => subscriptionNavBadge(user.value?.subscription))
 
 const landingNavItems = computed<NavigationMenuItem[]>(() => [
-	{ label: 'Возможности', to: '/#features' },
-	{ label: 'Как работает', to: '/#how-it-works' },
-	{ label: 'Этапы', to: '/#stages' },
-	{ label: 'Подписка', to: '/#subscription' },
+	{
+		label: 'Продукт',
+		icon: 'i-lucide-layout-grid',
+		to: '/#supplier-search',
+		children: [
+			{
+				label: 'Поиск поставщиков',
+				icon: 'i-lucide-search',
+				to: '/#supplier-search',
+				description: 'Автопоиск компаний по запросу и региону',
+			},
+			{
+				label: 'Рассылка и переписка',
+				icon: 'i-lucide-send',
+				to: '/#requests',
+				description: 'Запросы поставщикам и входящие ответы в одном окне',
+			},
+			{
+				label: 'Анализ ТЗ и КП',
+				icon: 'i-lucide-scan-search',
+				to: '/#tz-analysis',
+				description: 'AI-сверка коммерческих предложений с требованиями',
+			},
+			{
+				label: 'Для кого',
+				icon: 'i-lucide-users',
+				to: '/#icp',
+				description: 'От специалиста по закупкам до руководителя',
+			},
+		],
+	},
+	{ label: 'Тарифы', icon: 'i-lucide-credit-card', to: '/#pricing' },
+	{ label: 'Кейсы', icon: 'i-lucide-briefcase', to: '/#cases' },
+	{ label: 'Контакты', icon: 'i-lucide-mail', to: '/#contacts' },
 ])
 
 const navItems = computed<NavigationMenuItem[]>(() => [
@@ -150,7 +243,7 @@ const navItems = computed<NavigationMenuItem[]>(() => [
 		label: 'Подписка',
 		icon: 'i-lucide-credit-card',
 		active: isProfileSubscriptionActive.value,
-		to: subscriptionProfilePath(),
+		to: subscriptionPlansPath(),
 		description: subscriptionModulesSummary(user.value?.subscription),
 		badge: {
 			label: subscriptionBadge.value.label,
@@ -163,21 +256,35 @@ const navItems = computed<NavigationMenuItem[]>(() => [
 
 
 
-const userMenuItems = computed<DropdownMenuItem[][]>(() => [
-	[
-		{
-			label: user.value?.email,
-			disabled: true,
-			icon: 'i-lucide-mail',
-		},
-	],
-	[{
-		label: 'Профиль',
-		icon: 'i-lucide-user',
-		to: '/profile'
-	},
-	],
-	[
+const userMenuItems = computed<DropdownMenuItem[][]>(() => {
+	const sections: DropdownMenuItem[][] = [
+		[
+			{
+				label: user.value?.email,
+				disabled: true,
+				icon: 'i-lucide-mail',
+			},
+		],
+		[
+			{
+				label: 'Профиль',
+				icon: 'i-lucide-user',
+				to: '/profile',
+			},
+		],
+	]
+
+	if (user.value?.is_admin) {
+		sections.push([
+			{
+				label: 'Админка',
+				icon: 'i-lucide-shield',
+				to: '/admin',
+			},
+		])
+	}
+
+	sections.push([
 		{
 			label: 'Выйти',
 			icon: 'i-lucide-log-out',
@@ -185,9 +292,10 @@ const userMenuItems = computed<DropdownMenuItem[][]>(() => [
 			onSelect: () => {
 				auth.clearToken()
 				navigateTo('/auth')
-			}
-		}
-	]
+			},
+		},
+	])
 
-])
+	return sections
+})
 </script>

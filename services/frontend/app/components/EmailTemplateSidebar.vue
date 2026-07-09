@@ -26,7 +26,8 @@
 			<div v-if="loading && !templates.length" class="space-y-2">
 				<USkeleton v-for="i in 3" :key="i" class="h-20 w-full rounded-lg" />
 			</div>
-			<div v-else-if="!templates.length"
+			<div
+v-else-if="!templates.length"
 				class="text-xs text-muted text-center py-6">
 				Нет шаблонов
 			</div>
@@ -75,7 +76,7 @@
 		<UModal
 			v-model:open="formOpen"
 			:title="formMode === 'create' ? 'Новый шаблон' : 'Редактировать шаблон'"
-			:ui="{ content: 'max-w-3xl' }"
+			:ui="EMAIL_LETTER_MODAL_UI"
 		>
 			<template #body>
 				<div class="space-y-4">
@@ -88,7 +89,7 @@
 					<UFormField label="Текст письма">
 						<UTextarea
 							v-model="formBody"
-							:rows="12"
+							:rows="16"
 							class="w-full"
 							autoresize
 							placeholder="Текст письма. Можно использовать {company_name} для подстановки названия компании."
@@ -110,6 +111,7 @@
 
 <script lang="ts" setup>
 import type { EmailTemplate } from '#shared/types'
+import { EMAIL_LETTER_MODAL_UI } from '#shared/constants/emailModal'
 
 const emit = defineEmits<{
 	select: [template: EmailTemplate]

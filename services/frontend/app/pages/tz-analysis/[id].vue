@@ -1,5 +1,5 @@
 <template>
-	<UContainer class="py-8 max-w-7xl">
+	<UContainer class="py-8 max-w-7xl" :class="{ 'pb-28': showTzConfirmBar }">
 		<template v-if="loading">
 			<div class="space-y-4">
 				<USkeleton class="h-10 w-72" />
@@ -11,7 +11,8 @@
 		<template v-else-if="analysis">
 			<div class="flex items-start justify-between mb-6 gap-4 flex-wrap">
 				<div class="min-w-0">
-					<UButton to="/tz-analysis/history" variant="ghost" color="neutral" size="sm"
+					<UButton
+to="/tz-analysis/history" variant="ghost" color="neutral" size="sm"
 						leading-icon="i-lucide-arrow-left" class="-ml-1 mb-2">
 						К анализам
 					</UButton>
@@ -26,11 +27,13 @@
 							<UIcon name="i-lucide-calendar" class="w-3.5 h-3.5" />
 							{{ formatDate(analysis.created_at) }}
 						</span>
-						<span v-if="analysis.tz_filename || displayKpFilenames.length"
+						<span
+v-if="analysis.tz_filename || displayKpFilenames.length"
 							class="flex items-center gap-1 min-w-0 flex-wrap">
 							<UIcon name="i-lucide-files" class="w-3.5 h-3.5 shrink-0" />
 							<template v-if="analysis.tz_filename">
-								<button type="button" class="truncate max-w-full text-primary hover:underline text-left"
+								<button
+type="button" class="truncate max-w-full text-primary hover:underline text-left"
 									@click="openTzFile()">
 									{{ analysis.tz_filename }}
 								</button>
@@ -42,12 +45,24 @@
 			</div>
 
 			<template v-if="isDraft">
-				<UAlert color="info" variant="soft" icon="i-lucide-info" class="mb-6"
+				<UAlert
+color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 					description="Загрузите техническое задание и запустите анализ. После извлечения требований вы сможете проверить их и загрузить коммерческие предложения." />
+
+				<UAlert
+					v-if="isTestPlan(user?.subscription)"
+					color="info"
+					variant="soft"
+					icon="i-lucide-credit-card"
+					title="Лимит загрузки по подписке"
+					:description="uploadLimitHint"
+					class="mb-6"
+				/>
 
 				<UCard class="shadow-sm">
 					<UFormField label="Техническое задание" required>
-						<UFileUpload :model-value="tzFile" :accept="fileAccept" :interactive="true"
+						<UFileUpload
+:model-value="tzFile" :accept="fileAccept" :interactive="false"
 							:description="uploadDescription" layout="list" class="w-full min-h-32" position="inside"
 							@update:model-value="onTzFileChange">
 							<template #actions="{ open }">
@@ -98,7 +113,8 @@
 			</template>
 
 			<template v-else-if="analysis.status === TZAnalysisRunStatus.FAILED">
-				<UAlert color="error" variant="soft" icon="i-lucide-circle-alert"
+				<UAlert
+color="error" variant="soft" icon="i-lucide-circle-alert"
 					description="Не удалось выполнить анализ. Создайте новый анализ и попробуйте снова." />
 			</template>
 
@@ -129,7 +145,8 @@
 					@update:model-value="onUserTabPick"
 				>
 					<template #tz>
-						<div v-if="isTzReviewPhase && !isAnalysisClosed"
+						<div
+v-if="isTzReviewPhase && !isAnalysisClosed"
 							class="mb-6 rounded-xl border border-warning/25 bg-warning/10 p-4 sm:p-5">
 							<div class="flex gap-3 min-w-0">
 								<UIcon name="i-lucide-info" class="w-5 h-5 shrink-0 text-warning mt-0.5" />
@@ -151,81 +168,132 @@
 								<div class="flex items-center justify-between gap-2">
 									<p class="font-semibold text-sm">Требования из ТЗ</p>
 									<UBadge color="neutral" variant="subtle" size="xs">
-										{{ editableTzCount }}
-										{{ requirementWord(editableTzCount) }}
+										{{ displayedTzCount }}
+										{{ requirementWord(displayedTzCount) }}
 									</UBadge>
 								</div>
 							</template>
 
 							<div
-								v-if="!isTzConfirmed && !isCompleted"
-								class="sticky top-0 z-10 -mx-4 mb-4 px-4 pb-4 border-b border-default bg-default/95 backdrop-blur-sm sm:-mx-6 sm:px-6"
-							>
-								<UButton
-									color="warning"
-									variant="solid"
-									size="lg"
-									block
-									leading-icon="i-lucide-check"
-									:loading="confirmingTz"
-									:disabled="!requirementsRowsNonempty(editableRequirementsTz)"
-									@click="confirmTzRequirements"
-								>
-									Подтвердить требования
-								</UButton>
-							</div>
-
-							<div
+								ref="tzRequirementsScrollRef"
 								class="overflow-y-auto pr-1"
 								:class="!isTzConfirmed && !isCompleted
 									? 'max-h-[min(58vh,calc(100dvh-18rem))]'
 									: ''"
 							>
-								<RequirementTreeEditor v-if="editableTzCount > 0" :rows="editableRequirementsTz"
+								<RequirementTreeEditor
+									v-if="displayedTzCount > 0"
+									:rows="displayedTzRequirementsRows"
 									:scope-id="isTzConfirmed ? 'tz-results' : 'tz-review'"
-									:readonly="isTzConfirmed || isCompleted" show-heading-hint
+									:readonly="isTzConfirmed || isCompleted"
 									@remove="removeTzRequirement"
 									@add-child="addTzChildRequirement"
 									@add-heading="addTzHeadingRequirement"
 									@add-sibling="addTzSiblingRequirement"
-									@reorder="reorderTzRequirement" />
+									@reorder="reorderTzRequirement"
+								/>
+								<div
+									v-else-if="!isTzConfirmed && !isCompleted"
+									class="flex flex-col items-center gap-3 py-4"
+								>
+									<p class="text-sm text-muted text-center">
+										Нет извлечённых требований
+									</p>
+									<UButton
+										type="button"
+										variant="soft"
+										color="primary"
+										size="sm"
+										icon="i-lucide-plus"
+										label="Добавить требование"
+										@click="addTzRequirement()"
+									/>
+								</div>
 								<p v-else class="text-sm text-muted text-center py-4">
 									Нет извлечённых требований
 								</p>
-							</div>
-
-							<div
-								v-if="!isTzConfirmed && !isCompleted"
-								class="mt-4 pt-4 border-t border-default flex justify-center"
-							>
-								<UDropdownMenu :items="rootAddMenuItems" :ui="{ content: 'min-w-44' }">
-									<UButton
-										type="button"
-										variant="ghost"
-										color="neutral"
-										size="sm"
-										icon="i-lucide-plus"
-										label="Добавить"
-									/>
-								</UDropdownMenu>
 							</div>
 						</UCard>
 					</template>
 
 					<template #kp>
-						<div class="grid grid-cols-1 gap-6" :class="showSuppliersSidebar
-							? 'xl:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)]'
-							: ''">
-							<TzAnalysisSuppliersPanel v-if="showSuppliersSidebar && analysis?.id"
-								:analysis-id="analysis.id" :suppliers="suppliers" :file-accept="fileAccept"
-								:readonly="isCompleted || isAnalysisClosed"
-								:hide-kp-files="hasSuppliersProcessing || kpAnalyzing"
-								:selected-supplier-id="selectedSupplierId" compact
-								@select="onSelectSupplier"
-								@open-kp="({ supplierId, filename }) => openKpFile(filename, supplierId)"
-								@updated="refreshAnalysis" />
+						<div
+							class="grid grid-cols-1 gap-4 items-start"
+							:class="showSuppliersSidebar
+								? 'xl:grid-cols-[minmax(15rem,19rem)_minmax(0,1fr)]'
+								: ''"
+						>
+							<div
+								v-if="showSuppliersSidebar && analysis?.id"
+								class="order-1 xl:order-1 min-w-0 xl:sticky xl:top-4 xl:self-start xl:max-h-[calc(100dvh-6rem)] xl:overflow-y-auto"
+							>
+								<TzAnalysisSuppliersPanel
+									:analysis-id="analysis.id"
+									:suppliers="suppliers"
+									:file-accept="fileAccept"
+									:max-upload-size="maxUploadSize"
+									:show-upload-limit-alert="isTestPlan(user?.subscription)"
+									:readonly="isCompleted || isAnalysisClosed"
+									:hide-kp-files="false"
+									:selected-supplier-id="selectedSupplierId"
+									compact
+									rail
+									@select="onSelectSupplier"
+									@open-kp="({ supplierId, filename }) => openKpFile(filename, supplierId)"
+									@updated="refreshAnalysis"
+								>
+									<template v-if="selectedSupplier?.kp_filenames.length" #after-suppliers>
+										<div class="space-y-4">
+											<div class="space-y-2">
+												<p class="text-xs font-semibold text-muted uppercase tracking-wide">
+													Файлы КП
+												</p>
+												<div class="space-y-2">
+													<button
+														v-for="filename in selectedSupplier.kp_filenames"
+														:key="`${selectedSupplier.id}-${filename}`"
+														type="button"
+														class="flex items-center gap-2 w-full rounded-lg border border-default/60 bg-default/50 px-3 py-2.5 text-sm text-primary hover:bg-elevated/60 transition-colors text-left cursor-pointer"
+														@click="openKpFile(filename, selectedSupplier.id)"
+													>
+														<UIcon name="i-lucide-file-spreadsheet" class="w-4 h-4 shrink-0" />
+														<span class="truncate">{{ filename }}</span>
+													</button>
+												</div>
+											</div>
 
-							<div class="min-w-0 space-y-6">
+											<UFormField
+												v-if="hasMultipleSelectedSupplierKps"
+												label="Основное КП для сравнения"
+												class="mb-0"
+											>
+												<USelect
+													:model-value="selectedSupplierPrimaryKp ?? undefined"
+													:items="selectedSupplierKpOptions"
+													:loading="primaryKpSaving"
+													size="sm"
+													class="w-full"
+													@update:model-value="setPrimaryKp"
+												/>
+											</UFormField>
+										</div>
+									</template>
+									<template v-if="showComparisonResultsCard" #actions>
+										<UButton
+											block
+											size="md"
+											variant="outline"
+											leading-icon="i-lucide-download"
+											class="mt-1"
+											@click="exportTzXlsx"
+										>
+											Экспорт XLSX
+										</UButton>
+									</template>
+								</TzAnalysisSuppliersPanel>
+							</div>
+
+							<div class="min-w-0 space-y-4 order-2 xl:order-2">
 								<div
 									v-if="kpPanelLoading || supplierResultsLoading"
 									class="flex flex-col items-center justify-center gap-3 min-h-[40vh] text-muted rounded-xl border border-default/60 bg-elevated/20"
@@ -235,7 +303,7 @@
 								</div>
 								<template v-else>
 								<UCard
-									v-if="hasSuppliersProcessing && isTzConfirmed"
+									v-if="showKpProcessingBanner"
 									class="shadow-sm"
 								>
 									<div class="flex flex-col gap-1 py-4 text-muted">
@@ -251,43 +319,16 @@
 									</div>
 								</UCard>
 
-								<UCard
-									v-if="selectedSupplier && !hasComparisonResults && !isAnalysisClosed && !hasSuppliersProcessing && !kpAnalyzing"
-									class="shadow-sm"
-								>
-									<template #header>
-										<p class="font-semibold text-sm">
-											КП — {{ selectedSupplier.name }}
-										</p>
-									</template>
-									<div
-										v-if="selectedSupplier.kp_filenames.length"
-										class="space-y-2"
-									>
-										<button
-											v-for="filename in selectedSupplier.kp_filenames"
-											:key="`${selectedSupplier.id}-${filename}`"
-											type="button"
-											class="flex items-center gap-2 text-sm text-primary hover:underline text-left"
-											@click="openKpFile(filename, selectedSupplier.id)"
-										>
-											<UIcon name="i-lucide-file-spreadsheet" class="w-4 h-4 shrink-0" />
-											<span class="truncate">{{ filename }}</span>
-										</button>
-									</div>
-									<p v-else class="text-sm text-muted">
-										Нет загруженных файлов КП
-									</p>
-								</UCard>
-
 								<template v-if="isAnalysisClosed">
-									<UAlert color="neutral" variant="soft" icon="i-lucide-lock"
+									<UAlert
+color="neutral" variant="soft" icon="i-lucide-lock"
 										description="Анализ завершён без сравнения с КП. Этот раздел недоступен." />
 								</template>
 
-								<template v-else-if="isTzConfirmed && !hasComparisonResults && !isCompleted">
+								<template v-else-if="isTzConfirmed && !hasComparisonResults && !isCompleted && !isKpProcessing">
 									<div class="flex flex-wrap items-center gap-2">
-										<UButton color="warning" variant="solid" :loading="kpAnalyzing"
+										<UButton
+color="warning" variant="solid" :loading="kpAnalyzing"
 											:disabled="!canRunKpAnalysis" @click="runKpAnalysis">
 											Запустить анализ КП
 										</UButton>
@@ -298,11 +339,12 @@
 								</template>
 
 								<template v-else-if="isCompleted && !hasComparisonResults">
-									<UAlert color="neutral" variant="soft" icon="i-lucide-archive"
+									<UAlert
+color="neutral" variant="soft" icon="i-lucide-archive"
 										description="Сравнение с КП не выполнялось. Анализ завершён — запуск сравнения недоступен." />
 								</template>
 
-								<template v-else-if="hasComparisonResults">
+								<template v-else-if="showComparisonResultsCard">
 									<div
 										v-if="hasPendingSuppliers && !isCompleted"
 										class="flex flex-wrap items-center gap-2"
@@ -318,65 +360,26 @@
 										</UButton>
 									</div>
 
-									<div class="flex flex-wrap items-end justify-between gap-4">
-										<div class="space-y-2">
-											<p
-												v-if="selectedSupplier"
-												class="text-sm text-muted"
-											>
-												Поставщик:
-												<span class="font-medium text-default">
-													{{ selectedSupplier.name }}
-												</span>
-											</p>
-											<UFormField
-												v-if="selectedSupplier?.kp_filenames.length"
-												label="Основное КП"
-												class="mb-0"
-											>
-												<USelect
-													v-if="hasMultipleSelectedSupplierKps"
-													:model-value="selectedSupplierPrimaryKp ?? undefined"
-													:items="selectedSupplierKpOptions"
-													:loading="primaryKpSaving"
-													size="sm"
-													class="min-w-56"
-													@update:model-value="setPrimaryKp"
-												/>
-												<button
-													v-else-if="selectedSupplierPrimaryKpLabel && selectedSupplier"
-													type="button"
-													class="text-sm text-primary hover:underline text-left"
-													@click="openKpFile(
-														selectedSupplierPrimaryKpLabel,
-														selectedSupplier.id,
-													)"
-												>
-													{{ selectedSupplierPrimaryKpLabel }}
-												</button>
-											</UFormField>
-										</div>
-										<div class="flex flex-wrap items-center gap-2">
-											<UBadge color="primary" variant="subtle" size="lg">
-												{{ selectedSupplierStats.match_score }}% соответствия
-												<span
-													v-if="hasMultipleSelectedSupplierKps"
-													class="opacity-80"
-												>· основное КП</span>
-											</UBadge>
-											<UBadge color="success" variant="subtle">
-												{{ selectedSupplierStats.met_count }} ок
-											</UBadge>
-											<UBadge color="warning" variant="subtle">
-												{{ selectedSupplierStats.partial_count }} частично
-											</UBadge>
-											<UBadge color="error" variant="subtle">
-												{{ selectedSupplierStats.missing_count }} нет
-											</UBadge>
-											<UBadge color="neutral" variant="subtle">
-												{{ selectedSupplierStats.not_found_count }} не найдено
-											</UBadge>
-										</div>
+									<div class="flex flex-wrap items-center gap-2">
+										<UBadge color="primary" variant="subtle" size="lg">
+											{{ selectedSupplierStats.match_score }}% соответствия
+											<span
+												v-if="hasMultipleSelectedSupplierKps"
+												class="opacity-80"
+											>· основное КП</span>
+										</UBadge>
+										<UBadge color="success" variant="subtle">
+											{{ selectedSupplierStats.met_count }} ок
+										</UBadge>
+										<UBadge color="warning" variant="subtle">
+											{{ selectedSupplierStats.partial_count }} частично
+										</UBadge>
+										<UBadge color="error" variant="subtle">
+											{{ selectedSupplierStats.missing_count }} нет
+										</UBadge>
+										<UBadge color="neutral" variant="subtle">
+											{{ selectedSupplierStats.not_found_count }} не найдено
+										</UBadge>
 									</div>
 
 									<UCard class="shadow-sm w-full">
@@ -384,41 +387,47 @@
 											<div class="flex flex-col gap-3 w-full">
 												<div class="flex flex-wrap items-center justify-between gap-3 w-full">
 													<p class="font-semibold text-sm">Соответствия и несоответствия</p>
-													<div class="flex flex-wrap items-center gap-2">
-														<UButton size="sm" variant="outline" leading-icon="i-lucide-download"
-															@click="exportTzCsv">
-															Экспорт CSV
-														</UButton>
-														<UButton size="sm" leading-icon="i-lucide-file-text"
-															:disabled="tzSelectedIndices.length === 0" @click="openLetterModal">
-															Письмо поставщику
-														</UButton>
-														<UBadge v-if="tzSelectedIndices.length > 0" color="neutral"
-															variant="subtle">
-															{{ tzSelectedIndices.length }} в письме
-														</UBadge>
-													</div>
+													<UButton
+size="sm" leading-icon="i-lucide-file-text"
+														:disabled="!hasLetterIssues" @click="openLetterModal">
+														Письмо поставщику
+													</UButton>
 												</div>
-												<UFormField label="Фильтр" class="mb-0">
-													<USelect v-model="tzStatusFilter" :items="tzFilterOptions" size="sm"
-														class="min-w-40" />
-												</UFormField>
+												<div class="flex flex-wrap items-end gap-3 w-full">
+													<UFormField label="Поиск" class="mb-0 flex-1 min-w-48">
+														<UInput
+															v-model="tzRequirementSearch"
+															placeholder="Поиск по требованиям..."
+															icon="i-lucide-search"
+															size="sm"
+														/>
+													</UFormField>
+													<UFormField label="Фильтр" class="mb-0">
+														<USelect
+v-model="tzStatusFilter" :items="tzFilterOptions" size="sm"
+															class="min-w-40" />
+													</UFormField>
+												</div>
 											</div>
 										</template>
 
-										<div class="min-h-[55vh] max-h-[85vh] overflow-y-auto pr-1 space-y-8">
-											<section v-for="group in visibleKpItemGroups"
+										<div class="min-h-[min(70vh,calc(100dvh-14rem))] max-h-[min(85vh,calc(100dvh-10rem))] overflow-y-auto pr-1 space-y-8">
+											<section
+v-for="group in visibleKpItemGroups"
 												:key="`results-kp-${group.id}`" class="space-y-4">
-												<button type="button" class="sticky top-0 z-10 -mx-1 px-1 py-2 w-full text-left
+												<button
+type="button" class="sticky top-0 z-10 -mx-1 px-1 py-2 w-full text-left
 														bg-default/95 backdrop-blur-sm border-b border-default" :aria-expanded="isResultsKpExpanded(group.id)"
 													@click.stop="toggleResultsKpExpand(group.id)">
 													<div class="flex flex-wrap items-center gap-2">
-														<UIcon :name="isResultsKpExpanded(group.id)
+														<UIcon
+:name="isResultsKpExpanded(group.id)
 															? 'i-lucide-chevron-down'
 															: 'i-lucide-chevron-right'" class="w-4 h-4 shrink-0 text-muted" />
 														<p class="text-sm font-semibold text-highlighted">{{ group.label
 															}}</p>
-														<UBadge v-if="analysis.kp_filename === group.key"
+														<UBadge
+v-if="analysis.kp_filename === group.key"
 															color="primary" variant="subtle" size="xs">
 															Основное
 														</UBadge>
@@ -445,22 +454,23 @@
 														:default-kp-filename="group.filename"
 														:is-item-expanded="isItemExpanded"
 														:toggle-item-expand="toggleItemExpand"
-														:tz-selected-indices="tzSelectedIndices"
-														:belongs-to-primary-kp="belongsToPrimaryKp"
 														:editable="canEditItemStatuses"
 														:is-item-overridden="isItemOverridden"
-														@toggle-select="toggleTzSelect"
 														@status-change="updateItemStatus" />
 												</div>
 											</section>
 
-											<p v-if="visibleKpItemGroups.length === 0"
+											<p
+v-if="visibleKpItemGroups.length === 0"
 												class="text-sm text-muted text-center py-8">
-												<template v-if="selectedSupplier">
+												<template v-if="tzRequirementSearch.trim() || tzStatusFilter !== 'all'">
+													Ничего не найдено по заданным фильтрам
+												</template>
+												<template v-else-if="selectedSupplier">
 													Нет результатов для поставщика «{{ selectedSupplier.name }}»
 												</template>
 												<template v-else>
-													Выберите поставщика в списке слева
+													Выберите поставщика в панели слева
 												</template>
 											</p>
 										</div>
@@ -474,138 +484,192 @@
 			</template>
 		</template>
 
-		<UModal v-model:open="showLetterModal" title="Письмо поставщику"
-			description="Письмо формируется по основному КП. Снимите галочки у пунктов, которые не нужно включать."
-			:ui="{ content: 'sm:max-w-4xl' }">
+		<UModal v-model:open="showLetterModal" :ui="EMAIL_LETTER_MODAL_UI">
+			<template #header>
+				<div class="min-w-0">
+					<p class="text-lg font-semibold text-highlighted">Письмо поставщику</p>
+					<p class="text-sm text-muted mt-0.5">
+						Письмо формируется по основному КП и включает все несоответствия.
+					</p>
+				</div>
+			</template>
 			<template #body>
-				<div class="grid grid-cols-1 md:grid-cols-[15rem_minmax(0,1fr)] gap-5 min-h-0">
-					<aside class="flex flex-col gap-4 min-h-0 md:max-h-[62vh]">
-						<div class="space-y-3 shrink-0">
-							<p v-if="selectedSupplier" class="text-xs text-muted">
-									Поставщик:
-									<span class="text-default font-medium">{{ selectedSupplier.name }}</span>
-									<span v-if="primaryKpLabel"> · КП: </span>
-									<button
-										v-if="selectedSupplierPrimaryKp"
-										type="button"
-										class="text-primary hover:underline font-medium"
-										@click="openKpFile(
-											kpDisplayLabel(selectedSupplierPrimaryKp),
-											selectedSupplier.id,
-										)"
-									>
-										{{ primaryKpLabel }}
-									</button>
-								</p>
-								<p v-else-if="primaryKpLabel" class="text-xs text-muted">
-									Основное КП:
-									<button v-if="analysis?.kp_filename" type="button"
-										class="text-primary hover:underline font-medium"
-										@click="openKpFile(analysis.kp_filename)">
-										{{ primaryKpLabel }}
-									</button>
-									<span v-else class="text-default font-medium">{{ primaryKpLabel }}</span>
-								</p>
-								<UFormField label="Срок ответа">
-									<UInput v-model="docxDeadline" placeholder="7 июня 2026 г." size="md" />
-								</UFormField>
-							</div>
-
-							<div class="border-t border-default shrink-0" />
-
-							<div class="flex flex-col gap-2 shrink-0">
-								<p class="text-xs font-semibold uppercase tracking-wide text-muted px-0.5">
-									Разделы письма
-								</p>
-								<UButton v-for="tab in letterPreviewTabs" :key="tab.value" type="button" block
-									:variant="letterPreviewTab === tab.value ? 'soft' : 'ghost'"
-									:color="letterPreviewTab === tab.value ? tab.color : 'neutral'" size="sm"
-									class="justify-start text-left whitespace-normal h-auto py-2"
-									:disabled="tab.disabled" @click="scrollToLetterSection(
-										tab.value === 'partial' ? 'partial' : 'mismatch',
-									)">
-									{{ tab.label }}
-								</UButton>
-							</div>
-
-							<div class="flex-1 min-h-0 overflow-y-auto space-y-4 pr-0.5">
-								<div v-if="letterModalMismatchItems.length" id="letter-sidebar-mismatch" class="space-y-2">
-									<p class="text-xs font-semibold text-error px-0.5">
-										Не совпадает
-										<span v-if="primaryKpLabel" class="text-muted font-normal">
-											· {{ primaryKpLabel }}
-										</span>
-									</p>
-									<label v-for="item in letterModalMismatchItems" :key="item._index" class="flex items-start gap-2 rounded-lg border border-default/60
-											bg-elevated/30 px-2 py-2 cursor-pointer hover:bg-elevated/50">
-										<UCheckbox :model-value="tzSelectedIndices.includes(item._index)"
-											:color="getTzItemStatusColor(item.status)" class="shrink-0 mt-0.5"
-											@update:model-value="(v) => toggleTzSelect(item._index, v === true)"
-											@click.stop />
-										<span class="text-xs leading-relaxed whitespace-pre-wrap min-w-0">
-											{{ item.requirement }}
-										</span>
-									</label>
-								</div>
-
-								<div v-if="letterModalPartialItems.length" id="letter-sidebar-partial" class="space-y-2">
-									<p class="text-xs font-semibold text-warning px-0.5">
-										Частично совпадает
-										<span v-if="primaryKpLabel" class="text-muted font-normal">
-											· {{ primaryKpLabel }}
-										</span>
-									</p>
-									<label v-for="item in letterModalPartialItems" :key="item._index" class="flex items-start gap-2 rounded-lg border border-default/60
-											bg-elevated/30 px-2 py-2 cursor-pointer hover:bg-elevated/50">
-										<UCheckbox :model-value="tzSelectedIndices.includes(item._index)"
-											:color="getTzItemStatusColor(item.status)" class="shrink-0 mt-0.5"
-											@update:model-value="(v) => toggleTzSelect(item._index, v === true)"
-											@click.stop />
-										<span class="text-xs leading-relaxed whitespace-pre-wrap min-w-0">
-											{{ item.requirement }}
-										</span>
-									</label>
-								</div>
-							</div>
-						</aside>
-
-						<div ref="letterDocumentRef" class="relative min-h-[58vh]">
-							<UTextarea
-								v-if="tzSelectedIndices.length > 0"
-								ref="letterTextareaRef"
-								v-model="letterEditorText"
-								class="w-full"
-								:ui="{ base: 'h-[58vh] resize-none overflow-y-auto font-[inherit] leading-relaxed' }"
-								size="md"
-								:rows="20"
-								@update:model-value="onLetterEditorInput"
-							/>
-							<p v-else class="text-sm text-muted text-center py-10 rounded-xl border border-default bg-elevated/30">
-								Выберите пункты для формирования письма
+				<div class="flex flex-col min-h-[min(80vh,42rem)]">
+					<div class="flex-1 min-h-0 overflow-y-auto pr-1 pb-4">
+						<div class="grid grid-cols-1 md:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)] gap-4 min-h-0">
+					<aside class="flex flex-col gap-3 shrink-0 min-h-0 md:max-h-[72vh]">
+						<p v-if="selectedSupplier" class="text-xs text-muted">
+							Поставщик:
+							<span class="text-default font-medium">{{ selectedSupplier.name }}</span>
+							<span v-if="primaryKpLabel"> · КП: </span>
+							<button
+								v-if="selectedSupplierPrimaryKp"
+								type="button"
+								class="text-primary hover:underline font-medium"
+								@click="openKpFile(
+									kpDisplayLabel(selectedSupplierPrimaryKp),
+									selectedSupplier.id,
+								)"
+							>
+								{{ primaryKpLabel }}
+							</button>
+						</p>
+						<p v-else-if="primaryKpLabel" class="text-xs text-muted">
+							Основное КП:
+							<button
+v-if="analysis?.kp_filename" type="button"
+								class="text-primary hover:underline font-medium"
+								@click="openKpFile(analysis.kp_filename)">
+								{{ primaryKpLabel }}
+							</button>
+							<span v-else class="text-default font-medium">{{ primaryKpLabel }}</span>
+						</p>
+						<UFormField label="Срок ответа">
+							<UInput v-model="docxDeadline" placeholder="7 июня 2026 г." size="md" />
+						</UFormField>
+						<div class="flex flex-col gap-1.5 shrink-0">
+							<p class="text-xs font-semibold uppercase tracking-wide text-muted px-0.5">
+								Разделы письма
 							</p>
+							<UButton
+v-for="tab in letterPreviewTabs" :key="tab.value" type="button" block
+								:variant="letterPreviewTab === tab.value ? 'soft' : 'ghost'"
+								:color="letterPreviewTab === tab.value ? tab.color : 'neutral'" size="sm"
+								class="justify-start text-left whitespace-normal h-auto py-2"
+								:disabled="tab.disabled" @click="scrollToLetterSection(tab.value)">
+								{{ tab.label }}
+							</UButton>
+						</div>
+						<div class="flex-1 min-h-0 overflow-y-auto space-y-4 pr-0.5">
+							<div
+								v-for="section in letterSidebarSections"
+								:id="section.id"
+								:key="section.id"
+								class="space-y-2"
+							>
+								<p class="text-xs font-semibold px-0.5" :class="section.titleClass">
+									{{ section.title }}
+								</p>
+								<div
+									v-for="group in section.groups"
+									:key="group.groupKey"
+									class="rounded-lg border border-default/60 bg-elevated/30 px-2.5 py-2.5 space-y-2"
+								>
+									<div class="flex items-start gap-2">
+										<UCheckbox
+											:model-value="isGroupFullySelected(group)"
+											:indeterminate="isGroupPartiallySelected(group)"
+											:color="getTzItemStatusColor(group.status)"
+											class="shrink-0 mt-0.5"
+											@update:model-value="(v) => toggleGroupSelect(group, v === true)"
+											@click.stop
+										/>
+										<p class="flex-1 text-sm font-medium text-default leading-snug min-w-0">
+											{{ letterGroupTitle(group) }}
+										</p>
+										<TzOriginalTzHint
+											v-if="letterGroupShowQuote(group) && group.refValue"
+											:text="group.refValue"
+										/>
+									</div>
+									<div
+										v-if="letterGroupSubLines(group).length"
+										class="pl-6 space-y-1"
+									>
+										<label
+											v-for="item in letterGroupSubLines(group)"
+											:key="item._index"
+											class="flex items-start gap-2 rounded-md px-1 py-0.5
+												cursor-pointer hover:bg-elevated/40 transition-colors"
+										>
+											<UCheckbox
+												:model-value="tzSelectedIndices.includes(item._index)"
+												:color="getTzItemStatusColor(item.status)"
+												class="shrink-0 mt-0.5"
+												@update:model-value="(v) => toggleItemSelect(item._index, v === true)"
+												@click.stop
+											/>
+											<span class="text-xs text-default leading-relaxed min-w-0">
+												{{ itemAnalysisText(item) }}
+											</span>
+										</label>
+									</div>
+								</div>
+							</div>
+						</div>
+					</aside>
+
+					<div ref="letterDocumentRef" class="relative min-h-[min(72vh,40rem)]">
+						<InsertBusinessInfoButton
+							v-if="hasLetterIssues"
+							v-model="letterEditorText"
+							class="absolute top-2 right-2 z-10"
+							@inserted="letterEditorDirty = true"
+						/>
+						<UTextarea
+							v-if="hasLetterIssues"
+							ref="letterTextareaRef"
+							v-model="letterEditorText"
+							class="w-full"
+							:ui="{ base: 'h-[min(72vh,40rem)] resize-none overflow-y-auto font-[inherit] leading-relaxed' }"
+							size="md"
+							:rows="20"
+							@update:model-value="onLetterEditorInput"
+						/>
+						<p v-else class="text-sm text-muted text-center py-10 rounded-xl border border-default bg-elevated/30">
+							Нет несоответствий для формирования письма
+						</p>
+					</div>
 						</div>
 					</div>
-			</template>
-			<template #footer>
-				<div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 w-full">
-					<UButton variant="outline" color="neutral" @click="showLetterModal = false">
-						Закрыть
-					</UButton>
-					<UButton leading-icon="i-lucide-download" :loading="docxGenerating"
-						:disabled="tzSelectedIndices.length === 0 || !letterEditorText.trim()" @click="generateDocx">
-						Скачать DOCX
-						<span v-if="tzSelectedIndices.length > 0" class="ml-1 opacity-80">
-							({{ tzSelectedIndices.length }})
-						</span>
-					</UButton>
+
+					<div :class="EMAIL_LETTER_MODAL_FOOTER_CLASS">
+						<UButton
+							color="neutral"
+							variant="ghost"
+							leading-icon="i-lucide-arrow-left"
+							@click="showLetterModal = false"
+						>
+							Назад
+						</UButton>
+						<UButton
+							leading-icon="i-lucide-download"
+							:loading="docxGenerating"
+							:disabled="tzSelectedIndices.length === 0 || !letterEditorText.trim()"
+							@click="generateDocx"
+						>
+							Скачать DOCX
+						</UButton>
+					</div>
 				</div>
 			</template>
 		</UModal>
+
+		<Teleport to="body">
+			<div
+				v-if="showTzConfirmBar"
+				class="fixed inset-x-0 bottom-0 z-50 pointer-events-none px-4 pb-4 sm:pb-6"
+			>
+				<UContainer class="max-w-7xl flex justify-center">
+					<UButton
+						color="primary"
+						variant="solid"
+						size="xl"
+						class="pointer-events-auto min-w-[min(100%,20rem)] shadow-lg ring-1 ring-primary/20 rounded-xl"
+						leading-icon="i-lucide-check"
+						:loading="confirmingTz"
+						:disabled="!requirementsRowsNonempty(editableRequirementsTz)"
+						@click="confirmTzRequirements"
+					>
+						Подтвердить требования
+					</UButton>
+				</UContainer>
+			</div>
+		</Teleport>
 	</UContainer>
 </template>
 
 <script lang="ts" setup>
-import type { DropdownMenuItem } from '@nuxt/ui'
 import type {
 	TZAnalysisItem,
 	TZAnalysisKpStats,
@@ -632,24 +696,37 @@ import {
 	buildResultTree,
 	countRequirementRows,
 	flattenRequirementsToRows,
-	nextChildKey,
+	insertChildAfterParentRow,
+	getRowSubtreeRange,
 	renumberRequirementRows,
 	insertSiblingAfterRow,
 	moveRequirementRowBlock,
 	requirementsNonempty,
 	requirementsRowsNonempty,
 	rowsToHierarchy,
+	resolveLetterItemGrouping,
 	type EditableRequirementRow,
 } from '#shared/utils/requirementsStruct'
+import {
+	formatLetterRequirementLine,
+	formatLetterRequirementRef,
+	getTzRequirementDisplay,
+} from '#shared/utils/tzRequirementDisplay'
 import { getApiErrorDetail, isSubscriptionApiError } from '#shared/utils/apiError'
+import { EMAIL_LETTER_MODAL_FOOTER_CLASS, EMAIL_LETTER_MODAL_UI } from '#shared/constants/emailModal'
 import {
 	canStartModule2Work,
+	isTestPlan,
+	module2UploadLimitHint,
 	module2WorkBlockMessage,
+	tzKpUploadLimitBytes,
+	formatUploadLimitMb,
 } from '#shared/utils/subscriptionAccess'
 import { subscriptionProfilePath } from '#shared/utils/subscriptionDisplay'
 import RequirementResultsTree from '~/components/tz-analysis/RequirementResultsTree.vue'
 import RequirementTreeEditor from '~/components/tz-analysis/RequirementTreeEditor.vue'
 import TzAnalysisSuppliersPanel from '~/components/tz-analysis/TzAnalysisSuppliersPanel.vue'
+import TzOriginalTzHint from '~/components/tz-analysis/TzOriginalTzHint.vue'
 import { useRunStatusPolling } from '~/composables/useRunStatusPolling'
 import { useTzAnalysisFiles } from '~/composables/useTzAnalysisFiles'
 
@@ -665,16 +742,27 @@ const toast = useToast()
 function openSubscriptionProfile(): void {
 	void navigateTo(subscriptionProfilePath())
 }
-const { formatDate, formatLetterDate } = useFormatDate()
+const { formatDate } = useFormatDate()
 const { public: publicConfig } = useRuntimeConfig()
 
-const MAX_UPLOAD_SIZE = publicConfig.maxTzUploadSize as number
+const maxUploadSize = computed(() =>
+	tzKpUploadLimitBytes(
+		user.value?.subscription,
+		publicConfig.maxTzUploadSize as number,
+	),
+)
 const fileAccept = '.pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp'
 
-const uploadDescription = computed(() => {
-	const sizeMb = Math.round(MAX_UPLOAD_SIZE / 1024 / 1024)
-	return `PDF, DOCX, XLSX, TXT, изображения. До ${sizeMb} МБ`
-})
+const uploadDescription = computed(() =>
+	`PDF, DOCX, XLSX, TXT, изображения. До ${formatUploadLimitMb(maxUploadSize.value)}`,
+)
+
+const uploadLimitHint = computed(() =>
+	module2UploadLimitHint(
+		user.value?.subscription,
+		publicConfig.maxTzUploadSize as number,
+	),
+)
 
 const loading = ref(true)
 const analysis = ref<TZAnalysisSession | null>(null)
@@ -692,6 +780,10 @@ const { openTzFile, openKpFile } = useTzAnalysisFiles(
 	computed(() => analysis.value?.tz_filename),
 )
 provide('tzAnalysisFiles', { openTzFile, openKpFile })
+provide(
+	'tzRequirementsHierarchy',
+	computed(() => analysis.value?.requirements_tz ?? null),
+)
 
 const activeContentTab = ref('tz')
 const kpPanelLoading = ref(false)
@@ -709,10 +801,11 @@ const tzAnalyzing = ref(false)
 const kpAnalyzing = ref(false)
 const confirmingTz = ref(false)
 const tzPolling = ref(false)
-const tzSelectedIndices = ref<number[]>([])
 const tzStatusFilter = ref('all')
+const tzRequirementSearch = ref('')
 const showLetterModal = ref(false)
-const letterPreviewTab = ref('mismatch')
+const tzSelectedIndices = ref<number[]>([])
+const letterPreviewTab = ref<'mismatch' | 'not_found' | 'partial'>('mismatch')
 const processingPhase = ref<'tz' | 'kp'>('tz')
 const itemsOverrides = ref<Record<string, { status: TZAnalysisStatus }>>({})
 const primaryKpSaving = ref(false)
@@ -725,10 +818,11 @@ const letterEditorDirty = ref(false)
 const letterDocumentRef = ref<HTMLElement | null>(null)
 const letterTextareaRef = ref<{ $el?: HTMLElement } | null>(null)
 
-const LETTER_MISMATCH_HEADER = 'Несоответствующие параметры:'
+const LETTER_MISMATCH_HEADER = 'Не соответствует:'
+const LETTER_NOT_FOUND_HEADER = 'Не найдено:'
 const LETTER_PARTIAL_HEADER = 'Требуют уточнения/дополнения:'
 const LETTER_DEADLINE_PREFIX =
-	'Просим предоставить дополненное/уточненное предложение не позже '
+	'Просим предоставить дополненное/уточненное предложение не позднее '
 
 const tzFilterOptions = [
 	{ label: 'Все', value: 'all' },
@@ -739,6 +833,15 @@ const tzFilterOptions = [
 ]
 
 type TZItemView = TZAnalysisItem & { _index: number }
+
+type LetterGroup = {
+	groupKey: string
+	parentKey: string | null
+	refValue: string | null
+	isSplitChild: boolean
+	items: TZItemView[]
+	status: TZAnalysisStatus
+}
 
 type KpItemGroup = {
 	id: number
@@ -804,6 +907,12 @@ const hasSuppliersProcessing = computed(() =>
 	suppliers.value.some(
 		(supplier) => supplier.status === TZAnalysisSupplierStatus.PROCESSING,
 	),
+)
+const isKpProcessing = computed(() =>
+	hasSuppliersProcessing.value || kpAnalyzing.value,
+)
+const showKpProcessingBanner = computed(() =>
+	isKpProcessing.value && isTzConfirmed.value,
 )
 const kpAnalysisStarted = computed(() =>
 	hasSuppliersProcessing.value
@@ -913,6 +1022,13 @@ const hasKpContent = computed(() => {
 const isAnalysisClosed = computed(() =>
 	isCompleted.value && !hasKpContent.value,
 )
+const showTzConfirmBar = computed(() =>
+	isTzReviewPhase.value
+	&& !isAnalysisClosed.value
+	&& !isTzConfirmed.value
+	&& !isCompleted.value
+	&& activeContentTab.value === 'tz',
+)
 const visibleContentTabItems = computed(() => {
 	if (isAnalysisClosed.value || !isTzConfirmed.value) {
 		return contentTabItems.filter((item) => item.value === 'tz')
@@ -922,19 +1038,13 @@ const visibleContentTabItems = computed(() => {
 const showSuppliersSidebar = computed(() =>
 	isTzConfirmed.value && !isAnalysisClosed.value,
 )
-const selectedSupplierStats = computed(() => {
-	const primary = selectedSupplierPrimaryKp.value
-	const stats = primary ? analysis.value?.kp_stats?.[primary] : null
-	if (stats) return stats
-	const items = visibleKpItemGroups.value.flatMap((group) => group.items)
-	return {
-		match_score: 0,
-		met_count: items.filter((item) => item.status === 'met').length,
-		partial_count: items.filter((item) => item.status === 'partial').length,
-		missing_count: items.filter((item) => item.status === 'missing').length,
-		not_found_count: items.filter((item) => item.status === 'not_found').length,
-	}
-})
+const selectedSupplierStats = computed(() =>
+	computeStatsFromItems(
+		itemsForSupplier(selectedSupplier.value).filter((item) =>
+			belongsToPrimaryKp(item),
+		),
+	),
+)
 
 const visibleKpItemGroups = computed(() => {
 	if (suppliers.value.length === 0) {
@@ -973,11 +1083,195 @@ const letterItemsView = computed((): TZItemView[] => {
 		.map((item, index) => ({ ...item, _index: index }))
 })
 
+function isTzSelectable(status: TZAnalysisStatus) {
+	return status === 'partial' || status === 'missing' || status === 'not_found'
+}
+
+const letterSelectableItems = computed((): TZItemView[] =>
+	letterItemsView.value.filter(
+		(item) => belongsToPrimaryKp(item) && isTzSelectable(item.status),
+	),
+)
+
+const hasLetterIssues = computed(() => letterSelectableItems.value.length > 0)
+
+const letterModalMismatchItems = computed((): TZItemView[] =>
+	letterItemsView.value.filter(
+		(item) => belongsToPrimaryKp(item) && item.status === 'missing',
+	),
+)
+
+const letterModalNotFoundItems = computed((): TZItemView[] =>
+	letterItemsView.value.filter(
+		(item) => belongsToPrimaryKp(item) && item.status === 'not_found',
+	),
+)
+
+const letterModalPartialItems = computed((): TZItemView[] =>
+	letterItemsView.value.filter(
+		(item) => belongsToPrimaryKp(item) && item.status === 'partial',
+	),
+)
+
+function itemAnalysisText(item: TZItemView): string {
+	return getTzRequirementDisplay(
+		item,
+		analysis.value?.requirements_tz,
+	).analysisText
+}
+
+function resolveGroupLetterFields(item: TZItemView) {
+	const grouping = resolveLetterItemGrouping(
+		item,
+		analysis.value?.requirements_tz,
+		`_u_${item._index}`,
+	)
+	return {
+		...grouping,
+		analysisText: itemAnalysisText(item),
+	}
+}
+
+function groupItemsByRef(items: TZItemView[]): LetterGroup[] {
+	const bucket = new Map<string, LetterGroup>()
+	const order: string[] = []
+
+	for (const item of items) {
+		const {
+			groupKey,
+			parentKey,
+			tzVerbatim,
+			isSplitChild,
+		} = resolveGroupLetterFields(item)
+
+		if (!bucket.has(groupKey)) {
+			bucket.set(groupKey, {
+				groupKey,
+				parentKey,
+				refValue: tzVerbatim,
+				isSplitChild,
+				items: [item],
+				status: item.status,
+			})
+			order.push(groupKey)
+			continue
+		}
+
+		const group = bucket.get(groupKey)!
+		group.items.push(item)
+		if (!group.refValue && tzVerbatim) {
+			group.refValue = tzVerbatim
+		}
+	}
+
+	return order.map((key) => bucket.get(key)!)
+}
+
+function groupItemIndices(group: LetterGroup): number[] {
+	return group.items.map((item) => item._index)
+}
+
+function isGroupFullySelected(group: LetterGroup): boolean {
+	const indices = groupItemIndices(group)
+	return indices.length > 0
+		&& indices.every((index) => tzSelectedIndices.value.includes(index))
+}
+
+function isGroupPartiallySelected(group: LetterGroup): boolean {
+	const indices = groupItemIndices(group)
+	const selectedCount = indices.filter(
+		(index) => tzSelectedIndices.value.includes(index),
+	).length
+	return selectedCount > 0 && selectedCount < indices.length
+}
+
+function toggleGroupSelect(group: LetterGroup, checked: boolean) {
+	const indices = groupItemIndices(group)
+	if (checked) {
+		const next = new Set(tzSelectedIndices.value)
+		for (const index of indices) next.add(index)
+		tzSelectedIndices.value = [...next]
+	} else {
+		const remove = new Set(indices)
+		tzSelectedIndices.value = tzSelectedIndices.value.filter(
+			(index) => !remove.has(index),
+		)
+	}
+	saveLetterSelection()
+}
+
+function letterGroupTitle(group: LetterGroup): string {
+	if (group.isSplitChild && group.parentKey) {
+		return group.parentKey
+	}
+	if (group.items.length > 1 && group.parentKey) {
+		return group.parentKey
+	}
+	return itemAnalysisText(group.items[0]!)
+}
+
+function letterGroupSubLines(group: LetterGroup): TZItemView[] {
+	if (group.isSplitChild || group.items.length > 1) {
+		return group.items
+	}
+	return []
+}
+
+function toggleItemSelect(index: number, checked: boolean) {
+	if (checked) {
+		if (!tzSelectedIndices.value.includes(index)) {
+			tzSelectedIndices.value = [...tzSelectedIndices.value, index]
+		}
+	} else {
+		tzSelectedIndices.value = tzSelectedIndices.value.filter((i) => i !== index)
+	}
+	saveLetterSelection()
+}
+
+function letterGroupShowQuote(group: LetterGroup): boolean {
+	if (!group.refValue?.trim()) return false
+	return group.isSplitChild || group.items.length > 1
+}
+
+const letterGroupedMismatch = computed(() =>
+	groupItemsByRef(letterModalMismatchItems.value),
+)
+
+const letterGroupedNotFound = computed(() =>
+	groupItemsByRef(letterModalNotFoundItems.value),
+)
+
+const letterGroupedPartial = computed(() =>
+	groupItemsByRef(letterModalPartialItems.value),
+)
+
+const letterSidebarSections = computed(() => [
+	{
+		id: 'letter-sidebar-mismatch',
+		title: `Не соответствует (${letterModalMismatchItems.value.length})`,
+		titleClass: 'text-error',
+		groups: letterGroupedMismatch.value,
+	},
+	{
+		id: 'letter-sidebar-not-found',
+		title: `Не найдено (${letterModalNotFoundItems.value.length})`,
+		titleClass: 'text-neutral',
+		groups: letterGroupedNotFound.value,
+	},
+	{
+		id: 'letter-sidebar-partial',
+		title: `Частично (${letterModalPartialItems.value.length})`,
+		titleClass: 'text-warning',
+		groups: letterGroupedPartial.value,
+	},
+].filter((section) => section.groups.length > 0))
+
 function letterSelectionStorageKey() {
 	const analysisId = analysis.value?.id
-	const supplierId = displayedSupplierId.value
-	if (!analysisId || !supplierId) return null
-	return `tz-letter-selection:${analysisId}:${supplierId}`
+	const supplierId = selectedSupplierId.value
+	const primaryKp = selectedSupplierPrimaryKp.value ?? analysis.value?.kp_filename
+	if (!analysisId) return null
+	return `tz-letter-selection:${analysisId}:${supplierId ?? '_'}:${primaryKp ?? '_'}`
 }
 
 function saveLetterSelection() {
@@ -1003,12 +1297,22 @@ function loadLetterSelection(): number[] | null {
 	}
 }
 
+function selectPrimaryKpLetterItems() {
+	if (!analysis.value) return
+	tzSelectedIndices.value = letterItemsView.value
+		.filter((item) => belongsToPrimaryKp(item) && isTzSelectable(item.status))
+		.map((item) => item._index)
+	saveLetterSelection()
+}
+
 function restoreOrInitLetterSelection() {
 	const selectable = new Set(
-		letterItemsView.value
-			.filter((item) => belongsToPrimaryKp(item) && isTzSelectable(item.status))
-			.map((item) => item._index),
+		letterSelectableItems.value.map((item) => item._index),
 	)
+	if (selectable.size === 0) {
+		tzSelectedIndices.value = []
+		return
+	}
 	const saved = loadLetterSelection()
 	if (saved?.length) {
 		const restored = saved.filter((index) => selectable.has(index))
@@ -1017,7 +1321,7 @@ function restoreOrInitLetterSelection() {
 			return
 		}
 	}
-	selectPrimaryKpLetterItems(selectedSupplierPrimaryKp.value)
+	selectPrimaryKpLetterItems()
 }
 
 function letterMismatchReason(item: TZAnalysisItem) {
@@ -1027,12 +1331,35 @@ function letterMismatchReason(item: TZAnalysisItem) {
 	return `Причина отклонения: ${item.explanation}`
 }
 
+function itemMatchesRequirementSearch(
+	item: TZAnalysisItem,
+	query: string,
+): boolean {
+	const q = query.trim().toLowerCase()
+	if (!q) return true
+	const haystack = [
+		item.requirement,
+		item.requirement_ref,
+		item.ref,
+		item.ref_value,
+		item.offer_value,
+		item.offer_ref,
+		item.explanation,
+	]
+		.filter(Boolean)
+		.join(' ')
+		.toLowerCase()
+	return haystack.includes(q)
+}
+
 const filteredTzItems = computed((): TZItemView[] => {
 	if (!analysis.value) return []
+	const query = tzRequirementSearch.value
 	return applyItemOverrides(analysis.value.items)
 		.map((item, index) => ({ ...item, _index: index }))
 		.filter((item) =>
-			tzStatusFilter.value === 'all' || item.status === tzStatusFilter.value,
+			(tzStatusFilter.value === 'all' || item.status === tzStatusFilter.value)
+			&& itemMatchesRequirementSearch(item, query),
 		)
 })
 
@@ -1144,9 +1471,51 @@ async function setPrimaryKp(scopedKpFilename: string | null) {
 	}
 }
 
+function allItemViewsWithOverrides(): TZItemView[] {
+	if (!analysis.value) return []
+	return applyItemOverrides(analysis.value.items)
+		.map((item, index) => ({ ...item, _index: index }))
+}
+
+function itemsForSupplier(
+	supplier: TZAnalysisSupplierItem | null,
+): TZItemView[] {
+	const items = allItemViewsWithOverrides()
+	if (!supplier) return items
+	return items.filter((item) =>
+		isKpScopedToSupplier(getItemKpKey(item), supplier.name),
+	)
+}
+
+function computeStatsFromItems(items: TZAnalysisItem[]): TZAnalysisKpStats {
+	const met = items.filter((item) => item.status === 'met').length
+	const partial = items.filter((item) => item.status === 'partial').length
+	const missing = items.filter((item) => item.status === 'missing').length
+	const not_found = items.filter((item) => item.status === 'not_found').length
+	const total = items.length
+	return {
+		match_score: total === 0 ? 0 : Math.round((met + 0.5 * partial) / total * 100),
+		met_count: met,
+		partial_count: partial,
+		missing_count: missing,
+		not_found_count: not_found,
+	}
+}
+
 function getItemKpKey(item: TZAnalysisItem): string {
 	const filenames = displayKpFilenames.value
 	return item.kp_name || filenames[0] || '_default'
+}
+
+function resolveItemKpKey(
+	item: TZAnalysisItem,
+	supplierName?: string | null,
+): string {
+	const raw = getItemKpKey(item)
+	if (!supplierName || parseScopedKpName(raw)) {
+		return raw
+	}
+	return scopedKpDisplayName(supplierName, kpDisplayLabel(raw))
 }
 
 function belongsToSelectedSupplier(item: TZAnalysisItem): boolean {
@@ -1159,19 +1528,19 @@ function belongsToPrimaryKp(item: TZAnalysisItem): boolean {
 	if (!belongsToSelectedSupplier(item)) return false
 	const primary = selectedSupplierPrimaryKp.value
 	if (!primary || !hasMultipleSelectedSupplierKps.value) return true
-	return getItemKpKey(item) === primary
+	return resolveItemKpKey(item, selectedSupplier.value?.name) === primary
+}
+
+function countLetterGroupItems(groups: LetterGroup[]): number {
+	return groups.reduce((total, group) => total + group.items.length, 0)
 }
 
 function getKpStats(kpKey: string): TZAnalysisKpStats | null {
-	return analysis.value?.kp_stats?.[kpKey] ?? null
-}
-
-function selectPrimaryKpLetterItems(kpFilename: string | null | undefined) {
-	if (!analysis.value || !kpFilename) return
-	tzSelectedIndices.value = letterItemsView.value
-		.filter((item) => getItemKpKey(item) === kpFilename && isTzSelectable(item.status))
-		.map((item) => item._index)
-	saveLetterSelection()
+	const items = allItemViewsWithOverrides().filter(
+		(item) => getItemKpKey(item) === kpKey,
+	)
+	if (items.length === 0) return null
+	return computeStatsFromItems(items)
 }
 
 function collectResultsKpKeys(data: TZAnalysisSession): string[] {
@@ -1198,8 +1567,18 @@ function collectResultsKpKeys(data: TZAnalysisSession): string[] {
 	return ordered
 }
 
-const editableTzCount = computed(() =>
-	countRequirementRows(editableRequirementsTz.value),
+const displayedTzRequirementsRows = computed(() =>
+	isTzConfirmed.value
+		? flattenRequirementsToRows(analysis.value?.requirements_tz)
+		: editableRequirementsTz.value,
+)
+const displayedTzCount = computed(() =>
+	countRequirementRows(displayedTzRequirementsRows.value),
+)
+const showComparisonResultsCard = computed(() =>
+	hasComparisonResults.value
+	&& !isKpProcessing.value
+	&& visibleKpItemGroups.value.length > 0,
 )
 
 function requirementRowsSignature(rows: EditableRequirementRow[]): string {
@@ -1275,63 +1654,91 @@ function updateEditableRequirementsTz(
 	)
 }
 
+const tzRequirementsScrollRef = ref<HTMLElement | null>(null)
+
+function tzRequirementsScopeId() {
+	return isTzConfirmed.value ? 'tz-results' : 'tz-review'
+}
+
+function scrollToRequirementRowSync(
+	rowIndex: number,
+	scopeId: string,
+	attempt = 0,
+) {
+	const container = tzRequirementsScrollRef.value
+	if (!container) return
+
+	const el = container.querySelector<HTMLElement>(
+		`[data-row-index="${scopeId}:${rowIndex}"]`,
+	)
+	if (!el) {
+		if (attempt < 8) {
+			requestAnimationFrame(() =>
+				scrollToRequirementRowSync(rowIndex, scopeId, attempt + 1),
+			)
+		}
+		return
+	}
+
+	const containerRect = container.getBoundingClientRect()
+	const elRect = el.getBoundingClientRect()
+	const offsetTop = elRect.top - containerRect.top + container.scrollTop
+	const targetScroll = offsetTop - container.clientHeight / 2 + elRect.height / 2
+	container.scrollTo({
+		top: Math.max(0, targetScroll),
+		behavior: 'smooth',
+	})
+}
+
+function scrollToRequirementRow(rowIndex: number) {
+	const scopeId = tzRequirementsScopeId()
+	nextTick(() => {
+		requestAnimationFrame(() => {
+			scrollToRequirementRowSync(rowIndex, scopeId)
+		})
+	})
+}
+
 function addTzRequirement() {
 	updateEditableRequirementsTz((rows) => [
 		...rows,
 		{ key: nextTopLevelKey(rows), text: '' },
 	])
+	scrollToRequirementRow(editableRequirementsTz.value.length - 1)
 }
 
 function addTzChildRequirement(parentKey: string) {
 	const parentNorm = parentKey.trim().replace(/\//g, '.')
+	const parentIndex = editableRequirementsTz.value.findIndex(
+		(row) => row.key.trim().replace(/\//g, '.') === parentNorm,
+	)
+	const insertIndex = parentIndex === -1
+		? editableRequirementsTz.value.length
+		: parentIndex + 1
 	updateEditableRequirementsTz((rows) => {
 		const withHeading = rows.map((row) =>
 			row.key.trim().replace(/\//g, '.') === parentNorm
 				? { ...row, isHeading: true }
 				: row,
 		)
-		return [
-			...withHeading,
-			{
-				key: nextChildKey(parentKey, withHeading),
-				text: '',
-			},
-		]
+		return insertChildAfterParentRow(withHeading, parentKey)
 	})
+	scrollToRequirementRow(insertIndex)
 }
 
 function addTzHeadingRequirement(parentKey: string) {
-	updateEditableRequirementsTz((rows) => [
-		...rows,
-		{
-			key: nextChildKey(parentKey, rows),
-			text: '',
-			isHeading: true,
-		},
-	])
+	const parentNorm = parentKey.trim().replace(/\//g, '.')
+	const parentIndex = editableRequirementsTz.value.findIndex(
+		(row) => row.key.trim().replace(/\//g, '.') === parentNorm,
+	)
+	const insertIndex = parentIndex === -1
+		? editableRequirementsTz.value.length
+		: parentIndex + 1
+	updateEditableRequirementsTz((rows) =>
+		insertChildAfterParentRow(rows, parentKey, { isHeading: true }),
+	)
+	scrollToRequirementRow(insertIndex)
 }
-
-function addTzRootHeading() {
-	updateEditableRequirementsTz((rows) => [
-		...rows,
-		{ key: nextTopLevelKey(rows), text: '', isHeading: true },
-	])
-}
-
-const rootAddMenuItems = computed((): DropdownMenuItem[][] => [
-	[
-		{
-			label: 'Требование',
-			icon: 'i-lucide-list-plus',
-			onSelect: () => addTzRequirement(),
-		},
-		{
-			label: 'Заголовок',
-			icon: 'i-lucide-heading',
-			onSelect: () => addTzRootHeading(),
-		},
-	],
-])
 
 function removeTzRequirement(index: number) {
 	updateEditableRequirementsTz((rows) =>
@@ -1340,9 +1747,20 @@ function removeTzRequirement(index: number) {
 }
 
 function addTzSiblingRequirement(afterIndex: number) {
+	const [, end] = getRowSubtreeRange(editableRequirementsTz.value, afterIndex)
+	const insertIndex = end + 1
 	updateEditableRequirementsTz((rows) =>
 		insertSiblingAfterRow(rows, afterIndex),
 	)
+	const inserted = editableRequirementsTz.value[insertIndex]
+	const rowKey = inserted?.key ?? ''
+	const isTopLevel = rowKey.length > 0 && !rowKey.includes('.')
+	toast.add({
+		title: isTopLevel ? `Добавлен раздел ${rowKey}` : `Добавлен пункт ${rowKey}`,
+		color: 'success',
+		icon: 'i-lucide-check',
+	})
+	scrollToRequirementRow(insertIndex)
 }
 
 function reorderTzRequirement(fromIndex: number, toIndex: number) {
@@ -1372,55 +1790,72 @@ async function refreshAnalysis() {
 
 const selectedLetterItems = computed((): TZItemView[] =>
 	letterItemsView.value.filter((item) =>
-		tzSelectedIndices.value.includes(item._index) && isTzSelectable(item.status),
+		tzSelectedIndices.value.includes(item._index),
 	),
 )
 
-const letterModalMismatchItems = computed((): TZItemView[] =>
-	letterItemsView.value.filter((item) =>
-		belongsToPrimaryKp(item)
-		&& (item.status === 'missing' || item.status === 'not_found'),
-	),
-)
-
-const letterModalPartialItems = computed((): TZItemView[] =>
-	letterItemsView.value.filter((item) =>
-		belongsToPrimaryKp(item) && item.status === 'partial',
-	),
+const selectedLetterGroups = computed(() =>
+	groupItemsByRef(selectedLetterItems.value),
 )
 
 const letterItemsByTab = computed(() => ({
-	mismatch: selectedLetterItems.value.filter((item) =>
-		item.status === 'missing' || item.status === 'not_found',
-	),
-	partial: selectedLetterItems.value.filter((item) => item.status === 'partial'),
+	mismatch: selectedLetterGroups.value.filter((group) => group.status === 'missing'),
+	not_found: selectedLetterGroups.value.filter((group) => group.status === 'not_found'),
+	partial: selectedLetterGroups.value.filter((group) => group.status === 'partial'),
 }))
 
 const letterPreviewTabs = computed(() => {
-	const mismatchSelected = letterItemsByTab.value.mismatch.length
-	const partialSelected = letterItemsByTab.value.partial.length
+	const mismatchSelected = countLetterGroupItems(letterItemsByTab.value.mismatch)
+	const notFoundSelected = countLetterGroupItems(letterItemsByTab.value.not_found)
+	const partialSelected = countLetterGroupItems(letterItemsByTab.value.partial)
 	return [
 		{
 			label: mismatchSelected
-				? `Не совпадает (${mismatchSelected})`
-				: 'Не совпадает',
-			value: 'mismatch',
+				? `Не соответствует (${mismatchSelected})`
+				: 'Не соответствует',
+			value: 'mismatch' as const,
 			color: 'error' as const,
-			disabled: letterModalMismatchItems.value.length === 0,
+			disabled: letterGroupedMismatch.value.length === 0,
+		},
+		{
+			label: notFoundSelected
+				? `Не найдено (${notFoundSelected})`
+				: 'Не найдено',
+			value: 'not_found' as const,
+			color: 'neutral' as const,
+			disabled: letterGroupedNotFound.value.length === 0,
 		},
 		{
 			label: partialSelected
-				? `Частично совпадает (${partialSelected})`
-				: 'Частично совпадает',
-			value: 'partial',
+				? `Частично (${partialSelected})`
+				: 'Частично',
+			value: 'partial' as const,
 			color: 'warning' as const,
-			disabled: letterModalPartialItems.value.length === 0,
+			disabled: letterGroupedPartial.value.length === 0,
 		},
 	]
 })
 
+function formatGroupRequirementLine(group: LetterGroup): string {
+	if (group.refValue?.trim()) {
+		return group.refValue.trim()
+	}
+	return formatLetterRequirementLine(
+		group.items[0]!,
+		analysis.value?.requirements_tz,
+	)
+}
+
+function formatGroupRequirementRef(group: LetterGroup): string | null {
+	if (group.refValue?.trim()) return null
+	return formatLetterRequirementRef(
+		group.items[0]!,
+		analysis.value?.requirements_tz,
+	)
+}
+
 function buildDraftLetterParagraphs(): string[] {
-	const { mismatch, partial } = letterItemsByTab.value
+	const { mismatch, not_found, partial } = letterItemsByTab.value
 	const lines: string[] = [
 		'О несоответствии предложения техническим требованиям',
 		'',
@@ -1428,52 +1863,75 @@ function buildDraftLetterParagraphs(): string[] {
 		'Выявлены следующие замечания и требуемые уточнения:',
 	]
 
+	let itemNum = 1
+
 	if (mismatch.length) {
 		lines.push('', LETTER_MISMATCH_HEADER)
-		for (const [idx, item] of mismatch.entries()) {
-			lines.push(`${idx + 1}. По пункту:`)
+		for (const group of mismatch) {
+			const requirementLine = formatGroupRequirementLine(group)
+			const requirementRef = formatGroupRequirementRef(group)
+			lines.push(`${itemNum}. По пункту:`)
 			lines.push(
-				`Требование: "${item.requirement}"`
-				+ (item.requirement_ref ? ` (${item.requirement_ref})` : ''),
+				`Требование: "${requirementLine}"`
+				+ (requirementRef ? ` (${requirementRef})` : ''),
 			)
-			if (item.offer_value) {
-				lines.push(
-					`Предложено: "${item.offer_value}"`
-					+ (item.offer_ref ? ` (${item.offer_ref})` : ''),
-				)
+			for (const item of group.items) {
+				if (item.offer_value) {
+					lines.push(
+						`Предложено: "${item.offer_value}"`
+						+ (item.offer_ref ? ` (${item.offer_ref})` : ''),
+					)
+				}
+				lines.push(letterMismatchReason(item))
 			}
-			lines.push(letterMismatchReason(item))
+			itemNum += 1
+		}
+	}
+
+	if (not_found.length) {
+		lines.push('', LETTER_NOT_FOUND_HEADER)
+		for (const group of not_found) {
+			const requirementLine = formatGroupRequirementLine(group)
+			const requirementRef = formatGroupRequirementRef(group)
+			lines.push(`${itemNum}. По пункту:`)
+			lines.push(
+				`Требование: "${requirementLine}"`
+				+ (requirementRef ? ` (${requirementRef})` : ''),
+			)
+			for (const item of group.items) {
+				lines.push(letterMismatchReason(item))
+			}
+			itemNum += 1
 		}
 	}
 
 	if (partial.length) {
 		lines.push('', LETTER_PARTIAL_HEADER)
-		const start = mismatch.length + 1
-		for (const [offset, item] of partial.entries()) {
-			const n = start + offset
-			lines.push(`${n}. Пункт:`)
+		for (const group of partial) {
+			const requirementLine = formatGroupRequirementLine(group)
+			const requirementRef = formatGroupRequirementRef(group)
+			lines.push(`${itemNum}. Пункт:`)
 			lines.push(
-				`Требуется: "${item.requirement}"`
-				+ (item.requirement_ref ? ` (${item.requirement_ref})` : ''),
+				`Требуется: "${requirementLine}"`
+				+ (requirementRef ? ` (${requirementRef})` : ''),
 			)
-			if (item.offer_value) {
-				lines.push(
-					`Предложено: "${item.offer_value}"`
-					+ (item.offer_ref ? ` (${item.offer_ref})` : ''),
-				)
+			for (const item of group.items) {
+				if (item.offer_value) {
+					lines.push(
+						`Предложено: "${item.offer_value}"`
+						+ (item.offer_ref ? ` (${item.offer_ref})` : ''),
+					)
+				}
+				lines.push(`Необходимо: ${item.explanation}`)
 			}
-			lines.push(`Необходимо: ${item.explanation}`)
+			itemNum += 1
 		}
 	}
 
 	const deadline = docxDeadline.value.trim() || '7 дней'
 	lines.push(
 		'',
-		`Просим предоставить дополненное/уточненное предложение не позже ${deadline}.`,
-		'',
-		'С уважением,',
-		'',
-		formatLetterDate(),
+		`${LETTER_DEADLINE_PREFIX}${deadline}.`,
 	)
 	return lines
 }
@@ -1518,13 +1976,7 @@ function currentLetterParagraphs(): string[] {
 
 function letterClosingText(): string {
 	const deadline = docxDeadline.value.trim() || '7 дней'
-	return [
-		`${LETTER_DEADLINE_PREFIX}${deadline}.`,
-		'',
-		'С уважением,',
-		'',
-		formatLetterDate(),
-	].join('\n\n')
+	return `${LETTER_DEADLINE_PREFIX}${deadline}.`
 }
 
 function patchLetterClosingInEditor() {
@@ -1567,13 +2019,16 @@ function onLetterEditorInput() {
 	letterEditorDirty.value = true
 }
 
-function scrollToLetterSection(section: 'mismatch' | 'partial') {
+function scrollToLetterSection(section: 'mismatch' | 'not_found' | 'partial') {
 	const tab = letterPreviewTabs.value.find((t) => t.value === section)
 	if (tab?.disabled) return
 	letterPreviewTab.value = section
-	const header = section === 'mismatch'
-		? LETTER_MISMATCH_HEADER
-		: LETTER_PARTIAL_HEADER
+	const headerBySection = {
+		mismatch: LETTER_MISMATCH_HEADER,
+		not_found: LETTER_NOT_FOUND_HEADER,
+		partial: LETTER_PARTIAL_HEADER,
+	} as const
+	const header = headerBySection[section]
 	nextTick(() => {
 		const textarea = getLetterTextarea()
 		if (textarea) {
@@ -1583,11 +2038,8 @@ function scrollToLetterSection(section: 'mismatch' | 'partial') {
 				textarea.setSelectionRange(idx, idx + header.length)
 				const lineCount = letterEditorText.value.slice(0, idx).split('\n').length
 				textarea.scrollTop = Math.max(0, (lineCount - 2) * 22)
-				return
 			}
 		}
-		document.getElementById(`letter-sidebar-${section}`)
-			?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
 	})
 }
 
@@ -1623,6 +2075,9 @@ function applyAnalysis(
 			if (!itemsOverrides.value[key]) {
 				itemsOverrides.value[key] = value
 			}
+		}
+		if (data.confirmed) {
+			syncEditableRequirements(data)
 		}
 	} else {
 		itemsOverrides.value = { ...(data.items_overrides ?? {}) }
@@ -1665,6 +2120,7 @@ function applyAnalysis(
 		)
 		if (!fromPoll || itemsCount !== lastAppliedItemsCount) {
 			restoreOrInitLetterSelection()
+			scheduleLetterPreview()
 		}
 	}
 	lastAppliedItemsCount = itemsCount
@@ -1727,9 +2183,14 @@ function scheduleLetterPreview() {
 	syncLetterEditor(true)
 }
 
+watch(selectedSupplierId, () => {
+	restoreOrInitLetterSelection()
+	if (showLetterModal.value) scheduleLetterPreview()
+})
+
 watch(displayedSupplierId, () => {
 	restoreOrInitLetterSelection()
-	scheduleLetterPreview()
+	if (showLetterModal.value) scheduleLetterPreview()
 })
 
 function deferKpPanelRender() {
@@ -1782,12 +2243,12 @@ watch(showLetterModal, (open) => {
 		letterEditorDirty.value = false
 		return
 	}
-	const { mismatch, partial } = letterItemsByTab.value
-	if (mismatch.length > 0) letterPreviewTab.value = 'mismatch'
-	else if (partial.length > 0) letterPreviewTab.value = 'partial'
+	restoreOrInitLetterSelection()
+	if (letterModalMismatchItems.value.length > 0) letterPreviewTab.value = 'mismatch'
+	else if (letterModalNotFoundItems.value.length > 0) letterPreviewTab.value = 'not_found'
+	else if (letterModalPartialItems.value.length > 0) letterPreviewTab.value = 'partial'
 	letterEditorDirty.value = false
 	syncLetterEditor(true)
-	scheduleLetterPreview()
 })
 
 watch(docxDeadline, () => {
@@ -1807,13 +2268,16 @@ watch(
 
 watch(tzSelectedIndices, () => {
 	if (!showLetterModal.value) return
-	const { mismatch, partial } = letterItemsByTab.value
-	const onMismatch = letterPreviewTab.value === 'mismatch'
-	if (onMismatch && mismatch.length === 0 && partial.length > 0) {
-		letterPreviewTab.value = 'partial'
-	}
-	if (!onMismatch && partial.length === 0 && mismatch.length > 0) {
-		letterPreviewTab.value = 'mismatch'
+	const { mismatch, not_found, partial } = letterItemsByTab.value
+	if (letterPreviewTab.value === 'mismatch' && mismatch.length === 0) {
+		if (not_found.length > 0) letterPreviewTab.value = 'not_found'
+		else if (partial.length > 0) letterPreviewTab.value = 'partial'
+	} else if (letterPreviewTab.value === 'not_found' && not_found.length === 0) {
+		if (mismatch.length > 0) letterPreviewTab.value = 'mismatch'
+		else if (partial.length > 0) letterPreviewTab.value = 'partial'
+	} else if (letterPreviewTab.value === 'partial' && partial.length === 0) {
+		if (mismatch.length > 0) letterPreviewTab.value = 'mismatch'
+		else if (not_found.length > 0) letterPreviewTab.value = 'not_found'
 	}
 }, { deep: true })
 
@@ -1834,11 +2298,10 @@ function validateAndSetFile(
 		target.value = null
 		return
 	}
-	if (file.size > MAX_UPLOAD_SIZE) {
-		const sizeMb = Math.round(MAX_UPLOAD_SIZE / 1024 / 1024)
+	if (file.size > maxUploadSize.value) {
 		toast.add({
 			title: 'Файл слишком большой',
-			description: `${file.name} превышает ${sizeMb} МБ`,
+			description: `${file.name} превышает ${formatUploadLimitMb(maxUploadSize.value)}`,
 			color: 'error',
 		})
 		target.value = null
@@ -1861,7 +2324,6 @@ async function runTzAnalysis() {
 			`/tz-analysis/${analysis.value.id}/run`,
 			fd,
 		)
-		tzSelectedIndices.value = []
 		processingPhase.value = 'tz'
 		applyAnalysis(result)
 		if (result.status === TZAnalysisRunStatus.PROCESSING) {
@@ -1956,7 +2418,6 @@ async function runKpAnalysis() {
 			`/tz-analysis/${analysis.value.id}/run-kp`,
 			new FormData(),
 		)
-		tzSelectedIndices.value = []
 		processingPhase.value = 'kp'
 		applyAnalysis(result)
 		if (
@@ -1994,37 +2455,43 @@ async function runKpAnalysis() {
 }
 
 function openLetterModal() {
-	if (tzSelectedIndices.value.length === 0) {
+	if (!hasLetterIssues.value) {
 		toast.add({
-			title: 'Выберите пункты',
-			description: 'Отметьте галочками несоответствия для письма поставщику.',
+			title: 'Нет несоответствий',
+			description: 'Для выбранного КП нет пунктов для письма поставщику.',
 			color: 'warning',
 		})
 		return
 	}
-	const { mismatch } = letterItemsByTab.value
-	letterPreviewTab.value = mismatch.length > 0 ? 'mismatch' : 'partial'
+	if (letterModalMismatchItems.value.length > 0) letterPreviewTab.value = 'mismatch'
+	else if (letterModalNotFoundItems.value.length > 0) letterPreviewTab.value = 'not_found'
+	else letterPreviewTab.value = 'partial'
 	showLetterModal.value = true
-}
-
-function isTzSelectable(status: TZAnalysisStatus) {
-	return status === 'partial' || status === 'missing' || status === 'not_found'
 }
 
 async function updateItemStatus(index: number, status: TZAnalysisStatus) {
 	if (!analysis.value?.id || overrideSaving.value) return
 	overrideSaving.value = true
+	const prevOverrides = { ...itemsOverrides.value }
+	const overrideKey = String(index)
 	const nextOverrides = {
 		...itemsOverrides.value,
-		[String(index)]: { status },
+		[overrideKey]: { status },
 	}
+	itemsOverrides.value = nextOverrides
 	try {
-		const updated = await patch<TZAnalysisSession>(
+		await patch<TZAnalysisSession>(
 			`/tz-analysis/${analysis.value.id}/items-overrides`,
 			{ overrides: nextOverrides },
 		)
-		applyAnalysis(updated)
+		if (analysis.value) {
+			analysis.value = {
+				...analysis.value,
+				items_overrides: { ...nextOverrides },
+			}
+		}
 	} catch (e: unknown) {
+		itemsOverrides.value = prevOverrides
 		const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
 		toast.add({
 			title: typeof detail === 'string' ? detail : 'Не удалось сохранить статус',
@@ -2033,17 +2500,6 @@ async function updateItemStatus(index: number, status: TZAnalysisStatus) {
 	} finally {
 		overrideSaving.value = false
 	}
-}
-
-function toggleTzSelect(index: number, checked: boolean) {
-	if (checked) {
-		if (!tzSelectedIndices.value.includes(index)) {
-			tzSelectedIndices.value = [...tzSelectedIndices.value, index]
-		}
-	} else {
-		tzSelectedIndices.value = tzSelectedIndices.value.filter((i) => i !== index)
-	}
-	saveLetterSelection()
 }
 
 async function downloadBlob(url: string, filename: string) {
@@ -2059,11 +2515,11 @@ async function downloadBlob(url: string, filename: string) {
 	URL.revokeObjectURL(objectUrl)
 }
 
-async function exportTzCsv() {
+async function exportTzXlsx() {
 	if (!analysis.value?.id) return
 	await downloadBlob(
-		`/tz-analysis/${analysis.value.id}/export.csv`,
-		`tz_analysis_${analysis.value.id}.csv`,
+		`/tz-analysis/${analysis.value.id}/export.xlsx`,
+		`tz_analysis_${analysis.value.id}.xlsx`,
 	)
 }
 

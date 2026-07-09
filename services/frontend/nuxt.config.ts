@@ -30,7 +30,10 @@ export default defineNuxtConfig({
 				import.meta.env.CONTACT_EMAIL ?? 'support@tenderoptima.by',
 			),
 			contactPhone: String(
-				import.meta.env.CONTACT_PHONE ?? '+375291234567',
+				import.meta.env.CONTACT_PHONE ?? '+375 29 1234567',
+			),
+			contactTelegram: String(
+				import.meta.env.CONTACT_TELEGRAM ?? 'tenderoptima_bot',
 			),
 		},
 	},
@@ -60,6 +63,7 @@ export default defineNuxtConfig({
 	},
 	fonts: {
 		families: [
+			{ name: 'Plus Jakarta Sans', provider: 'google', global: true },
 			{ name: 'Inter', provider: 'google', global: true },
 			{ name: 'JetBrains Mono', provider: 'google', global: true },
 		],
@@ -74,6 +78,12 @@ export default defineNuxtConfig({
 	app: {
 		head: {
 			title: 'TenderOptima',
+			link: [
+				{
+					rel: 'stylesheet',
+					href: 'https://api.fontshare.com/v2/css?f[]=satoshi@500,900&display=swap',
+				},
+			],
 		},
 	},
 });

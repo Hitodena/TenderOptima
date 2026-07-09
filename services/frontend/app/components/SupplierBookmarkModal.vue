@@ -76,15 +76,37 @@
 								>
 									Добавить всех
 								</UButton>
-								<UButton
-									v-if="canModifyList(list)"
-									size="xs"
-									variant="ghost"
-									color="error"
-									icon="i-lucide-trash-2"
-									:loading="deletingListId === list.id"
-									@click.stop="removeList(list.id)"
-								/>
+								<template v-if="canModifyList(list)">
+									<template v-if="confirmDeleteListId === list.id">
+										<UButton
+											size="xs"
+											color="error"
+											variant="soft"
+											icon="i-lucide-check"
+											aria-label="Подтвердить удаление базы"
+											:loading="deletingListId === list.id"
+											@click.stop="confirmRemoveList(list.id)"
+										/>
+										<UButton
+											size="xs"
+											color="neutral"
+											variant="ghost"
+											icon="i-lucide-x"
+											aria-label="Отменить удаление"
+											@click.stop="confirmDeleteListId = null"
+										/>
+									</template>
+									<UButton
+										v-else
+										size="xs"
+										variant="ghost"
+										color="error"
+										icon="i-lucide-trash-2"
+										aria-label="Удалить базу"
+										:loading="deletingListId === list.id"
+										@click.stop="startDeleteListConfirm(list.id)"
+									/>
+								</template>
 							</button>
 
 							<div v-if="expandedListIds.has(list.id)" class="border-t border-default p-3 space-y-3 bg-elevated/20">
@@ -102,6 +124,7 @@
 									<div class="flex-1 min-w-0">
 										<p class="text-sm font-medium truncate">{{ item.company_name }}</p>
 										<p class="text-xs text-muted truncate">{{ item.email }}</p>
+										<p v-if="item.phone" class="text-xs text-muted/60 truncate">{{ item.phone }}</p>
 										<p v-if="item.domain" class="text-xs text-muted/60 truncate">{{ item.domain }}</p>
 									</div>
 									<div class="flex items-center gap-1 shrink-0">
@@ -109,11 +132,41 @@
 											v-if="canModifyList(list)"
 											size="xs"
 											variant="ghost"
-											color="error"
-											icon="i-lucide-trash-2"
-											:loading="deletingItemId === item.id"
-											@click="removeItem(list.id, item.id)"
+											color="neutral"
+											icon="i-lucide-pencil"
+											@click="openEditItemModal(list.id, item)"
 										/>
+										<template v-if="canModifyList(list)">
+											<template v-if="confirmDeleteItemId === item.id">
+												<UButton
+													size="xs"
+													color="error"
+													variant="soft"
+													icon="i-lucide-check"
+													aria-label="Подтвердить удаление"
+													:loading="deletingItemId === item.id"
+													@click.stop="confirmRemoveItem(list.id, item.id)"
+												/>
+												<UButton
+													size="xs"
+													color="neutral"
+													variant="ghost"
+													icon="i-lucide-x"
+													aria-label="Отменить удаление"
+													@click.stop="confirmDeleteItemId = null"
+												/>
+											</template>
+											<UButton
+												v-else
+												size="xs"
+												variant="ghost"
+												color="error"
+												icon="i-lucide-trash-2"
+												aria-label="Удалить поставщика"
+												:loading="deletingItemId === item.id"
+												@click.stop="startDeleteItemConfirm(item.id)"
+											/>
+										</template>
 										<UButton
 											size="sm"
 											variant="soft"
@@ -128,93 +181,13 @@
 
 								<div v-if="canModifyList(list)">
 									<UButton
-										v-if="addingToListId !== list.id"
 										size="sm"
 										variant="outline"
 										leading-icon="i-lucide-user-plus"
-										@click="startAddItem(list.id)"
+										@click="openAddItemModal(list.id)"
 									>
 										Добавить поставщика
 									</UButton>
-									<div v-else class="rounded-lg border border-default p-4 bg-default">
-										<p class="text-sm font-semibold mb-3">Новый поставщик</p>
-										<UForm
-											:schema="itemSchema"
-											:state="itemForm"
-											class="space-y-3"
-											@submit="() => createItem(list.id)"
-										>
-											<UFormField label="Название компании" name="company_name" required>
-												<UInput
-													v-model="itemForm.company_name"
-													placeholder="ООО ПромПоставка"
-													icon="i-lucide-building-2"
-													class="w-full"
-												/>
-											</UFormField>
-											<UFormField label="Email" name="email" required>
-												<UInput
-													v-model="itemForm.email"
-													type="email"
-													placeholder="sales@supplier.ru"
-													icon="i-lucide-mail"
-													class="w-full"
-												/>
-											</UFormField>
-
-											<div>
-												<UButton
-													type="button"
-													variant="ghost"
-													color="neutral"
-													size="sm"
-													class="px-0"
-													:trailing-icon="showItemOptional ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
-													@click="showItemOptional = !showItemOptional"
-												>
-													Дополнительные поля
-												</UButton>
-
-												<div v-show="showItemOptional" class="mt-3 space-y-3">
-													<UFormField label="Домен" name="domain" hint="example.com">
-														<UInput
-															v-model="itemForm.domain"
-															placeholder="supplier.ru"
-															icon="i-lucide-globe"
-															class="w-full"
-														/>
-													</UFormField>
-													<UFormField
-														label="Заметки"
-														name="notes"
-														hint="Контакты, телефоны, комментарии"
-													>
-														<UTextarea
-															v-model="itemForm.notes"
-															:rows="3"
-															placeholder="Телефон, контактное лицо, условия поставки..."
-															class="w-full"
-														/>
-													</UFormField>
-												</div>
-											</div>
-
-											<div class="flex justify-end gap-2">
-												<UButton
-													size="sm"
-													variant="ghost"
-													color="neutral"
-													type="button"
-													@click="cancelAddItem"
-												>
-													Отмена
-												</UButton>
-												<UButton size="sm" type="submit" :loading="savingItem">
-													Сохранить
-												</UButton>
-											</div>
-										</UForm>
-									</div>
 								</div>
 							</div>
 						</div>
@@ -223,6 +196,14 @@
 			</div>
 		</template>
 	</UModal>
+
+	<AddSupplierModal
+		v-model:open="bookmarkModalOpen"
+		:bookmark-list-id="editingBookmarkListId"
+		:bookmark-item="editingBookmarkItem"
+		@added="fetchLists"
+		@updated="fetchLists"
+	/>
 
 	<UModal v-model:open="createListOpen" title="Новая база поставщиков" :ui="{ content: 'max-w-md' }">
 		<template #body>
@@ -255,6 +236,7 @@ import type {
 	SupplierBookmarkList,
 	SupplierCreate,
 } from '#shared/types'
+import { pluralizeSuppliers } from '#shared/utils/textFormat'
 
 const props = defineProps<{ requestId: string }>()
 const isOpen = defineModel<boolean>('open', { default: false })
@@ -266,29 +248,23 @@ const toast = useToast()
 const lists = ref<SupplierBookmarkList[]>([])
 const loading = ref(false)
 const savingList = ref(false)
-const savingItem = ref(false)
 const deletingListId = ref<string | null>(null)
 const deletingItemId = ref<string | null>(null)
+const confirmDeleteListId = ref<string | null>(null)
+const confirmDeleteItemId = ref<string | null>(null)
 const addingItemId = ref<string | null>(null)
 const addingListId = ref<string | null>(null)
-const addingToListId = ref<string | null>(null)
 const search = ref('')
 const expandedListIds = ref(new Set<string>())
 const createListOpen = ref(false)
+const bookmarkModalOpen = ref(false)
+const editingBookmarkListId = ref<string | null>(null)
+const editingBookmarkItem = ref<SupplierBookmarkItem | null>(null)
 
 const listForm = reactive({ title: '' })
-const itemForm = reactive({ domain: '', company_name: '', email: '', notes: '' })
-const showItemOptional = ref(false)
 
 const listSchema = z.object({
 	title: z.string().min(1, 'Обязательное поле').max(255),
-})
-
-const itemSchema = z.object({
-	domain: z.string().optional(),
-	company_name: z.string().min(1, 'Обязательное поле').max(200),
-	email: z.string().email('Неверный формат email'),
-	notes: z.string().optional(),
 })
 
 const filteredLists = computed(() => {
@@ -321,6 +297,36 @@ function normalizeDomain(value: string | null | undefined): string | null {
 	return trimmed.length >= 3 ? trimmed : null
 }
 
+function normalizePhone(value: string | null | undefined): string | null {
+	const trimmed = (value ?? '').trim()
+	return trimmed || null
+}
+
+function clearDeleteConfirm() {
+	confirmDeleteListId.value = null
+	confirmDeleteItemId.value = null
+}
+
+function startDeleteListConfirm(listId: string) {
+	confirmDeleteItemId.value = null
+	confirmDeleteListId.value = listId
+}
+
+function startDeleteItemConfirm(itemId: string) {
+	confirmDeleteListId.value = null
+	confirmDeleteItemId.value = itemId
+}
+
+async function confirmRemoveList(listId: string) {
+	confirmDeleteListId.value = null
+	await removeList(listId)
+}
+
+async function confirmRemoveItem(listId: string, itemId: string) {
+	confirmDeleteItemId.value = null
+	await removeItem(listId, itemId)
+}
+
 function toggleList(listId: string) {
 	const next = new Set(expandedListIds.value)
 	if (next.has(listId)) next.delete(listId)
@@ -343,6 +349,18 @@ async function fetchLists() {
 function openCreateList() {
 	listForm.title = ''
 	createListOpen.value = true
+}
+
+function openAddItemModal(listId: string) {
+	editingBookmarkListId.value = listId
+	editingBookmarkItem.value = null
+	bookmarkModalOpen.value = true
+}
+
+function openEditItemModal(listId: string, item: SupplierBookmarkItem) {
+	editingBookmarkListId.value = listId
+	editingBookmarkItem.value = item
+	bookmarkModalOpen.value = true
 }
 
 async function createList() {
@@ -380,44 +398,6 @@ async function removeList(listId: string) {
 	}
 }
 
-function startAddItem(listId: string) {
-	addingToListId.value = listId
-	itemForm.domain = ''
-	itemForm.company_name = ''
-	itemForm.email = ''
-	itemForm.notes = ''
-	showItemOptional.value = false
-}
-
-function cancelAddItem() {
-	addingToListId.value = null
-	showItemOptional.value = false
-}
-
-async function createItem(listId: string) {
-	if (savingItem.value) return
-	savingItem.value = true
-	try {
-		const created = await post<SupplierBookmarkItem>(`/supplier-bookmarks/${listId}/items`, {
-			company_name: itemForm.company_name.trim(),
-			email: itemForm.email.trim(),
-			domain: normalizeDomain(itemForm.domain),
-			notes: itemForm.notes.trim() || null,
-		})
-		lists.value = lists.value.map((list) =>
-			list.id === listId
-				? { ...list, items: [...list.items, created] }
-				: list,
-		)
-		cancelAddItem()
-		toast.add({ title: 'Поставщик добавлен в базу', color: 'success' })
-	} catch {
-		toast.add({ title: 'Не удалось сохранить поставщика', color: 'error' })
-	} finally {
-		savingItem.value = false
-	}
-}
-
 async function removeItem(listId: string, itemId: string) {
 	deletingItemId.value = itemId
 	try {
@@ -440,6 +420,7 @@ function supplierPayload(item: SupplierBookmarkItem): SupplierCreate {
 		domain: normalizeDomain(item.domain),
 		company_name: item.company_name.trim(),
 		email: item.email.trim(),
+		phone: normalizePhone(item.phone),
 		source: 'manual',
 		request_id: props.requestId,
 	}
@@ -479,7 +460,7 @@ async function addAllToRequest(list: SupplierBookmarkList) {
 		if (added > 0) emit('added')
 		if (failed === 0) {
 			toast.add({
-				title: `Добавлено поставщиков: ${added}`,
+				title: `Добавлено ${added} ${pluralizeSuppliers(added)}`,
 				color: 'success',
 				icon: 'i-lucide-check',
 			})
@@ -498,5 +479,10 @@ async function addAllToRequest(list: SupplierBookmarkList) {
 
 watch(isOpen, (open) => {
 	if (open) fetchLists()
+	else clearDeleteConfirm()
+})
+
+watch(search, () => {
+	clearDeleteConfirm()
 })
 </script>
