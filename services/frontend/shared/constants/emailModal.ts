@@ -6,4 +6,4 @@ export const EMAIL_LETTER_MODAL_UI = {
 
 /** Sticky footer bar for letter modals (Send / Cancel). */
 export const EMAIL_LETTER_MODAL_FOOTER_CLASS =
-	'sticky bottom-0 shrink-0 -mx-1 mt-auto border-t border-default bg-default/95 backdrop-blur-sm px-1 pt-3 flex items-center justify-end gap-2'
+	'sticky bottom-0 z-20 shrink-0 -mx-1 mt-auto border-t border-default bg-default px-1 pt-3 pb-1 flex items-center justify-end gap-2'

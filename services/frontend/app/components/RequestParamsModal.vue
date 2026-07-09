@@ -134,10 +134,7 @@ v-model="form.businessInfo"
 v-if="error" color="error" variant="soft" icon="i-lucide-circle-alert" :description="error"
                     class="shrink-0" />
 
-                <div
-                    class="sticky bottom-0 shrink-0 -mx-1 mt-auto border-t border-default bg-default/95
-                        backdrop-blur-sm px-1 pt-3 flex items-center justify-end gap-2"
-                >
+                <div :class="EMAIL_LETTER_MODAL_FOOTER_CLASS">
                     <UButton color="neutral" variant="ghost" @click="close">
                         Отмена
                     </UButton>
@@ -204,10 +201,7 @@ v-for="(att, idx) in uploadedAttachments" :key="idx"
                 <UAlert v-if="error" color="error" variant="soft" icon="i-lucide-circle-alert" :description="error" />
                 </div>
 
-                <div
-                    class="sticky bottom-0 shrink-0 -mx-1 mt-auto border-t border-default bg-default/95
-                        backdrop-blur-sm px-1 pt-3 flex items-center justify-end gap-2"
-                >
+                <div :class="EMAIL_LETTER_MODAL_FOOTER_CLASS">
                     <UButton
                         color="neutral"
                         variant="ghost"
@@ -234,7 +228,10 @@ import type {
     UserResponse,
     UserUpdate,
 } from "#shared/types"
-import { EMAIL_LETTER_MODAL_UI } from "#shared/constants/emailModal"
+import {
+    EMAIL_LETTER_MODAL_FOOTER_CLASS,
+    EMAIL_LETTER_MODAL_UI,
+} from "#shared/constants/emailModal"
 import { getApiErrorDetail } from "#shared/utils/apiError"
 import { pluralizeSuppliers } from "#shared/utils/textFormat"
 import { emailQuotaBlockMessage, emailQuotaRemaining, effectiveEmailLimit } from "#shared/utils/subscriptionAccess"
