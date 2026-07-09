@@ -51,7 +51,7 @@ class SubscriptionBillingProfile(IDMixinUUID, TimestampMixin, Base):
 
 
 class SubscriptionBillingDocument(IDMixinUUID, TimestampMixin, Base):
-    """Generated invoice/act DOCX for a subscription billing period."""
+    """Generated invoice/act PDF for a subscription billing period."""
 
     __tablename__ = "subscription_billing_documents"
     __table_args__ = (

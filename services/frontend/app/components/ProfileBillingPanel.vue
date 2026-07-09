@@ -39,7 +39,7 @@ async function downloadBillingDocument(
 		const url = URL.createObjectURL(blob)
 		const a = document.createElement('a')
 		a.href = url
-		a.download = `${doc.receipt_id}-${docType}.docx`
+		a.download = `${doc.receipt_id}-${docType}.pdf`
 		a.click()
 		URL.revokeObjectURL(url)
 	} catch {

@@ -414,25 +414,45 @@ def write_billing_documents(
     invoice_path: Path,
     act_path: Path,
 ) -> tuple[Path, Path]:
-    """Build and store invoice and act DOCX files."""
+    """Build invoice/act as DOCX, convert to PDF, return PDF paths."""
+    from backend.services.extraction.docx_to_pdf import (
+        convert_docx_to_pdf_file,
+    )
+
     invoice_path.parent.mkdir(parents=True, exist_ok=True)
-    invoice_path.write_bytes(
+    invoice_docx = invoice_path.with_suffix(".docx")
+    act_docx = act_path.with_suffix(".docx")
+    invoice_pdf = invoice_path.with_suffix(".pdf")
+    act_pdf = act_path.with_suffix(".pdf")
+
+    invoice_docx.write_bytes(
         build_invoice_docx_bytes(
             quote=quote,
             service_recipient=service_recipient,
             env_party=env_party,
         )
     )
-    act_path.write_bytes(
+    act_docx.write_bytes(
         build_act_docx_bytes(
             quote=quote,
             service_recipient=service_recipient,
             env_party=env_party,
         )
     )
+
+    converted_invoice = convert_docx_to_pdf_file(invoice_docx, invoice_pdf)
+    converted_act = convert_docx_to_pdf_file(act_docx, act_pdf)
+    if converted_invoice is None or converted_act is None:
+        raise RuntimeError(
+            "Failed to convert billing DOCX to PDF "
+            "(LibreOffice/soffice required)"
+        )
+
     logger.info(
         "Billing documents written",
-        invoice=str(invoice_path),
-        act=str(act_path),
+        invoice_docx=str(invoice_docx),
+        act_docx=str(act_docx),
+        invoice_pdf=str(converted_invoice),
+        act_pdf=str(converted_act),
     )
-    return invoice_path, act_path
+    return converted_invoice, converted_act

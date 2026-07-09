@@ -87,21 +87,23 @@ class SubscriptionDAO(BaseDAO[Subscription]):
             )
             if plan_changed or geo_changed:
                 catalog = catalog_for_plan(plan, geo_code)
-                values.update(
-                    {
-                        "max_searches_per_month": catalog.max_searches_per_month,
-                        "max_emails_per_month": catalog.max_emails_per_month,
-                        "max_kp_processed_per_month": (
-                            catalog.max_kp_processed_per_month
-                        ),
-                        "max_pages_analyzed_per_month": (
-                            catalog.max_pages_analyzed_per_month
-                        ),
-                        "price_module_1_monthly": catalog.price_module_1_monthly,
-                        "price_module_2_monthly": catalog.price_module_2_monthly,
-                        "price_bundle_monthly": catalog.price_bundle_monthly,
-                    }
-                )
+                catalog_defaults = {
+                    "max_searches_per_month": catalog.max_searches_per_month,
+                    "max_emails_per_month": catalog.max_emails_per_month,
+                    "max_kp_processed_per_month": (
+                        catalog.max_kp_processed_per_month
+                    ),
+                    "max_pages_analyzed_per_month": (
+                        catalog.max_pages_analyzed_per_month
+                    ),
+                    "price_module_1_monthly": catalog.price_module_1_monthly,
+                    "price_module_2_monthly": catalog.price_module_2_monthly,
+                    "price_bundle_monthly": catalog.price_bundle_monthly,
+                }
+                # Keep explicitly provided overrides from the admin payload.
+                for key, value in catalog_defaults.items():
+                    if key not in values:
+                        values[key] = value
 
             updated = await cls.update_fields(session, existing.id, **values)
             if updated is None:

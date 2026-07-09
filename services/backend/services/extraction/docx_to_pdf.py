@@ -148,3 +148,23 @@ def convert_docx_to_pdf(docx_path: Path) -> Path | None:
         destination = persistent_dir / pdf_path.name
         shutil.copy2(pdf_path, destination)
         return destination
+
+
+def convert_docx_to_pdf_file(
+    docx_path: Path,
+    pdf_path: Path | None = None,
+) -> Path | None:
+    """Convert *docx_path* to PDF and write it to *pdf_path* (or beside DOCX).
+
+    Returns the written PDF path, or ``None`` when conversion fails.
+    """
+    converted = convert_docx_to_pdf(docx_path)
+    if converted is None:
+        return None
+    try:
+        destination = pdf_path or docx_path.with_suffix(".pdf")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(converted, destination)
+        return destination
+    finally:
+        shutil.rmtree(converted.parent, ignore_errors=True)

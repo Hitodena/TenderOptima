@@ -1539,9 +1539,15 @@ async function fetchComparison() {
 		)
 		if (
 			!comparisonSortBy.value
-			&& comparison.value.price_requirements?.length
+			&& (comparison.value.price_requirements?.length
+				|| priceRequirements.value.length)
 		) {
-			comparisonSortBy.value = comparison.value.price_requirements[0] ?? null
+			const unitPrice = 'Цена за единицу без НДС'
+			comparisonSortBy.value = priceRequirements.value.includes(unitPrice)
+				? unitPrice
+				: (comparison.value.price_requirements?.[0]
+					?? priceRequirements.value[0]
+					?? null)
 		}
 	} catch {
 		comparison.value = null

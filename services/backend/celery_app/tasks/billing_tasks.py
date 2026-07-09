@@ -15,6 +15,7 @@ from backend.celery_app.celery_config import app
 from backend.celery_app.utils import async_task, get_db_manager
 from backend.core import get_config
 from backend.db.dao import SubscriptionBillingDocumentDAO
+from backend.services.extraction.docx_to_pdf import convert_docx_to_pdf_file
 from backend.utils.user_email_credentials import (
     resolve_smtp_credentials,
     smtp_connection,
@@ -28,13 +29,37 @@ def _send_mime(msg, recipient: str, smtp_creds) -> None:
         server.sendmail(smtp_creds.user, [recipient], msg.as_string())
 
 
-def _attach_docx(msg: MIMEMultipart, path: Path) -> None:
-    part = MIMEBase("application", "octet-stream")
+def _resolve_pdf_attachment(stored_path: str | None) -> Path | None:
+    if not stored_path:
+        return None
+    path = Path(stored_path)
+    if path.suffix.lower() == ".pdf" and path.is_file():
+        return path
+    if path.suffix.lower() == ".docx" and path.is_file():
+        pdf_path = path.with_suffix(".pdf")
+        if pdf_path.is_file():
+            return pdf_path
+        return convert_docx_to_pdf_file(path, pdf_path)
+    docx_fallback = path.with_suffix(".docx")
+    if docx_fallback.is_file():
+        target = (
+            path
+            if path.suffix.lower() == ".pdf"
+            else docx_fallback.with_suffix(".pdf")
+        )
+        if target.is_file():
+            return target
+        return convert_docx_to_pdf_file(docx_fallback, target)
+    return None
+
+
+def _attach_pdf(msg: MIMEMultipart, path: Path) -> None:
+    part = MIMEBase("application", "pdf")
     part.set_payload(path.read_bytes())
     encoders.encode_base64(part)
     part.add_header(
         "Content-Disposition",
-        f'attachment; filename="{path.name}"',
+        f'attachment; filename="{path.with_suffix(".pdf").name}"',
     )
     msg.attach(part)
 
@@ -51,7 +76,7 @@ async def send_billing_document_email(
     document_id: str,
     recipient: str,
 ) -> dict:
-    """Send billing invoice and act DOCX to the subscription owner."""
+    """Send billing invoice and act PDF to the subscription owner."""
     db_manager = get_db_manager()
     doc_uuid = uuid.UUID(document_id)
 
@@ -60,28 +85,30 @@ async def send_billing_document_email(
         if row is None:
             logger.error("Billing document not found", document_id=document_id)
             return {"status": "error", "reason": "not_found"}
-        invoice_path = (
-            Path(row.invoice_docx_path) if row.invoice_docx_path else None
-        )
-        act_path = Path(row.act_docx_path) if row.act_docx_path else None
+        invoice_stored = row.invoice_docx_path
+        act_stored = row.act_docx_path
+        receipt_id = row.receipt_id
+        period_start = row.period_start
+        period_end = row.period_end
 
     attachments: list[Path] = []
-    for path in (invoice_path, act_path):
-        if path is not None and path.is_file():
-            attachments.append(path)
+    for stored in (invoice_stored, act_stored):
+        pdf_path = _resolve_pdf_attachment(stored)
+        if pdf_path is not None and pdf_path.is_file():
+            attachments.append(pdf_path)
 
     if not attachments:
-        logger.error("Billing DOCX files missing", document_id=document_id)
+        logger.error("Billing PDF files missing", document_id=document_id)
         return {"status": "error", "reason": "file_missing"}
 
     smtp_creds = resolve_smtp_credentials(None, config)
-    subject = f"Документы по подписке TenderOptima — {row.receipt_id}"
+    subject = f"Документы по подписке TenderOptima — {receipt_id}"
     body = (
         "Добрый день.\n\n"
         f"Во вложении счёт-фактура и акт сдачи-приёмки услуг "
         f"по подписке за период "
-        f"{row.period_start.strftime('%d.%m.%Y')} — "
-        f"{row.period_end.strftime('%d.%m.%Y')}.\n\n"
+        f"{period_start.strftime('%d.%m.%Y')} — "
+        f"{period_end.strftime('%d.%m.%Y')}.\n\n"
         "С уважением,\n"
         f"{config.billing_issuer_name}\n"
     )
@@ -89,7 +116,7 @@ async def send_billing_document_email(
     msg = MIMEMultipart()
     msg.attach(MIMEText(body, "plain", "utf-8"))
     for attachment in attachments:
-        _attach_docx(msg, attachment)
+        _attach_pdf(msg, attachment)
     msg["From"] = f"{config.billing_issuer_name} <{smtp_creds.user}>"
     msg["To"] = recipient
     msg["Subject"] = subject

@@ -131,7 +131,7 @@ async function downloadInvoice(doc: BillingDocumentResponse) {
 		const url = URL.createObjectURL(blob)
 		const a = document.createElement('a')
 		a.href = url
-		a.download = `${doc.receipt_id}-invoice.docx`
+		a.download = `${doc.receipt_id}-invoice.pdf`
 		a.click()
 		URL.revokeObjectURL(url)
 	} catch {

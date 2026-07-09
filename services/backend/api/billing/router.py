@@ -202,7 +202,7 @@ async def list_billing_documents(
 @router.post(
     "/documents/generate",
     response_model=BillingGenerateResponse,
-    summary="Generate invoice/act DOCX for current subscription",
+    summary="Generate invoice/act PDF for current subscription",
 )
 async def generate_billing_document(
     body: BillingGenerateRequest,
@@ -246,15 +246,21 @@ async def generate_billing_document(
     )
 
     storage_dir = _billing_storage_dir(current_user.id)
-    invoice_path = storage_dir / f"{quote.receipt_id}-invoice.docx"
-    act_path = storage_dir / f"{quote.receipt_id}-act.docx"
-    write_billing_documents(
-        quote=quote,
-        service_recipient=profile,
-        env_party=issuer_from_config(config),
-        invoice_path=invoice_path,
-        act_path=act_path,
-    )
+    invoice_path = storage_dir / f"{quote.receipt_id}-invoice.pdf"
+    act_path = storage_dir / f"{quote.receipt_id}-act.pdf"
+    try:
+        write_billing_documents(
+            quote=quote,
+            service_recipient=profile,
+            env_party=issuer_from_config(config),
+            invoice_path=invoice_path,
+            act_path=act_path,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
 
     document_fields = {
         "plan": quote.plan,
@@ -312,9 +318,34 @@ async def generate_billing_document(
     )
 
 
+def _resolve_billing_pdf_path(stored_path: str) -> Path | None:
+    """Return a PDF path for download, converting legacy DOCX on demand."""
+    from backend.services.extraction.docx_to_pdf import (
+        convert_docx_to_pdf_file,
+    )
+
+    path = Path(stored_path)
+    if path.suffix.lower() == ".pdf" and path.is_file():
+        return path
+    if path.suffix.lower() == ".docx" and path.is_file():
+        pdf_path = path.with_suffix(".pdf")
+        if pdf_path.is_file():
+            return pdf_path
+        return convert_docx_to_pdf_file(path, pdf_path)
+    # Stored path may already point at a missing PDF while DOCX still exists.
+    docx_fallback = path.with_suffix(".docx")
+    if docx_fallback.is_file():
+        if path.suffix.lower() == ".pdf":
+            return convert_docx_to_pdf_file(docx_fallback, path)
+        return convert_docx_to_pdf_file(
+            docx_fallback, docx_fallback.with_suffix(".pdf")
+        )
+    return None
+
+
 @router.get(
     "/documents/{document_id}/download",
-    summary="Download generated billing DOCX",
+    summary="Download generated billing PDF",
 )
 async def download_billing_document(
     document_id: uuid.UUID,
@@ -342,17 +373,14 @@ async def download_billing_document(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document file not found",
         )
-    path = Path(stored_path)
-    if not path.is_file():
+    path = _resolve_billing_pdf_path(stored_path)
+    if path is None or not path.is_file():
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document file missing",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to prepare PDF document",
         )
     return FileResponse(
         path,
-        media_type=(
-            "application/vnd.openxmlformats-officedocument"
-            ".wordprocessingml.document"
-        ),
-        filename=path.name,
+        media_type="application/pdf",
+        filename=path.with_suffix(".pdf").name,
     )

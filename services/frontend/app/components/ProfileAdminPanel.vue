@@ -514,34 +514,26 @@ async function saveSubscription() {
 			geo_code: subscriptionForm.geo_code || 'BY',
 			currency_code: subscriptionForm.currency_code || 'BYN',
 			is_active: subscriptionActive.value === 'active',
-		}
-		if (useCustomLimits.value) {
-			payload.max_searches_per_month = parseOptionalNumber(
+			// Always persist values from the form. Catalog defaults are applied
+			// into the form when the plan changes or custom mode is turned off.
+			max_searches_per_month: parseOptionalNumber(
 				subscriptionForm.max_searches_per_month,
-			)
-			payload.max_emails_per_month = parseOptionalNumber(
+			),
+			max_emails_per_month: parseOptionalNumber(
 				subscriptionForm.max_emails_per_month,
-			)
-			payload.max_pages_analyzed_per_month = parseOptionalNumber(
+			),
+			max_pages_analyzed_per_month: parseOptionalNumber(
 				subscriptionForm.max_pages_analyzed_per_month,
-			)
-			payload.price_module_1_monthly = parseOptionalPrice(
+			),
+			price_module_1_monthly: parseOptionalPrice(
 				subscriptionForm.price_module_1_monthly,
-			)
-			payload.price_module_2_monthly = parseOptionalPrice(
+			),
+			price_module_2_monthly: parseOptionalPrice(
 				subscriptionForm.price_module_2_monthly,
-			)
-			payload.price_bundle_monthly = parseOptionalPrice(
+			),
+			price_bundle_monthly: parseOptionalPrice(
 				subscriptionForm.price_bundle_monthly,
-			)
-		} else {
-			const catalog = catalogForPlan(subscriptionForm.plan)
-			payload.max_searches_per_month = catalog.max_searches_per_month
-			payload.max_emails_per_month = catalog.max_emails_per_month
-			payload.max_pages_analyzed_per_month = catalog.max_pages_analyzed_per_month
-			payload.price_module_1_monthly = catalog.price_module_1_monthly
-			payload.price_module_2_monthly = catalog.price_module_2_monthly
-			payload.price_bundle_monthly = catalog.price_bundle_monthly
+			),
 		}
 		selectedUser.value = await patch<AdminUserDetail>(
 			`/admin/users/${selectedUserId.value}/subscription`,
