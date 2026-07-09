@@ -123,7 +123,7 @@ v-else-if="sortedThreads.length === 0"
 								</p>
 								<div class="flex items-center justify-between gap-2">
 									<UBadge
-										:color="thread.last_message?.direction === 'incoming' ? 'primary' : 'neutral'"
+										color="primary"
 										variant="subtle" size="sm">
 										{{ thread.message_count }} {{ messageCountLabel(thread.message_count) }}
 									</UBadge>
@@ -431,26 +431,19 @@ v-if="!showParamsPanel" size="xs" variant="ghost" color="neutral"
 
 							<template v-else-if="messages.length">
 								<div
-v-for="msg in messages" :key="msg.id" class="flex gap-2 md:gap-3"
-									:class="msg.direction === 'outgoing' ? 'flex-row-reverse' : ''">
+	v-for="msg in messages" :key="msg.id" class="flex gap-2 md:gap-3">
 
 									<div
-class="w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center shrink-0 mt-1"
-										:class="msg.direction === 'incoming' ? 'bg-primary/10' : 'bg-elevated'">
+	class="w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center shrink-0 mt-1 bg-primary/10">
 										<UIcon
-											:name="msg.direction === 'incoming' ? 'i-lucide-building-2' : 'i-lucide-user'"
-											class="w-3.5 h-3.5 md:w-4 md:h-4"
-											:class="msg.direction === 'incoming' ? 'text-primary' : 'text-muted'" />
+											name="i-lucide-building-2"
+											class="w-3.5 h-3.5 md:w-4 md:h-4 text-primary" />
 									</div>
 
 									<div class="flex-1 min-w-0 max-w-[85%] md:max-w-[75%]">
-										<div
-class="flex items-center gap-2 mb-1"
-											:class="msg.direction === 'outgoing' ? 'flex-row-reverse' : ''">
+										<div class="flex items-center gap-2 mb-1">
 											<span class="text-xs font-medium">
-												{{ msg.direction === 'incoming'
-													? selectedThread?.supplier.company_name
-													: 'Вы' }}
+												{{ selectedThread?.supplier.company_name }}
 											</span>
 											<span class="text-xs text-muted">
 												{{ msg.received_at ? formatDateTime(msg.received_at) : '' }}
@@ -458,9 +451,7 @@ class="flex items-center gap-2 mb-1"
 										</div>
 
 										<div
-class="rounded-xl px-3.5 py-2.5 text-sm shadow-sm" :class="msg.direction === 'incoming'
-											? 'bg-elevated border border-default/60 rounded-tl-md'
-											: 'bg-primary/10 rounded-tr-md'">
+	class="rounded-xl rounded-tl-md px-3.5 py-2.5 text-sm shadow-sm bg-elevated border border-default/60">
 											<p
 v-if="msg.subject"
 												class="text-[10px] text-muted mb-1.5 font-medium tracking-tight">
@@ -964,15 +955,6 @@ async function fetchMessages(rsId: string, options?: { silent?: boolean }): Prom
 	}
 }
 
-async function pollMessagesAfterSend(rsId: string, knownIds: Set<string>) {
-	const maxAttempts = 15
-	for (let attempt = 0; attempt < maxAttempts; attempt++) {
-		await fetchMessages(rsId, { silent: true })
-		if (messages.value.some(m => !knownIds.has(String(m.id)))) return
-		await new Promise(resolve => setTimeout(resolve, 400))
-	}
-}
-
 function scrollToBottom() {
 	if (messagesContainer.value)
 		messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
@@ -990,7 +972,6 @@ async function sendReply() {
 		return
 	}
 	const rsId = selectedRsId.value
-	const knownIds = new Set(messages.value.map(m => String(m.id)))
 	const body = replyBody.value
 	sendingReply.value = true
 	replyError.value = null
@@ -998,7 +979,6 @@ async function sendReply() {
 		await post(`/requests/${id}/suppliers/${rsId}/reply`, { body })
 		replyBody.value = ''
 		toast.add({ title: 'Ответ отправлен', color: 'success', icon: 'i-lucide-mail-check' })
-		await pollMessagesAfterSend(rsId, knownIds)
 		await fetchThreads()
 		await fetchSubscription()
 	} catch (e: unknown) {

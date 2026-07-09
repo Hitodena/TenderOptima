@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -125,6 +126,7 @@ async def login(
         )
 
     reset_login_lockout(user)
+    user.last_login_at = datetime.now(UTC)
     session.add(user)
     await session.commit()
 

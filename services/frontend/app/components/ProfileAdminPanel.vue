@@ -38,6 +38,9 @@
 							{{ t('admin.users.registeredAt') }}: {{ formatDate(item.created_at) }}
 						</p>
 						<p class="text-[11px] text-muted">
+							{{ t('admin.users.lastLogin') }}: {{ formatLastLogin(item.last_login_at) }}
+						</p>
+						<p class="text-[11px] text-muted">
 							{{ t('admin.users.emailsSent') }}: {{ item.emails_sent_this_month }}
 							· {{ t('admin.users.pagesAnalyzed') }}: {{ item.pages_analyzed_this_month }}
 							<template v-if="item.pages_analysis_remaining != null">
@@ -58,6 +61,9 @@
 							</p>
 							<p class="text-xs text-muted mt-1">
 								{{ t('admin.users.registeredAt') }}: {{ formatDate(selectedUser.created_at) }}
+							</p>
+							<p class="text-xs text-muted mt-1">
+								{{ t('admin.users.lastLogin') }}: {{ formatLastLogin(selectedUser.last_login_at) }}
 							</p>
 							<div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted mt-2">
 								<span>{{ t('admin.users.emailsSent') }}: {{ selectedUser.emails_sent_this_month }}</span>
@@ -293,7 +299,7 @@ import { getApiErrorDetail } from '#shared/utils/apiError'
 import { t } from '~/constants/translations'
 
 const { get, patch } = useApi()
-const { formatDate } = useFormatDate()
+const { formatDate, formatDateTime } = useFormatDate()
 
 const users = ref<AdminUserListItem[]>([])
 const selectedUserId = ref<string | null>(null)
@@ -390,6 +396,10 @@ const emailError = ref<string | null>(null)
 const emailSuccess = ref(false)
 const subscriptionError = ref<string | null>(null)
 const subscriptionSuccess = ref(false)
+
+function formatLastLogin(value: string | null): string {
+	return value ? formatDateTime(value) : t('admin.users.noLastLogin')
+}
 
 function parseOptionalNumber(value: string | number | null | undefined): number | null {
 	const trimmed = String(value ?? '').trim()

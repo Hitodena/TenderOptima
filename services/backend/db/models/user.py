@@ -32,6 +32,10 @@ class User(IDMixinUUID, TimestampMixin, Base):
     is_admin: Mapped[bool] = mapped_column(default=False)
     agree_terms: Mapped[bool] = mapped_column(default=True)
     agree_marketing: Mapped[bool] = mapped_column(default=False)
+    last_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     failed_login_attempts: Mapped[int] = mapped_column(
         default=0, nullable=False

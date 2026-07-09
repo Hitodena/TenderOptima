@@ -134,6 +134,13 @@ class RequestResponse(BaseModel):
             ),
         ),
     ] = 0
+    supplier_messages_incoming_suppliers: Annotated[
+        int,
+        Field(
+            default=0,
+            description="Suppliers that sent at least one incoming email",
+        ),
+    ] = 0
 
     @classmethod
     def from_model(
@@ -143,6 +150,7 @@ class RequestResponse(BaseModel):
         supplier_messages_total: int = 0,
         supplier_messages_incoming: int = 0,
         supplier_messages_unread: int = 0,
+        supplier_messages_incoming_suppliers: int = 0,
     ) -> "RequestResponse":
         """Build response from ORM row plus optional message aggregates."""
         base = cls.model_validate(request)
@@ -151,6 +159,9 @@ class RequestResponse(BaseModel):
                 "supplier_messages_total": supplier_messages_total,
                 "supplier_messages_incoming": supplier_messages_incoming,
                 "supplier_messages_unread": supplier_messages_unread,
+                "supplier_messages_incoming_suppliers": (
+                    supplier_messages_incoming_suppliers
+                ),
             }
         )
 

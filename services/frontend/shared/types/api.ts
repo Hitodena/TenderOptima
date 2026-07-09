@@ -151,6 +151,7 @@ export interface AdminUserListItem {
 	company_name: string | null;
 	is_admin: boolean;
 	created_at: string;
+	last_login_at: string | null;
 	smtp_password_configured: boolean;
 	imap_password_configured: boolean;
 	emails_sent_this_month: number;
@@ -166,6 +167,7 @@ export interface AdminUserDetail {
 	company_name: string | null;
 	is_admin: boolean;
 	created_at: string;
+	last_login_at: string | null;
 	email_settings: UserEmailSettingsResponse;
 	emails_sent_this_month: number;
 	pages_analyzed_this_month: number;
@@ -260,6 +262,7 @@ export interface RequestResponse {
 	supplier_messages_total?: number;
 	supplier_messages_incoming?: number;
 	supplier_messages_unread?: number;
+	supplier_messages_incoming_suppliers?: number;
 }
 
 export interface RequestSupplierResponse {

@@ -25,3 +25,7 @@ export function pluralizeRu(
 export function pluralizeSuppliers(count: number): string {
 	return pluralizeRu(count, 'поставщик', 'поставщика', 'поставщиков')
 }
+
+export function pluralizeLetters(count: number): string {
+	return pluralizeRu(count, 'письмо', 'письма', 'писем')
+}

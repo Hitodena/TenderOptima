@@ -28,7 +28,11 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
             stmt = (
                 select(cls.model)
                 .join(cls.model.request_supplier)
-                .where(RequestSupplier.request_id == request_id)
+                .where(
+                    RequestSupplier.request_id == request_id,
+                    cls.model.direction
+                    == EmailMessageDirection.INCOMING.value,
+                )
                 .options(
                     selectinload(cls.model.request_supplier).selectinload(
                         RequestSupplier.supplier
@@ -67,7 +71,10 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
         )
         stmt = (
             select(cls.model)
-            .where(cls.model.request_supplier_id == request_supplier_id)
+            .where(
+                cls.model.request_supplier_id == request_supplier_id,
+                cls.model.direction == EmailMessageDirection.INCOMING.value,
+            )
             .order_by(cls.model.received_at.asc())
         )
         result = await session.execute(stmt)
@@ -238,7 +245,7 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
         session: AsyncSession,
         request_id: uuid.UUID,
     ) -> dict[uuid.UUID, int]:
-        """Message count per request_supplier_id for enabled links on the request."""
+        """Incoming count per request_supplier_id for enabled links."""
         stmt = (
             select(
                 cls.model.request_supplier_id,
@@ -248,6 +255,7 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
             .where(
                 RequestSupplier.request_id == request_id,
                 RequestSupplier.is_enabled.is_(True),
+                cls.model.direction == EmailMessageDirection.INCOMING.value,
             )
             .group_by(cls.model.request_supplier_id)
         )
@@ -260,13 +268,14 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
         session: AsyncSession,
         request_id: uuid.UUID,
     ) -> list[EmailMessage]:
-        """One latest message per enabled request-supplier (PostgreSQL DISTINCT ON)."""
+        """One latest incoming message per enabled request-supplier."""
         stmt = (
             select(cls.model)
             .join(cls.model.request_supplier)
             .where(
                 RequestSupplier.request_id == request_id,
                 RequestSupplier.is_enabled.is_(True),
+                cls.model.direction == EmailMessageDirection.INCOMING.value,
             )
             .distinct(cls.model.request_supplier_id)
             .order_by(
@@ -352,8 +361,8 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
         cls,
         session: AsyncSession,
         request_ids: list[uuid.UUID],
-    ) -> dict[uuid.UUID, tuple[int, int, int]]:
-        """Return (total, incoming, unread_threads) per request id.
+    ) -> dict[uuid.UUID, tuple[int, int, int, int]]:
+        """Return (total, incoming, unread_threads, incoming_suppliers).
 
         unread_threads = supplier links whose latest incoming message is newer
         than thread_read_at (or never marked read).
@@ -364,6 +373,9 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
         totals: dict[uuid.UUID, int] = dict.fromkeys(request_ids, 0)
         incoming: dict[uuid.UUID, int] = dict.fromkeys(request_ids, 0)
         unread: dict[uuid.UUID, int] = dict.fromkeys(request_ids, 0)
+        incoming_suppliers: dict[uuid.UUID, int] = dict.fromkeys(
+            request_ids, 0
+        )
 
         def _count_stmt(*, incoming_only: bool = False):
             stmt = (
@@ -393,6 +405,29 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
         ):
             incoming[request_id] = int(count)
 
+        incoming_suppliers_stmt = (
+            select(
+                RequestSupplier.request_id,
+                func.count(func.distinct(cls.model.request_supplier_id)).label(
+                    "supplier_count"
+                ),
+            )
+            .select_from(cls.model)
+            .join(
+                RequestSupplier,
+                cls.model.request_supplier_id == RequestSupplier.id,
+            )
+            .where(
+                RequestSupplier.request_id.in_(request_ids),
+                cls.model.direction == EmailMessageDirection.INCOMING.value,
+            )
+            .group_by(RequestSupplier.request_id)
+        )
+        for request_id, count in await session.execute(
+            incoming_suppliers_stmt
+        ):
+            incoming_suppliers[request_id] = int(count)
+
         latest_messages = await cls._latest_messages_for_requests(
             session, request_ids
         )
@@ -408,6 +443,7 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
                 totals.get(req_id, 0),
                 incoming.get(req_id, 0),
                 unread.get(req_id, 0),
+                incoming_suppliers.get(req_id, 0),
             )
             for req_id in request_ids
         }
@@ -418,14 +454,17 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
         session: AsyncSession,
         request_ids: list[uuid.UUID],
     ) -> list[EmailMessage]:
-        """Latest message per request-supplier for the given requests."""
+        """Latest incoming message per request-supplier for the given requests."""
         stmt = (
             select(cls.model)
             .join(
                 RequestSupplier,
                 cls.model.request_supplier_id == RequestSupplier.id,
             )
-            .where(RequestSupplier.request_id.in_(request_ids))
+            .where(
+                RequestSupplier.request_id.in_(request_ids),
+                cls.model.direction == EmailMessageDirection.INCOMING.value,
+            )
             .distinct(cls.model.request_supplier_id)
             .order_by(
                 cls.model.request_supplier_id,

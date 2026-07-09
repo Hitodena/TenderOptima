@@ -239,7 +239,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
 	select: [supplierId: string]
 	'open-kp': [payload: { supplierId: string; filename: string }]
-	updated: []
+	updated: [supplierId?: string]
 }>()
 
 const { post, del: delReq } = useApi()
@@ -342,12 +342,12 @@ async function createSupplier() {
 		for (const file of newSupplierFiles.value) {
 			fd.append('kp_files', file)
 		}
-		await post<TZAnalysisSupplierItem>(
+		const created = await post<TZAnalysisSupplierItem>(
 			`/tz-analysis/${props.analysisId}/suppliers`,
 			fd,
 		)
 		resetAddForm()
-		emit('updated')
+		emit('updated', created.id)
 		toast.add({
 			title: 'Поставщик добавлен',
 			color: 'success',

@@ -39,12 +39,17 @@
 							multiple
 							accept=".pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp"
 							:interactive="false"
+							highlight
+							color="primary"
+							variant="area"
 							layout="list"
-							class="w-full"
+							position="inside"
+							icon="i-lucide-paperclip"
+							class="w-full min-h-32"
 							@update:model-value="onFilesUpdate"
 						>
 							<template #actions="{ open }">
-								<UButton type="button" variant="outline" size="sm" @click="open()">
+								<UButton type="button" variant="soft" color="primary" size="sm" @click="open()">
 									<UIcon name="i-lucide-paperclip" class="w-4 h-4" />
 									Добавить файлы
 								</UButton>

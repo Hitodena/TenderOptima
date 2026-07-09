@@ -17,6 +17,7 @@ class AdminUserListItem(BaseModel):
     company_name: str | None = None
     is_admin: bool
     created_at: datetime
+    last_login_at: datetime | None = None
     smtp_password_configured: bool
     imap_password_configured: bool
     emails_sent_this_month: int = 0
@@ -34,6 +35,7 @@ class AdminUserDetail(BaseModel):
     company_name: str | None = None
     is_admin: bool
     created_at: datetime
+    last_login_at: datetime | None = None
     email_settings: UserEmailSettingsResponse
     emails_sent_this_month: int = 0
     pages_analyzed_this_month: int = 0

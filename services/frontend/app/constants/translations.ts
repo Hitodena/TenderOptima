@@ -71,6 +71,8 @@ export const translations = {
 		},
 		users: {
 			registeredAt: 'Регистрация',
+			lastLogin: 'Последний вход',
+			noLastLogin: 'ещё не входил',
 			emailsSent: 'Писем отправлено',
 			pagesAnalyzed: 'Страниц проанализировано',
 			pagesRemaining: 'Страниц осталось',
@@ -114,6 +116,8 @@ export const translations = {
 			'Можно добавить поставщиков и отправить запрос тем, кому письмо ещё не отправлено.',
 		mailingPendingHint:
 			'Выберите поставщиков без отправленного письма и нажмите «Отправить запрос»',
+		receivedLettersStats:
+			'Получено {emails} {emailsLabel} от {suppliers} {suppliersLabel}',
 	},
 	inbox: {
 		insertBusinessInfo: 'Вставить реквизиты',

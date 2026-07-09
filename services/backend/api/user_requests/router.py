@@ -57,12 +57,16 @@ async def _request_responses_with_stats(
         return []
     ids = [r.id for r in requests]
     stats = await EmailMessageDAO.get_message_stats_for_requests(session, ids)
+    empty_stats = (0, 0, 0, 0)
     return [
         RequestResponse.from_model(
             r,
-            supplier_messages_total=stats.get(r.id, (0, 0, 0))[0],
-            supplier_messages_incoming=stats.get(r.id, (0, 0, 0))[1],
-            supplier_messages_unread=stats.get(r.id, (0, 0, 0))[2],
+            supplier_messages_total=stats.get(r.id, empty_stats)[0],
+            supplier_messages_incoming=stats.get(r.id, empty_stats)[1],
+            supplier_messages_unread=stats.get(r.id, empty_stats)[2],
+            supplier_messages_incoming_suppliers=stats.get(r.id, empty_stats)[
+                3
+            ],
         )
         for r in requests
     ]

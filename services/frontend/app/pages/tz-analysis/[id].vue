@@ -1803,11 +1803,18 @@ const canRunKpAnalysis = computed(() =>
 	&& canRunTzAnalysis.value,
 )
 
-async function refreshAnalysis() {
+async function refreshAnalysis(selectSupplierId?: string) {
 	if (!analysis.value?.id) return
 	try {
 		const data = await get<TZAnalysisSession>(`/tz-analysis/${analysis.value.id}`)
 		applyAnalysis(data)
+		if (
+			selectSupplierId
+			&& suppliers.value.some((supplier) => supplier.id === selectSupplierId)
+		) {
+			selectedSupplierId.value = selectSupplierId
+			displayedSupplierId.value = selectSupplierId
+		}
 	} catch {
 		toast.add({ title: 'Не удалось обновить анализ', color: 'error' })
 	}

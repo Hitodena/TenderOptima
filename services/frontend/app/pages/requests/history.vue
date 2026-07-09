@@ -57,8 +57,7 @@ v-if="hasUnreadMessages(req)"
 										<span>·</span>
 										<span class="flex items-center gap-1 text-primary">
 											<UIcon name="i-lucide-inbox" class="w-3 h-3" />
-											Входящие: {{ req.supplier_messages_incoming ?? 0 }} / Всего:
-											{{ req.supplier_messages_total ?? 0 }}
+											{{ requestMessageStatsLabel(req) }}
 										</span>
 									</template>
 								</p>
@@ -110,7 +109,8 @@ v-if="confirmCloseId === req.id" color="neutral" variant="ghost" size="xs"
 <script lang="ts" setup>
 import type { RequestResponse } from '#shared/types'
 import { getRequestStatusColor, getRequestStatusLabel, RequestStatus } from '#shared/types'
-import { titleCaseWords } from '#shared/utils/textFormat'
+import { pluralizeLetters, pluralizeSuppliers, titleCaseWords } from '#shared/utils/textFormat'
+import { t } from '~/constants/translations'
 
 const { post, get } = useApi()
 const { formatDate } = useFormatDate()
@@ -120,8 +120,18 @@ function showMessageStats(req: RequestResponse): boolean {
 		req.status === RequestStatus.QUEUED
 		|| req.status === RequestStatus.COMPLETED
 		|| req.status === RequestStatus.CLOSED
-		|| (req.supplier_messages_total ?? 0) > 0
+		|| (req.supplier_messages_incoming ?? 0) > 0
 	)
+}
+
+function requestMessageStatsLabel(req: RequestResponse): string {
+	const emails = req.supplier_messages_incoming ?? 0
+	const suppliers = req.supplier_messages_incoming_suppliers ?? 0
+	return t('requests.receivedLettersStats')
+		.replace('{emails}', String(emails))
+		.replace('{emailsLabel}', pluralizeLetters(emails))
+		.replace('{suppliers}', String(suppliers))
+		.replace('{suppliersLabel}', pluralizeSuppliers(suppliers))
 }
 
 function hasUnreadMessages(req: RequestResponse): boolean {
