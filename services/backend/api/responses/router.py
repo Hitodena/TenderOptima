@@ -308,7 +308,11 @@ async def post_reply(
 
     await ensure_can_send_emails(session, current_user, pending_count=1)
 
-    send_reply.delay(str(rs_id), payload.body, None)  # type: ignore
+    send_reply.delay(
+        str(rs_id),
+        payload.body,
+        payload.attachment_paths,
+    )  # type: ignore
     return {"status": "queued", "rs_id": str(rs_id)}
 
 

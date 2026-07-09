@@ -55,8 +55,17 @@
 				@click="selectTemplate(template)"
 			>
 				<div class="flex items-start justify-between gap-2 mb-1">
-					<p class="text-sm font-medium truncate flex-1">
+					<p class="text-sm font-medium truncate flex-1 min-w-0">
 						{{ template.title }}
+						<UBadge
+							v-if="template.is_primary"
+							color="primary"
+							variant="subtle"
+							size="sm"
+							class="ml-1"
+						>
+							{{ t('inbox.templatesPrimary') }}
+						</UBadge>
 						<UBadge
 							v-if="template.is_global"
 							color="info"
@@ -72,7 +81,17 @@
 						class="flex items-center gap-0.5 shrink-0"
 					>
 						<UButton
-							v-if="canEdit(template)"
+							v-if="canSetPrimary(template)"
+							size="xs"
+							variant="ghost"
+							color="neutral"
+							icon="i-lucide-star"
+							:title="t('inbox.templatesSetPrimary')"
+							:aria-label="t('inbox.templatesSetPrimary')"
+							:loading="primaryId === template.id"
+							@click.stop="setPrimary(template)"
+						/>
+						<UButton
 							size="xs"
 							variant="ghost"
 							color="neutral"
@@ -80,7 +99,7 @@
 							@click.stop="startEdit(template)"
 						/>
 						<UButton
-							v-if="canEdit(template)"
+							v-if="canDelete(template)"
 							size="xs"
 							variant="ghost"
 							color="error"
@@ -109,6 +128,13 @@
 		>
 			<template #body>
 				<div class="space-y-4">
+					<UAlert
+						v-if="forkingGlobal"
+						color="info"
+						variant="soft"
+						icon="i-lucide-copy"
+						:description="t('inbox.templatesForkHint')"
+					/>
 					<UFormField :label="t('inbox.templatesFormTitle')">
 						<UInput
 							v-model="formTitle"
@@ -144,9 +170,7 @@
 							:disabled="!canSaveForm"
 							@click="saveForm"
 						>
-							{{ formMode === 'create'
-								? t('inbox.templatesSave')
-								: t('inbox.templatesSaveChanges') }}
+							{{ saveButtonLabel }}
 						</UButton>
 					</div>
 				</div>
@@ -182,11 +206,13 @@ const templates = ref<EmailTemplate[]>([])
 const loading = ref(false)
 const saving = ref(false)
 const deletingId = ref<string | null>(null)
+const primaryId = ref<string | null>(null)
 const selectedId = ref<string | null>(null)
 
 const formOpen = ref(false)
 const formMode = ref<'create' | 'edit'>('create')
 const editingId = ref<string | null>(null)
+const forkingGlobal = ref(false)
 const formTitle = ref('')
 const formSubject = ref('')
 const formBody = ref('')
@@ -207,6 +233,12 @@ const canSaveForm = computed(() => {
 	return true
 })
 
+const saveButtonLabel = computed(() => {
+	if (formMode.value === 'create') return t('inbox.templatesSave')
+	if (forkingGlobal.value) return t('inbox.templatesSaveAsOwn')
+	return t('inbox.templatesSaveChanges')
+})
+
 async function fetchTemplates() {
 	loading.value = true
 	try {
@@ -221,8 +253,12 @@ async function fetchTemplates() {
 	}
 }
 
-function canEdit(template: EmailTemplate): boolean {
+function canDelete(template: EmailTemplate): boolean {
 	return !template.is_global
+}
+
+function canSetPrimary(template: EmailTemplate): boolean {
+	return !template.is_global && !template.is_primary
 }
 
 function selectTemplate(template: EmailTemplate) {
@@ -235,6 +271,7 @@ function resetForm() {
 	formSubject.value = ''
 	formBody.value = ''
 	editingId.value = null
+	forkingGlobal.value = false
 }
 
 function openCreate() {
@@ -251,10 +288,43 @@ function closeForm() {
 function startEdit(template: EmailTemplate) {
 	formMode.value = 'edit'
 	editingId.value = template.id
+	forkingGlobal.value = template.is_global
 	formTitle.value = template.title
 	formSubject.value = template.subject
 	formBody.value = template.body
 	formOpen.value = true
+}
+
+function applyPrimaryLocally(updated: EmailTemplate) {
+	templates.value = templates.value.map((item) => {
+		if (item.id === updated.id) return updated
+		if (!item.is_global && item.is_primary) {
+			return { ...item, is_primary: false }
+		}
+		return item
+	})
+	// Keep primary templates first in the list.
+	templates.value = [...templates.value].sort((a, b) => {
+		if (a.is_primary !== b.is_primary) return a.is_primary ? -1 : 1
+		if (a.is_global !== b.is_global) return a.is_global ? -1 : 1
+		return 0
+	})
+}
+
+async function setPrimary(template: EmailTemplate) {
+	primaryId.value = template.id
+	try {
+		const updated = await post<EmailTemplate>(
+			`/email-templates/${template.id}/primary`,
+			{},
+		)
+		applyPrimaryLocally(updated)
+		toast.add({ title: t('inbox.templatesSetPrimaryDone'), color: 'success' })
+	} catch {
+		toast.add({ title: t('inbox.templatesSetPrimaryError'), color: 'error' })
+	} finally {
+		primaryId.value = null
+	}
 }
 
 async function saveForm() {
@@ -267,7 +337,7 @@ async function saveForm() {
 		const subject = requiresSubject.value
 			? formSubject.value.trim()
 			: formTitle.value.trim()
-		if (formMode.value === 'create') {
+		if (formMode.value === 'create' || forkingGlobal.value) {
 			const created = await post<EmailTemplate>('/email-templates', {
 				title: formTitle.value.trim(),
 				subject,
@@ -276,7 +346,12 @@ async function saveForm() {
 				category: props.category,
 			})
 			templates.value = [created, ...templates.value]
-			toast.add({ title: t('inbox.templatesSaved'), color: 'success' })
+			toast.add({
+				title: forkingGlobal.value
+					? t('inbox.templatesForked')
+					: t('inbox.templatesSaved'),
+				color: 'success',
+			})
 		} else if (editingId.value) {
 			const updated = await patch<EmailTemplate>(
 				`/email-templates/${editingId.value}`,
@@ -294,7 +369,7 @@ async function saveForm() {
 		closeForm()
 	} catch {
 		toast.add({
-			title: formMode.value === 'create'
+			title: formMode.value === 'create' || forkingGlobal.value
 				? t('inbox.templatesSaveError')
 				: t('inbox.templatesUpdateError'),
 			color: 'error',

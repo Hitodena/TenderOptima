@@ -27,35 +27,20 @@
 					</UFormField>
 					<UFormField label="Текст письма">
 						<div class="flex flex-col gap-2">
-							<InsertBusinessInfoButton v-model="body" class="self-start" />
+							<div class="flex flex-wrap items-center gap-2">
+								<InsertBusinessInfoButton v-model="body" />
+								<LetterAttachButton
+									:count="filesToUpload.length"
+									@click="attachmentsField?.open()"
+								/>
+							</div>
 							<UTextarea v-model="body" :rows="18" class="w-full" autoresize />
 						</div>
 					</UFormField>
-					<div>
-						<p class="text-sm font-semibold mb-1">Вложения</p>
-						<p class="text-xs text-muted mb-2">(договор, спецификация и др.)</p>
-						<UFileUpload
-							:model-value="filesToUpload"
-							multiple
-							accept=".pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp"
-							:interactive="false"
-							highlight
-							color="primary"
-							variant="area"
-							layout="list"
-							position="inside"
-							icon="i-lucide-paperclip"
-							class="w-full min-h-32"
-							@update:model-value="onFilesUpdate"
-						>
-							<template #actions="{ open }">
-								<UButton type="button" variant="soft" color="primary" size="sm" @click="open()">
-									<UIcon name="i-lucide-paperclip" class="w-4 h-4" />
-									Добавить файлы
-								</UButton>
-							</template>
-						</UFileUpload>
-					</div>
+					<LetterAttachmentsField
+						ref="attachmentsField"
+						v-model="filesToUpload"
+					/>
 				</div>
 
 				<UAlert
@@ -105,6 +90,8 @@ import {
 	canSendEmail,
 	emailQuotaBlockMessage,
 } from '#shared/utils/subscriptionAccess'
+import LetterAttachButton from '~/components/LetterAttachButton.vue'
+import LetterAttachmentsField from '~/components/LetterAttachmentsField.vue'
 
 const props = defineProps<{
 	requestId: string
@@ -121,6 +108,7 @@ const toast = useToast()
 const subject = ref('')
 const body = ref('')
 const filesToUpload = ref<File[]>([])
+const attachmentsField = ref<{ open: () => void } | null>(null)
 const sending = ref(false)
 const error = ref('')
 
@@ -137,10 +125,6 @@ function defaultBody() {
 Поздравляем! Ваше коммерческое предложение признано лучшим в рамках проведённого тендера.
 
 Мы готовы заключить с вами договор на поставку товаров/услуг на условиях, указанных в вашем предложении.`
-}
-
-function onFilesUpdate(newFiles: File[] | null | undefined) {
-	filesToUpload.value = newFiles ?? []
 }
 
 function resetForm() {

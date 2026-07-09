@@ -228,18 +228,13 @@ color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 
 							<template #company_name-cell="{ row }">
 								<div
-									class="flex items-start gap-2 min-w-0 py-0.5"
+									class="min-w-0 py-0.5"
 									:class="lockedRowContentClass(row.original)">
-									<div
-										class="w-7 h-7 rounded-lg bg-elevated flex items-center justify-center shrink-0 mt-0.5">
-										<UIcon name="i-lucide-building-2" class="w-3.5 h-3.5 text-muted" />
-									</div>
 									<span
-										class="font-medium text-sm leading-snug line-clamp-2 wrap-break-word min-w-0"
+										class="font-medium text-sm leading-snug line-clamp-2 wrap-break-word block"
 										:title="row.original.supplier?.company_name ?? undefined">
 										{{ row.original.supplier?.company_name }}
 									</span>
-									<SupplierInfoHint v-if="row.original.supplier" :supplier="row.original.supplier" />
 								</div>
 							</template>
 
@@ -399,7 +394,6 @@ import { subscriptionProfilePath } from '#shared/utils/subscriptionDisplay'
 import { t } from '~/constants/translations'
 import type { TableColumn, TableRow } from '@nuxt/ui'
 import SupplierBookmarkModal from '~/components/SupplierBookmarkModal.vue'
-import SupplierInfoHint from '~/components/requests/SupplierInfoHint.vue'
 
 const route = useRoute()
 const id = route.params.id as string
@@ -582,8 +576,8 @@ const supplierColumns = computed<TableColumn<RequestSupplierResponse>[]>(() => {
 		header: 'Компания',
 		meta: {
 			class: {
-				th: 'min-w-64 sm:min-w-80',
-				td: 'min-w-64 sm:min-w-80 max-w-none whitespace-normal align-top',
+				th: 'min-w-80 sm:min-w-96 lg:min-w-[28rem]',
+				td: 'min-w-80 sm:min-w-96 lg:min-w-[28rem] max-w-none whitespace-normal align-top',
 			},
 		},
 	})

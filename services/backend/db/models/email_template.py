@@ -22,6 +22,9 @@ class EmailTemplate(IDMixinUUID, TimestampMixin, Base):
     is_global: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False
     )
+    is_primary: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
     category: Mapped[str] = mapped_column(
         String(32),
         default=EmailTemplateCategory.LETTER.value,

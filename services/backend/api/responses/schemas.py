@@ -164,6 +164,7 @@ class ReplyPayload(BaseModel):
     """Payload for POST reply in a supplier thread."""
 
     body: Annotated[str, Field(min_length=1, max_length=50000)]
+    attachment_paths: list[str] | None = None
 
 
 class CustomEmailPayload(BaseModel):

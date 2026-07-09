@@ -546,12 +546,12 @@ v-if="!showParamsPanel" size="xs" variant="ghost" color="neutral"
 						<div class="border-t border-default px-3 md:px-5 py-4 shrink-0">
 							<div class="flex flex-wrap items-center justify-end gap-2 mb-2">
 								<p class="text-xs text-muted font-medium mr-auto">Ответить на письмо</p>
-								<ReceiptAcknowledgementButton v-model="replyBody" />
+								<ReceiptAcknowledgementButton
+									v-model="replyBody"
+									:company-name="selectedThread?.supplier.company_name"
+								/>
 								<InsertBusinessInfoButton v-model="replyBody" />
 							</div>
-							<p class="text-xs sm:text-sm text-muted mb-2">
-								{{ t('inbox.requisitesHint') }}
-							</p>
 							<UTextarea
 								v-model="replyBody"
 								:placeholder="t('inbox.replyPlaceholder')"
@@ -561,13 +561,61 @@ v-if="!showParamsPanel" size="xs" variant="ghost" color="neutral"
 								class="w-full mb-3"
 								:ui="{ base: 'min-h-[3.25rem] resize-none' }"
 							/>
-							<div class="flex items-center justify-between gap-2">
+							<div
+								v-if="replyFiles.length"
+								class="flex flex-wrap gap-2 mb-3"
+							>
+								<div
+									v-for="(file, idx) in replyFiles"
+									:key="`${file.name}-${file.size}-${file.lastModified}`"
+									class="flex items-center gap-1.5 max-w-full rounded-lg border border-default px-2 py-1.5 text-xs"
+								>
+									<UIcon name="i-lucide-paperclip" class="w-3.5 h-3.5 text-muted shrink-0" />
+									<span class="truncate min-w-0" :title="file.name">{{ file.name }}</span>
+									<span class="text-muted shrink-0">{{ formatBytes(file.size) }}</span>
+									<UButton
+										size="xs"
+										color="neutral"
+										variant="ghost"
+										icon="i-lucide-x"
+										:title="t('inbox.attachFileRemove')"
+										:aria-label="t('inbox.attachFileRemove')"
+										:disabled="sendingReply"
+										@click="removeReplyFile(idx)"
+									/>
+								</div>
+							</div>
+							<div class="flex flex-wrap items-center justify-between gap-2">
 								<p class="text-xs text-muted hidden md:block">Ответ придёт поставщику на его email</p>
-								<UButton
-leading-icon="i-lucide-send" :loading="sendingReply"
-									:disabled="!replyBody.trim() || !canSendReplyEmail" class="w-full md:w-auto" @click="sendReply">
-									Отправить ответ
-								</UButton>
+								<div class="flex items-center gap-1.5 w-full md:w-auto justify-end">
+									<input
+										ref="replyFileInput"
+										type="file"
+										class="hidden"
+										multiple
+										accept=".pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp"
+										@change="onReplyFilesSelected"
+									>
+									<UButton
+										size="sm"
+										color="neutral"
+										variant="ghost"
+										icon="i-lucide-paperclip"
+										:title="t('inbox.attachFile')"
+										:aria-label="t('inbox.attachFile')"
+										:disabled="sendingReply || replyFiles.length >= maxReplyUploadFiles"
+										@click="replyFileInput?.click()"
+									/>
+									<UButton
+										leading-icon="i-lucide-send"
+										:loading="sendingReply"
+										:disabled="!replyBody.trim() || !canSendReplyEmail"
+										class="flex-1 md:flex-none"
+										@click="sendReply"
+									>
+										Отправить ответ
+									</UButton>
+								</div>
 							</div>
 							<UAlert
 v-if="replyQuotaMessage && !canSendReplyEmail"
@@ -1037,8 +1085,51 @@ function scrollToBottom() {
 }
 
 const replyBody = ref('')
+const replyFiles = ref<File[]>([])
+const replyFileInput = ref<HTMLInputElement | null>(null)
 const sendingReply = ref(false)
 const replyError = ref<string | null>(null)
+
+const { public: publicConfig } = useRuntimeConfig()
+const maxReplyUploadFiles = publicConfig.maxUploadFiles as number
+const maxReplyUploadSize = publicConfig.maxRequestUploadSize as number
+
+function onReplyFilesSelected(event: Event) {
+	const input = event.target as HTMLInputElement
+	const selected = input.files ? [...input.files] : []
+	input.value = ''
+	if (!selected.length) return
+
+	const sizeMb = Math.round(maxReplyUploadSize / 1024 / 1024)
+	const accepted: File[] = []
+	for (const file of selected) {
+		if (file.size > maxReplyUploadSize) {
+			toast.add({
+				title: t('inbox.attachFileTooLarge'),
+				description: `${file.name} превышает ${sizeMb} МБ`,
+				color: 'error',
+			})
+			continue
+		}
+		accepted.push(file)
+	}
+
+	const merged = [...replyFiles.value, ...accepted]
+	if (merged.length > maxReplyUploadFiles) {
+		toast.add({
+			title: t('inbox.attachFileLimit'),
+			description: `Максимум ${maxReplyUploadFiles} файла`,
+			color: 'warning',
+		})
+		replyFiles.value = merged.slice(0, maxReplyUploadFiles)
+		return
+	}
+	replyFiles.value = merged
+}
+
+function removeReplyFile(index: number) {
+	replyFiles.value = replyFiles.value.filter((_, i) => i !== index)
+}
 
 async function sendReply() {
 	if (!selectedRsId.value || !replyBody.value.trim()) return
@@ -1052,8 +1143,27 @@ async function sendReply() {
 	sendingReply.value = true
 	replyError.value = null
 	try {
-		await post(`/requests/${id}/suppliers/${rsId}/reply`, { body })
+		let attachmentPaths: string[] | undefined
+		if (replyFiles.value.length > 0) {
+			const uploadFormData = new FormData()
+			for (const file of replyFiles.value) {
+				uploadFormData.append('files', file)
+			}
+			const uploaded = await post<Attachment[]>(
+				`/requests/${id}/attachments`,
+				uploadFormData,
+			)
+			attachmentPaths = uploaded
+				.map((a) => a.path)
+				.filter((p): p is string => Boolean(p))
+		}
+
+		await post(`/requests/${id}/suppliers/${rsId}/reply`, {
+			body,
+			attachment_paths: attachmentPaths ?? null,
+		})
 		replyBody.value = ''
+		replyFiles.value = []
 		toast.add({ title: 'Ответ отправлен', color: 'success', icon: 'i-lucide-mail-check' })
 		await fetchThreads()
 		await fetchMessages(rsId, { silent: true })
@@ -1087,7 +1197,10 @@ const priceRequirements = computed(() =>
 	comparison.value?.price_requirements?.length
 		? comparison.value.price_requirements
 		: (comparison.value?.requirements ?? []).filter((req) =>
-			['Цена за единицу без НДС'].includes(req),
+			[
+				'Цена за единицу без НДС',
+				'Общая стоимость без НДС',
+			].includes(req),
 		),
 )
 

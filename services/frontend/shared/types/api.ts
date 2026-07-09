@@ -401,6 +401,7 @@ export interface TZAnalysisKpStats {
 	partial_count: number;
 	missing_count: number;
 	not_found_count: number;
+	not_compare_count: number;
 }
 
 export interface TZAnalysisSupplierItem {
@@ -465,6 +466,7 @@ export interface EmailTemplate {
 	subject: string;
 	body: string;
 	is_global: boolean;
+	is_primary: boolean;
 	category: EmailTemplateCategory;
 	created_at: string;
 	updated_at: string;

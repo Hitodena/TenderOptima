@@ -15,6 +15,7 @@ class EmailTemplateResponse(BaseModel):
     subject: str
     body: str
     is_global: bool
+    is_primary: bool
     category: EmailTemplateCategory
     created_at: datetime
     updated_at: datetime
@@ -25,6 +26,7 @@ class EmailTemplateCreate(BaseModel):
     subject: Annotated[str, Field(min_length=1, max_length=500)]
     body: Annotated[str, Field(min_length=1, max_length=50000)]
     is_global: bool = False
+    is_primary: bool = False
     category: EmailTemplateCategory = EmailTemplateCategory.LETTER
 
 
@@ -33,3 +35,4 @@ class EmailTemplateUpdate(BaseModel):
     subject: Annotated[str | None, Field(min_length=1, max_length=500)] = None
     body: Annotated[str | None, Field(min_length=1, max_length=50000)] = None
     category: EmailTemplateCategory | None = None
+    is_primary: bool | None = None
