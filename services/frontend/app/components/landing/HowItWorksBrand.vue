@@ -3,6 +3,7 @@
 		:id="sectionId"
 		ref="sectionRef"
 		class="landing-hiw reveal bg-elevated/25 py-[var(--landing-section-py)] px-4 sm:px-6 lg:px-8"
+		:class="{ 'is-inview': isVisible }"
 	>
 		<div class="landing-hiw__container mx-auto max-w-7xl">
 			<header class="mb-8 text-center sm:mb-10">
@@ -162,7 +163,10 @@ const props = withDefaults(
 	},
 )
 
-const { target: sectionRef } = useScrollReveal()
+const { target: sectionRef, isVisible } = useScrollReveal({
+	once: false,
+	threshold: 0.12,
+})
 
 const normalizedSteps = computed(() =>
 	props.steps?.length ? props.steps : fallbackSteps,
@@ -196,7 +200,13 @@ function activate(index: number | string) {
 }
 
 function startAutoplay() {
-	if (!props.autoplay || normalizedSteps.value.length < 2) return
+	if (
+		!props.autoplay
+		|| normalizedSteps.value.length < 2
+		|| !isVisible.value
+	) {
+		return
+	}
 	timer = setInterval(() => {
 		activeIndex.value = (activeIndex.value + 1) % normalizedSteps.value.length
 	}, props.intervalMs)
@@ -217,7 +227,15 @@ watch(() => props.steps, () => {
 	restartAutoplay()
 })
 
-onMounted(startAutoplay)
+watch(isVisible, (visible) => {
+	if (visible) {
+		startAutoplay()
+	}
+	else {
+		stopAutoplay()
+	}
+})
+
 onBeforeUnmount(stopAutoplay)
 </script>
 

@@ -170,6 +170,14 @@ class CeleryConfig:
             "queue": "mail_send",
             "routing_key": "mail.send",
         },
+        "consultation.notify_admin": {
+            "queue": "mail_send",
+            "routing_key": "mail.send",
+        },
+        "consultation.send_autoreply": {
+            "queue": "mail_send",
+            "routing_key": "mail.send",
+        },
     }
 
     include = [
@@ -178,6 +186,7 @@ class CeleryConfig:
         "backend.celery_app.tasks.parser_tasks",
         "backend.celery_app.tasks.analysis_tasks",
         "backend.celery_app.tasks.security_tasks",
+        "backend.celery_app.tasks.consultation_tasks",
     ]
 
     # Logging

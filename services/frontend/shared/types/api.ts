@@ -1,4 +1,7 @@
 import type {
+	ConsultationRequestType,
+	ConsultationRole,
+	ConsultationStatus,
 	EmailTemplateCategory,
 	RequestStatus,
 	RequestSupplierStatus,
@@ -10,6 +13,43 @@ import type {
 export interface TokenResponse {
 	access_token: string;
 	token_type: string;
+}
+
+export interface ConsultationCreate {
+	name: string;
+	email: string;
+	phone: string;
+	request_type: ConsultationRequestType;
+	company?: string;
+	role?: ConsultationRole;
+	comment?: string | null;
+	consent: boolean;
+	agree_marketing?: boolean;
+	utm_source?: string | null;
+	utm_medium?: string | null;
+	utm_campaign?: string | null;
+	utm_content?: string | null;
+	page_url?: string | null;
+	honeypot?: string;
+}
+
+export interface ConsultationResponse {
+	id: string;
+	name: string;
+	company: string;
+	email: string;
+	phone: string;
+	role: ConsultationRole;
+	request_type: ConsultationRequestType;
+	comment: string | null;
+	agree_marketing: boolean;
+	status: ConsultationStatus;
+	utm_source: string | null;
+	utm_medium: string | null;
+	utm_campaign: string | null;
+	utm_content: string | null;
+	page_url: string | null;
+	created_at: string;
 }
 
 export interface UserResponse {

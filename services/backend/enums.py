@@ -94,3 +94,29 @@ class SubscriptionGeo(StrEnum):
 
     BY = "BY"
     US = "US"
+
+
+class ConsultationRole(StrEnum):
+    """Role of the person requesting a consultation from the landing form."""
+
+    PROCUREMENT_MANAGER = "procurement_manager"
+    TENDER_SPECIALIST = "tender_specialist"
+    TECH_SPECIALIST = "tech_specialist"
+    DIRECTOR = "director"
+    OTHER = "other"
+
+
+class ConsultationRequestType(StrEnum):
+    """What the lead is asking for from the landing form."""
+
+    DEMO = "demo"
+    TRIAL = "trial"
+
+
+class ConsultationStatus(StrEnum):
+    """Lifecycle status of a consultation lead."""
+
+    NEW = "new"
+    IN_PROGRESS = "in_progress"
+    DONE = "done"
+    REJECTED = "rejected"
