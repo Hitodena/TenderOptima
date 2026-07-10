@@ -48,7 +48,10 @@
 						class="text-left min-w-0 flex-1"
 						@click="emit('select', supplier.id)"
 					>
-						<p class="text-sm font-medium text-highlighted truncate">
+						<p
+							class="supplier-company-title text-sm font-medium text-highlighted break-words"
+							:title="supplier.name"
+						>
 							{{ supplier.name }}
 						</p>
 						<p class="text-xs text-muted mt-0.5">
@@ -410,3 +413,13 @@ async function removeSupplier(supplierId: string) {
 	}
 }
 </script>
+
+<style scoped>
+.supplier-company-title {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	overflow: hidden;
+	white-space: normal;
+}
+</style>

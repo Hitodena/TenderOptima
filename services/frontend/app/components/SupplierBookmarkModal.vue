@@ -122,7 +122,12 @@
 										<UIcon name="i-lucide-building-2" class="w-4 h-4 text-muted" />
 									</div>
 									<div class="flex-1 min-w-0">
-										<p class="text-sm font-medium truncate">{{ item.company_name }}</p>
+										<p
+											class="supplier-company-title text-sm font-medium leading-snug break-words"
+											:title="item.company_name"
+										>
+											{{ item.company_name }}
+										</p>
 										<p class="text-xs text-muted truncate">{{ item.email }}</p>
 										<p v-if="item.phone" class="text-xs text-muted/60 truncate">{{ item.phone }}</p>
 										<p v-if="item.domain" class="text-xs text-muted/60 truncate">{{ item.domain }}</p>
@@ -487,3 +492,13 @@ watch(search, () => {
 	clearDeleteConfirm()
 })
 </script>
+
+<style scoped>
+.supplier-company-title {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	overflow: hidden;
+	white-space: normal;
+}
+</style>

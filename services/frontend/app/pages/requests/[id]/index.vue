@@ -231,7 +231,7 @@ color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 									class="min-w-0 max-w-full py-0.5"
 									:class="lockedRowContentClass(row.original)">
 									<span
-										class="font-medium text-sm leading-snug line-clamp-2 wrap-break-word overflow-hidden block"
+										class="supplier-company-title text-sm font-medium leading-snug break-words"
 										:title="row.original.supplier?.company_name ?? undefined">
 										{{ row.original.supplier?.company_name }}
 									</span>
@@ -826,3 +826,13 @@ function onEmailSaved() {
 	fetchSuppliersAndEnforceQuota()
 }
 </script>
+
+<style scoped>
+.supplier-company-title {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	overflow: hidden;
+	white-space: normal;
+}
+</style>
