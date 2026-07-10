@@ -352,7 +352,7 @@ const MiniMock = defineComponent({
 		const Tech = (): VNode =>
 			h('div', { class: 'space-y-3' }, [
 				h('div', { class: 'flex items-center justify-between' }, [
-					h('span', { class: 'text-[11px] font-semibold text-muted' }, 'Скрытые потери на вычитке сложных КП'),
+					h('span', { class: 'text-[11px] font-semibold text-muted' }, 'Сверка ТЗ ↔ КП'),
 					Tag('2 расхождения', 'bg-amber-50 text-amber-700'),
 				]),
 				h('div', { class: 'overflow-hidden rounded-lg border border-default' }, [
@@ -464,8 +464,8 @@ const MiniMock = defineComponent({
 					>
 						<div class="relative h-1.5 w-full" :class="activeAccent.topBar" />
 
-						<div class="grid gap-0 lg:grid-cols-[1.1fr_0.9fr]">
-							<div class="p-6 sm:p-8">
+						<div class="grid grid-cols-1 gap-0 md:grid-cols-[1.1fr_0.9fr]">
+							<div class="p-6 md:p-8">
 								<div class="flex flex-wrap items-center gap-2">
 									<span class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
 										<UIcon name="i-lucide-triangle-alert" class="size-3.5" />
@@ -503,8 +503,8 @@ const MiniMock = defineComponent({
 								</ul>
 							</div>
 
-							<div class="border-t border-default bg-elevated/40 p-6 sm:p-8 lg:border-l lg:border-t-0">
-								<div ref="metricsRootRef" class="grid grid-cols-2 gap-3">
+							<div class="border-t border-default bg-elevated/40 p-6 md:border-l md:border-t-0 md:p-8">
+								<div ref="metricsRootRef" class="grid grid-cols-1 gap-4 md:grid-cols-2">
 									<div
 										v-for="(metric, i) in activeRole.metrics"
 										:key="i"

@@ -19,7 +19,7 @@
 	<section
 		id="supplier-search"
 		ref="sectionRef"
-		class="landing-hiw reveal bg-elevated/25 py-[var(--landing-section-py)] px-4 sm:px-6 lg:px-8"
+		class="landing-hiw reveal bg-elevated/25 px-4 py-12 sm:px-6 md:py-24 lg:px-8"
 		:class="{ 'is-inview': isVisible, 'is-visible': hasRevealed }"
 		@mouseenter="pauseAutoplay"
 		@mouseleave="resumeAutoplay"
@@ -80,9 +80,6 @@
 							<div class="mock-window">
 								<!-- Шапка окна -->
 								<div class="mock-window__chrome">
-									<span class="mock-window__dots" aria-hidden="true">
-										<i></i><i></i><i></i>
-									</span>
 									<span class="mock-window__url">
 										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mock-window__lock"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
 										{{ LANDING_MOCKUP_BROWSER_TITLE }}
@@ -459,7 +456,6 @@ onBeforeUnmount(stopAutoplay)
 }
 
 .landing-section-title {
-	font-size: clamp(1.75rem, 3.5vw, 2.5rem);
 	font-weight: 700;
 	line-height: 1.2;
 	letter-spacing: -0.02em;
@@ -488,11 +484,13 @@ onBeforeUnmount(stopAutoplay)
 	grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
 	gap: clamp(1.25rem, 3vw, 2.5rem);
 	align-items: start;
+	min-width: 0;
 }
 
 .landing-hiw__timeline {
 	display: grid;
 	gap: 0;
+	min-width: 0;
 	list-style: none;
 	margin: 0;
 	padding: 0;
@@ -603,6 +601,7 @@ onBeforeUnmount(stopAutoplay)
 
 .landing-hiw__sticky {
 	position: sticky;
+	min-width: 0;
 	top: 5.5rem;
 }
 
@@ -710,23 +709,6 @@ onBeforeUnmount(stopAutoplay)
 	background: color-mix(in oklab, var(--ui-bg) 60%, var(--ui-bg-elevated));
 }
 
-.mock-window__dots {
-	display: inline-flex;
-	gap: 0.3rem;
-}
-
-.mock-window__dots i {
-	width: 0.6rem;
-	height: 0.6rem;
-	border-radius: 999px;
-	background: var(--ui-border);
-	display: block;
-}
-
-.mock-window__dots i:nth-child(1) { background: #f87171; }
-.mock-window__dots i:nth-child(2) { background: #fbbf24; }
-.mock-window__dots i:nth-child(3) { background: #34d399; }
-
 .mock-window__url {
 	display: inline-flex;
 	align-items: center;
@@ -769,6 +751,7 @@ onBeforeUnmount(stopAutoplay)
 
 .mock-window__body {
 	padding: 0.875rem;
+	min-width: 0;
 	min-height: 16rem;
 }
 
@@ -1077,7 +1060,7 @@ onBeforeUnmount(stopAutoplay)
 .mock-export__hint { display: flex; align-items: center; gap: 0.5rem; }
 .mock-export__hint-text { font-size: 0.68rem; color: var(--ui-text-muted); }
 
-.mock-export__grid { overflow-x: auto; border-radius: 0.5rem; border: 1px solid var(--ui-border); background: var(--ui-bg); }
+.mock-export__grid { overflow-x: auto; overscroll-behavior-inline: contain; -webkit-overflow-scrolling: touch; border-radius: 0.5rem; border: 1px solid var(--ui-border); background: var(--ui-bg); }
 .mock-export__sheet {
 	display: grid;
 	grid-template-columns: 2rem minmax(8rem, 1.4fr) repeat(3, minmax(5rem, 1fr));
@@ -1128,6 +1111,8 @@ onBeforeUnmount(stopAutoplay)
 /* ====================== Responsive для моков ====================== */
 @media (max-width: 640px) {
 	.mock-window__body { padding: 0.65rem; min-height: 14rem; }
+	.mock-window__chrome { padding: 0.45rem 0.55rem; }
+	.mock-window__live { display: none; }
 
 	.mock-mail { grid-template-columns: 1fr; min-height: auto; }
 	.mock-mail__sidebar { order: 1; }
@@ -1135,8 +1120,24 @@ onBeforeUnmount(stopAutoplay)
 	.mock-mail__extract { order: 3; }
 
 	.mock-search__form { grid-template-columns: 1fr; }
+	.mock-search__results-head,
+	.mock-compare__hint,
+	.mock-export__hint,
+	.mock-compare__recommend {
+		align-items: flex-start;
+		flex-direction: column;
+	}
 
-	.mock-supplier__add { font-size: 0.6rem; padding: 0.2rem 0.4rem; }
+	.mock-supplier {
+		grid-template-columns: auto minmax(0, 1fr);
+	}
+
+	.mock-supplier__add {
+		grid-column: 2;
+		justify-self: start;
+		font-size: 0.6rem;
+		padding: 0.2rem 0.4rem;
+	}
 
 	.mock-cta { width: 100%; justify-content: center; }
 }

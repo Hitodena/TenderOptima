@@ -2,16 +2,16 @@
 	<section
 		:id="sectionId"
 		ref="sectionRef"
-		class="reveal bg-default px-4 py-10 sm:px-6 sm:py-12 lg:px-8"
+		class="reveal bg-default px-4 py-12 sm:px-6 md:py-24 lg:px-8"
 		:class="{ 'is-visible': isVisible }"
 	>
 		<div class="mx-auto max-w-4xl">
-			<article class="landing-roi-band landing-card p-6 text-center sm:p-8 lg:text-left">
+			<article class="landing-roi-band landing-card p-6 text-center md:p-8 lg:text-left">
 				<div class="mb-6 lg:mb-8">
 					<p class="landing-section-headline mb-2">
 						Окупаемость
 					</p>
-					<h2 class="landing-section-title mb-3 text-2xl sm:text-3xl">
+					<h2 class="landing-section-title mb-3">
 						Одна успешная закупка окупает подписку
 					</h2>
 					<p class="landing-section-description mx-auto lg:mx-0">
@@ -21,14 +21,14 @@
 						>
 							<span
 								v-if="part.accent"
-								class="landing-desc-accent"
+								class="font-semibold text-slate-900 dark:text-highlighted"
 							>{{ part.text }}</span>
 							<template v-else>{{ part.text }}</template>
 						</template>
 					</p>
 				</div>
 
-				<div class="grid gap-4 sm:grid-cols-2">
+				<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 					<div
 						v-for="(point, index) in points"
 						:key="point.title"
@@ -41,14 +41,14 @@
 						<h3 class="mb-1.5 text-base font-semibold text-highlighted">
 							{{ point.title }}
 						</h3>
-						<p class="text-sm leading-relaxed text-muted">
+						<p class="text-sm leading-relaxed text-gray-600 dark:text-muted">
 							<template
 								v-for="(part, partIndex) in point.description"
 								:key="`${point.title}-${partIndex}`"
 							>
 								<span
 									v-if="part.accent"
-									class="landing-desc-accent"
+									class="font-semibold text-slate-900 dark:text-highlighted"
 								>{{ part.text }}</span>
 								<template v-else>{{ part.text }}</template>
 							</template>

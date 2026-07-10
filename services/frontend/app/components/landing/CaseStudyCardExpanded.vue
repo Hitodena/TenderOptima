@@ -12,7 +12,7 @@
 				{{ study.title }}
 			</h3>
 
-			<p class="case-metric mb-5 text-2xl font-bold leading-tight tracking-tight text-primary sm:text-3xl">
+			<p class="case-metric mb-4 text-lg font-semibold leading-snug tracking-tight text-primary sm:mb-5 sm:text-xl sm:font-bold lg:text-2xl xl:text-3xl">
 				{{ study.metric }}
 			</p>
 

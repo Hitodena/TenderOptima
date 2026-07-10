@@ -2,7 +2,7 @@
 	<section
 		:id="sectionId"
 		ref="sectionRef"
-		class="landing-hiw reveal bg-elevated/25 py-[var(--landing-section-py)] px-4 sm:px-6 lg:px-8"
+		class="landing-hiw reveal bg-elevated/25 px-4 py-12 sm:px-6 md:py-24 lg:px-8"
 		:class="{ 'is-inview': isVisible }"
 	>
 		<div class="landing-hiw__container mx-auto max-w-7xl">

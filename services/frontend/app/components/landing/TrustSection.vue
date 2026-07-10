@@ -2,7 +2,7 @@
 	<section
 		:id="sectionId"
 		ref="sectionRef"
-		class="reveal px-4 py-[var(--landing-section-py)] sm:px-6 lg:px-8"
+		class="reveal px-4 py-12 sm:px-6 md:py-24 lg:px-8"
 		:class="tone === 'dark' ? 'landing-trust-band-dark' : tone === 'elevated' ? 'bg-elevated/25' : ''"
 	>
 		<div class="mx-auto max-w-6xl">
@@ -18,7 +18,7 @@
 				</p>
 			</header>
 
-			<div class="grid gap-5 sm:grid-cols-2">
+			<div class="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
 				<article
 					v-for="(block, index) in blocks"
 					:key="block.title"
@@ -84,7 +84,7 @@ withDefaults(
 		sectionId: 'trust',
 		eyebrow: 'Доверие',
 		title: 'Почему B2B-команды выбирают TenderOptima',
-		description: 'Безопасность данных, прозрачное подключение почты и возможность развёртывания в вашем контуре — без обещаний, которые мы не можем подтвердить.',
+		description: 'Безопасность данных, прозрачное подключение почты и возможность развёртывания в вашем контуре - без обещаний, которые мы не можем подтвердить.',
 		blocks: () => TRUST_BLOCKS,
 		industries: () => INDUSTRY_SEGMENTS,
 		showIndustries: true,

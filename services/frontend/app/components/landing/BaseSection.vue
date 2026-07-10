@@ -2,7 +2,7 @@
 	<section
 		:id="id"
 		ref="sectionRef"
-		class="reveal py-[var(--landing-section-py)] px-4 sm:px-6 lg:px-8"
+		class="reveal px-4 py-12 sm:px-6 md:py-24 lg:px-8"
 		:class="{ 'bg-elevated/25': tone === 'elevated' }"
 	>
 		<div class="mx-auto" :class="maxWidthClass">

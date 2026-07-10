@@ -19,7 +19,7 @@
 	<section
 		id="tz-analysis"
 		ref="sectionRef"
-		class="landing-hiw reveal bg-elevated/25 py-[var(--landing-section-py)] px-4 sm:px-6 lg:px-8"
+		class="landing-hiw reveal bg-elevated/25 px-4 py-12 sm:px-6 md:py-24 lg:px-8"
 	>
 		<div class="landing-hiw__container mx-auto max-w-7xl">
 			<header class="mb-8 text-center sm:mb-10">
@@ -66,7 +66,6 @@
 						>
 							<div class="mock-window">
 								<div class="mock-window__chrome">
-									<span class="mock-window__dots" aria-hidden="true"><i></i><i></i><i></i></span>
 									<span class="mock-window__url">
 										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mock-window__lock"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
 										{{ LANDING_MOCKUP_BROWSER_TITLE }}
@@ -271,11 +270,11 @@ onBeforeUnmount(stopAutoplay)
 
 <style scoped>
 .landing-section-headline { font-size: 0.8125rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ui-primary); }
-.landing-section-title { font-size: clamp(1.75rem, 3.5vw, 2.5rem); font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; color: var(--ui-text-highlighted); }
+.landing-section-title { font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; color: var(--ui-text-highlighted); }
 .landing-section-description { max-width: 42rem; font-size: 1.0625rem; line-height: 1.65; color: var(--ui-text-muted); }
 .landing-card { border: 1px solid var(--ui-border); border-radius: 1rem; background: var(--ui-bg); transition: box-shadow 0.25s ease, transform 0.25s ease, border-color 0.25s ease; }
-.landing-hiw__grid { display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); gap: clamp(1.25rem, 3vw, 2.5rem); align-items: start; }
-.landing-hiw__timeline { display: grid; gap: 0; list-style: none; margin: 0; padding: 0; }
+.landing-hiw__grid { display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); gap: clamp(1.25rem, 3vw, 2.5rem); align-items: start; min-width: 0; }
+.landing-hiw__timeline { display: grid; gap: 0; min-width: 0; list-style: none; margin: 0; padding: 0; }
 .landing-hiw-step { position: relative; padding-left: 0; }
 .landing-hiw-step:not(:last-child)::after { content: ''; position: absolute; left: 19px; top: 40px; bottom: 0; width: 2px; background: color-mix(in oklab, var(--ui-primary) 22%, var(--ui-border)); transform: translateX(-50%); pointer-events: none; }
 .landing-hiw-step.is-complete:not(:last-child)::after { background: color-mix(in oklab, var(--ui-primary) 55%, var(--ui-border)); }
@@ -288,7 +287,7 @@ onBeforeUnmount(stopAutoplay)
 .landing-hiw-step__text { color: var(--ui-text-muted); font-size: 0.875rem; line-height: 1.6; max-width: 36rem; }
 .landing-hiw-step.is-active .landing-hiw-step__index, .landing-hiw-step.is-complete .landing-hiw-step__index { background: var(--ui-primary); border-color: var(--ui-primary); color: var(--ui-primary-foreground, white); box-shadow: 0 4px 14px color-mix(in oklab, var(--ui-primary) 35%, transparent); }
 .landing-hiw-step.is-active .landing-hiw-step__title { color: var(--ui-primary); }
-.landing-hiw__sticky { position: sticky; top: 5.5rem; }
+.landing-hiw__sticky { position: sticky; min-width: 0; top: 5.5rem; }
 .landing-hiw__panel { padding: 0.875rem; overflow: hidden; }
 .landing-hiw__panel-meta { display: grid; gap: 0.375rem; padding: 0.875rem 0.25rem 0.25rem; }
 .landing-hiw__panel-kicker { margin: 0; color: var(--ui-primary); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.6875rem; font-weight: 700; }
@@ -309,17 +308,12 @@ onBeforeUnmount(stopAutoplay)
 /* ===== Mock base ===== */
 .mock-window { position: relative; overflow: hidden; border-radius: 0.75rem; border: 1px solid var(--ui-border); background: radial-gradient(120% 80% at 100% 0%, color-mix(in oklab, var(--ui-primary) 10%, transparent), transparent 60%), var(--ui-bg-elevated, var(--ui-bg)); box-shadow: 0 18px 40px -24px rgba(15, 23, 42, 0.35); }
 .mock-window__chrome { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--ui-border); background: color-mix(in oklab, var(--ui-bg) 60%, var(--ui-bg-elevated)); }
-.mock-window__dots { display: inline-flex; gap: 0.3rem; }
-.mock-window__dots i { width: 0.6rem; height: 0.6rem; border-radius: 999px; display: block; }
-.mock-window__dots i:nth-child(1) { background: #f87171; }
-.mock-window__dots i:nth-child(2) { background: #fbbf24; }
-.mock-window__dots i:nth-child(3) { background: #34d399; }
 .mock-window__url { display: inline-flex; align-items: center; gap: 0.35rem; flex: 1; min-width: 0; margin-inline: auto; padding: 0.2rem 0.6rem; border-radius: 999px; background: var(--ui-bg); border: 1px solid var(--ui-border); color: var(--ui-text-dimmed, var(--ui-text-muted)); font-size: 0.7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mock-window__lock { width: 0.75rem; height: 0.75rem; flex: none; opacity: 0.7; }
 .mock-window__crumb { color: var(--ui-text-muted); }
 .mock-window__live { flex: none; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.08em; color: #10b981; padding: 0.15rem 0.4rem; border-radius: 999px; background: color-mix(in oklab, #10b981 14%, transparent); border: 1px solid color-mix(in oklab, #10b981 35%, transparent); animation: mock-live 1.6s ease-in-out infinite; }
 @keyframes mock-live { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
-.mock-window__body { padding: 0.875rem; min-height: 16rem; }
+.mock-window__body { padding: 0.875rem; min-width: 0; min-height: 16rem; }
 
 .mock-pill { display: inline-flex; align-items: center; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.02em; padding: 0.15rem 0.45rem; border-radius: 999px; }
 .mock-pill--ok { color: #047857; background: color-mix(in oklab, #10b981 16%, transparent); }
@@ -420,12 +414,34 @@ onBeforeUnmount(stopAutoplay)
 
 @media (max-width: 640px) {
 	.mock-window__body { padding: 0.65rem; min-height: 14rem; }
+	.mock-window__chrome { padding: 0.45rem 0.55rem; }
+	.mock-window__live { display: none; }
+	.mock-extract__head { align-items: flex-start; flex-direction: column; }
+	.mock-upload__file, .mock-extract-item, .mock-req-item {
+		grid-template-columns: auto minmax(0, 1fr);
+	}
+	.mock-upload__file .mock-status,
+	.mock-extract-item .mock-status,
+	.mock-req-item__edit {
+		grid-column: 2;
+		justify-self: start;
+	}
+	.mock-extract-item__tag {
+		justify-self: start;
+	}
 	.mock-letter { grid-template-columns: 1fr; min-height: auto; }
 	.mock-letter__nav { order: 1; }
 	.mock-letter__editor { order: 2; }
 	.mock-match-row { grid-template-columns: 1fr; gap: 0.2rem; }
 	.mock-match-row__kp::before { content: 'КП: '; color: var(--ui-text-dimmed, var(--ui-text-muted)); }
 	.mock-upload .mock-cta, .mock-req .mock-cta, .mock-cta { width: 100%; justify-content: center; }
+	.mock-upload .mock-cta {
+		color: var(--ui-primary);
+		background: transparent;
+		border: 1px solid color-mix(in oklab, var(--ui-primary) 35%, var(--ui-border));
+		box-shadow: none;
+		animation: none;
+	}
 }
 
 @media (prefers-reduced-motion: reduce) {

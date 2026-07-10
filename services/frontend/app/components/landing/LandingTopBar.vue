@@ -18,7 +18,7 @@
 				</a>
 				<span class="hidden items-center gap-1.5 sm:inline-flex">
 					<UIcon name="i-lucide-clock" class="size-3.5 shrink-0 text-primary" />
-					пн–пт 9:00–18:00
+					пн-пт 9:00-18:00
 				</span>
 			</div>
 			<button

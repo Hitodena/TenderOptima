@@ -2,7 +2,7 @@
 	<section
 		id="how-it-works"
 		ref="sectionRef"
-		class="reveal bg-elevated/25 px-4 pb-8 pt-12 sm:px-6 sm:pb-10 sm:pt-14 lg:px-8"
+		class="reveal bg-elevated/25 px-4 py-12 sm:px-6 md:py-24 lg:px-8"
 		:class="{ 'is-visible': isVisible }"
 	>
 		<div class="mx-auto max-w-6xl">
@@ -11,7 +11,7 @@
 					Как работает сервис
 				</p>
 				<h2 class="landing-section-title mb-4">
-					Два модуля — один инструмент
+					Два модуля - один инструмент
 				</h2>
 				<p class="landing-section-description mx-auto">
 					TenderOptima закрывает весь цикл закупки: от поиска поставщиков и рассылки запросов
@@ -19,7 +19,7 @@
 				</p>
 			</header>
 
-			<div class="grid gap-4 sm:grid-cols-2">
+			<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 				<NuxtLink
 					v-for="(direction, index) in directions"
 					:key="direction.id"

@@ -2,7 +2,7 @@
 	<section
 		:id="sectionId"
 		ref="sectionRef"
-		class="reveal py-[var(--landing-section-py)] px-4 sm:px-6 lg:px-8"
+		class="reveal px-4 py-12 sm:px-6 md:py-24 lg:px-8"
 	>
 		<div class="mx-auto max-w-7xl">
 			<header class="mb-10 text-center sm:mb-12">
@@ -30,11 +30,15 @@
 				/>
 			</div>
 
-			<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+			<div
+				class="pricing-teaser-cards -mx-4 flex snap-x snap-mandatory items-stretch gap-4 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:grid-cols-2 md:gap-4 md:overflow-visible md:px-0 md:pb-0 lg:grid-cols-3 xl:grid-cols-5"
+				role="list"
+			>
 				<article
 					v-for="(plan, index) in planTeasers"
 					:key="plan.id"
-					class="landing-card landing-pricing-teaser reveal"
+					class="pricing-teaser-cards__slide landing-card landing-pricing-teaser reveal flex snap-center flex-col p-6 md:p-8"
+					role="listitem"
 					:class="[
 						`stagger-${index + 1}`,
 						{
@@ -44,7 +48,13 @@
 						},
 					]"
 				>
-					<p v-if="plan.recommended && !plan.disabled" class="mb-2 text-xs font-semibold uppercase tracking-wide text-primary">
+					<p
+						class="landing-pricing-teaser__badge mb-2 text-xs font-semibold uppercase tracking-wide"
+						:class="plan.recommended && !plan.disabled
+							? 'text-primary max-sm:invisible'
+							: 'invisible'"
+						aria-hidden="true"
+					>
 						Рекомендуем
 					</p>
 					<h3 class="mb-1 text-lg font-semibold text-highlighted">
@@ -58,34 +68,36 @@
 					>
 						{{ plan.price }}
 					</p>
-					<p v-if="plan.period" class="mb-3 text-xs text-muted">
-						{{ plan.period }}
-					</p>
 					<p
-						v-else-if="!plan.unavailable"
-						class="mb-3"
-					/>
-					<p class="mb-4 flex-1 text-sm leading-relaxed text-muted">
+						class="mb-3 text-xs text-muted"
+						:class="{ invisible: !plan.period }"
+					>
+						{{ plan.period || `${PRICING_CURRENCY}/мес` }}
+					</p>
+					<p class="landing-pricing-teaser__description mb-4 flex-1 text-sm leading-relaxed text-muted">
 						{{ plan.description }}
 					</p>
 					<div
-						v-if="plan.moduleScopeLabel || plan.features.length"
-						class="text-left text-xs text-muted"
+						class="landing-pricing-teaser__features mt-auto text-left text-xs text-muted"
 					>
-						<p v-if="plan.moduleScopeLabel">
-							{{ plan.moduleScopeLabel }}
+						<p
+							class="mb-0"
+							:class="{ invisible: !plan.moduleScopeLabel }"
+						>
+							{{ plan.moduleScopeLabel || 'Функционал' }}
 						</p>
-						<ul v-if="plan.features.length" class="mb-0 mt-2 space-y-1.5">
+						<ul class="mb-0 mt-2 space-y-1.5">
 							<li
-								v-for="feature in plan.features"
-								:key="feature"
+								v-for="slot in 2"
+								:key="slot"
 								class="flex items-start gap-2"
+								:class="{ invisible: !plan.features[slot - 1] }"
 							>
 								<UIcon
 									name="i-lucide-check"
 									class="mt-0.5 size-3.5 shrink-0 text-primary"
 								/>
-								<span>{{ feature }}</span>
+								<span>{{ plan.features[slot - 1] || '—' }}</span>
 							</li>
 						</ul>
 					</div>
@@ -99,7 +111,10 @@
 					:aria-expanded="detailsOpen"
 					@click="detailsOpen = !detailsOpen"
 				>
-					<span class="min-w-0 text-left text-sm font-medium text-highlighted sm:text-base">
+					<span class="pricing-teaser-details__label min-w-0 text-left md:hidden">
+						{{ featureTableTitleMobile(activeModuleTab) }}
+					</span>
+					<span class="pricing-teaser-details__label hidden min-w-0 text-left font-medium text-highlighted md:inline md:text-base">
 						{{ featureTableTitle(activeModuleTab) }}
 					</span>
 					<UIcon
@@ -115,12 +130,13 @@
 					<PricingFeatureMatrix
 						:module-tab="activeModuleTab"
 						hide-category-row
+						mobile-head="compact"
 					/>
 				</div>
 			</div>
 
 			<p class="mt-4 text-center text-xs text-muted">
-				* * Все цены указаны без учёта НДС. При оплате за 6 месяцев — скидка 10%. Пакеты расширения действуют в течение оплаченного периода.
+				* * Все цены указаны без учёта НДС. При оплате за 6 месяцев - скидка 10%. Пакеты расширения действуют в течение оплаченного периода.
 			</p>
 
 			<div class="mt-10 flex justify-center">
@@ -136,13 +152,16 @@
 
 <script lang="ts" setup>
 import type { TabsItem } from '@nuxt/ui'
+import { useMediaQuery } from '@vueuse/core'
 
 import BaseButton from '~/components/landing/BaseButton.vue'
 import PricingFeatureMatrix from '~/components/landing/PricingFeatureMatrix.vue'
 import { LANDING_CTA_LABEL } from '#shared/constants/landing'
 import {
+	PRICING_CURRENCY,
 	PRICING_MODULE_TABS,
 	featureTableTitle,
+	featureTableTitleMobile,
 	pricingTeaserPlans,
 	type PricingModuleTab,
 } from '#shared/constants/pricing'
@@ -157,8 +176,8 @@ withDefaults(
 		sectionId: 'pricing',
 		title: 'Тариф под задачи вашей команды',
 		description:
-			'Пять уровней — от пилотного запуска до корпоративного контура. '
-			+ 'Модуль 1 — поиск и рассылка, модуль 2 — анализ ТЗ и КП.',
+			'Пять уровней - от пилотного запуска до корпоративного контура. '
+			+ 'Модуль 1 - поиск и рассылка, модуль 2 - анализ ТЗ и КП.',
 	},
 )
 
@@ -168,10 +187,11 @@ const { target: sectionRef, isVisible } = useScrollReveal()
 
 const activeModuleTab = ref<PricingModuleTab>('module1')
 const detailsOpen = ref(false)
+const isMobileTabs = useMediaQuery('(max-width: 767px)')
 
 const moduleTabItems = computed<TabsItem[]>(() =>
 	PRICING_MODULE_TABS.map((tab) => ({
-		label: tab.label,
+		label: isMobileTabs.value ? (tab.labelMobile ?? tab.label) : tab.label,
 		value: tab.value,
 	})),
 )

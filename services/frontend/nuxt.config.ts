@@ -30,7 +30,7 @@ export default defineNuxtConfig({
 				import.meta.env.CONTACT_EMAIL ?? 'support@tenderoptima.by',
 			),
 			contactPhone: String(
-				import.meta.env.CONTACT_PHONE ?? '+375 29 1234567',
+				import.meta.env.CONTACT_PHONE ?? '+375 29 12 12 960',
 			),
 			contactTelegram: String(
 				import.meta.env.CONTACT_TELEGRAM ?? 'tenderoptima_bot',

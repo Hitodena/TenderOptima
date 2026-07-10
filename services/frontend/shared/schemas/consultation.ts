@@ -11,7 +11,7 @@ export const CONSULTATION_REQUEST_TYPE_OPTIONS = [
 		description: 'Покажем продукт на вашем сценарии закупки',
 		submitLabel: LANDING_CTA_LABEL,
 		modalTitle: LANDING_CTA_LABEL,
-		modalDescription: 'Оставьте контакты — менеджер свяжется и предоставит вам доступ.',
+		modalDescription: 'Оставьте контакты - менеджер свяжется и предоставит вам доступ.',
 		successMessage: 'Заявка отправлена. Мы свяжемся с вами в ближайшее рабочее время.',
 	},
 	{
@@ -20,7 +20,7 @@ export const CONSULTATION_REQUEST_TYPE_OPTIONS = [
 		description: 'Откроем тестовый период после короткого созвона',
 		submitLabel: 'Получить пробный доступ',
 		modalTitle: 'Получить пробный доступ',
-		modalDescription: 'Оставьте контакты — менеджер откроет trial и поможет с первым запуском.',
+		modalDescription: 'Оставьте контакты - менеджер откроет trial и поможет с первым запуском.',
 		successMessage: 'Заявка отправлена. Мы свяжемся с вами для открытия пробного доступа.',
 	},
 ] as const
