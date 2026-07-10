@@ -38,7 +38,85 @@ const activeAccent = computed(() => accentMap[activePanel.value.accent])
 
 const { target: sectionRef, isVisible } = useScrollReveal({ threshold: 0.1 })
 
-function activate(id: JtbdBridgePanel['id']) {
+const AUTO_SWITCH_DELAY_MS = 5000
+/** Section entered viewport while user was still scrolling (not already parked on the block). */
+const SCROLL_RECENT_MS = 800
+
+const userPickedTab = ref(false)
+const hasAutoSwitched = ref(false)
+const lastScrollAt = ref(0)
+let autoSwitchTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearAutoSwitch() {
+	if (autoSwitchTimer) {
+		clearTimeout(autoSwitchTimer)
+		autoSwitchTimer = null
+	}
+}
+
+function onWindowScroll() {
+	lastScrollAt.value = Date.now()
+}
+
+function wasRecentlyScrolling() {
+	return Date.now() - lastScrollAt.value < SCROLL_RECENT_MS
+}
+
+function scheduleAutoSwitch() {
+	clearAutoSwitch()
+
+	if (userPickedTab.value || hasAutoSwitched.value || !import.meta.client) {
+		return
+	}
+
+	const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+	if (prefersReduced) {
+		return
+	}
+
+	// Секция появилась, пока пользователь уже читает (скролл остановился) — не переключаем.
+	if (!wasRecentlyScrolling()) {
+		return
+	}
+
+	autoSwitchTimer = setTimeout(() => {
+		if (userPickedTab.value || hasAutoSwitched.value) {
+			return
+		}
+		hasAutoSwitched.value = true
+		const idx = panels.findIndex((p) => p.id === activeId.value)
+		activate(panels[(idx + 1) % panels.length].id, { auto: true })
+	}, AUTO_SWITCH_DELAY_MS)
+}
+
+watch(isVisible, (visible) => {
+	if (visible) {
+		scheduleAutoSwitch()
+	}
+	else {
+		clearAutoSwitch()
+	}
+})
+
+onMounted(() => {
+	if (!import.meta.client) {
+		return
+	}
+	window.addEventListener('scroll', onWindowScroll, { passive: true })
+})
+
+onUnmounted(() => {
+	clearAutoSwitch()
+	if (import.meta.client) {
+		window.removeEventListener('scroll', onWindowScroll)
+	}
+})
+
+function activate(id: JtbdBridgePanel['id'], options?: { auto?: boolean }) {
+	if (!options?.auto) {
+		userPickedTab.value = true
+		clearAutoSwitch()
+	}
 	activeId.value = id
 }
 
@@ -344,11 +422,11 @@ function onTabKeydown(e: KeyboardEvent) {
 }
 
 .jtbd-panel-enter-active {
-	transition: opacity 0.25s ease;
+	transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .jtbd-panel-leave-active {
-	transition: opacity 0.15s ease;
+	transition: opacity 0.25s cubic-bezier(0.4, 0, 1, 1);
 }
 
 .jtbd-panel-enter-from,
@@ -357,11 +435,11 @@ function onTabKeydown(e: KeyboardEvent) {
 }
 
 .jtbd-visual-enter-active {
-	transition: opacity 0.3s ease;
+	transition: opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .jtbd-visual-leave-active {
-	transition: opacity 0.15s ease;
+	transition: opacity 0.25s cubic-bezier(0.4, 0, 1, 1);
 }
 
 .jtbd-visual-enter-from,

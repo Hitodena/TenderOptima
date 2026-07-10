@@ -15,8 +15,16 @@
 						Одна успешная закупка окупает подписку
 					</h2>
 					<p class="landing-section-description mx-auto lg:mx-0">
-						Экономия на контракте или предотвращённая ошибка в ТЗ стоят в разы больше, чем тариф
-						TenderOptima — платформа окупается уже на первой закупке.
+						<template
+							v-for="(part, partIndex) in intro"
+							:key="`intro-${partIndex}`"
+						>
+							<span
+								v-if="part.accent"
+								class="landing-desc-accent"
+							>{{ part.text }}</span>
+							<template v-else>{{ part.text }}</template>
+						</template>
 					</p>
 				</div>
 
@@ -34,7 +42,16 @@
 							{{ point.title }}
 						</h3>
 						<p class="text-sm leading-relaxed text-muted">
-							{{ point.description }}
+							<template
+								v-for="(part, partIndex) in point.description"
+								:key="`${point.title}-${partIndex}`"
+							>
+								<span
+									v-if="part.accent"
+									class="landing-desc-accent"
+								>{{ part.text }}</span>
+								<template v-else>{{ part.text }}</template>
+							</template>
 						</p>
 					</div>
 				</div>
@@ -44,17 +61,19 @@
 </template>
 
 <script lang="ts" setup>
-import type { RoiPaybackPoint } from '#shared/constants/landing'
-import { ROI_PAYBACK_POINTS } from '#shared/constants/landing'
+import type { LandingTextPart, RoiPaybackPoint } from '#shared/constants/landing'
+import { ROI_PAYBACK_INTRO, ROI_PAYBACK_POINTS } from '#shared/constants/landing'
 import { useScrollReveal } from '~/composables/useScrollReveal'
 
 withDefaults(
 	defineProps<{
 		sectionId?: string
+		intro?: LandingTextPart[]
 		points?: RoiPaybackPoint[]
 	}>(),
 	{
 		sectionId: 'roi',
+		intro: () => ROI_PAYBACK_INTRO,
 		points: () => ROI_PAYBACK_POINTS,
 	},
 )

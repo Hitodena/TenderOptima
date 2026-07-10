@@ -12,13 +12,13 @@
 				class="reveal rounded-2xl border border-gray-100 bg-white p-6 text-left shadow-sm dark:border-gray-800 dark:bg-gray-900/40"
 				:class="[`stagger-${index + 1}`, { 'is-visible': isVisible }]"
 			>
-				<div class="mb-3 flex items-center gap-2">
-					<span class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-orange-50 text-orange-600 dark:bg-orange-950/50 dark:text-orange-400">
+				<div class="mb-3 flex items-center gap-2.5">
+					<span class="flex size-9 shrink-0 items-center justify-center self-center rounded-lg bg-orange-50 text-orange-600 dark:bg-orange-950/50 dark:text-orange-400">
 						<UIcon :name="metric.icon" class="size-4" />
 					</span>
-					<p class="text-4xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
+					<span class="text-4xl font-bold leading-none tracking-tight text-gray-900 dark:text-gray-100">
 						{{ counters[index]?.display || metric.value }}
-					</p>
+					</span>
 				</div>
 				<p class="text-sm leading-snug text-gray-600 dark:text-gray-400">
 					{{ metric.label }}
@@ -43,10 +43,10 @@ withDefaults(
 
 const metrics = [
 	{
-		value: '×10',
-		numericValue: 50,
-		prefix: '×',
-		suffix: '',
+		value: '10+',
+		numericValue: 10,
+		prefix: '',
+		suffix: '+',
 		icon: 'i-lucide-zap',
 		label: 'Скорость анализа объёмных технических предложений',
 	},

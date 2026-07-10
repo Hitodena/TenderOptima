@@ -276,7 +276,7 @@
 					<UIcon name="i-lucide-lock" class="size-4" />
 				</span>
 				<span>
-					<span class="landing-mockup-badge-value block">Закрывающие</span>
+					<span class="landing-mockup-badge-label block">Закрывающие</span>
 					<span class="landing-mockup-badge-label">документы</span>
 				</span>
 			</div>
@@ -287,7 +287,7 @@
 				</span>
 				<span>
 					<span class="landing-mockup-badge-value block">14 дней</span>
-					<span class="landing-mockup-badge-label">бесплатно</span>
+					<span class="landing-mockup-badge-value">бесплатно</span>
 				</span>
 			</div>
 		</template>

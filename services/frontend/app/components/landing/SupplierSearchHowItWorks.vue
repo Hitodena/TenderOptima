@@ -27,7 +27,7 @@
 		<div class="landing-hiw__container mx-auto max-w-7xl">
 			<header class="mb-8 text-center sm:mb-10">
 				<p class="landing-section-headline mb-2">
-					Поиск поставщиков
+					Модуль 1. Поиск поставщиков
 				</p>
 				<h2 class="landing-section-title mb-4">
 					Поиск поставщиков и рассылка запросов

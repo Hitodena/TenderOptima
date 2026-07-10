@@ -23,7 +23,7 @@
 	>
 		<div class="landing-hiw__container mx-auto max-w-7xl">
 			<header class="mb-8 text-center sm:mb-10">
-				<p class="landing-section-headline mb-2">ТЗ / КП</p>
+				<p class="landing-section-headline mb-2">Модуль 2. ТЗ / КП</p>
 				<h2 class="landing-section-title mb-4">Анализ требований и сравнение с коммерческими предложениями</h2>
 				<p class="landing-section-description mx-auto">Система извлекает пункты из технического задания, затем сверяет каждое требование с КП поставщика.</p>
 			</header>
@@ -232,7 +232,11 @@ const steps: TzKpFlowStep[] = [
 
 const props = withDefaults(defineProps<{ autoplay?: boolean; intervalMs?: number; initialStep?: number }>(), { autoplay: true, intervalMs: 5000, initialStep: 0 })
 
-const { target: sectionRef } = useScrollReveal()
+const { target: sectionRef, isVisible } = useScrollReveal({
+	once: false,
+	threshold: 0.12,
+})
+
 const activeIndex = ref(props.initialStep)
 const currentStep = computed(() => steps[activeIndex.value] ?? steps[0])
 let timer: ReturnType<typeof setInterval> | null = null
@@ -242,10 +246,26 @@ function formatStepNumber(index: number | string): string { return String(toStep
 function isStepActive(index: number | string): boolean { return toStepIndex(index) === activeIndex.value }
 function isStepComplete(index: number | string): boolean { return toStepIndex(index) < activeIndex.value }
 function activate(index: number | string) { activeIndex.value = toStepIndex(index); restartAutoplay() }
-function startAutoplay() { if (!props.autoplay || steps.length < 2) return; timer = setInterval(() => { activeIndex.value = (activeIndex.value + 1) % steps.length }, props.intervalMs) }
+function startAutoplay() {
+	if (!props.autoplay || steps.length < 2 || !isVisible.value) {
+		return
+	}
+	timer = setInterval(() => {
+		activeIndex.value = (activeIndex.value + 1) % steps.length
+	}, props.intervalMs)
+}
 function stopAutoplay() { if (timer) clearInterval(timer); timer = null }
 function restartAutoplay() { stopAutoplay(); startAutoplay() }
-onMounted(startAutoplay)
+
+watch(isVisible, (visible) => {
+	if (visible) {
+		startAutoplay()
+	}
+	else {
+		stopAutoplay()
+	}
+})
+
 onBeforeUnmount(stopAutoplay)
 </script>
 

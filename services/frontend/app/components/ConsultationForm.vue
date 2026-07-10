@@ -88,7 +88,7 @@
 			leading-icon="i-lucide-send"
 			class="cursor-pointer justify-center landing-btn-primary"
 		>
-			{{ activeOption.submitLabel }}
+			{{ submitLabel ?? activeOption.submitLabel }}
 		</UButton>
 	</UForm>
 </template>
@@ -108,6 +108,7 @@ import { getApiErrorDetail } from '#shared/utils/apiError'
 const props = withDefaults(
 	defineProps<{
 		initialRequestType?: ConsultationRequestType
+		submitLabel?: string
 		submitSize?: ButtonProps['size']
 	}>(),
 	{

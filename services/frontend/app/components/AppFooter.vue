@@ -3,8 +3,8 @@
 		<div
 			class="mx-auto flex max-w-7xl flex-nowrap items-center justify-between gap-3 text-xs text-muted sm:text-sm"
 		>
-			<p class="shrink-0 whitespace-nowrap">
-				&copy; TenderOptima, {{ currentYear }}
+			<p class="min-w-0">
+				&copy; TenderOptima, {{ currentYear }}. Все права защищены
 			</p>
 
 			<nav

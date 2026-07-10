@@ -16,7 +16,7 @@
 
 		<BaseSection max-width="3xl">
 			<UAccordion
-				type="multiple" :unmount-on-hide="false" :items="faqAccordionItems"
+				type="single" :unmount-on-hide="false" :items="faqAccordionItems"
 				class="rounded-xl border border-default bg-default px-4 sm:px-5" :ui="{
 					trigger: 'py-4 text-base font-medium cursor-pointer',
 					body: 'text-sm text-muted pb-4 leading-relaxed',

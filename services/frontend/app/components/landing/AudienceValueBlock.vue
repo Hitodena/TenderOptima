@@ -352,7 +352,7 @@ const MiniMock = defineComponent({
 		const Tech = (): VNode =>
 			h('div', { class: 'space-y-3' }, [
 				h('div', { class: 'flex items-center justify-between' }, [
-					h('span', { class: 'text-[11px] font-semibold text-muted' }, 'Сверка ТЗ ↔ КП'),
+					h('span', { class: 'text-[11px] font-semibold text-muted' }, 'Скрытые потери на вычитке сложных КП'),
 					Tag('2 расхождения', 'bg-amber-50 text-amber-700'),
 				]),
 				h('div', { class: 'overflow-hidden rounded-lg border border-default' }, [

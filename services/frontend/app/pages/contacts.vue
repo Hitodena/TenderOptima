@@ -41,10 +41,6 @@
 					<ConsultationForm />
 				</div>
 			</div>
-
-			<p class="landing-cta-copyright">
-				Все права защищены
-			</p>
 		</BaseSection>
 	</div>
 </template>

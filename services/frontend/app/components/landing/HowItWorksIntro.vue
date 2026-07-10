@@ -11,7 +11,7 @@
 					Как работает сервис
 				</p>
 				<h2 class="landing-section-title mb-4">
-					Два направления — один инструмент
+					Два модуля — один инструмент
 				</h2>
 				<p class="landing-section-description mx-auto">
 					TenderOptima закрывает весь цикл закупки: от поиска поставщиков и рассылки запросов
@@ -24,24 +24,23 @@
 					v-for="(direction, index) in directions"
 					:key="direction.id"
 					:to="direction.anchor"
-					class="landing-service-direction reveal landing-card group block p-5 sm:p-6"
+					class="landing-service-direction reveal landing-card group relative block overflow-hidden p-5 sm:p-6"
 					:class="[`stagger-${index + 1}`, { 'is-visible': isVisible }]"
 				>
-					<div class="mb-4 flex items-start justify-between gap-3">
-						<div class="flex size-11 items-center justify-center rounded-xl bg-primary/10 transition-colors group-hover:bg-primary/15">
-							<UIcon :name="direction.icon" class="size-5 text-primary" />
-						</div>
-						<span class="text-xs font-semibold tabular-nums text-muted">
-							{{ direction.index }}
-						</span>
+					<span
+						class="landing-service-direction__index pointer-events-none absolute select-none"
+						aria-hidden="true"
+					>
+						{{ direction.index }}
+					</span>
+					<div class="relative z-10">
+						<h3 class="mb-2 pr-16 text-lg font-semibold text-highlighted sm:pr-20 sm:text-xl">
+							{{ direction.title }}
+						</h3>
+						<p class="max-w-[18rem] text-sm leading-relaxed text-muted sm:max-w-[20rem]">
+							{{ direction.description }}
+						</p>
 					</div>
-					<h3 class="mb-2 text-lg font-semibold text-highlighted">
-						{{ direction.title }}
-					</h3>
-					<p class="text-sm leading-relaxed text-muted">
-						{{ direction.description }}
-					</p>
-					 
 				</NuxtLink>
 			</div>
 		</div>

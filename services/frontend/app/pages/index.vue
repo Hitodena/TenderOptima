@@ -303,7 +303,7 @@ id="faq" ref="faqReveal"
 						</div>
 
 						<UAccordion
-type="multiple" :unmount-on-hide="false" :items="faqAccordionItems"
+type="single" :unmount-on-hide="false" :items="faqAccordionItems"
 							class="rounded-xl border border-default bg-default px-4 sm:px-5" :ui="{
 								trigger: 'py-4 text-base font-medium cursor-pointer',
 								body: 'text-sm text-muted pb-4 leading-relaxed',
@@ -331,13 +331,9 @@ type="multiple" :unmount-on-hide="false" :items="faqAccordionItems"
 								<p class="landing-cta-description mb-4 text-sm">
 									Менеджер свяжется в рабочее время и предоставит вам доступ.
 								</p>
-								<ConsultationForm />
+								<ConsultationForm :submit-label="landingCtaFormSubmitLabel" />
 							</div>
 						</div>
-
-						<p class="landing-cta-copyright">
-							Все права защищены
-						</p>
 					</div>
 				</section>
 			</div>
@@ -376,6 +372,7 @@ import {
 	FAQ_ITEMS,
 	HERO_BULLET_POINTS,
 	HERO_TRUST_BADGES,
+	LANDING_CTA_FORM_SUBMIT_LABEL,
 	LANDING_CTA_LABEL,
 	LANDING_CTA_SECTION_TITLE,
 } from '#shared/constants/landing'
@@ -432,6 +429,7 @@ const { target: ctaReveal, isVisible: ctaVisible } = useScrollReveal()
 const heroBulletPoints = HERO_BULLET_POINTS
 const heroTrustBadges = HERO_TRUST_BADGES
 const landingCtaLabel = LANDING_CTA_LABEL
+const landingCtaFormSubmitLabel = LANDING_CTA_FORM_SUBMIT_LABEL
 const landingCtaSectionTitle = LANDING_CTA_SECTION_TITLE
 
 const faqAccordionItems = computed<AccordionItem[]>(() =>

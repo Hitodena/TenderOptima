@@ -814,20 +814,6 @@ input[type='number'] {
 	}
 }
 
-.landing-cta-copyright {
-	margin-top: 1.25rem;
-	font-size: 0.75rem;
-	color: var(--ui-text-muted);
-	text-align: center;
-}
-
-@media (min-width: 1024px) {
-	.landing-cta-copyright {
-		margin-top: 1.5rem;
-		text-align: left;
-	}
-}
-
 .landing-cta-button {
 	background: var(--ui-bg-inverted);
 	color: var(--ui-text-inverted);
@@ -896,6 +882,16 @@ input[type='number'] {
 	font-size: 1.0625rem;
 	line-height: 1.65;
 	color: var(--ui-text-muted);
+}
+
+.landing-desc-accent {
+	font-weight: 600;
+	color: var(--ui-text-highlighted);
+	box-decoration-break: clone;
+	-webkit-box-decoration-break: clone;
+	background: color-mix(in oklab, var(--ui-primary) 9%, transparent);
+	padding: 0.05em 0.2em;
+	border-radius: 0.25em;
 }
 
 .landing-cta-shadow {
@@ -1125,6 +1121,32 @@ input[type='number'] {
 .landing-service-direction {
 	text-decoration: none;
 	color: inherit;
+}
+
+.landing-service-direction__index {
+	top: -0.35rem;
+	right: -0.15rem;
+	font-size: clamp(5rem, 22vw, 8.5rem);
+	font-weight: 800;
+	line-height: 1;
+	letter-spacing: -0.06em;
+	font-variant-numeric: tabular-nums;
+	color: color-mix(in oklab, var(--ui-primary) 16%, transparent);
+	transition: color 200ms ease;
+}
+
+.landing-service-direction:hover .landing-service-direction__index,
+.landing-service-direction:focus-visible .landing-service-direction__index {
+	color: color-mix(in oklab, var(--ui-primary) 24%, transparent);
+}
+
+.dark .landing-service-direction__index {
+	color: color-mix(in oklab, var(--ui-primary) 22%, transparent);
+}
+
+.dark .landing-service-direction:hover .landing-service-direction__index,
+.dark .landing-service-direction:focus-visible .landing-service-direction__index {
+	color: color-mix(in oklab, var(--ui-primary) 32%, transparent);
 }
 
 .landing-service-direction:focus-visible {
@@ -1570,4 +1592,217 @@ input[type='number'] {
 .landing-pricing-teaser-recommended {
 	border-color: color-mix(in oklab, var(--color-cta-warm) 45%, var(--ui-border));
 	box-shadow: 0 8px 24px color-mix(in oklab, var(--color-cta-warm) 12%, transparent);
+}
+
+.landing-pricing-teaser--disabled {
+	opacity: 0.55;
+	filter: grayscale(1);
+}
+
+.pricing-teaser-details {
+	border-radius: 1rem;
+	border: 1px solid var(--ui-border);
+	background: color-mix(in oklab, var(--ui-bg) 92%, transparent);
+	overflow: hidden;
+}
+
+.pricing-teaser-details__trigger {
+	display: flex;
+	width: 100%;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+	padding: 1rem 1.25rem;
+	text-align: left;
+	cursor: pointer;
+	transition: background-color 0.2s ease;
+}
+
+.pricing-teaser-details__trigger:hover {
+	background: color-mix(in oklab, var(--ui-bg-elevated) 50%, transparent);
+}
+
+.pricing-teaser-details__panel {
+	border-top: 1px solid var(--ui-border);
+}
+
+.pricing-teaser-details__panel .pricing-matrix {
+	border: none;
+	border-radius: 0;
+	background: transparent;
+}
+
+.pricing-matrix {
+	border-radius: 1rem;
+	border: 1px solid var(--ui-border);
+	background: var(--ui-bg);
+	overflow: hidden;
+}
+
+.pricing-matrix__scroll {
+	overflow-x: auto;
+	scroll-snap-type: x mandatory;
+	-webkit-overflow-scrolling: touch;
+	scrollbar-width: thin;
+}
+
+.pricing-matrix__table {
+	width: 100%;
+	min-width: 52rem;
+	border-collapse: separate;
+	border-spacing: 0;
+}
+
+.pricing-matrix__sticky-col {
+	position: sticky;
+	left: 0;
+	z-index: 2;
+	min-width: 10.5rem;
+	max-width: 14rem;
+	padding: 0.75rem 1rem;
+	background: var(--ui-bg);
+	border-right: 1px solid var(--ui-border);
+	text-align: left;
+	vertical-align: middle;
+}
+
+@media (min-width: 1024px) {
+	.pricing-matrix__sticky-col {
+		min-width: 14rem;
+	}
+}
+
+.pricing-matrix__head-feature {
+	font-size: 0.75rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--ui-text-muted);
+}
+
+.pricing-matrix__plan-col {
+	min-width: 8.5rem;
+	padding: 0.625rem 0.5rem;
+	text-align: center;
+	vertical-align: middle;
+	scroll-snap-align: start;
+	border-right: 1px solid color-mix(in oklab, var(--ui-border) 50%, transparent);
+}
+
+.pricing-matrix__plan-col--popular {
+	background: color-mix(in oklab, var(--color-cta-warm-light) 6%, var(--ui-bg));
+}
+
+.pricing-matrix__plan-col:last-child {
+	border-right: none;
+}
+
+.pricing-matrix__mobile-plan {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.125rem;
+	padding: 0.5rem;
+	border-radius: 0.75rem;
+}
+
+.pricing-matrix__mobile-plan--popular {
+	background: color-mix(in oklab, var(--color-cta-warm-light) 10%, transparent);
+	border: 1px solid color-mix(in oklab, var(--color-cta-warm) 30%, transparent);
+}
+
+.pricing-matrix__mobile-plan--disabled {
+	opacity: 0.5;
+	filter: grayscale(1);
+}
+
+.pricing-matrix__plan-col--disabled {
+	opacity: 0.45;
+	filter: grayscale(1);
+}
+
+.pricing-matrix__mobile-price {
+	font-size: 1.25rem;
+	font-weight: 700;
+	line-height: 1.1;
+	color: var(--ui-text-highlighted);
+}
+
+.pricing-matrix__category-row th {
+	padding: 0;
+	background: color-mix(in oklab, var(--ui-bg-elevated) 70%, var(--ui-bg));
+	border-top: 1px solid var(--ui-border);
+	border-bottom: 1px solid var(--ui-border);
+}
+
+.pricing-matrix__category-trigger {
+	display: flex;
+	width: 100%;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+	padding: 0.875rem 1rem;
+	text-align: left;
+	cursor: pointer;
+	transition: background-color 0.15s ease;
+}
+
+.pricing-matrix__category-trigger:hover {
+	background: color-mix(in oklab, var(--ui-bg-elevated) 50%, transparent);
+}
+
+.pricing-matrix__feature-row:nth-child(even) td,
+.pricing-matrix__feature-row:nth-child(even) th {
+	background: color-mix(in oklab, var(--ui-bg-elevated) 35%, var(--ui-bg));
+}
+
+.pricing-matrix__feature-name {
+	font-size: 0.8125rem;
+	font-weight: 500;
+	color: var(--ui-text);
+}
+
+.pricing-matrix__info-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0.125rem;
+	border-radius: 9999px;
+	color: var(--ui-text-muted);
+	cursor: pointer;
+	transition: color 0.15s ease;
+}
+
+.pricing-matrix__info-btn:hover {
+	color: var(--ui-text-highlighted);
+}
+
+.pricing-feature-cell {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 1.5rem;
+}
+
+.pricing-feature-cell__check {
+	width: 1.125rem;
+	height: 1.125rem;
+	color: var(--color-success-500);
+}
+
+.pricing-feature-cell__minus {
+	width: 1rem;
+	height: 1rem;
+	color: color-mix(in oklab, var(--ui-text-muted) 70%, transparent);
+}
+
+.pricing-feature-cell__dash {
+	color: var(--ui-text-muted);
+}
+
+.pricing-feature-cell__text {
+	font-size: 0.8125rem;
+	font-weight: 500;
+	color: var(--ui-text);
+	line-height: 1.3;
 }
