@@ -14,6 +14,8 @@ from backend.enums import (
 from backend.schemas.analysis import (
     TZAnalysisItem,
     TZAnalysisSessionResult,
+    apply_items_overrides,
+    build_analysis_stats,
 )
 from backend.utils.requirements_struct import (
     normalize_requirements_kp,
@@ -237,6 +239,13 @@ def row_to_session(row, *, suppliers=None) -> TZAnalysisDetailResponse:
     kp_filenames = row.kp_filenames or []
     if not kp_filenames and row.kp_filename:
         kp_filenames = [row.kp_filename]
+    overrides = dict(getattr(row, "items_overrides", None) or {})
+    stats_items = apply_items_overrides(items, overrides)
+    kp_stats, primary_kp, top_stats = build_analysis_stats(
+        stats_items,
+        kp_filenames,
+        row.kp_filename,
+    )
     supplier_items = [
         TZAnalysisSupplierItem.model_validate(s)
         for s in (suppliers if suppliers is not None else [])
@@ -255,14 +264,14 @@ def row_to_session(row, *, suppliers=None) -> TZAnalysisDetailResponse:
         requirements_kp=normalize_requirements_kp(
             getattr(row, "requirements_kp", None)
         ),
-        kp_stats=dict(getattr(row, "kp_stats", None) or {}),
+        kp_stats=kp_stats,
         items=items,
-        items_overrides=dict(getattr(row, "items_overrides", None) or {}),
-        match_score=row.match_score,
-        met_count=row.met_count,
-        partial_count=row.partial_count,
-        missing_count=row.missing_count,
-        not_found_count=row.not_found_count,
+        items_overrides=overrides,
+        match_score=top_stats["match_score"],
+        met_count=top_stats["met_count"],
+        partial_count=top_stats["partial_count"],
+        missing_count=top_stats["missing_count"],
+        not_found_count=top_stats["not_found_count"],
         tz_requirements_count=int(
             getattr(row, "tz_requirements_count", 0) or 0
         ),

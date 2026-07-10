@@ -754,10 +754,29 @@ async def update_items_overrides(
         )
     merged = dict(getattr(row, "items_overrides", None) or {})
     merged.update(body.overrides)
+    items = apply_items_overrides(
+        [TZAnalysisItem(**item) for item in (row.items or [])],
+        merged,
+    )
+    kp_filenames = list(row.kp_filenames or [])
+    if not kp_filenames and row.kp_filename:
+        kp_filenames = [row.kp_filename]
+    kp_stats, primary_kp, top_stats = build_analysis_stats(
+        items,
+        kp_filenames,
+        row.kp_filename,
+    )
     updated = await TZAnalysisDAO.update_fields(
         session,
         analysis_id,
         items_overrides=merged,
+        kp_stats=kp_stats,
+        kp_filename=primary_kp or row.kp_filename,
+        match_score=top_stats["match_score"],
+        met_count=top_stats["met_count"],
+        partial_count=top_stats["partial_count"],
+        missing_count=top_stats["missing_count"],
+        not_found_count=top_stats["not_found_count"],
     )
     if not updated:
         raise HTTPException(
