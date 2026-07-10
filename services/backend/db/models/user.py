@@ -1,6 +1,8 @@
+import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, String, Text
+from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db.models.base import Base, IDMixinUUID, TimestampMixin
@@ -32,6 +34,13 @@ class User(IDMixinUUID, TimestampMixin, Base):
     is_admin: Mapped[bool] = mapped_column(default=False)
     agree_terms: Mapped[bool] = mapped_column(default=True)
     agree_marketing: Mapped[bool] = mapped_column(default=False)
+    ref_by: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    referral_invitation_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("registration_referrals.id", ondelete="SET NULL"),
+        nullable=True,
+        unique=True,
+    )
     last_login_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
@@ -88,4 +97,9 @@ class User(IDMixinUUID, TimestampMixin, Base):
     )
     idea_suggestions: Mapped[list["IdeaSuggestion"]] = relationship(  # noqa: F821 # type: ignore
         back_populates="user",
+    )
+    referral_invitation: Mapped["ReferralInvitation | None"] = relationship(  # noqa: F821
+        "ReferralInvitation",
+        foreign_keys=[referral_invitation_id],
+        lazy="selectin",
     )

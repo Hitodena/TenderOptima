@@ -190,6 +190,7 @@ export interface AdminUserListItem {
 	email: string;
 	full_name: string | null;
 	company_name: string | null;
+	ref_by: string | null;
 	is_admin: boolean;
 	created_at: string;
 	last_login_at: string | null;
@@ -206,6 +207,7 @@ export interface AdminUserDetail {
 	email: string;
 	full_name: string | null;
 	company_name: string | null;
+	ref_by: string | null;
 	is_admin: boolean;
 	created_at: string;
 	last_login_at: string | null;
@@ -214,6 +216,21 @@ export interface AdminUserDetail {
 	pages_analyzed_this_month: number;
 	pages_analysis_remaining: number | null;
 	subscription: SubscriptionResponse | null;
+}
+
+export interface ReferralInvitationCreate {
+	inviter_name: string;
+}
+
+export interface ReferralInvitationResponse {
+	id: string;
+	code: string;
+	inviter_name: string;
+	created_by_admin_id: string | null;
+	used_by_user_id: string | null;
+	used_by_user_email: string | null;
+	used_at: string | null;
+	created_at: string;
 }
 
 export interface AdminEmailMessageItem {
@@ -259,6 +276,7 @@ export interface RegisterCreate {
 	full_name: string;
 	company_name?: string | null;
 	phone: string;
+	referral_code: string;
 	agree_terms: boolean;
 	agree_marketing: boolean;
 }

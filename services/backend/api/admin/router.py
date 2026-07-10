@@ -8,17 +8,20 @@ from backend.api.admin.schemas import (
     AdminRequestSupplierRecipientUpdate,
     AdminUserDetail,
     AdminUserListItem,
+    ReferralInvitationCreate,
+    ReferralInvitationResponse,
 )
 from backend.api.deps import get_admin, get_session
 from backend.api.subscriptions.helpers import subscription_to_response
 from backend.api.subscriptions.schemas import SubscriptionUpdate
 from backend.db.dao import (
     EmailMessageDAO,
+    ReferralInvitationDAO,
     RequestSupplierDAO,
     SubscriptionDAO,
     UserAdminDAO,
 )
-from backend.db.models import User
+from backend.db.models import ReferralInvitation, User
 from backend.enums import EmailMessageDirection
 from backend.schemas.user_email_settings import UserEmailSettingsUpdate
 from backend.utils.user_email_settings import email_settings_response
@@ -40,6 +43,7 @@ def _admin_list_item(
         email=user.email,
         full_name=user.full_name,
         company_name=user.company_name,
+        ref_by=user.ref_by,
         is_admin=user.is_admin,
         created_at=user.created_at,
         last_login_at=user.last_login_at,
@@ -64,6 +68,7 @@ def _admin_detail(
         email=user.email,
         full_name=user.full_name,
         company_name=user.company_name,
+        ref_by=user.ref_by,
         is_admin=user.is_admin,
         created_at=user.created_at,
         last_login_at=user.last_login_at,
@@ -79,6 +84,22 @@ def _owner_mailbox(user: User | None) -> str | None:
     if user is None:
         return None
     return user.smtp_user or user.email
+
+
+def _referral_item(
+    invitation: ReferralInvitation,
+) -> ReferralInvitationResponse:
+    used_by_user = invitation.used_by_user
+    return ReferralInvitationResponse(
+        id=invitation.id,
+        code=invitation.code,
+        inviter_name=invitation.inviter_name,
+        created_by_admin_id=invitation.created_by_admin_id,
+        used_by_user_id=invitation.used_by_user_id,
+        used_by_user_email=used_by_user.email if used_by_user else None,
+        used_at=invitation.used_at,
+        created_at=invitation.created_at,
+    )
 
 
 def _email_message_item(message) -> AdminEmailMessageItem:
@@ -161,6 +182,38 @@ async def list_users(
             )
         )
     return items
+
+
+@router.get(
+    "/referrals",
+    response_model=list[ReferralInvitationResponse],
+    summary="List registration referral invitations",
+)
+async def list_referrals(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _admin: Annotated[User, Depends(get_admin)],
+) -> list[ReferralInvitationResponse]:
+    invitations = await ReferralInvitationDAO.list_invitations(session)
+    return [_referral_item(invitation) for invitation in invitations]
+
+
+@router.post(
+    "/referrals",
+    response_model=ReferralInvitationResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create registration referral invitation",
+)
+async def create_referral(
+    body: ReferralInvitationCreate,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    admin: Annotated[User, Depends(get_admin)],
+) -> ReferralInvitationResponse:
+    invitation = await ReferralInvitationDAO.create_invitation(
+        session,
+        inviter_name=body.inviter_name,
+        created_by_admin_id=admin.id,
+    )
+    return _referral_item(invitation)
 
 
 @router.get(

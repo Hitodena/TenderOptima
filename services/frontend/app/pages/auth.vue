@@ -7,7 +7,7 @@
 					<UIcon name="i-lucide-package-search" class="w-6 h-6 text-white" />
 				</div>
 				<h1 class="text-2xl font-bold text-highlighted">TenderOptima</h1>
-				<p class="text-sm text-muted mt-1">Автоматический поиск поставщиков B2B</p>
+				<p class="text-sm text-muted mt-1">{{ t('auth.subtitle') }}</p>
 			</div>
 
 			<UCard class="shadow-lg">
@@ -22,10 +22,10 @@ v-model="loginForm.email" type="email" placeholder="you@company.com"
 									icon="i-lucide-mail" class="w-full" autocomplete="email" />
 							</UFormField>
 
-							<UFormField label="Пароль" name="password" required>
+							<UFormField :label="t('auth.passwordLabel')" name="password" required>
 								<UInput
 v-model="loginForm.password" :type="showLoginPassword ? 'text' : 'password'"
-									placeholder="••••••••" icon="i-lucide-lock" class="w-full"
+									:placeholder="t('auth.passwordPlaceholder')" icon="i-lucide-lock" class="w-full"
 									autocomplete="current-password" @keydown.enter="handleLogin">
 									<template #trailing>
 										<button
@@ -45,7 +45,7 @@ v-if="loginError" color="error" variant="soft" icon="i-lucide-circle-alert"
 								:description="loginError" />
 
 							<UButton type="submit" class="w-full justify-center" size="lg" :loading="loginLoading">
-								Войти
+								{{ t('auth.loginSubmit') }}
 							</UButton>
 
 						</UForm>
@@ -55,6 +55,12 @@ v-if="loginError" color="error" variant="soft" icon="i-lucide-circle-alert"
 						<UForm
 :schema="registerSchema" :state="registerForm" class="space-y-4"
 							@submit="handleRegister">
+							<UAlert
+								color="info"
+								variant="soft"
+								icon="i-lucide-ticket"
+								:description="t('auth.inviteHint')"
+							/>
 
 							<UFormField label="Email" name="email" required>
 								<UInput
@@ -63,27 +69,27 @@ v-model="registerForm.email" type="email" placeholder="you@company.com"
 							</UFormField>
 
 							<div class="grid grid-cols-2 gap-3">
-								<UFormField label="Полное имя" name="full_name" required>
+								<UFormField :label="t('auth.fullNameLabel')" name="full_name" required>
 									<UInput
-v-model="registerForm.full_name" placeholder="Иван Иванов"
+v-model="registerForm.full_name" :placeholder="t('auth.fullNamePlaceholder')"
 										icon="i-lucide-user" class="w-full" autocomplete="name" />
 								</UFormField>
 
-								<UFormField label="Компания" name="company_name">
+								<UFormField :label="t('auth.companyLabel')" name="company_name">
 									<UInput
-v-model="registerForm.company_name" placeholder="ООО Ромашка"
+v-model="registerForm.company_name" :placeholder="t('auth.companyPlaceholder')"
 										icon="i-lucide-building-2" class="w-full" autocomplete="organization" />
 								</UFormField>
 							</div>
 
-							<UFormField label="Телефон" name="phone" required>
+							<UFormField :label="t('auth.phoneLabel')" name="phone" required>
 								<PhoneNumberInput v-model="registerForm.phone" default-country="BY" />
 							</UFormField>
 
-							<UFormField label="Пароль" name="password" required hint="Минимум 8 символов">
+							<UFormField :label="t('auth.passwordLabel')" name="password" required :hint="t('auth.passwordHint')">
 								<UInput
 v-model="registerForm.password"
-									:type="showRegisterPassword ? 'text' : 'password'" placeholder="••••••••"
+									:type="showRegisterPassword ? 'text' : 'password'" :placeholder="t('auth.passwordPlaceholder')"
 									icon="i-lucide-lock" class="w-full" autocomplete="new-password"
 									@keydown.enter="handleRegister">
 									<template #trailing>
@@ -104,17 +110,17 @@ type="button"
 									<UCheckbox v-model="registerForm.agree_terms" required>
 										<template #label>
 											<span class="text-sm">
-												Я принимаю
+												{{ t('auth.termsPrefix') }}
 												<ULink
 to="#"
 													class="text-primary underline underline-offset-2 hover:opacity-80">
-													условия использования
+													{{ t('auth.termsLink') }}
 												</ULink>
-												и
+												{{ t('auth.termsAnd') }}
 												<ULink
 to="#"
 													class="text-primary underline underline-offset-2 hover:opacity-80">
-													политику конфиденциальности
+													{{ t('auth.privacyLink') }}
 												</ULink>
 											</span>
 										</template>
@@ -125,7 +131,7 @@ to="#"
 									<UCheckbox v-model="registerForm.agree_marketing">
 										<template #label>
 											<span class="text-sm">
-												Согласен на получение маркетинговых уведомлений
+												{{ t('auth.marketingConsent') }}
 											</span>
 										</template>
 									</UCheckbox>
@@ -139,7 +145,7 @@ v-if="registerError" color="error" variant="soft" icon="i-lucide-circle-alert"
 							<UButton
 type="submit" class="w-full justify-center" size="lg" :loading="registerLoading"
 								:disabled="!registerForm.agree_terms">
-								Создать аккаунт
+								{{ t('auth.registerSubmit') }}
 							</UButton>
 
 						</UForm>
@@ -156,6 +162,7 @@ import type { RegisterCreate, TokenResponse } from '#shared/types'
 import { getApiErrorDetail } from '#shared/utils/apiError'
 import { isValidPhoneNumber } from 'libphonenumber-js'
 import { z } from 'zod'
+import { t } from '~/constants/translations'
 
 definePageMeta({ layout: 'auth' })
 
@@ -169,29 +176,46 @@ onMounted(() => {
 })
 
 const route = useRoute()
+const referralCode = computed(() => {
+	const value = route.query.ref
+	if (Array.isArray(value)) return value[0]?.trim() ?? ''
+	return typeof value === 'string' ? value.trim() : ''
+})
+const canRegister = computed(() => referralCode.value.length > 0)
 const activeTab = ref(
-	route.query.tab === 'register' ? 'register' : 'login',
+	canRegister.value && route.query.tab === 'register' ? 'register' : 'login',
 )
 
-const tabs = [
-	{ label: 'Войти', slot: 'login', icon: 'i-lucide-log-in', value: 'login' },
-	{ label: 'Регистрация', slot: 'register', icon: 'i-lucide-user-plus', value: 'register' },
-]
+const tabs = computed(() => [
+	{ label: t('auth.loginTab'), slot: 'login', icon: 'i-lucide-log-in', value: 'login' },
+	...(canRegister.value
+		? [{ label: t('auth.registerTab'), slot: 'register', icon: 'i-lucide-user-plus', value: 'register' }]
+		: []),
+])
+
+watch(canRegister, (available) => {
+	if (!available && activeTab.value === 'register') {
+		activeTab.value = 'login'
+	}
+	if (available && route.query.tab === 'register') {
+		activeTab.value = 'register'
+	}
+})
 
 const loginSchema = z.object({
-	email: z.string().email('Неверный формат email'),
-	password: z.string().min(8, 'Минимум 8 символов'),
+	email: z.string().email(t('auth.emailInvalid')),
+	password: z.string().min(8, t('auth.passwordMin')),
 })
 
 const registerSchema = z.object({
-	email: z.string().email('Неверный формат email'),
-	full_name: z.string().min(2, 'Минимум 2 символа'),
+	email: z.string().email(t('auth.emailInvalid')),
+	full_name: z.string().min(2, t('auth.nameMin')),
 	company_name: z.string().optional(),
 	phone: z
 		.string()
-		.min(1, 'Введите номер телефона')
-		.refine((val) => isValidPhoneNumber(val), 'Введите корректный номер телефона'),
-	password: z.string().min(8, 'Минимум 8 символов'),
+		.min(1, t('auth.phoneRequired'))
+		.refine((val) => isValidPhoneNumber(val), t('auth.phoneInvalid')),
+	password: z.string().min(8, t('auth.passwordMin')),
 	agree_terms: z.boolean().optional(),
 	agree_marketing: z.boolean().optional(),
 })
@@ -215,7 +239,7 @@ async function handleLogin() {
 		auth.setToken(data.access_token)
 		await navigateTo('/requests')
 	} catch (e: unknown) {
-		loginError.value = getApiErrorDetail(e) ?? 'Внутренняя ошибка сервера'
+		loginError.value = getApiErrorDetail(e) ?? t('auth.serverError')
 	} finally {
 		loginLoading.value = false
 	}
@@ -235,7 +259,7 @@ const registerLoading = ref(false)
 const showRegisterPassword = ref(false)
 
 async function handleRegister() {
-	if (registerLoading.value || !registerForm.agree_terms) return
+	if (registerLoading.value || !registerForm.agree_terms || !canRegister.value) return
 	registerLoading.value = true
 	registerError.value = ''
 	try {
@@ -245,6 +269,7 @@ async function handleRegister() {
 			full_name: registerForm.full_name,
 			company_name: registerForm.company_name || null,
 			phone: registerForm.phone,
+			referral_code: referralCode.value,
 			agree_terms: registerForm.agree_terms,
 			agree_marketing: registerForm.agree_marketing,
 		}
@@ -252,7 +277,7 @@ async function handleRegister() {
 		auth.setToken(data.access_token)
 		await navigateTo('/requests')
 	} catch (e: unknown) {
-		registerError.value = getApiErrorDetail(e) ?? 'Ошибка регистрации'
+		registerError.value = getApiErrorDetail(e) ?? t('auth.registerError')
 	} finally {
 		registerLoading.value = false
 	}

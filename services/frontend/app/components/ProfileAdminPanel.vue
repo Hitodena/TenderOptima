@@ -40,6 +40,9 @@
 						<p class="text-[11px] text-muted">
 							{{ t('admin.users.lastLogin') }}: {{ formatLastLogin(item.last_login_at) }}
 						</p>
+						<p v-if="item.ref_by" class="text-[11px] text-muted">
+							{{ t('admin.users.refBy') }}: {{ item.ref_by }}
+						</p>
 						<p class="text-[11px] text-muted">
 							{{ t('admin.users.emailsSent') }}: {{ item.emails_sent_this_month }}
 							· {{ t('admin.users.pagesAnalyzed') }}: {{ item.pages_analyzed_this_month }}
@@ -64,6 +67,9 @@
 							</p>
 							<p class="text-xs text-muted mt-1">
 								{{ t('admin.users.lastLogin') }}: {{ formatLastLogin(selectedUser.last_login_at) }}
+							</p>
+							<p v-if="selectedUser.ref_by" class="text-xs text-muted mt-1">
+								{{ t('admin.users.refBy') }}: {{ selectedUser.ref_by }}
 							</p>
 							<div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted mt-2">
 								<span>{{ t('admin.users.emailsSent') }}: {{ selectedUser.emails_sent_this_month }}</span>

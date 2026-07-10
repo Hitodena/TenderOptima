@@ -58,6 +58,15 @@ class RegisterCreate(BaseModel):
             examples=["+79161234567"],
         ),
     ]
+    referral_code: Annotated[
+        str,
+        Field(
+            description="One-time referral invitation code",
+            min_length=12,
+            max_length=128,
+            examples=["invite-code"],
+        ),
+    ]
     agree_terms: Annotated[
         bool,
         Field(

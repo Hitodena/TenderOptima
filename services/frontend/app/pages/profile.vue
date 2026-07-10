@@ -284,7 +284,7 @@ v-if="profileSuccess" color="success" variant="soft" icon="i-lucide-check"
 									<div>
 										<p class="text-xs text-muted mb-0.5">Телефон</p>
 										<a
-:href="`tel:${publicConfig.contactPhone}`"
+:href="`tel:${contactPhoneHref}`"
 											class="text-sm font-medium text-primary hover:underline underline-offset-2 transition-opacity hover:opacity-80">
 											{{ publicConfig.contactPhone }}
 										</a>
@@ -338,6 +338,9 @@ const { get, patch } = useApi()
 const auth = useAuthStore()
 const route = useRoute()
 const { public: publicConfig } = useRuntimeConfig()
+const contactPhoneHref = computed(() =>
+	String(publicConfig.contactPhone).replace(/\s/g, ''),
+)
 
 const user = ref<UserResponse | null>(null)
 

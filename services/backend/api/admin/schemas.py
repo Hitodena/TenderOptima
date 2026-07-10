@@ -5,7 +5,7 @@ from backend.api.subscriptions.schemas import SubscriptionResponse
 from backend.schemas.user_email_settings import (
     UserEmailSettingsResponse,
 )
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class AdminUserListItem(BaseModel):
@@ -15,6 +15,7 @@ class AdminUserListItem(BaseModel):
     email: EmailStr
     full_name: str | None = None
     company_name: str | None = None
+    ref_by: str | None = None
     is_admin: bool
     created_at: datetime
     last_login_at: datetime | None = None
@@ -33,6 +34,7 @@ class AdminUserDetail(BaseModel):
     email: EmailStr
     full_name: str | None = None
     company_name: str | None = None
+    ref_by: str | None = None
     is_admin: bool
     created_at: datetime
     last_login_at: datetime | None = None
@@ -41,6 +43,25 @@ class AdminUserDetail(BaseModel):
     pages_analyzed_this_month: int = 0
     pages_analysis_remaining: int | None = None
     subscription: SubscriptionResponse | None = None
+
+
+class ReferralInvitationCreate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    inviter_name: str = Field(min_length=2, max_length=150)
+
+
+class ReferralInvitationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    code: str
+    inviter_name: str
+    created_by_admin_id: uuid.UUID | None = None
+    used_by_user_id: uuid.UUID | None = None
+    used_by_user_email: EmailStr | None = None
+    used_at: datetime | None = None
+    created_at: datetime
 
 
 class AdminEmailMessageItem(BaseModel):

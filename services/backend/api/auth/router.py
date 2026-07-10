@@ -14,7 +14,12 @@ from backend.api.auth.schemas import (
 )
 from backend.api.deps import get_current_user, get_session
 from backend.celery_app.tasks.security_tasks import send_login_lockout_alert
-from backend.db.dao import SubscriptionDAO, UserAdminDAO, UserDAO
+from backend.db.dao import (
+    ReferralInvitationDAO,
+    SubscriptionDAO,
+    UserAdminDAO,
+    UserDAO,
+)
 from backend.db.models import User
 from backend.enums import SubscriptionPlan
 from backend.schemas.user_email_settings import (
@@ -41,6 +46,7 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
     summary="Register a new user account",
     responses={
         201: {"description": "User successfully created and JWT returned"},
+        403: {"description": "Referral invitation is missing or already used"},
         409: {"description": "Email already exists in the system"},
         422: {"description": "Validation error in request payload"},
     },
@@ -59,19 +65,40 @@ async def register(
             detail="User with this email already exists",
         )
 
+    invitation = await ReferralInvitationDAO.get_available_by_code_for_update(
+        session, request.referral_code
+    )
+    if invitation is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Регистрация доступна только по действительной ссылке-приглашению",
+        )
+
     hashed_password = hash_password(request.password)
-    user = await UserDAO.create(
-        session,
+    user = User(
         email=request.email,
         hashed_password=hashed_password,
         full_name=request.full_name,
         company_name=request.company_name,
         phone=request.phone,
+        agree_terms=request.agree_terms,
+        agree_marketing=request.agree_marketing,
+        ref_by=invitation.inviter_name,
+        referral_invitation_id=invitation.id,
     )
-    business_info = build_business_info(user)
-    await UserDAO.update_contact_info(
-        session, user.id, business_info=business_info
-    )
+    user.business_info = build_business_info(user)
+    try:
+        session.add(user)
+        await session.flush()
+        await ReferralInvitationDAO.mark_used(
+            session, invitation, user_id=user.id
+        )
+        await session.commit()
+        await session.refresh(user)
+    except Exception:
+        await session.rollback()
+        raise
+
     await SubscriptionDAO.upsert_for_user(
         session,
         user.id,

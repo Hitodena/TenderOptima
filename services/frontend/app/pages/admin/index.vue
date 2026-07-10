@@ -23,6 +23,116 @@
 					<AdminEmailRoutingPanel />
 				</template>
 
+				<template #referrals>
+					<div class="space-y-4">
+						<UCard>
+							<template #header>
+								<div>
+									<p class="font-semibold">{{ t('admin.referrals.title') }}</p>
+									<p class="text-sm text-muted">
+										{{ t('admin.referrals.description') }}
+									</p>
+								</div>
+							</template>
+
+							<UForm
+								:schema="referralSchema"
+								:state="referralForm"
+								class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
+								@submit="createReferral"
+							>
+								<UFormField
+									:label="t('admin.referrals.inviterNameLabel')"
+									name="inviter_name"
+									required
+								>
+									<UInput
+										v-model="referralForm.inviter_name"
+										icon="i-lucide-user-round-plus"
+										:placeholder="t('admin.referrals.inviterNamePlaceholder')"
+										class="w-full"
+										autocomplete="name"
+									/>
+								</UFormField>
+								<UButton
+									type="submit"
+									:loading="savingReferral"
+									leading-icon="i-lucide-ticket-plus"
+									class="justify-center"
+								>
+									{{ t('admin.referrals.create') }}
+								</UButton>
+							</UForm>
+						</UCard>
+
+						<UAlert
+							v-if="referralLoadError"
+							color="error"
+							variant="soft"
+							icon="i-lucide-circle-alert"
+							:description="referralLoadError"
+						/>
+
+						<div class="overflow-x-auto rounded-lg border border-default">
+							<UTable
+								:data="referrals"
+								:columns="referralColumns"
+								:loading="loadingReferrals"
+								class="min-w-[760px] lg:min-w-[960px]"
+							>
+								<template #empty>
+									<div class="flex flex-col items-center justify-center gap-3 py-12">
+										<UIcon name="i-lucide-ticket" class="size-10 text-muted opacity-40" />
+										<p class="text-muted">{{ t('admin.referrals.empty') }}</p>
+									</div>
+								</template>
+
+								<template #code-cell="{ row }">
+									<p class="max-w-64 truncate font-mono text-xs text-muted">
+										{{ row.original.code }}
+									</p>
+								</template>
+
+								<template #status-cell="{ row }">
+									<UBadge
+										:color="row.original.used_at ? 'success' : 'neutral'"
+										variant="soft"
+									>
+										{{ row.original.used_at ? t('admin.referrals.used') : t('admin.referrals.available') }}
+									</UBadge>
+								</template>
+
+								<template #created_at-cell="{ row }">
+									<span class="text-xs text-muted whitespace-nowrap">
+										{{ formatDate(row.original.created_at) }}
+									</span>
+								</template>
+
+								<template #used_by_user_email-cell="{ row }">
+									<span class="text-xs text-muted">
+										{{ row.original.used_by_user_email ?? t('admin.referrals.notUsed') }}
+									</span>
+								</template>
+
+								<template #actions-cell="{ row }">
+									<div class="flex justify-end">
+										<UButton
+											size="xs"
+											variant="ghost"
+											color="neutral"
+											icon="i-lucide-copy"
+											:aria-label="t('admin.referrals.copyLink')"
+											:title="t('admin.referrals.copyLink')"
+											:loading="copyingReferralId === row.original.id"
+											@click="copyReferralLink(row.original)"
+										/>
+									</div>
+								</template>
+							</UTable>
+						</div>
+					</div>
+				</template>
+
 				<template #errors>
 						<div class="space-y-4">
 							<div class="flex items-center justify-between flex-wrap gap-3">
@@ -373,6 +483,8 @@ import type {
 	BlacklistResponse,
 	FrontendErrorLogResponse,
 	IdeaSuggestionResponse,
+	ReferralInvitationCreate,
+	ReferralInvitationResponse,
 	UserResponse,
 } from '#shared/types'
 import { t } from '~/constants/translations'
@@ -382,6 +494,7 @@ definePageMeta({ layout: 'default' })
 const { get, post, del: delReq } = useApi()
 const { formatDate, formatTime } = useFormatDate()
 const toast = useToast()
+const requestUrl = useRequestURL()
 
 const user = ref<UserResponse | null>(null)
 try {
@@ -400,6 +513,7 @@ const activeTab = ref('users')
 const tabs = [
 	{ label: 'Пользователи', slot: 'users', value: 'users', icon: 'i-lucide-users' },
 	{ label: t('admin.emailRouting.tabLabel'), slot: 'email', value: 'email', icon: 'i-lucide-mail' },
+	{ label: t('admin.referrals.tabLabel'), slot: 'referrals', value: 'referrals', icon: 'i-lucide-ticket' },
 	{ label: 'Ошибки', slot: 'errors', value: 'errors', icon: 'i-lucide-bug' },
 	{ label: 'Идеи', slot: 'ideas', value: 'ideas', icon: 'i-lucide-lightbulb' },
 	{ label: 'Блэклист', slot: 'blacklist', value: 'blacklist', icon: 'i-lucide-shield-ban' },
@@ -485,6 +599,26 @@ async function copyErrorRow(row: FrontendErrorLogResponse) {
 	}
 }
 
+function referralLink(code: string): string {
+	return `${requestUrl.origin}/auth?tab=register&ref=${encodeURIComponent(code)}`
+}
+
+async function copyReferralLink(row: ReferralInvitationResponse) {
+	if (copyingReferralId.value) return
+	copyingReferralId.value = row.id
+	try {
+		const copied = await copyTextToClipboard(referralLink(row.code))
+		toast.add({
+			title: copied ? t('admin.referrals.linkCopied') : t('admin.referrals.copyError'),
+			color: copied ? 'success' : 'error',
+		})
+	} catch {
+		toast.add({ title: t('admin.referrals.copyError'), color: 'error' })
+	} finally {
+		copyingReferralId.value = null
+	}
+}
+
 function truncate(text: string, maxLen: number): string {
 	if (text.length <= maxLen) return text
 	return `${text.slice(0, maxLen)}…`
@@ -564,6 +698,9 @@ async function fetchIdeas() {
 watch(ideasPage, () => fetchIdeas())
 
 watch(activeTab, (tab) => {
+	if (tab === 'referrals' && referrals.value.length === 0 && !loadingReferrals.value) {
+		void fetchReferrals()
+	}
 	if (tab === 'errors' && errors.value.length === 0 && !loadingErrors.value) {
 		void fetchErrors()
 	}
@@ -578,6 +715,62 @@ watch(activeTab, (tab) => {
 onMounted(() => {
 	// tabs are loaded lazily on activation
 })
+
+// --- Referrals tab ---
+
+const referrals = ref<ReferralInvitationResponse[]>([])
+const loadingReferrals = ref(false)
+const savingReferral = ref(false)
+const copyingReferralId = ref<string | null>(null)
+const referralLoadError = ref<string | null>(null)
+
+const referralForm = reactive<ReferralInvitationCreate>({ inviter_name: '' })
+
+const referralSchema = z.object({
+	inviter_name: z.string().min(2, t('auth.nameMin')).max(150),
+})
+
+const referralColumns: TableColumn<ReferralInvitationResponse>[] = [
+	{ accessorKey: 'inviter_name', header: t('admin.referrals.inviterColumn') },
+	{ accessorKey: 'code', header: t('admin.referrals.codeColumn') },
+	{ id: 'status', header: t('admin.referrals.statusColumn') },
+	{ accessorKey: 'created_at', header: t('admin.referrals.createdAtColumn') },
+	{ accessorKey: 'used_by_user_email', header: t('admin.referrals.usedByColumn') },
+	{ id: 'actions', header: t('admin.referrals.actionsColumn') },
+]
+
+async function fetchReferrals() {
+	loadingReferrals.value = true
+	referralLoadError.value = null
+	try {
+		referrals.value = await get<ReferralInvitationResponse[]>('/admin/referrals')
+	} catch (e: unknown) {
+		referrals.value = []
+		referralLoadError.value = getApiErrorDetail(e) ?? t('admin.referrals.loadError')
+	} finally {
+		loadingReferrals.value = false
+	}
+}
+
+async function createReferral() {
+	if (savingReferral.value) return
+	savingReferral.value = true
+	try {
+		const created = await post<ReferralInvitationResponse>('/admin/referrals', {
+			inviter_name: referralForm.inviter_name.trim(),
+		})
+		referrals.value = [created, ...referrals.value]
+		referralForm.inviter_name = ''
+		toast.add({ title: t('admin.referrals.created'), color: 'success' })
+	} catch (e: unknown) {
+		toast.add({
+			title: getApiErrorDetail(e) ?? t('admin.referrals.createError'),
+			color: 'error',
+		})
+	} finally {
+		savingReferral.value = false
+	}
+}
 
 // --- Blacklist tab ---
 

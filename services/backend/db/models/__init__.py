@@ -4,6 +4,7 @@ from .consultation import Consultation
 from .email_template import EmailTemplate
 from .frontend_error_log import FrontendErrorLog
 from .idea_suggestion import IdeaSuggestion
+from .referral_invitation import ReferralInvitation
 from .request import Request
 from .response import EmailMessage, ResponseAnalysis
 from .search import SearchHistory
@@ -28,6 +29,7 @@ __all__ = [
     "FrontendErrorLog",
     "IdeaSuggestion",
     "Request",
+    "ReferralInvitation",
     "SupplierBookmarkList",
     "SupplierBookmarkItem",
     "EmailMessage",
