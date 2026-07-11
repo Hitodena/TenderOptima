@@ -185,7 +185,7 @@ services:
       - tenderoptima_network
 
 volumes:
-  # pgdata:
+  pgdata:
   redisdata:
   uploads:
 
