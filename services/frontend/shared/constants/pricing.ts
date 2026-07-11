@@ -58,12 +58,14 @@ export const PRICING_BILLING = {
 export const PRICING_MODULE_TABS: {
 	value: PricingModuleTab
 	label: string
+	labelMobile?: string
 }[] = [
 	{ value: 'module1', label: 'Модуль 1' },
 	{ value: 'module2', label: 'Модуль 2' },
 	{
 		value: 'complex',
 		label: 'Комплексный тариф (-5%)',
+		labelMobile: 'М1+М2',
 	},
 ]
 
@@ -190,7 +192,6 @@ const MODULE_1_FEATURES: PricingFeature[] = [
 ]
 
 const MODULE_2_FEATURES: PricingFeature[] = [
-	 
 	{
 		name: 'Объём анализа текстов (символов/мес)',
 		tooltipDescription:
@@ -319,6 +320,16 @@ export function featureTableTitle(tab: PricingModuleTab): string {
 	return 'Комплексный тариф: модуль 1 + модуль 2'
 }
 
+export function featureTableTitleMobile(tab: PricingModuleTab): string {
+	if (tab === 'module1') {
+		return 'Модуль 1. Поиск поставщиков'
+	}
+	if (tab === 'module2') {
+		return 'Модуль 2. Анализ КП на соответствие'
+	}
+	return 'М1+М2'
+}
+
 export function pricingTierSavings(tier: PlanPricingTier): number {
 	return tier.monthly * PRICING_BILLING.sixMonths.months - tier.sixMonth
 }
@@ -389,13 +400,13 @@ function teaserFeaturesForPlan(
 	}
 
 	if (tab === 'module2') {
-		const volume = MODULE_2_FEATURES[1]!.values[planId]
+		const volume = MODULE_2_FEATURES[0]!.values[planId]
 		const volumeText = formatTeaserFeatureValue(volume)
 		const features: string[] = []
 		if (volumeText) {
 			features.push(`Объём анализа: ${volumeText}`)
 		}
-		if (MODULE_2_FEATURES[2]!.values[planId]) {
+		if (MODULE_2_FEATURES[1]!.values[planId]) {
 			features.push('Автопроверка соответствия КП к ТЗ')
 		}
 		return features.slice(0, 2)
@@ -462,7 +473,7 @@ export function pricingTeaserForPlan(
 	if (!tier) {
 		return {
 			...base,
-			price: '—',
+			price: '-',
 			...teaserDisplayFields(plan.id, tab),
 			disabled: false,
 		}

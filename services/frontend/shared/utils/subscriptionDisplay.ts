@@ -2,8 +2,11 @@ import type { SubscriptionPlan, SubscriptionResponse } from '#shared/types'
 
 export const PLAN_LABELS: Record<string, string> = {
 	test: 'Тестовый',
+	mini: 'Мини',
+	starter: 'Начальный',
 	basic: 'Базовый',
 	advanced: 'Расширенный',
+	extended: 'Расширенный',
 	corporate: 'Корпоративный',
 }
 
@@ -37,14 +40,30 @@ export const PLAN_CATALOG: Record<SubscriptionPlan, PlanCatalogEntry> = {
 			'Загрузка файлов до 1 МБ',
 		],
 	},
-	basic: {
+	mini: {
+		max_searches_per_month: 10,
+		max_emails_per_month: 200,
+		max_kp_processed_per_month: null,
+		max_pages_analyzed_per_month: null,
+		price_module_1_monthly: '65',
+		price_module_2_monthly: null,
+		price_bundle_monthly: null,
+		module_1_enabled: true,
+		module_2_enabled: false,
+		features: [
+			'Модуль 1: пилотный поиск и рассылка',
+			'До 10 поисков и 200 писем в месяц',
+			'Модуль 2 недоступен на тарифе Мини',
+		],
+	},
+	starter: {
 		max_searches_per_month: 50,
 		max_emails_per_month: 1000,
 		max_kp_processed_per_month: 7,
-		max_pages_analyzed_per_month: 140,
+		max_pages_analyzed_per_month: 500,
 		price_module_1_monthly: '160',
 		price_module_2_monthly: '220',
-		price_bundle_monthly: '340',
+		price_bundle_monthly: '360',
 		module_1_enabled: true,
 		module_2_enabled: false,
 		features: [
@@ -53,19 +72,51 @@ export const PLAN_CATALOG: Record<SubscriptionPlan, PlanCatalogEntry> = {
 			'Модуль 2 подключается отдельно',
 		],
 	},
-	advanced: {
-		max_searches_per_month: 150,
-		max_emails_per_month: 2500,
+	basic: {
+		max_searches_per_month: 100,
+		max_emails_per_month: 2000,
 		max_kp_processed_per_month: 20,
-		max_pages_analyzed_per_month: 400,
+		max_pages_analyzed_per_month: 1500,
 		price_module_1_monthly: '250',
 		price_module_2_monthly: '480',
 		price_bundle_monthly: '690',
 		module_1_enabled: true,
 		module_2_enabled: true,
 		features: [
-			'Модуль 1 и модуль 2 в одной подписке',
-			'До 150 поисков, 2500 писем, 400 страниц в месяц',
+			'Модуль 1 и модуль 2 для регулярных закупок',
+			'До 100 поисков, 2000 писем, 1500 страниц в месяц',
+			'Анализ ТЗ/КП, экспорт, письма поставщикам',
+		],
+	},
+	advanced: {
+		max_searches_per_month: 200,
+		max_emails_per_month: 4000,
+		max_kp_processed_per_month: 40,
+		max_pages_analyzed_per_month: 3000,
+		price_module_1_monthly: '400',
+		price_module_2_monthly: '770',
+		price_bundle_monthly: '1110',
+		module_1_enabled: true,
+		module_2_enabled: true,
+		features: [
+			'Legacy id расширенного тарифа',
+			'До 200 поисков, 4000 писем, 3000 страниц в месяц',
+			'Анализ ТЗ/КП, экспорт, письма поставщикам',
+		],
+	},
+	extended: {
+		max_searches_per_month: 200,
+		max_emails_per_month: 4000,
+		max_kp_processed_per_month: 40,
+		max_pages_analyzed_per_month: 3000,
+		price_module_1_monthly: '400',
+		price_module_2_monthly: '770',
+		price_bundle_monthly: '1110',
+		module_1_enabled: true,
+		module_2_enabled: true,
+		features: [
+			'Модуль 1 и модуль 2 для высокой нагрузки',
+			'До 200 поисков, 4000 писем, 3000 страниц в месяц',
 			'Анализ ТЗ/КП, экспорт, письма поставщикам',
 		],
 	},
@@ -164,22 +215,30 @@ export function formatUsageLimit(value: number | null | undefined): string {
 
 export const SUBSCRIPTION_PLAN_ORDER: SubscriptionPlan[] = [
 	'test',
+	'mini',
+	'starter',
 	'basic',
-	'advanced',
+	'extended',
 	'corporate',
 ]
 
 export const PLAN_DESCRIPTIONS: Record<SubscriptionPlan, string> = {
 	test: 'Ознакомление с платформой и обоими модулями',
-	basic: 'Поиск поставщиков и рассылка для небольших команд',
-	advanced: 'Полный цикл: поиск, inbox и анализ ТЗ/КП',
+	mini: 'Пилотный запуск модуля поиска и рассылки',
+	starter: 'Поиск поставщиков и рассылка для небольших команд',
+	basic: 'Сбалансированный объём для регулярных закупок',
+	advanced: 'Legacy id расширенного тарифа',
+	extended: 'Высокая нагрузка и большое количество закупок',
 	corporate: 'Индивидуальные лимиты и сопровождение',
 }
 
 export const PLAN_TAGLINES: Record<SubscriptionPlan, string> = {
 	test: 'Бесплатный тест',
-	basic: 'Старт закупок',
-	advanced: 'Оптимальный пакет',
+	mini: 'Пилот',
+	starter: 'Старт закупок',
+	basic: 'Оптимальный пакет',
+	advanced: 'Архивный id',
+	extended: 'Высокая нагрузка',
 	corporate: 'Enterprise',
 }
 

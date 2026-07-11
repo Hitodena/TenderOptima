@@ -64,7 +64,14 @@ export interface UserResponse {
 	subscription?: SubscriptionResponse | null;
 }
 
-export type SubscriptionPlan = 'test' | 'basic' | 'advanced' | 'corporate';
+export type SubscriptionPlan =
+	| 'test'
+	| 'mini'
+	| 'starter'
+	| 'basic'
+	| 'advanced'
+	| 'extended'
+	| 'corporate';
 
 export interface SubscriptionResponse {
 	id: string;

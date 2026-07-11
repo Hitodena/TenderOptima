@@ -107,11 +107,14 @@ def upgrade() -> None:
         sa.text(
             """
             UPDATE subscriptions
-            SET plan = 'basic',
+            SET plan = 'starter',
                 module_1_enabled = true,
                 module_2_enabled = false,
                 max_searches_per_month = COALESCE(max_requests_per_month, 50),
-                max_emails_per_month = COALESCE(max_mailings_per_request, 1000)
+                max_emails_per_month = COALESCE(max_mailings_per_request, 1000),
+                price_module_1_monthly = 160,
+                price_module_2_monthly = 220,
+                price_bundle_monthly = 360
             WHERE plan IS NOT NULL
             """
         )

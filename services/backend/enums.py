@@ -84,8 +84,11 @@ class SubscriptionPlan(StrEnum):
     """Tariff tier for a user subscription."""
 
     TEST = "test"
+    MINI = "mini"
+    STARTER = "starter"
     BASIC = "basic"
     ADVANCED = "advanced"
+    EXTENDED = "extended"
     CORPORATE = "corporate"
 
 

@@ -1,25 +1,27 @@
 services:
-  db:
-    image: postgres:18-alpine
-    container_name: tenderoptima_db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-    env_file:
-      - .env
-    volumes:
-      - pgdata:/var/lib/postgresql
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 10s
-      timeout: 10s
-      retries: 5
-    networks:
-      - tenderoptima_network
+  # Local Postgres is disabled because the project now uses the remote
+  # Dockerized database provisioned outside this compose stack.
+  # db:
+  #   image: postgres:18-alpine
+  #   container_name: tenderoptima_db
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_USER: ${POSTGRES_USER}
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  #     POSTGRES_DB: ${POSTGRES_DB}
+  #   env_file:
+  #     - .env
+  #   volumes:
+  #     - pgdata:/var/lib/postgresql
+  #   ports:
+  #     - "${POSTGRES_PORT:-5432}:5432"
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+  #     interval: 10s
+  #     timeout: 10s
+  #     retries: 5
+  #   networks:
+  #     - tenderoptima_network
 
   redis:
     image: redis:8.0-alpine
@@ -54,12 +56,9 @@ services:
     container_name: tenderoptima_migrate
     command: >
       sh -c "alembic -c backend/alembic.ini upgrade head
-      && python -m backend.scripts.basic_email_templates"
+      && python -m backend.scripts.initial_data"
     env_file:
       - ./services/backend/.env
-    depends_on:
-      db:
-        condition: service_healthy
     networks:
       - tenderoptima_network
     restart: on-failure
@@ -77,8 +76,6 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
-      db:
-        condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
@@ -104,8 +101,6 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
-      db:
-        condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
@@ -128,8 +123,6 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
-      db:
-        condition: service_healthy
       redis:
         condition: service_healthy
       parser:
@@ -160,8 +153,6 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
-      db:
-        condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
@@ -194,7 +185,7 @@ services:
       - tenderoptima_network
 
 volumes:
-  pgdata:
+  # pgdata:
   redisdata:
   uploads:
 

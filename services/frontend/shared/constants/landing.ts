@@ -11,7 +11,7 @@ export const TRUST_STRIP_ITEMS: TrustStripItem[] = [
 	{ icon: 'i-lucide-shield-check', label: '-80% рисков' },
 ]
 
-/** Prominent hero trust badges — only factual claims, no fabricated certifications. */
+/** Prominent hero trust badges - only factual claims, no fabricated certifications. */
 export interface HeroTrustBadge {
 	icon: string
 	label: string
@@ -23,13 +23,27 @@ export const HERO_TRUST_BADGES: HeroTrustBadge[] = [
 	{ icon: 'i-lucide-crosshair', label: 'Найдено 3 отклонения' },
 ]
 
-export const HERO_BULLET_POINTS: string[] = [
-	'Быстрый поиск лучших поставщиков по регионам',
-	'Автоматическая проверка сложных КП на соответствие ТЗ',
-	'Единая среда без пересылки сотен писем',
+export interface HeroBulletPoint {
+	desktop: string
+	mobile: string
+}
+
+export const HERO_BULLET_POINTS: HeroBulletPoint[] = [
+	{
+		desktop: 'Быстрый поиск лучших поставщиков по регионам',
+		mobile: 'Быстрый поиск лучших поставщиков',
+	},
+	{
+		desktop: 'Автоматическая проверка сложных КП на соответствие ТЗ',
+		mobile: 'Автопроверка сложных КП на соответствие ТЗ',
+	},
+	{
+		desktop: 'Единая среда без пересылки сотен писем',
+		mobile: 'Единая среда без пересылки сотен писем',
+	},
 ]
 
-/** Primary public landing CTA — opens consultation modal (demo request). */
+/** Primary public landing CTA - opens consultation modal (demo request). */
 export const LANDING_CTA_LABEL = 'Посмотреть систему в деле'
 
 export const LANDING_CTA_SECTION_TITLE = 'Посмотрите систему в деле'
@@ -39,12 +53,12 @@ export const LANDING_CTA_FORM_SUBMIT_LABEL = 'Получить доступ на
 
 /** Browser chrome title in landing mockups and screenshot frames. */
 export const LANDING_MOCKUP_BROWSER_TITLE
-	= 'TenderOptima — автоматизация процесса закупок'
+	= 'TenderOptima - автоматизация процесса закупок'
 
 /** Short browser chrome title when the mockup URL bar has limited space. */
 export const LANDING_MOCKUP_BROWSER_TITLE_SHORT = 'TenderOptima'
 
-/** JTBD bridge — interactive split-screen panels after hero. */
+/** JTBD bridge - interactive split-screen panels after hero. */
 export interface JtbdBridgePanel {
 	id: 'price-push' | 'tz-kp'
 	tabLabel: string
@@ -62,7 +76,7 @@ export const JTBD_BRIDGE_PANELS: JtbdBridgePanel[] = [
 		id: 'price-push',
 		tabLabel: 'Сбор и дожим по цене',
 		tabShort: 'Лучшая цена',
-		headline: 'От запроса до лучшей цены — за 5 минут',
+		headline: 'От запроса до лучшей цены - за 5 минут',
 		description:
 			'Забудьте про ручной поиск контактов и сотни писем в почте. Платформа сама найдёт поставщиков, разошлёт запросы и соберёт ответы в единую таблицу.',
 		trigger:
@@ -102,7 +116,7 @@ export const PURCHASE_SCENARIO_STEPS: PurchaseScenarioStep[] = [
 	{
 		icon: 'i-lucide-upload',
 		title: 'Загрузили ТЗ',
-		description: 'AI извлекает требования из технического задания — DOCX, PDF, сканы.',
+		description: 'AI извлекает требования из технического задания - DOCX, PDF, сканы.',
 	},
 	{
 		icon: 'i-lucide-search',
@@ -112,7 +126,7 @@ export const PURCHASE_SCENARIO_STEPS: PurchaseScenarioStep[] = [
 	{
 		icon: 'i-lucide-send',
 		title: 'Отправили запросы',
-		description: 'Шаблон письма, параметры и рассылка — из одного экрана.',
+		description: 'Шаблон письма, параметры и рассылка - из одного экрана.',
 	},
 	{
 		icon: 'i-lucide-inbox',
@@ -122,7 +136,7 @@ export const PURCHASE_SCENARIO_STEPS: PurchaseScenarioStep[] = [
 	{
 		icon: 'i-lucide-scan-search',
 		title: 'AI сравнил',
-		description: 'Сверка КП с требованиями ТЗ — таблица соответствия по каждому пункту.',
+		description: 'Сверка КП с требованиями ТЗ - таблица соответствия по каждому пункту.',
 	},
 	{
 		icon: 'i-lucide-file-check',
@@ -131,7 +145,7 @@ export const PURCHASE_SCENARIO_STEPS: PurchaseScenarioStep[] = [
 	},
 ]
 
-/** «Рассылка запросов» — two-column block on the landing page. */
+/** «Рассылка запросов» - two-column block on the landing page. */
 export interface RequestBroadcastHighlight {
 	icon: string
 	text: string
@@ -140,7 +154,8 @@ export interface RequestBroadcastHighlight {
 }
 
 export const REQUEST_BROADCAST = {
-	title: 'Быстрая отправка запросов и переписка с поставщиками — в несколько кликов',
+	title: 'Быстрая отправка запросов и переписка с поставщиками - в несколько кликов',
+	titleMobile: 'Работа с поставщиками в несколько кликов',
 	subtitle:
 		'',
 	highlights: [
@@ -208,7 +223,7 @@ export const PRODUCT_MODULES: ProductModule[] = [
 	{
 		icon: 'i-lucide-file-scan',
 		title: 'Извлечение требований из ТЗ',
-		description: 'AI достаёт требования из документа — DOCX, PDF, сканы.',
+		description: 'AI достаёт требования из документа - DOCX, PDF, сканы.',
 		highlight: 'Поддержка форматов, OCR',
 		image: '/landing/upload_area_analyze.png',
 		imageAlt: 'Загрузка и анализ технического задания',
@@ -226,7 +241,7 @@ export const PRODUCT_MODULES: ProductModule[] = [
 	{
 		icon: 'i-lucide-file-check',
 		title: 'Экспорт',
-		description: 'Готовая таблица соответствия — выгрузка в XLSX/DOCX, письма поставщикам на уточнения.',
+		description: 'Готовая таблица соответствия - выгрузка в XLSX/DOCX, письма поставщикам на уточнения.',
 		highlight: 'Готовые шаблоны, docx/xlsx генерация',
 		image: '/landing/excel.png',
 		imageAlt: 'Экспорт таблицы соответствия в Excel',
@@ -243,7 +258,7 @@ export interface ContactEmailChannel {
 export const CONTACT_SUPPORT = {
 	title: 'Поддержка',
 	lead:
-		' Поможем решить вопрос: пн–пт с 9:00 до 18:00.',
+		' Поможем решить вопрос: пн-пт с 9:00 до 18:00.',
 	emails: [
 		{
 			address: 'support@tenderoptima.by',
@@ -275,7 +290,7 @@ export interface FaqItem {
 export const FAQ_ITEMS: FaqItem[] = [
 	{
 		question: 'Нужно ли устанавливать программу?',
-		answer: 'Нет. TenderOptima работает в браузере — зарегистрируйтесь и начните работу сразу.',
+		answer: 'Нет. TenderOptima работает в браузере - зарегистрируйтесь и начните работу сразу.',
 	},
 	{
 		question: 'В каком формате должно быть техническое задание?',
@@ -283,7 +298,7 @@ export const FAQ_ITEMS: FaqItem[] = [
 	},
 	{
 		question: 'Сколько времени занимает анализ?',
-		answer: 'Извлечение требований из ТЗ — минуты. Полный анализ КП может занять до нескольких часов в зависимости от объёма.',
+		answer: 'Извлечение требований из ТЗ - минуты. Полный анализ КП может занять до нескольких часов в зависимости от объёма.',
 	},
 	{
 		question: 'Как отслеживать ответы поставщиков?',
@@ -295,11 +310,11 @@ export const FAQ_ITEMS: FaqItem[] = [
 	},
 	{
 		question: 'Нужно ли обучаться работе на платформе?',
-		answer: 'Интерфейс нативно простой и понятный. Достаточно 5–10 минут для понимания всех принципов.',
+		answer: 'Интерфейс нативно простой и понятный. Достаточно 5-10 минут для понимания всех принципов.',
 	},
 ]
 
-/** B2B trust narrative blocks (descriptionroute §1.3) — no fabricated certifications. */
+/** B2B trust narrative blocks (descriptionroute §1.3) - no fabricated certifications. */
 export interface TrustBlock {
 	icon: string
 	title: string
@@ -312,7 +327,7 @@ export const TRUST_BLOCKS: TrustBlock[] = [
 	{
 		icon: 'i-lucide-shield-check',
 		title: 'Безопасность данных',
-		description: 'ТЗ и коммерческие предложения хранятся в изолированной базе. Доступ разграничен ролями, соединение защищено HTTPS. Условия обработки — в договоре и NDA по запросу.',
+		description: 'ТЗ и коммерческие предложения хранятся в изолированной базе. Доступ разграничен ролями, соединение защищено HTTPS. Условия обработки - в договоре и NDA по запросу.',
 		link: '/security',
 		linkLabel: 'Подробнее о безопасности',
 	},
@@ -326,14 +341,14 @@ export const TRUST_BLOCKS: TrustBlock[] = [
 	{
 		icon: 'i-lucide-server',
 		title: 'Закрытый контур / on-premise',
-		description: 'Для Enterprise доступно развёртывание в инфраструктуре клиента на базе Docker Compose — данные остаются в вашем контуре.',
+		description: 'Для Enterprise доступно развёртывание в инфраструктуре клиента на базе Docker Compose - данные остаются в вашем контуре.',
 		link: '/contacts',
 		linkLabel: 'Обсудить развёртывание',
 	},
 	{
 		icon: 'i-lucide-file-signature',
 		title: 'Договор и конфиденциальность',
-		description: 'Публичный договор оказания услуг, согласие на обработку персональных данных. По запросу — дополнительное соглашение о конфиденциальности и удаление данных.',
+		description: 'Публичный договор оказания услуг, согласие на обработку персональных данных. По запросу - дополнительное соглашение о конфиденциальности и удаление данных.',
 		link: '/security',
 		linkLabel: 'Гарантии для B2B',
 	},
@@ -344,7 +359,7 @@ export interface IndustrySegment {
 	label: string
 }
 
-/** Industry focus areas — descriptive, without fabricated client logos. */
+/** Industry focus areas - descriptive, without fabricated client logos. */
 export const INDUSTRY_SEGMENTS: IndustrySegment[] = [
 	{ icon: 'i-lucide-factory', label: 'Производство' },
 	{ icon: 'i-lucide-shopping-bag', label: 'Ритейл' },
@@ -360,7 +375,7 @@ export interface LandingTextPart {
 	accent?: boolean
 }
 
-/** Compact ROI payback narrative — one block instead of repeating across JTBD/ICP. */
+/** Compact ROI payback narrative - one block instead of repeating across JTBD/ICP. */
 export interface RoiPaybackPoint {
 	icon: string
 	title: string
@@ -369,9 +384,9 @@ export interface RoiPaybackPoint {
 
 export const ROI_PAYBACK_INTRO: LandingTextPart[] = [
 	{ text: 'Экономия на контракте или предотвращённая ошибка в ТЗ стоят ' },
-	{ text: 'в разы больше', accent: true },
-	{ text: ', чем тариф TenderOptima — платформа окупается уже на ' },
-	{ text: 'первой закупке', accent: true },
+	{ text: 'в разы больше'    },
+	{ text: ', чем тариф TenderOptima - платформа окупается уже на ' },
+	{ text: 'первой закупке'   },
 	{ text: '.' },
 ]
 
@@ -381,25 +396,22 @@ export const ROI_PAYBACK_POINTS: RoiPaybackPoint[] = [
 		title: 'Эффективные механики снижения цены.',
 		description: [
 			{ text: 'Экономия', accent: true },
-			{ text: 'на одном контракте часто ' },
+			{ text: ' на одном контракте часто ' },
 			{ text: 'превышает годовую подписку', accent: true },
-			{ text: '. Массовый охват рынка и дожим поставщиков' },
-			{ text: 'автоматический дожим поставщиков'  },
-			{ text: ' обеспечивают снижение цены контракта. Мы убираем рутину, высвобождая ресурсы команды.' },
+			{ text: '. Массовый охват рынка и массовый дожим поставщиков обеспечивают снижение цены контракта. Мы убираем рутину, высвобождая ресурсы команды.' },
 		],
 	},
 	{
 		icon: 'i-lucide-shield-alert',
 		title: 'Скрытые потери на вычитке сложных КП',
 		description: [
-			{ text: 'Отрыв команды 3–5 тех.специалистов на чтение многостраничных документов. Система' },
+			{ text: 'Отрыв команды 3-5 тех.специалистов на чтение многостраничных документов. Система ' },
 			{ text: 'сокращает недели', accent: true },
-			{ text: 'занятости команды' },
-			{ text: 'до 1–2 часов', accent: true },
+			{ text: ' занятости команды ' },
+			{ text: 'до 1-2 часов', accent: true },
 			{ text: '. Одна пропущенная несостыковка в оборудовании стоит дороже тарифа. ' },
 			{ text: 'Система подсказывает расхождения', accent: true },
-			{ text: ' до подписания договора. ' },
-			{ text: '.' },
+			{ text: ' до подписания договора.' },
 		],
 	},
 ]
@@ -420,7 +432,7 @@ export const SERVICE_DIRECTIONS: ServiceDirection[] = [
 		index: 1,
 		title: 'Поиск поставщиков',
 		description:
-			'Автопоиск компаний по запросу и региону, рассылка запросов и сбор ответов — без ручного сбора контактов.',
+			'Автопоиск компаний по запросу и региону, рассылка запросов и сбор ответов - без ручного сбора контактов.',
 		icon: 'i-lucide-search',
 		anchor: '#supplier-search',
 	},
@@ -435,7 +447,7 @@ export const SERVICE_DIRECTIONS: ServiceDirection[] = [
 	},
 ]
 
-/** Anonymized scenario-based case studies — no fabricated client names or logos. */
+/** Anonymized scenario-based case studies - no fabricated client names or logos. */
 export type CaseStudyVisual = 'compare' | 'search' | 'extract'
 
 export interface CaseStudy {
@@ -473,7 +485,7 @@ export const CASE_STUDIES: CaseStudy[] = [
 		title: 'Поиск поставщиков и рассылка запросов по региону',
 		metric: 'в 3 раза больше ответов рынка',
 		description:
-			'Нужно было быстро найти поставщиков по новой закупке и разослать запросы с единым шаблоном — без ручного сбора контактов и подготовки писем. Автопоиск, рассылка из одного экрана и сбор ответов в едином интерфейсе.',
+			'Нужно было быстро найти поставщиков по новой закупке и разослать запросы с единым шаблоном - без ручного сбора контактов и подготовки писем. Автопоиск, рассылка из одного экрана и сбор ответов в едином интерфейсе.',
 		outcomes: [
 			'Поиск и рассылка без переключения между сервисами',
 			'Единый шаблон запроса для всех участников',

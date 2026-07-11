@@ -167,43 +167,46 @@
 				<!-- Hero: asymmetric layout, flat CTA, compact trust row, metrics cards -->
 				<section class="landing-hero px-4 pt-12 pb-8 sm:px-6 sm:pt-14 sm:pb-10 lg:px-8 lg:pt-16 lg:pb-12">
 					<div ref="heroReveal" class="reveal is-visible relative z-10 mx-auto max-w-6xl">
-						<div class="landing-hero-grid gap-8 text-center lg:gap-10 lg:text-left">
+						<div class="landing-hero-grid gap-4 text-center lg:gap-10 lg:text-left">
 							<div class="pb-4 sm:pb-6 lg:pb-2">
 								<h1
-									class="landing-hero-title mb-4 text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl lg:text-6xl"
+									class="landing-hero-title mb-4 text-4xl font-extrabold leading-tight tracking-tight md:text-6xl"
 								>
 									Упростите процессы закупок
 								</h1>
-								<ul class="mx-auto mb-6 flex flex-col gap-y-3 lg:mx-0">
+								<ul class="mx-auto mb-6 flex flex-col gap-y-2.5 lg:mx-0 md:gap-y-3">
 									<li
 										v-for="point in heroBulletPoints"
-										:key="point"
-										class="flex flex-row items-start gap-2.5"
+										:key="point.desktop"
+										class="flex items-center gap-2 md:items-start md:gap-2.5"
 									>
 										<UIcon
 											name="i-lucide-check"
-											class="mt-0.5 size-[17px] shrink-0 text-orange-600"
+											class="size-4 shrink-0 text-orange-600 md:mt-0.5 md:size-[17px]"
 											aria-hidden="true"
 										/>
-										<span class="text-base font-normal text-gray-600 dark:text-gray-400">
-											{{ point }}
+										<span class="text-left text-sm leading-snug text-gray-600 dark:text-gray-400 md:hidden">
+											{{ point.mobile }}
+										</span>
+										<span class="hidden text-left text-base font-normal leading-snug text-gray-600 dark:text-gray-400 md:inline">
+											{{ point.desktop }}
 										</span>
 									</li>
 								</ul>
-								<div class="flex flex-col items-center justify-center gap-3 sm:flex-row lg:justify-start">
+								<div class="flex w-full flex-col items-center gap-3 lg:items-start">
 									<UButton
 										size="lg"
 										leading-icon="i-lucide-play-circle"
 										:label="landingCtaLabel"
-										class="landing-btn-primary"
+										class="landing-btn-primary w-auto max-w-full"
 										@click="consultation.open()"
 									/>
 								</div>
-								<div class="mt-6 flex flex-nowrap items-center justify-center gap-x-2.5 sm:mt-7 sm:gap-x-3 lg:justify-start">
+								<div class="mt-6 flex flex-wrap items-center justify-center gap-x-2.5 gap-y-2 sm:mt-7 sm:gap-x-3 lg:justify-start">
 									<template v-for="(badge, index) in heroTrustBadges" :key="badge.label">
 										<span
 											v-if="index > 0"
-											class="shrink-0 text-sm text-gray-300 dark:text-gray-600"
+											class="hidden shrink-0 text-sm text-gray-300 dark:text-gray-600 sm:inline"
 											aria-hidden="true"
 										>|</span>
 										<TrustBadge compact :icon="badge.icon" :label="badge.label" />
@@ -234,7 +237,7 @@
 				<section
 					id="icp"
 					ref="icpReveal"
-					class="reveal py-(--landing-section-py) px-4 sm:px-6 lg:px-8"
+					class="reveal px-4 py-12 sm:px-6 md:py-24 lg:px-8"
 					:class="{ 'is-visible': icpVisible }"
 				>
 					<div class="mx-auto max-w-7xl">
@@ -263,7 +266,7 @@
 				<!-- Case studies preview -->
 				<section
 					id="cases" ref="casesReveal"
-					class="reveal bg-elevated/25 py-(--landing-section-py) px-4 sm:px-6 lg:px-8"
+					class="reveal bg-elevated/25 px-4 py-12 sm:px-6 md:py-24 lg:px-8"
 				>
 					<div class="mx-auto max-w-6xl">
 						<div class="mb-12 text-center">
@@ -291,7 +294,7 @@
 				<!-- FAQ -->
 				<section
 id="faq" ref="faqReveal"
-					class="reveal bg-elevated/25 py-(--landing-section-py) px-4 sm:px-6 lg:px-8">
+					class="reveal bg-elevated/25 px-4 py-12 sm:px-6 md:py-24 lg:px-8">
 					<div class="mx-auto max-w-3xl">
 						<div class="mb-10 text-center">
 							<p class="landing-section-headline mb-2">
@@ -313,7 +316,7 @@ type="single" :unmount-on-hide="false" :items="faqAccordionItems"
 				</section>
 
 				<!-- CTA: final section with embedded consultation form -->
-				<section id="contacts" ref="ctaReveal" class="landing-cta-band reveal py-(--landing-section-py) px-4 sm:px-6 lg:px-8">
+				<section id="contacts" ref="ctaReveal" class="landing-cta-band reveal px-4 py-12 sm:px-6 md:py-24 lg:px-8">
 					<div
 						class="mx-auto max-w-7xl"
 						:class="{ 'is-visible': ctaVisible }"
@@ -324,7 +327,7 @@ type="single" :unmount-on-hide="false" :items="faqAccordionItems"
 								<ContactSupportPanel class="mt-4 sm:mt-5" />
 							</div>
 
-							<div class="landing-cta-grid__form landing-card bg-default p-5 sm:p-6">
+							<div class="landing-cta-grid__form landing-card bg-default p-6 md:p-8">
 								<h2 class="landing-cta-title mb-1.5 text-xl font-bold sm:text-2xl">
 									{{ landingCtaSectionTitle }}
 								</h2>

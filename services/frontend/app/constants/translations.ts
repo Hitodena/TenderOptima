@@ -78,6 +78,12 @@ export const translations = {
 			pagesRemaining: 'Страниц осталось',
 			pagesPerMonth: 'Страниц / мес',
 			refBy: 'Пригласил',
+			planTest: 'Тестовый',
+			planMini: 'Мини',
+			planStarter: 'Начальный',
+			planBasic: 'Базовый',
+			planExtended: 'Расширенный',
+			planCorporate: 'Корпоративный',
 		},
 		referrals: {
 			tabLabel: 'Приглашения',

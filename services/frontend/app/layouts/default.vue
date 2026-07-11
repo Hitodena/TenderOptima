@@ -88,7 +88,11 @@
 					class="hidden sm:inline-flex landing-btn-primary"
 					@click="consultation.open()"
 				/>
-				<UDropdownMenu v-else :items="userMenuItems" :ui="{ content: 'w-48' }">
+				<UDropdownMenu
+					v-if="auth.isAuthenticated.value"
+					:items="userMenuItems"
+					:ui="{ content: 'w-48' }"
+				>
 					<UButton color="neutral" variant="ghost" trailing-icon="i-lucide-chevron-down" size="lg">
 						<span class="max-w-28 truncate text-base">{{ user?.full_name || user?.email }}</span>
 					</UButton>

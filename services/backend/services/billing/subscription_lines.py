@@ -10,8 +10,11 @@ from backend.utils.subscription_catalog import resolve_subscription_prices
 
 PLAN_TITLES = {
     SubscriptionPlan.TEST.value: "Тестовый",
+    SubscriptionPlan.MINI.value: "Мини",
+    SubscriptionPlan.STARTER.value: "Начальный",
     SubscriptionPlan.BASIC.value: "Базовый",
     SubscriptionPlan.ADVANCED.value: "Расширенный",
+    SubscriptionPlan.EXTENDED.value: "Расширенный",
     SubscriptionPlan.CORPORATE.value: "Корпоративный",
 }
 

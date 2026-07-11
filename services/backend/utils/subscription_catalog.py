@@ -31,25 +31,56 @@ PLAN_CATALOG: dict[str, PlanCatalogEntry] = {
         price_module_2_monthly=None,
         price_bundle_monthly=None,
     ),
-    SubscriptionPlan.BASIC.value: PlanCatalogEntry(
+    SubscriptionPlan.MINI.value: PlanCatalogEntry(
+        max_searches_per_month=10,
+        max_emails_per_month=200,
+        max_kp_processed_per_month=None,
+        max_pages_analyzed_per_month=None,
+        max_tz_kp_upload_bytes=None,
+        price_module_1_monthly=Decimal("65"),
+        price_module_2_monthly=None,
+        price_bundle_monthly=None,
+    ),
+    SubscriptionPlan.STARTER.value: PlanCatalogEntry(
         max_searches_per_month=50,
         max_emails_per_month=1000,
         max_kp_processed_per_month=7,
-        max_pages_analyzed_per_month=140,
+        max_pages_analyzed_per_month=500,
         max_tz_kp_upload_bytes=None,
         price_module_1_monthly=Decimal("160"),
         price_module_2_monthly=Decimal("220"),
-        price_bundle_monthly=Decimal("340"),
+        price_bundle_monthly=Decimal("360"),
     ),
-    SubscriptionPlan.ADVANCED.value: PlanCatalogEntry(
-        max_searches_per_month=150,
-        max_emails_per_month=2500,
+    SubscriptionPlan.BASIC.value: PlanCatalogEntry(
+        max_searches_per_month=100,
+        max_emails_per_month=2000,
         max_kp_processed_per_month=20,
-        max_pages_analyzed_per_month=400,
+        max_pages_analyzed_per_month=1500,
         max_tz_kp_upload_bytes=None,
         price_module_1_monthly=Decimal("250"),
         price_module_2_monthly=Decimal("480"),
         price_bundle_monthly=Decimal("690"),
+    ),
+    # Legacy value used before the public tariff grid was renamed.
+    SubscriptionPlan.ADVANCED.value: PlanCatalogEntry(
+        max_searches_per_month=200,
+        max_emails_per_month=4000,
+        max_kp_processed_per_month=40,
+        max_pages_analyzed_per_month=3000,
+        max_tz_kp_upload_bytes=None,
+        price_module_1_monthly=Decimal("400"),
+        price_module_2_monthly=Decimal("770"),
+        price_bundle_monthly=Decimal("1110"),
+    ),
+    SubscriptionPlan.EXTENDED.value: PlanCatalogEntry(
+        max_searches_per_month=200,
+        max_emails_per_month=4000,
+        max_kp_processed_per_month=40,
+        max_pages_analyzed_per_month=3000,
+        max_tz_kp_upload_bytes=None,
+        price_module_1_monthly=Decimal("400"),
+        price_module_2_monthly=Decimal("770"),
+        price_bundle_monthly=Decimal("1110"),
     ),
     SubscriptionPlan.CORPORATE.value: PlanCatalogEntry(
         max_searches_per_month=None,
@@ -65,25 +96,55 @@ PLAN_CATALOG: dict[str, PlanCatalogEntry] = {
 
 GEO_CURRENCY_PRICES: dict[str, dict[str, PlanCatalogEntry]] = {
     SubscriptionGeo.US.value: {
-        SubscriptionPlan.BASIC.value: PlanCatalogEntry(
+        SubscriptionPlan.MINI.value: PlanCatalogEntry(
+            max_searches_per_month=10,
+            max_emails_per_month=200,
+            max_kp_processed_per_month=None,
+            max_pages_analyzed_per_month=None,
+            max_tz_kp_upload_bytes=None,
+            price_module_1_monthly=Decimal("22"),
+            price_module_2_monthly=None,
+            price_bundle_monthly=None,
+        ),
+        SubscriptionPlan.STARTER.value: PlanCatalogEntry(
             max_searches_per_month=50,
             max_emails_per_month=1000,
             max_kp_processed_per_month=7,
-            max_pages_analyzed_per_month=140,
+            max_pages_analyzed_per_month=500,
             max_tz_kp_upload_bytes=None,
             price_module_1_monthly=Decimal("53"),
             price_module_2_monthly=Decimal("73"),
-            price_bundle_monthly=Decimal("113"),
+            price_bundle_monthly=Decimal("120"),
         ),
-        SubscriptionPlan.ADVANCED.value: PlanCatalogEntry(
-            max_searches_per_month=150,
-            max_emails_per_month=2500,
+        SubscriptionPlan.BASIC.value: PlanCatalogEntry(
+            max_searches_per_month=100,
+            max_emails_per_month=2000,
             max_kp_processed_per_month=20,
-            max_pages_analyzed_per_month=400,
+            max_pages_analyzed_per_month=1500,
             max_tz_kp_upload_bytes=None,
             price_module_1_monthly=Decimal("83"),
             price_module_2_monthly=Decimal("160"),
             price_bundle_monthly=Decimal("230"),
+        ),
+        SubscriptionPlan.ADVANCED.value: PlanCatalogEntry(
+            max_searches_per_month=200,
+            max_emails_per_month=4000,
+            max_kp_processed_per_month=40,
+            max_pages_analyzed_per_month=3000,
+            max_tz_kp_upload_bytes=None,
+            price_module_1_monthly=Decimal("133"),
+            price_module_2_monthly=Decimal("257"),
+            price_bundle_monthly=Decimal("370"),
+        ),
+        SubscriptionPlan.EXTENDED.value: PlanCatalogEntry(
+            max_searches_per_month=200,
+            max_emails_per_month=4000,
+            max_kp_processed_per_month=40,
+            max_pages_analyzed_per_month=3000,
+            max_tz_kp_upload_bytes=None,
+            price_module_1_monthly=Decimal("133"),
+            price_module_2_monthly=Decimal("257"),
+            price_bundle_monthly=Decimal("370"),
         ),
     },
 }
@@ -99,7 +160,7 @@ def catalog_for_plan(
         return geo_prices[plan]
     return PLAN_CATALOG.get(
         plan,
-        PLAN_CATALOG[SubscriptionPlan.BASIC.value],
+        PLAN_CATALOG[SubscriptionPlan.STARTER.value],
     )
 
 

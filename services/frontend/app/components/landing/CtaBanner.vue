@@ -15,8 +15,7 @@
 
 		<div class="flex w-full shrink-0 flex-col items-center gap-2 lg:w-auto lg:items-end">
 			<BaseButton
-				block
-				class="w-full sm:w-auto"
+				class="w-auto max-w-full"
 				leading-icon="i-lucide-messages-square"
 				@click="consultation.open()"
 			>

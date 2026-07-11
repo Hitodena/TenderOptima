@@ -14,8 +14,8 @@
 				aria-label="Не включено"
 			/>
 		</template>
-		<template v-else-if="value == null || value === '—'">
-			<span class="pricing-feature-cell__dash" aria-hidden="true">—</span>
+		<template v-else-if="value == null || value === '-'">
+			<span class="pricing-feature-cell__dash" aria-hidden="true">-</span>
 		</template>
 		<template v-else>
 			<span class="pricing-feature-cell__text">{{ value }}</span>

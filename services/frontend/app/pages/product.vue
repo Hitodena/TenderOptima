@@ -40,7 +40,15 @@
 								<span class="landing-browser-dot" />
 								<span class="landing-browser-url">{{ LANDING_MOCKUP_BROWSER_TITLE }}</span>
 							</div>
-							<img :src="module.image" :alt="module.imageAlt" class="block h-auto w-full" loading="lazy" decoding="async">
+							<img
+								:src="module.image"
+								:alt="module.imageAlt"
+								class="block h-auto w-full"
+								width="960"
+								height="600"
+								loading="lazy"
+								decoding="async"
+							>
 						</div>
 					</div>
 					<div :class="{ 'lg:order-1': moduleIndex % 2 === 1 }">

@@ -12,7 +12,7 @@
 		/>
 
 		<div
-			class="rounded-3xl border border-slate-100/50 bg-slate-50 p-4 dark:border-white/10 dark:bg-slate-900/40 sm:p-6"
+			class="min-w-0 rounded-3xl border border-slate-100/50 bg-slate-50 p-3 dark:border-white/10 dark:bg-slate-900/40 sm:p-6"
 			:class="{ 'landing-mockup-shell--plain': variant !== 'hero' }"
 		>
 			<div
@@ -23,9 +23,6 @@
 				}"
 			>
 				<div class="landing-browser-chrome">
-					<span class="landing-browser-dot" />
-					<span class="landing-browser-dot" />
-					<span class="landing-browser-dot" />
 					<span class="landing-browser-url">{{ browserUrl }}</span>
 				</div>
 
@@ -271,7 +268,7 @@
 		</div>
 
 		<template v-if="variant === 'hero'">
-			<div class="landing-mockup-badge landing-mockup-badge-1">
+			<div class="landing-mockup-badge landing-mockup-badge-1 hidden sm:flex">
 				<span class="landing-mockup-badge-icon">
 					<UIcon name="i-lucide-lock" class="size-4" />
 				</span>
@@ -281,7 +278,7 @@
 				</span>
 			</div>
 
-			<div class="landing-mockup-badge landing-mockup-badge-2">
+			<div class="landing-mockup-badge landing-mockup-badge-2 hidden sm:flex">
 				<span class="landing-mockup-badge-icon">
 					<UIcon name="i-lucide-server" class="size-4" />
 				</span>
@@ -374,6 +371,8 @@ const selectedCount = computed(() => suppliers.filter((s) => s.checked).length)
 
 <style scoped>
 .landing-mockup--broadcast {
+	width: 100%;
+	min-width: 0;
 	max-width: none;
 }
 
@@ -410,6 +409,7 @@ const selectedCount = computed(() => suppliers.filter((s) => s.checked).length)
 
 .mock-broadcast__header {
 	display: flex;
+	min-width: 0;
 	align-items: flex-start;
 	justify-content: space-between;
 	gap: 0.75rem;
@@ -590,6 +590,7 @@ const selectedCount = computed(() => suppliers.filter((s) => s.checked).length)
 
 .mock-mail__header {
 	display: flex;
+	min-width: 0;
 	align-items: flex-start;
 	justify-content: space-between;
 	gap: 0.75rem;
@@ -623,6 +624,7 @@ const selectedCount = computed(() => suppliers.filter((s) => s.checked).length)
 	display: grid;
 	grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr) minmax(0, 0.85fr);
 	gap: 0.5rem;
+	min-width: 0;
 	min-height: 12rem;
 }
 
@@ -818,6 +820,7 @@ const selectedCount = computed(() => suppliers.filter((s) => s.checked).length)
 
 .mock-supplier-compare__header {
 	display: flex;
+	min-width: 0;
 	align-items: flex-start;
 	justify-content: space-between;
 	gap: 0.75rem;
@@ -864,6 +867,8 @@ const selectedCount = computed(() => suppliers.filter((s) => s.checked).length)
 
 .mock-supplier-compare__scroll {
 	overflow-x: auto;
+	overscroll-behavior-inline: contain;
+	-webkit-overflow-scrolling: touch;
 	border-radius: 0.5rem;
 	border: 1px solid var(--ui-border);
 	background: color-mix(in oklab, var(--ui-bg-elevated) 55%, transparent);
@@ -988,6 +993,33 @@ const selectedCount = computed(() => suppliers.filter((s) => s.checked).length)
 }
 
 @media (max-width: 640px) {
+	.landing-mockup-backdrop {
+		inset: -0.5rem 0;
+	}
+
+	.mock-broadcast,
+	.mock-mail,
+	.mock-supplier-compare {
+		padding: 0.75rem;
+	}
+
+	.mock-broadcast__header,
+	.mock-mail__header,
+	.mock-supplier-compare__header {
+		flex-direction: column;
+		align-items: stretch;
+	}
+
+	.mock-broadcast__count,
+	.mock-mail__count,
+	.mock-supplier-compare__count {
+		align-self: flex-start;
+	}
+
+	.mock-broadcast__tag {
+		display: none;
+	}
+
 	.mock-mail__layout {
 		grid-template-columns: 1fr;
 		min-height: auto;

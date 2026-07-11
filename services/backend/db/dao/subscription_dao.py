@@ -39,7 +39,7 @@ class SubscriptionDAO(BaseDAO[Subscription]):
     ) -> Subscription:
         existing = await cls.get_by_user_id(session, user_id)
         if existing is None:
-            plan = values.get("plan", SubscriptionPlan.BASIC.value)
+            plan = values.get("plan", SubscriptionPlan.STARTER.value)
             catalog = catalog_for_plan(plan, values.get("geo_code", "BY"))
             defaults = {
                 "user_id": user_id,

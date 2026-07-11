@@ -322,7 +322,7 @@ const emailForm = reactive({
 })
 
 const subscriptionForm = reactive({
-	plan: 'basic' as SubscriptionPlan,
+	plan: 'starter' as SubscriptionPlan,
 	module_1_enabled: true,
 	module_2_enabled: false,
 	max_searches_per_month: '',
@@ -385,10 +385,12 @@ function onCustomLimitsToggle(enabled: boolean | 'indeterminate') {
 }
 
 const planOptions = [
-	{ label: 'Тестовый', value: 'test' },
-	{ label: 'Базовый', value: 'basic' },
-	{ label: 'Расширенный', value: 'advanced' },
-	{ label: 'Корпоративный', value: 'corporate' },
+	{ label: t('admin.users.planTest'), value: 'test' },
+	{ label: t('admin.users.planMini'), value: 'mini' },
+	{ label: t('admin.users.planStarter'), value: 'starter' },
+	{ label: t('admin.users.planBasic'), value: 'basic' },
+	{ label: t('admin.users.planExtended'), value: 'extended' },
+	{ label: t('admin.users.planCorporate'), value: 'corporate' },
 ]
 
 const activeOptions = [
@@ -428,7 +430,7 @@ function fillForms(detail: AdminUserDetail) {
 	emailForm.imap_password = ''
 
 	const sub = detail.subscription
-	subscriptionForm.plan = sub?.plan ?? 'basic'
+	subscriptionForm.plan = sub?.plan ?? 'starter'
 	subscriptionForm.module_1_enabled = sub?.module_1_enabled ?? true
 	subscriptionForm.module_2_enabled = sub?.module_2_enabled ?? false
 	subscriptionForm.max_searches_per_month = sub?.max_searches_per_month?.toString() ?? ''

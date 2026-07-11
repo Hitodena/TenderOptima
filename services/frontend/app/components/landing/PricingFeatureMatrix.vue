@@ -5,21 +5,42 @@
 				<caption class="sr-only">
 					{{ featureTableTitle(moduleTab) }}
 				</caption>
-				<thead v-if="showMobileHead" class="lg:hidden">
+				<thead v-if="mobileHead" class="pricing-matrix__mobile-head lg:hidden">
 					<tr>
 						<th
 							class="pricing-matrix__sticky-col pricing-matrix__head-feature"
 							scope="col"
 						>
-							Тариф
+							Функция
 						</th>
 						<th
 							v-for="plan in PRICING_PLANS"
 							:key="`mobile-head-${plan.id}`"
 							class="pricing-matrix__plan-col"
+							:class="{
+								'pricing-matrix__plan-col--popular': plan.isPopular,
+								'pricing-matrix__plan-col--disabled': isPlanDisabled(plan),
+							}"
 							scope="col"
 						>
 							<div
+								v-if="mobileHead === 'compact'"
+								class="pricing-matrix__compact-plan"
+								:class="{
+									'pricing-matrix__compact-plan--popular': plan.isPopular,
+									'pricing-matrix__compact-plan--disabled': isPlanDisabled(plan),
+								}"
+							>
+								<span class="font-semibold text-highlighted">{{ plan.name }}</span>
+								<p
+									v-if="isPlanDisabled(plan)"
+									class="mt-0.5 text-center text-[0.65rem] leading-snug text-muted"
+								>
+									Недоступен
+								</p>
+							</div>
+							<div
+								v-else
 								class="pricing-matrix__mobile-plan"
 								:class="{
 									'pricing-matrix__mobile-plan--popular': plan.isPopular,
@@ -157,12 +178,13 @@ import PricingFeatureCell from '~/components/landing/PricingFeatureCell.vue'
 const props = withDefaults(
 	defineProps<{
 		moduleTab: PricingModuleTab
-		showMobileHead?: boolean
+		/** Mobile column headers: compact = plan names only, full = price + CTA */
+		mobileHead?: 'compact' | 'full'
 		isSixMonthBilling?: boolean
 		hideCategoryRow?: boolean
 	}>(),
 	{
-		showMobileHead: false,
+		mobileHead: undefined,
 		isSixMonthBilling: false,
 		hideCategoryRow: false,
 	},

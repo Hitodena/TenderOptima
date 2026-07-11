@@ -3,7 +3,7 @@ import { REQUEST_BROADCAST } from '#shared/constants/landing'
 import { useScrollReveal } from '~/composables/useScrollReveal'
 import ProductMockup from '~/components/landing/ProductMockup.vue'
 
-const { title, subtitle, highlights } = REQUEST_BROADCAST
+const { title, titleMobile, subtitle, highlights } = REQUEST_BROADCAST
 
 const { target: sectionRef, isVisible } = useScrollReveal({
 	once: false,
@@ -14,10 +14,10 @@ const hasRevealed = ref(false)
 
 type MockSlide = 'broadcast' | 'inbox' | 'compare'
 
-const slides: { id: MockSlide; label: string }[] = [
-	{ id: 'broadcast', label: 'Рассылка запросов' },
-	{ id: 'inbox', label: 'Переписка' },
-	{ id: 'compare', label: 'Сравнение поставщиков' },
+const slides: { id: MockSlide; label: string; shortLabel: string }[] = [
+	{ id: 'broadcast', label: 'Рассылка запросов', shortLabel: 'Рассылка' },
+	{ id: 'inbox', label: 'Переписка', shortLabel: 'Переписка' },
+	{ id: 'compare', label: 'Сравнение поставщиков', shortLabel: 'Сравнение' },
 ]
 
 const activeSlide = ref(0)
@@ -78,28 +78,29 @@ onBeforeUnmount(stopAutoplay)
 	<section
 		id="requests"
 		ref="sectionRef"
-		class="reveal bg-elevated/25 py-(--landing-section-py) px-4 sm:px-6 lg:px-8"
+		class="reveal bg-elevated/25 px-4 py-12 sm:px-6 md:py-24 lg:px-8"
 		:class="{ 'is-inview': isVisible, 'is-visible': hasRevealed }"
 	>
 		<div class="mx-auto max-w-7xl">
 			<div
-				class="grid items-center gap-10 lg:grid-cols-[minmax(0,46fr)_minmax(0,54fr)] lg:gap-12 xl:gap-16"
+				class="grid items-center gap-12 lg:grid-cols-[minmax(0,46fr)_minmax(0,54fr)] lg:gap-12 xl:gap-16"
 			>
 				<div
 					class="reveal max-w-xl lg:max-w-none"
 					:class="{ 'is-visible': hasRevealed }"
 				>
-					<h2 class="text-3xl font-bold tracking-tight text-highlighted">
-						{{ title }}
+					<h2 class="landing-section-title mb-0 text-left">
+						<span class="md:hidden">{{ titleMobile }}</span>
+						<span class="hidden md:inline">{{ title }}</span>
 					</h2>
 					<p
 						v-if="subtitle"
-						class="mt-4 text-base leading-relaxed text-muted sm:text-lg"
+						class="mt-6 text-base leading-relaxed text-muted sm:mt-4 sm:text-lg"
 					>
 						{{ subtitle }}
 					</p>
 
-					<ul class="mt-8 space-y-4">
+					<ul class="mt-10 space-y-4 sm:mt-8">
 						<li
 							v-for="(item, index) in highlights"
 							:key="item.text"
@@ -133,7 +134,7 @@ onBeforeUnmount(stopAutoplay)
 					</Transition>
 
 					<div
-						class="mt-4 flex flex-wrap items-center justify-center gap-2"
+						class="request-mock-tabs mt-6 flex flex-nowrap items-center justify-center gap-2 overflow-x-auto pb-1 sm:mt-4 sm:flex-wrap sm:overflow-visible"
 						role="tablist"
 						aria-label="Сценарии рассылки, переписки и сравнения"
 					>
@@ -142,12 +143,13 @@ onBeforeUnmount(stopAutoplay)
 							:key="slide.id"
 							type="button"
 							role="tab"
-							class="request-mock-tab"
+							class="request-mock-tab shrink-0"
 							:class="{ 'request-mock-tab--active': activeSlide === index }"
 							:aria-selected="activeSlide === index"
 							@click="goToSlide(index)"
 						>
-							{{ slide.label }}
+							<span class="sm:hidden">{{ slide.shortLabel }}</span>
+							<span class="hidden sm:inline">{{ slide.label }}</span>
 						</button>
 					</div>
 				</div>
@@ -157,6 +159,15 @@ onBeforeUnmount(stopAutoplay)
 </template>
 
 <style scoped>
+.request-mock-tabs {
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+}
+
+.request-mock-tabs::-webkit-scrollbar {
+	display: none;
+}
+
 .request-mock-fade-enter-active,
 .request-mock-fade-leave-active {
 	transition: opacity 0.25s ease, transform 0.25s ease;

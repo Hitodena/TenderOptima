@@ -5,7 +5,7 @@ import { useScrollReveal } from '~/composables/useScrollReveal'
 
 const panels = JTBD_BRIDGE_PANELS
 
-/** Sky — vibrant; orange — restrained B2B. */
+/** Sky - vibrant; orange - restrained B2B. */
 const accentMap = {
 	sky: {
 		tabActive:
@@ -13,7 +13,7 @@ const accentMap = {
 		tabIcon: 'text-sky-600 dark:text-sky-400',
 		headline: 'text-sky-700 dark:text-sky-300',
 		trigger:
-			'bg-sky-50 text-sky-900 ring-1 ring-sky-200/80 dark:bg-sky-950/40 dark:text-sky-100 dark:ring-sky-800/60 font-semibold',
+			'bg-sky-50 text-sky-900 ring-1 ring-sky-200/80 dark:bg-sky-950/40 dark:text-sky-100 dark:ring-sky-800/60',
 		metric: 'text-sky-700 dark:text-sky-300',
 		metricSize: 'text-2xl sm:text-3xl',
 		visualGlow: 'from-sky-400/20 via-cyan-400/10 to-transparent',
@@ -74,7 +74,7 @@ function scheduleAutoSwitch() {
 		return
 	}
 
-	// Секция появилась, пока пользователь уже читает (скролл остановился) — не переключаем.
+	// Секция появилась, пока пользователь уже читает (скролл остановился) - не переключаем.
 	if (!wasRecentlyScrolling()) {
 		return
 	}
@@ -137,11 +137,11 @@ function onTabKeydown(e: KeyboardEvent) {
 	<section
 		id="jtbd"
 		ref="sectionRef"
-		class="reveal bg-default py-(--landing-section-py) px-4 sm:px-6 lg:px-8"
+		class="reveal bg-default px-4 py-12 sm:px-6 md:py-24 lg:px-8"
 		:class="{ 'is-visible': isVisible }"
 	>
 		<div class="mx-auto max-w-6xl">
-			<header class="mb-8 text-center sm:mb-10">
+			<header class="mb-12 text-center sm:mb-10">
 				<p class="landing-section-headline mb-2">
 					Сценарии окупаемости
 				</p>
@@ -149,14 +149,14 @@ function onTabKeydown(e: KeyboardEvent) {
 					Два сценария окупаемости
 				</h2>
 				<p class="landing-section-description mx-auto">
-					Выберите задачу — покажем, где платформа экономит время и бюджет на вашей закупке.
+					Выберите задачу - покажем, где платформа экономит время и бюджет на вашей закупке.
 				</p>
 			</header>
 
 			<div
 				role="tablist"
 				aria-label="Сценарии окупаемости TenderOptima"
-				class="jtbd-tabs mb-6 flex gap-2 overflow-x-auto pb-1 sm:mb-8 sm:justify-center"
+				class="jtbd-tabs mb-8 flex gap-3 overflow-x-auto pb-1 max-md:px-0.5 sm:mb-8 sm:gap-2 sm:justify-center"
 				@keydown="onTabKeydown"
 			>
 				<button
@@ -173,7 +173,7 @@ function onTabKeydown(e: KeyboardEvent) {
 						panel.id === activeId
 							? accentMap[panel.accent].tabActive
 							: 'border-transparent bg-transparent text-muted hover:border-default hover:bg-elevated/50 hover:text-default',
-						panel.id === activeId && panel.accent === 'sky' ? 'font-semibold' : 'font-medium',
+						panel.id === activeId && panel.accent === 'sky' ? 'font-medium sm:font-semibold' : 'font-medium',
 					]"
 					@click="activate(panel.id)"
 				>
@@ -193,12 +193,12 @@ function onTabKeydown(e: KeyboardEvent) {
 						:key="activePanel.id"
 						role="tabpanel"
 						:aria-labelledby="`jtbd-tab-${activePanel.id}`"
-						class="grid gap-0 lg:grid-cols-2"
+						class="grid grid-cols-1 gap-0 md:grid-cols-2"
 					>
 						<!-- Left: JTBD copy -->
-						<div class="flex flex-col justify-center p-5 sm:p-7 lg:p-9">
+						<div class="flex flex-col justify-center p-7 max-md:py-8 md:p-8">
 							<h3
-								class="text-2xl font-extrabold leading-tight tracking-tight sm:text-3xl lg:text-[2rem]"
+								class="text-2xl font-normal leading-tight tracking-tight sm:text-3xl sm:font-extrabold lg:text-[2rem]"
 								:class="activeAccent.headline"
 							>
 								{{ activePanel.headline }}
@@ -210,7 +210,10 @@ function onTabKeydown(e: KeyboardEvent) {
 
 							<div
 								class="mt-5 rounded-xl px-4 py-3.5 text-sm leading-snug sm:px-5 sm:py-4"
-								:class="activeAccent.trigger"
+								:class="[
+									activeAccent.trigger,
+									activePanel.accent === 'sky' ? 'font-normal sm:font-semibold' : 'font-normal',
+								]"
 							>
 								<UIcon
 									v-if="activePanel.accent === 'sky'"
@@ -220,7 +223,7 @@ function onTabKeydown(e: KeyboardEvent) {
 								{{ activePanel.trigger }}
 							</div>
 
-							<div class="mt-6 grid grid-cols-2 gap-3 sm:gap-4">
+							<div class="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
 								<div
 									v-for="(metric, i) in activePanel.metrics"
 									:key="i"
@@ -228,7 +231,7 @@ function onTabKeydown(e: KeyboardEvent) {
 									:class="activePanel.accent === 'sky' ? 'bg-elevated/40' : 'bg-elevated/25'"
 								>
 									<p
-										class="font-extrabold tracking-tight"
+										class="font-normal tracking-tight sm:font-extrabold"
 										:class="[activeAccent.metric, activeAccent.metricSize]"
 									>
 										{{ metric.value }}
@@ -242,7 +245,7 @@ function onTabKeydown(e: KeyboardEvent) {
 
 						<!-- Right: abstract visual -->
 						<div
-							class="relative flex min-h-[260px] items-center justify-center overflow-hidden border-t border-default p-5 sm:min-h-[300px] sm:p-7 lg:min-h-0 lg:border-l lg:border-t-0 lg:p-8"
+							class="relative flex min-h-[260px] items-center justify-center overflow-hidden border-t border-default p-6 md:min-h-[300px] md:border-l md:border-t-0 md:p-8"
 							:class="activeAccent.visualBg"
 						>
 							<div

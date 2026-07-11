@@ -20,7 +20,7 @@ class Subscription(IDMixinUUID, TimestampMixin, Base):
     plan: Mapped[str] = mapped_column(
         String(32),
         nullable=False,
-        default=SubscriptionPlan.BASIC.value,
+        default=SubscriptionPlan.STARTER.value,
     )
 
     module_1_enabled: Mapped[bool] = mapped_column(
