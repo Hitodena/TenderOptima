@@ -1,161 +1,139 @@
 <script lang="ts" setup>
-import type { SubscriptionPlan, SubscriptionResponse } from '#shared/types'
+import type { SubscriptionResponse } from '#shared/types'
+import type { PricingPlanProps, TabsItem } from '@nuxt/ui'
 import {
-	PLAN_DESCRIPTIONS,
-	PLAN_LABELS,
-	PLAN_TAGLINES,
-	SUBSCRIPTION_PLAN_ORDER,
-	catalogForPlan,
-	formatEmailsFeature,
-	formatPagesFeature,
-	formatSearchesFeature,
-} from '#shared/utils/subscriptionDisplay'
-import type { PricingPlanProps } from '@nuxt/ui'
+	PRICING_CURRENCY,
+	PRICING_PLANS,
+	PRICING_TEASER_DESCRIPTIONS,
+	featureTableTitle,
+	featureTableTitleMobile,
+	featuresForModuleTab,
+	isPlanAvailableForTab,
+	planTierForTab,
+	pricingTierSavings,
+	type FeatureValue,
+	type PricingModuleTab,
+	type PricingPlan,
+} from '#shared/constants/pricing'
+import { t } from '~/constants/translations'
 
-const props = defineProps<{
-	subscription: SubscriptionResponse | null | undefined
-}>()
+const props = withDefaults(defineProps<{
+	subscription?: SubscriptionResponse | null
+}>(), {
+	subscription: null,
+})
 
-const planLabels = PLAN_LABELS
 const currentPlan = computed(() => props.subscription?.plan ?? null)
-const currencyCode = computed(() => props.subscription?.currency_code ?? 'BYN')
+const activeModuleTab = ref<PricingModuleTab>('module1')
 
-function planFeatures(plan: SubscriptionPlan) {
-	const catalog = catalogForPlan(plan)
+const moduleTabItems = computed<TabsItem[]>(() =>
+	[
+		{ label: 'Модуль 1', value: 'module1' },
+		{ label: 'Модуль 2', value: 'module2' },
+		{ label: 'М1+М2', value: 'complex' },
+	],
+)
+
+function formatFeatureValue(value: FeatureValue): string | null {
+	if (value === null || value === false) return null
+	if (value === true) return null
+	if (typeof value === 'number') return value.toLocaleString('ru-RU')
+	return String(value)
+}
+
+function planFeatures(plan: PricingPlan, tab: PricingModuleTab) {
 	const items: Array<{ title: string; icon: string }> = []
 
-	if (catalog.module_1_enabled) {
+	if (plan.isEnterprise) {
 		items.push({
-			title: 'Модуль 1 — поиск, рассылка, inbox',
-			icon: 'i-lucide-mail',
-		})
-	}
-	if (catalog.module_2_enabled) {
-		items.push({
-			title: 'Модуль 2 — анализ ТЗ/КП, экспорт, письма',
-			icon: 'i-lucide-file-search',
-		})
-	} else if (plan === 'basic') {
-		items.push({
-			title: 'Модуль 2 подключается отдельно',
-			icon: 'i-lucide-puzzle',
-		})
-	}
-
-	if (plan === 'corporate') {
-		items.push({
-			title: 'Лимиты и стоимость согласуются индивидуально',
+			title: t('subscription.enterpriseLimits'),
 			icon: 'i-lucide-sliders-horizontal',
 		})
-	} else {
-		const searches = formatSearchesFeature(catalog.max_searches_per_month)
-		const emails = formatEmailsFeature(catalog.max_emails_per_month)
-		const pages = formatPagesFeature(catalog.max_pages_analyzed_per_month)
-
-		if (searches) items.push({ title: searches, icon: 'i-lucide-search' })
-		if (emails) items.push({ title: emails, icon: 'i-lucide-send' })
-		if (pages) items.push({ title: pages, icon: 'i-lucide-file-spreadsheet' })
-	}
-
-	if (catalog.module_1_enabled) {
-		items.push({
-			title: 'ИИ-обработка ответов и сравнительная таблица',
-			icon: 'i-lucide-table',
-		})
-		items.push({
-			title: 'Формирование дополнительных писем',
-			icon: 'i-lucide-mail-plus',
-		})
-	}
-
-	if (catalog.module_2_enabled) {
-		items.push({
-			title: 'Письма поставщикам с готовыми шаблонами',
-			icon: 'i-lucide-file-text',
-		})
-	}
-
-	if (plan === 'test') {
-		items.push({
-			title: 'Загрузка файлов до 1 МБ',
-			icon: 'i-lucide-upload',
-		})
-	}
-	if (plan === 'corporate') {
 		items.push({
 			title: 'Приоритетная поддержка',
 			icon: 'i-lucide-headphones',
 		})
+		return items
+	}
+
+	if (!isPlanAvailableForTab(plan.id, tab)) {
+		items.push({
+			title: tab === 'module2'
+				? t('subscription.module2UnavailableForMini')
+				: t('subscription.complexUnavailableForMini'),
+			icon: 'i-lucide-circle-slash',
+		})
+		return items
+	}
+
+	const activeFeatures = featuresForModuleTab(tab)
+	for (const feature of activeFeatures) {
+		const value = feature.values[plan.id]
+		if (value === null || value === false) continue
+		const valueText = formatFeatureValue(value)
+		items.push({
+			title: valueText ? `${feature.name}: ${valueText}` : feature.name,
+			icon: 'i-lucide-check',
+		})
+		if (items.length >= 5) break
 	}
 
 	return items
 }
 
-function planPricingTerms(plan: SubscriptionPlan): string | undefined {
-	const catalog = catalogForPlan(plan)
-	const currency = currencyCode.value
-
-	if (plan === 'corporate') return 'Стоимость по запросу · без НДС'
-	if (plan === 'test') return 'Бесплатный период ознакомления'
-
-	const parts: string[] = []
-	if (catalog.price_module_1_monthly) {
-		parts.push(`М1: ${catalog.price_module_1_monthly} ${currency}`)
-	}
-	if (catalog.price_module_2_monthly) {
-		parts.push(`М2: ${catalog.price_module_2_monthly} ${currency}`)
-	}
-	if (catalog.price_bundle_monthly) {
-		parts.push(`М1+2: ${catalog.price_bundle_monthly} ${currency}`)
-	}
-
-	return parts.length > 0 ? `${parts.join(' · ')} · без НДС` : undefined
+function planScope(tab: PricingModuleTab): string {
+	if (tab === 'module1') return t('subscription.module1Scope')
+	if (tab === 'module2') return t('subscription.module2Scope')
+	return t('subscription.complexScope')
 }
 
-function buildPricingPlan(plan: SubscriptionPlan): PricingPlanProps {
-	const catalog = catalogForPlan(plan)
-	const isCurrent = currentPlan.value === plan
-	const isRecommended = plan === 'advanced'
-	const currency = currencyCode.value
+function buildPricingPlan(plan: PricingPlan): PricingPlanProps {
+	const tab = activeModuleTab.value
+	const tier = planTierForTab(plan, tab)
+	const isCurrent = currentPlan.value === plan.id
+	const isUnavailable = !plan.isEnterprise && !isPlanAvailableForTab(plan.id, tab)
 
-	let price: string | undefined
-	let billingCycle: string | undefined
-	let billingPeriod: string | undefined
-	let tagline = PLAN_TAGLINES[plan]
-
-	if (plan === 'test') {
-		price = '0'
-		billingCycle = ` ${currency}/мес`
-		billingPeriod = 'Оба модуля'
-	} else if (plan === 'corporate') {
-		price = 'По запросу'
-		tagline = 'Индивидуальный расчёт'
-	} else if (plan === 'basic' && catalog.price_module_1_monthly) {
-		price = `${catalog.price_module_1_monthly}`
-		billingCycle = ` ${currency}/мес`
-		billingPeriod = 'Модуль 1'
-	} else if (plan === 'advanced' && catalog.price_bundle_monthly) {
-		price = `${catalog.price_bundle_monthly}`
-		billingCycle = ` ${currency}/мес`
-		billingPeriod = 'Модуль 1+2'
+	if (plan.isEnterprise) {
+		return {
+			title: plan.name,
+			description: PRICING_TEASER_DESCRIPTIONS[plan.id],
+			tagline: t('subscription.enterpriseLimits'),
+			price: t('subscription.priceOnRequest'),
+			terms: `${t('subscription.enterprisePrice')} · ${t('subscription.priceWithoutVat')}`,
+			features: planFeatures(plan, tab),
+			orientation: 'horizontal',
+			variant: isCurrent ? 'subtle' : 'outline',
+			highlight: isCurrent,
+			badge: isCurrent
+				? { label: t('subscription.currentPlan'), color: 'primary', variant: 'subtle' }
+				: undefined,
+			ui: {
+				root: 'min-w-0 w-full',
+				featureTitle: 'text-muted text-sm text-pretty break-words',
+				terms: 'text-xs/5 text-muted text-center text-balance break-words',
+				title: 'text-highlighted text-xl sm:text-2xl text-pretty font-semibold',
+			},
+		}
 	}
 
 	return {
-		title: planLabels[plan] ?? plan,
-		description: PLAN_DESCRIPTIONS[plan],
-		tagline,
-		price,
-		billingCycle,
-		billingPeriod: plan === 'corporate' ? undefined : billingPeriod,
-		terms: planPricingTerms(plan),
-		features: planFeatures(plan),
+		title: plan.name,
+		description: PRICING_TEASER_DESCRIPTIONS[plan.id],
+		tagline: isUnavailable ? t('subscription.unavailablePlan') : planScope(tab),
+		price: tier ? tier.monthly.toLocaleString('ru-RU') : undefined,
+		billingCycle: tier ? ` ${PRICING_CURRENCY}/${t('subscription.perMonth')}` : undefined,
+		billingPeriod: isUnavailable ? undefined : featureTableTitleMobile(tab),
+		terms: tier
+			? `${t('subscription.sixMonthPayment')}: ${tier.sixMonth.toLocaleString('ru-RU')} ${PRICING_CURRENCY} · −${pricingTierSavings(tier).toLocaleString('ru-RU')} ${PRICING_CURRENCY} · ${t('subscription.priceWithoutVat')}`
+			: undefined,
+		features: planFeatures(plan, tab),
 		orientation: 'horizontal',
 		variant: isCurrent ? 'subtle' : 'outline',
 		highlight: isCurrent,
 		badge: isCurrent
-			? { label: 'Ваш тариф', color: 'primary', variant: 'subtle' }
-			: isRecommended
-				? { label: 'Рекомендуем', color: 'success', variant: 'subtle' }
+			? { label: t('subscription.currentPlan'), color: 'primary', variant: 'subtle' }
+			: plan.isPopular && !isUnavailable
+				? { label: t('subscription.popularPlan'), color: 'success', variant: 'subtle' }
 				: undefined,
 		ui: {
 			root: 'min-w-0 w-full',
@@ -167,12 +145,25 @@ function buildPricingPlan(plan: SubscriptionPlan): PricingPlanProps {
 }
 
 const pricingPlans = computed(() =>
-	SUBSCRIPTION_PLAN_ORDER.map((plan) => buildPricingPlan(plan)),
+	PRICING_PLANS.map((plan) => buildPricingPlan(plan)),
 )
 </script>
 
 <template>
-	<div class="min-w-0">
+	<div class="min-w-0 space-y-5">
+		<UTabs
+			v-model="activeModuleTab"
+			:items="moduleTabItems"
+			:content="false"
+			variant="pill"
+			:ui="{
+				list: 'w-full',
+				trigger: 'flex-1 justify-center text-xs sm:text-sm',
+			}"
+		/>
+		<p class="text-sm text-muted">
+			{{ featureTableTitle(activeModuleTab) }}
+		</p>
 		<UPricingPlans
 			orientation="vertical"
 			:plans="pricingPlans"

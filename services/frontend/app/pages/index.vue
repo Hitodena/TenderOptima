@@ -297,7 +297,9 @@
 				<!-- FAQ -->
 				<section
 id="faq" ref="faqReveal"
-					class="reveal bg-elevated/25 px-4 py-12 sm:px-6 md:py-24 lg:px-8">
+					class="reveal bg-elevated/25 px-4 py-12 sm:px-6 md:py-24 lg:px-8"
+					:class="{ 'is-visible': faqVisible }"
+				>
 					<div class="mx-auto max-w-3xl">
 						<div class="mb-10 text-center">
 							<p class="landing-section-headline mb-2">
@@ -414,13 +416,6 @@ onMounted(async () => {
 		return
 	}
 
-	if (heroReveal.value) {
-		heroReveal.value.classList.add('is-visible')
-	}
-
-	if (faqReveal.value) {
-		faqReveal.value.classList.add('is-visible')
-	}
 })
 
 // --- Landing page only composables ---
@@ -433,7 +428,7 @@ const { target: heroReveal, isVisible: heroVisible } = useScrollReveal({
 
 const { target: icpReveal, isVisible: icpVisible } = useScrollReveal()
 const { target: casesReveal, isVisible: casesVisible } = useScrollReveal()
-const { target: faqReveal } = useScrollReveal()
+const { target: faqReveal, isVisible: faqVisible } = useScrollReveal()
 const { target: ctaReveal, isVisible: ctaVisible } = useScrollReveal()
 
 const heroBulletPoints = HERO_BULLET_POINTS
