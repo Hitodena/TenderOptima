@@ -11,9 +11,7 @@
 			</div>
 
 			<UCard class="shadow-lg">
-				<UTabs v-model="activeTab" :items="tabs" class="w-full" :ui="{ list: 'mb-4' }">
-
-					<template #login>
+				<template v-if="activeTab === 'login'">
 						<UForm :schema="loginSchema" :state="loginForm" class="space-y-4" @submit="handleLogin">
 
 							<UFormField label="Email" name="email" required>
@@ -49,9 +47,9 @@ v-if="loginError" color="error" variant="soft" icon="i-lucide-circle-alert"
 							</UButton>
 
 						</UForm>
-					</template>
+				</template>
 
-					<template #register>
+				<template v-else>
 						<UForm
 :schema="registerSchema" :state="registerForm" class="space-y-4"
 							@submit="handleRegister">
@@ -161,9 +159,7 @@ type="submit" class="w-full justify-center" size="lg" :loading="registerLoading"
 							</UButton>
 
 						</UForm>
-					</template>
-
-				</UTabs>
+				</template>
 			</UCard>
 
 			<div
@@ -264,13 +260,6 @@ const canRegister = computed(() => referralCode.value.length > 0)
 const activeTab = ref(
 	canRegister.value && route.query.tab === 'register' ? 'register' : 'login',
 )
-
-const tabs = computed(() => [
-	{ label: t('auth.loginTab'), slot: 'login', icon: 'i-lucide-log-in', value: 'login' },
-	...(canRegister.value
-		? [{ label: t('auth.registerTab'), slot: 'register', icon: 'i-lucide-user-plus', value: 'register' }]
-		: []),
-])
 
 watch(canRegister, (available) => {
 	if (!available && activeTab.value === 'register') {
