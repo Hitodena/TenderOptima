@@ -278,6 +278,11 @@ input[type='number'] {
 	animation: landing-float 6s ease-in-out infinite reverse;
 }
 
+.landing-hero--observed:not(.landing-hero--inview) .landing-hero-shape,
+.landing-hero--observed:not(.landing-hero--inview) .landing-mockup-badge {
+	animation-play-state: paused !important;
+}
+
 @keyframes landing-float {
 	0%,
 	100% {

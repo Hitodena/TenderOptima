@@ -20,6 +20,7 @@
 		id="tz-analysis"
 		ref="sectionRef"
 		class="landing-hiw reveal bg-elevated/25 px-4 py-12 sm:px-6 md:py-24 lg:px-8"
+		:class="{ 'is-inview': isVisible, 'is-visible': hasRevealed }"
 	>
 		<div class="landing-hiw__container mx-auto max-w-7xl">
 			<header class="mb-8 text-center sm:mb-10">
@@ -239,6 +240,7 @@ const { target: sectionRef, isVisible } = useScrollReveal({
 const activeIndex = ref(props.initialStep)
 const currentStep = computed(() => steps[activeIndex.value] ?? steps[0])
 let timer: ReturnType<typeof setInterval> | null = null
+const hasRevealed = ref(false)
 
 function toStepIndex(index: number | string): number { return typeof index === 'number' ? index : Number(index) }
 function formatStepNumber(index: number | string): string { return String(toStepIndex(index) + 1).padStart(2, '0') }
@@ -258,6 +260,7 @@ function restartAutoplay() { stopAutoplay(); startAutoplay() }
 
 watch(isVisible, (visible) => {
 	if (visible) {
+		hasRevealed.value = true
 		startAutoplay()
 	}
 	else {
@@ -442,6 +445,12 @@ onBeforeUnmount(stopAutoplay)
 		box-shadow: none;
 		animation: none;
 	}
+}
+
+.landing-hiw:not(.is-inview) .mock-window *,
+.landing-hiw:not(.is-inview) .mock-window *::before,
+.landing-hiw:not(.is-inview) .mock-window *::after {
+	animation-play-state: paused !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

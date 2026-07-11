@@ -277,6 +277,11 @@ export const translations = {
 			'Получено {emails} {emailsLabel} от {suppliers} {suppliersLabel}',
 	},
 	tzAnalysis: {
+		comparisonTitle: 'Соответствия и несоответствия',
+		supplierLetter: 'Письмо поставщику',
+		supplierLetterDescription:
+			'Письмо формируется по основному КП и включает все несоответствия.',
+		exportXlsx: 'Экспорт XLSX',
 		kpProcessingBanner:
 			'Анализ коммерческих предложений выполняется. Уже готовые поставщики доступны для изучения.',
 		kpProcessingBannerHint:

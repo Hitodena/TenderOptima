@@ -38,6 +38,9 @@ export function useScrollReveal(options: ScrollRevealOptions = {}) {
 		const observer = new IntersectionObserver(
 			([entry]) => {
 				if (!entry?.isIntersecting) {
+					if (!once) {
+						isVisible.value = false
+					}
 					return
 				}
 

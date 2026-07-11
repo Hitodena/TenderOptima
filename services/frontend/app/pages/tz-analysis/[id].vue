@@ -287,18 +287,6 @@ v-if="isTzReviewPhase && !isAnalysisClosed"
 											</UFormField>
 										</div>
 									</template>
-									<template v-if="showComparisonResultsCard" #actions>
-										<UButton
-											block
-											size="md"
-											variant="outline"
-											leading-icon="i-lucide-download"
-											class="mt-1"
-											@click="exportTzXlsx"
-										>
-											Экспорт XLSX
-										</UButton>
-									</template>
 								</TzAnalysisSuppliersPanel>
 							</div>
 
@@ -412,13 +400,30 @@ color="neutral" variant="soft" icon="i-lucide-archive"
 									<UCard class="shadow-sm w-full">
 										<template #header>
 											<div class="flex flex-col gap-3 w-full">
-												<div class="flex flex-wrap items-center justify-between gap-3 w-full">
-													<p class="font-semibold text-sm">Соответствия и несоответствия</p>
-													<UButton
-size="sm" leading-icon="i-lucide-file-text"
-														:disabled="!hasLetterIssues" @click="openLetterModal">
-														Письмо поставщику
-													</UButton>
+												<div class="flex flex-col gap-3 w-full sm:flex-row sm:items-center sm:justify-between">
+													<p class="font-semibold text-sm">
+														{{ t('tzAnalysis.comparisonTitle') }}
+													</p>
+													<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+														<UButton
+															size="sm"
+															leading-icon="i-lucide-file-text"
+															class="w-full justify-center sm:w-auto"
+															:disabled="!hasLetterIssues"
+															@click="openLetterModal"
+														>
+															{{ t('tzAnalysis.supplierLetter') }}
+														</UButton>
+														<UButton
+															size="sm"
+															variant="outline"
+															leading-icon="i-lucide-download"
+															class="w-full justify-center sm:w-auto"
+															@click="exportTzXlsx"
+														>
+															{{ t('tzAnalysis.exportXlsx') }}
+														</UButton>
+													</div>
 												</div>
 												<div class="flex flex-wrap items-end gap-3 w-full">
 													<UFormField label="Поиск" class="mb-0 flex-1 min-w-48">
@@ -514,9 +519,11 @@ v-if="visibleKpItemGroups.length === 0"
 		<UModal v-model:open="showLetterModal" :ui="EMAIL_LETTER_MODAL_UI">
 			<template #header>
 				<div class="min-w-0">
-					<p class="text-lg font-semibold text-highlighted">Письмо поставщику</p>
+					<p class="text-lg font-semibold text-highlighted">
+						{{ t('tzAnalysis.supplierLetter') }}
+					</p>
 					<p class="text-sm text-muted mt-0.5">
-						Письмо формируется по основному КП и включает все несоответствия.
+						{{ t('tzAnalysis.supplierLetterDescription') }}
 					</p>
 				</div>
 			</template>

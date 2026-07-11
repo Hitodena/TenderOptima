@@ -165,7 +165,10 @@
 		<template v-else-if="!auth.isAuthenticated.value">
 			<div class="landing-page">
 				<!-- Hero: asymmetric layout, flat CTA, compact trust row, metrics cards -->
-				<section class="landing-hero px-4 pt-12 pb-8 sm:px-6 sm:pt-14 sm:pb-10 lg:px-8 lg:pt-16 lg:pb-12">
+				<section
+					class="landing-hero landing-hero--observed px-4 pt-12 pb-8 sm:px-6 sm:pt-14 sm:pb-10 lg:px-8 lg:pt-16 lg:pb-12"
+					:class="{ 'landing-hero--inview': heroVisible }"
+				>
 					<div ref="heroReveal" class="reveal is-visible relative z-10 mx-auto max-w-6xl">
 						<div class="landing-hero-grid gap-4 text-center lg:gap-10 lg:text-left">
 							<div class="pb-4 sm:pb-6 lg:pb-2">
@@ -422,7 +425,11 @@ onMounted(async () => {
 
 // --- Landing page only composables ---
 
-const heroReveal = ref<HTMLElement | null>(null)
+const { target: heroReveal, isVisible: heroVisible } = useScrollReveal({
+	once: false,
+	threshold: 0.1,
+	rootMargin: '0px',
+})
 
 const { target: icpReveal, isVisible: icpVisible } = useScrollReveal()
 const { target: casesReveal, isVisible: casesVisible } = useScrollReveal()
