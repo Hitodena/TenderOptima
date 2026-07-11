@@ -1,3 +1,4 @@
+import secrets
 from datetime import UTC, datetime
 from typing import Annotated
 
@@ -7,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.auth.helpers import user_to_response
 from backend.api.auth.schemas import (
+    ConsentActionRequest,
+    ConsentActionResponse,
     RegisterCreate,
     TokenResponse,
     UserResponse,
@@ -63,6 +66,11 @@ async def register(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="User with this email already exists",
+        )
+    if not request.agree_terms:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Required personal data processing consent is missing",
         )
 
     invitation = await ReferralInvitationDAO.get_available_by_code_for_update(
@@ -132,6 +140,11 @@ async def login(
     user = await UserDAO.get_by_email(session, form_data.username)
     if user:
         raise_if_locked(user)
+        if user.deleted_at is not None or user.consent_revoked_at is not None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account access is disabled",
+            )
 
     if not user or not verify_password(
         form_data.password, user.hashed_password
@@ -221,6 +234,80 @@ async def update_user(
         business_info=request.business_info,
     )
     return await user_to_response(session, updated_user)
+
+
+async def deactivate_user_subscription(
+    session: AsyncSession,
+    user: User,
+) -> None:
+    """Disable paid/product access after consent withdrawal or deletion."""
+    subscription = await SubscriptionDAO.get_by_user_id(session, user.id)
+    if subscription is None:
+        return
+    await SubscriptionDAO.update_fields(
+        session,
+        subscription.id,
+        is_active=False,
+        module_1_enabled=False,
+        module_2_enabled=False,
+    )
+
+
+@router.post(
+    "/me/consent/revoke",
+    response_model=ConsentActionResponse,
+    summary="Revoke required personal data processing consent",
+)
+async def revoke_my_consent(
+    body: ConsentActionRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ConsentActionResponse:
+    """Record required consent withdrawal and disable service access."""
+    if not body.acknowledged:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Consent withdrawal risks must be acknowledged",
+        )
+    updated_user = await UserDAO.revoke_required_consent(
+        session,
+        current_user.id,
+        reason=body.reason,
+    )
+    await deactivate_user_subscription(session, updated_user)
+    return ConsentActionResponse(
+        status="consent_revoked",
+        message="Required consent revoked; account access disabled",
+    )
+
+
+@router.delete(
+    "/me",
+    response_model=ConsentActionResponse,
+    summary="Delete current user account",
+)
+async def delete_my_account(
+    body: ConsentActionRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ConsentActionResponse:
+    """Soft-delete and anonymize the current user account."""
+    if not body.acknowledged:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Account deletion risks must be acknowledged",
+        )
+    deleted_user = await UserDAO.anonymize_account(
+        session,
+        current_user.id,
+        hashed_password=hash_password(secrets.token_urlsafe(32)),
+        reason=body.reason,
+    )
+    await deactivate_user_subscription(session, deleted_user)
+    return ConsentActionResponse(
+        status="account_deleted",
+        message="Account deleted and access disabled",
+    )
 
 
 @router.get(

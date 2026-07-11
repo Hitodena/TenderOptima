@@ -68,7 +68,7 @@ v-model="registerForm.email" type="email" placeholder="you@company.com"
 									icon="i-lucide-mail" class="w-full" autocomplete="email" />
 							</UFormField>
 
-							<div class="grid grid-cols-2 gap-3">
+							<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 								<UFormField :label="t('auth.fullNameLabel')" name="full_name" required>
 									<UInput
 v-model="registerForm.full_name" :placeholder="t('auth.fullNamePlaceholder')"
@@ -112,13 +112,13 @@ type="button"
 											<span class="text-sm">
 												{{ t('auth.termsPrefix') }}
 												<ULink
-to="#"
+													to="/legal/personal-data-consent"
 													class="text-primary underline underline-offset-2 hover:opacity-80">
 													{{ t('auth.termsLink') }}
 												</ULink>
 												{{ t('auth.termsAnd') }}
 												<ULink
-to="#"
+													to="/legal/privacy-policy"
 													class="text-primary underline underline-offset-2 hover:opacity-80">
 													{{ t('auth.privacyLink') }}
 												</ULink>
@@ -126,6 +126,18 @@ to="#"
 										</template>
 									</UCheckbox>
 								</UFormField>
+
+								<UButton
+									type="button"
+									variant="link"
+									color="primary"
+									size="sm"
+									leading-icon="i-lucide-info"
+									class="px-0"
+									@click="consentInfoOpen = true"
+								>
+									{{ t('auth.consentDetailsButton') }}
+								</UButton>
 
 								<UFormField name="agree_marketing">
 									<UCheckbox v-model="registerForm.agree_marketing">
@@ -153,6 +165,73 @@ type="submit" class="w-full justify-center" size="lg" :loading="registerLoading"
 
 				</UTabs>
 			</UCard>
+
+			<div
+				v-if="consentInfoOpen"
+				class="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4"
+				role="dialog"
+				aria-modal="true"
+				:aria-label="t('auth.consentModalTitle')"
+				@click.self="consentInfoOpen = false"
+			>
+				<div class="flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-default bg-default shadow-2xl">
+					<div class="flex items-start justify-between gap-3 border-b border-default p-4 sm:p-5">
+						<div>
+							<h2 class="text-base font-semibold text-highlighted">
+								{{ t('auth.consentModalTitle') }}
+							</h2>
+							<p class="mt-1 text-sm text-muted">
+								{{ t('auth.consentModalDescription') }}
+							</p>
+						</div>
+						<button
+							type="button"
+							class="rounded-md p-1 text-muted transition-colors hover:bg-elevated hover:text-default"
+							:aria-label="t('auth.consentModalClose')"
+							@click="consentInfoOpen = false"
+						>
+							<UIcon name="i-lucide-x" class="size-5" />
+						</button>
+					</div>
+
+					<div class="space-y-4 overflow-y-auto p-4 text-sm text-muted sm:p-5">
+						<p>{{ t('auth.consentModalBody') }}</p>
+						<div class="rounded-xl border border-warning/30 bg-warning/10 p-3">
+							<h3 class="mb-2 font-semibold text-highlighted">
+								{{ t('auth.consentModalRisksTitle') }}
+							</h3>
+							<ul class="list-disc space-y-1 ps-5">
+								<li>{{ t('auth.consentModalRiskAccess') }}</li>
+								<li>{{ t('auth.consentModalRiskProcessing') }}</li>
+								<li>{{ t('auth.consentModalRiskSupport') }}</li>
+							</ul>
+						</div>
+						<div>
+							<p class="mb-2 font-medium text-highlighted">
+								{{ t('auth.consentModalLegalLinks') }}
+							</p>
+							<div class="flex flex-col gap-2 sm:flex-row">
+								<UButton to="/legal/personal-data-consent" variant="outline" color="neutral" size="sm">
+									{{ t('auth.termsLink') }}
+								</UButton>
+								<UButton to="/legal/privacy-policy" variant="outline" color="neutral" size="sm">
+									{{ t('auth.privacyLink') }}
+								</UButton>
+							</div>
+						</div>
+					</div>
+
+					<div class="border-t border-default p-4 sm:flex sm:justify-end sm:p-5">
+						<button
+							type="button"
+							class="inline-flex w-full cursor-pointer items-center justify-center rounded-md bg-primary px-3 py-2 text-sm font-medium text-inverted transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 sm:w-auto"
+							@click="consentInfoOpen = false"
+						>
+							{{ t('auth.consentModalClose') }}
+						</button>
+					</div>
+				</div>
+			</div>
 		</div>
 	</div>
 </template>
@@ -216,7 +295,7 @@ const registerSchema = z.object({
 		.min(1, t('auth.phoneRequired'))
 		.refine((val) => isValidPhoneNumber(val), t('auth.phoneInvalid')),
 	password: z.string().min(8, t('auth.passwordMin')),
-	agree_terms: z.boolean().optional(),
+	agree_terms: z.boolean().refine((value) => value === true, t('auth.consentModalTitle')),
 	agree_marketing: z.boolean().optional(),
 })
 
@@ -257,6 +336,7 @@ const registerForm = reactive({
 const registerError = ref('')
 const registerLoading = ref(false)
 const showRegisterPassword = ref(false)
+const consentInfoOpen = ref(false)
 
 async function handleRegister() {
 	if (registerLoading.value || !registerForm.agree_terms || !canRegister.value) return

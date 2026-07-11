@@ -18,6 +18,12 @@ export function useUtmParams() {
 	})
 
 	function captureFromRoute() {
+		const { canUseAnalytics } = useCookieConsent()
+		if (!canUseAnalytics.value) {
+			cookie.value = null
+			return
+		}
+
 		const route = useRoute()
 		const found = UTM_KEYS.some((key) => typeof route.query[key] === 'string')
 		if (!found) return

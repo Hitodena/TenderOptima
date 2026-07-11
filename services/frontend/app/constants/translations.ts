@@ -3,6 +3,9 @@
  * Add new user-facing strings here; do not hardcode them in components.
  */
 export const translations = {
+	navigation: {
+		offerHistory: 'История предложений',
+	},
 	admin: {
 		errors: {
 			dateColumn: 'Дата',
@@ -137,8 +140,71 @@ export const translations = {
 		serverError: 'Внутренняя ошибка сервера',
 		registerError: 'Ошибка регистрации',
 		inviteHint: 'Регистрация доступна по приглашению.',
+		consentDetailsButton: 'Подробнее о согласии',
+		consentModalTitle: 'Согласие на обработку персональных данных',
+		consentModalDescription:
+			'Ознакомьтесь с условиями обработки данных до создания аккаунта.',
+		consentModalBody:
+			'TenderOptima обрабатывает данные для регистрации, предоставления доступа к сервису, поддержки, рассылки запросов поставщикам и исполнения договорных обязательств. Отзыв обязательного согласия прекращает возможность пользоваться сервисом, так как без обработки данных платформа не сможет хранить аккаунт, заявки, переписку и результаты анализа.',
+		consentModalRisksTitle: 'Что произойдёт при отзыве',
+		consentModalRiskAccess:
+			'Доступ к личному кабинету и рабочим разделам будет отключён.',
+		consentModalRiskProcessing:
+			'Создание новых запросов, переписка и анализ предложений станут недоступны.',
+		consentModalRiskSupport:
+			'Для уточнения судьбы уже созданных материалов потребуется обращение в поддержку.',
+		consentModalLegalLinks: 'Документы для ознакомления',
+		consentModalClose: 'Понятно',
 	},
 	profile: {
+		settingsTitle: 'Настройки',
+		settingsDescription: 'Настройте параметры вашей учетной записи',
+		actsTab: 'Акты',
+		profileTab: 'Профиль',
+		contactTab: 'Свяжитесь с нами',
+		profileTitle: 'Профиль',
+		profileDescription: 'Обновите личные данные',
+		fullNameLabel: 'Полное имя',
+		companyNameLabel: 'Название компании',
+		contactEmailLabel: 'Контактный email',
+		phoneLabel: 'Телефон',
+		phoneLockedHint: 'Указан при регистрации, изменить нельзя',
+		phoneMissing: 'Не указан',
+		profileSaved: 'Профиль обновлён',
+		saveError: 'Ошибка при сохранении',
+		contactTitle: 'Контактная информация',
+		contactDescription: 'Служба поддержки',
+		accountTitle: 'Учетная запись',
+		signedInAs: 'Вы вошли как:',
+		logoutDescription:
+			'Нажмите на кнопку ниже, чтобы выйти из системы и завершить сессию.',
+		logout: 'Выйти',
+		revokeConsent: 'Отозвать согласие',
+		deleteAccount: 'Удалить аккаунт',
+		consentActionsTitle: 'Управление согласием и аккаунтом',
+		consentActionsDescription:
+			'Отзыв обязательного согласия прекращает оказание услуг. Удаление аккаунта очищает персональные данные профиля.',
+		revokeConsentTitle: 'Отзыв согласия',
+		revokeConsentDescription:
+			'После отзыва обязательного согласия доступ к сервису будет отключён.',
+		revokeConsentBody:
+			'Без согласия на обработку персональных данных TenderOptima не сможет предоставлять личный кабинет, хранить заявки, переписку и результаты анализа. После подтверждения вас разлогинит.',
+		deleteAccountTitle: 'Удаление аккаунта',
+		deleteAccountDescription:
+			'Аккаунт будет удалён, а персональные данные профиля очищены.',
+		deleteAccountBody:
+			'Мы обезличим учетную запись и отключим доступ. Рабочие записи, необходимые для целостности истории заявок и договорных обязательств, будут сохранены без персональных данных профиля.',
+		destructiveReasonLabel: 'Причина',
+		destructiveReasonPlaceholder: 'Можно оставить пустым',
+		destructiveSecondStep: 'Подтверждение',
+		destructiveAcknowledge:
+			'Я понимаю последствия и хочу продолжить',
+		destructiveBack: 'Назад',
+		destructiveCancel: 'Отмена',
+		revokeConsentConfirm: 'Подтвердить отзыв',
+		deleteAccountConfirm: 'Удалить аккаунт',
+		revokeConsentError: 'Не удалось отозвать согласие',
+		deleteAccountError: 'Не удалось удалить аккаунт',
 		businessCardTitle: 'Визитная карточка',
 		businessCardDescription:
 			'Настройте вашу визитную карточку, которая добавляется ко всем письмам',
@@ -175,6 +241,24 @@ export const translations = {
 		mailSaved: 'Почтовые настройки сохранены',
 		mailSaveError: 'Ошибка сохранения почты',
 		mailLoadError: 'Не удалось загрузить настройки почты',
+	},
+	cookies: {
+		title: 'Настройки cookie-файлов',
+		description:
+			'Мы используем cookie для работы сервиса и, с вашего согласия, для аналитики и маркетинговой атрибуции.',
+		necessaryTitle: 'Технические/функциональные cookie-файлы',
+		necessaryDescription:
+			'Нужны для авторизации, безопасности и корректной работы сайта. Эти cookie нельзя отключить.',
+		analyticsTitle: 'Аналитические cookie-файлы',
+		analyticsDescription:
+			'Помогают понимать, какие страницы и сценарии используются чаще, чтобы улучшать интерфейс.',
+		marketingTitle: 'Маркетинговые cookie-файлы',
+		marketingDescription:
+			'Сохраняют параметры рекламных переходов и помогают оценивать эффективность коммуникаций.',
+		acceptAll: 'Принять все',
+		saveChoice: 'Сохранить мой выбор',
+		necessaryOnly: 'Только необходимые',
+		openSettings: 'Настроить cookie',
 	},
 	subscription: {
 		upgradeCta: 'Перейдите на расширенный план.',
@@ -276,6 +360,8 @@ export const translations = {
 		businessCardMissing: 'Визитная карточка не настроена',
 		businessCardMissingHint: 'Заполните её в профиле',
 		profileLink: 'Профиль',
+		threadTab: 'Переписка',
+		comparisonTab: 'Сравнение',
 	},
 } as const
 

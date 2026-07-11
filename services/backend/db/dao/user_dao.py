@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime
 
 from loguru import logger
 from sqlalchemy import select
@@ -94,3 +95,73 @@ class UserDAO(BaseDAO[User]):
                 user_id=user_id,
             )
             raise
+
+    @classmethod
+    async def revoke_required_consent(
+        cls,
+        session: AsyncSession,
+        user_id: uuid.UUID,
+        *,
+        reason: str | None = None,
+    ) -> User:
+        """Record required consent withdrawal and disable account access."""
+        user = await cls.get_by_id(session, user_id)
+        if user is None:
+            raise ValueError(f"User with id {user_id} not found")
+
+        now = datetime.now(UTC)
+        user.agree_terms = False
+        user.consent_revoked_at = user.consent_revoked_at or now
+        if reason and not user.deleted_reason:
+            user.deleted_reason = reason
+
+        session.add(user)
+        await session.flush()
+        await session.refresh(user)
+        await session.commit()
+        logger.info("User consent revoked", user_id=user_id)
+        return user
+
+    @classmethod
+    async def anonymize_account(
+        cls,
+        session: AsyncSession,
+        user_id: uuid.UUID,
+        *,
+        hashed_password: str,
+        reason: str | None = None,
+    ) -> User:
+        """Soft-delete a user while preserving related business records."""
+        user = await cls.get_by_id(session, user_id)
+        if user is None:
+            raise ValueError(f"User with id {user_id} not found")
+
+        now = datetime.now(UTC)
+        deleted_email = f"deleted-{user.id}@deleted.tenderoptima.local"
+        user.email = deleted_email
+        user.hashed_password = hashed_password
+        user.full_name = "Удалённый пользователь"
+        user.company_name = None
+        user.phone = None
+        user.contact_email = None
+        user.business_info = None
+        user.smtp_host = None
+        user.smtp_port = None
+        user.smtp_user = None
+        user.smtp_password = None
+        user.imap_host = None
+        user.imap_port = None
+        user.imap_user = None
+        user.imap_password = None
+        user.agree_terms = False
+        user.agree_marketing = False
+        user.consent_revoked_at = user.consent_revoked_at or now
+        user.deleted_at = user.deleted_at or now
+        user.deleted_reason = reason
+
+        session.add(user)
+        await session.flush()
+        await session.refresh(user)
+        await session.commit()
+        logger.info("User account anonymized", user_id=user_id)
+        return user

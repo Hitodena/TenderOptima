@@ -23,6 +23,9 @@ async def user_to_response(
         phone=user.phone,
         contact_email=user.contact_email,
         business_info=user.business_info,
+        agree_terms=user.agree_terms,
+        consent_revoked_at=user.consent_revoked_at,
+        deleted_at=user.deleted_at,
         is_admin=user.is_admin,
         subscription=subscription_to_response(
             subscription,

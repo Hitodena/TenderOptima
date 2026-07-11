@@ -60,8 +60,21 @@ export interface UserResponse {
 	phone?: string | null;
 	contact_email?: string | null;
 	business_info?: string | null;
+	agree_terms: boolean;
+	consent_revoked_at: string | null;
+	deleted_at: string | null;
 	is_admin?: boolean;
 	subscription?: SubscriptionResponse | null;
+}
+
+export interface ConsentActionRequest {
+	acknowledged: boolean;
+	reason?: string | null;
+}
+
+export interface ConsentActionResponse {
+	status: string;
+	message: string;
 }
 
 export type SubscriptionPlan =

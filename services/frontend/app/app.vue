@@ -7,6 +7,7 @@
 		</UMain>
 
 		<ConsultationModal />
+		<CookieConsentBanner />
 	</UApp>
 </template>
 

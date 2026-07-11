@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -163,6 +164,26 @@ class UserResponse(BaseModel):
             ],
         ),
     ]
+    agree_terms: Annotated[
+        bool,
+        Field(
+            description="Whether the required data processing consent is active"
+        ),
+    ]
+    consent_revoked_at: Annotated[
+        datetime | None,
+        Field(
+            default=None,
+            description="UTC timestamp when required consent was revoked",
+        ),
+    ]
+    deleted_at: Annotated[
+        datetime | None,
+        Field(
+            default=None,
+            description="UTC timestamp when the account was deleted",
+        ),
+    ]
     is_admin: Annotated[
         bool,
         Field(
@@ -177,6 +198,33 @@ class UserResponse(BaseModel):
             description="Current subscription, if assigned",
         ),
     ]
+
+
+class ConsentActionRequest(BaseModel):
+    """Payload confirming a sensitive consent/account action."""
+
+    acknowledged: Annotated[
+        bool,
+        Field(
+            description="User confirms they understand the service access impact",
+            examples=[True],
+        ),
+    ]
+    reason: Annotated[
+        str | None,
+        Field(
+            default=None,
+            max_length=500,
+            description="Optional user-provided reason",
+        ),
+    ] = None
+
+
+class ConsentActionResponse(BaseModel):
+    """Result of a consent revocation or account deletion."""
+
+    status: Annotated[str, Field(examples=["consent_revoked"])]
+    message: Annotated[str, Field(examples=["Account access disabled"])]
 
 
 class UserUpdate(BaseModel):

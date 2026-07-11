@@ -118,6 +118,7 @@ import {
 	subscriptionPlansPath,
 } from '#shared/utils/subscriptionDisplay'
 import { LANDING_CTA_LABEL } from '#shared/constants/landing'
+import { t } from '~/constants/translations'
 
 const auth = useAuthStore()
 const consultation = useConsultationModal()
@@ -236,7 +237,7 @@ const navItems = computed<NavigationMenuItem[]>(() => [
 				description: 'Сравнение ТЗ с коммерческим предложением',
 			},
 			{
-				label: 'История',
+				label: t('navigation.offerHistory'),
 				icon: 'i-lucide-history',
 				to: '/tz-analysis/history',
 				description: 'Активные, в обработке и завершённые анализы',

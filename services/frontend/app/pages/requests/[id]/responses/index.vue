@@ -35,26 +35,26 @@
 						</UButton>
 					</div>
 
-					<div class="flex gap-1 p-0.5 bg-elevated rounded-lg shrink-0">
+					<div class="flex gap-1 rounded-xl bg-elevated p-1 shadow-inner shrink-0">
 						<button
 							type="button"
-							class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
+							class="rounded-lg px-3 py-1.5 text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
 							:class="mainTab === 'thread'
-								? 'bg-default text-default shadow-sm'
-								: 'text-muted hover:text-default'"
+								? 'bg-primary text-inverted shadow-sm'
+								: 'text-muted hover:bg-default hover:text-default'"
 							@click="mainTab = 'thread'"
 						>
-							Переписка
+							{{ t('inbox.threadTab') }}
 						</button>
 						<button
 							type="button"
-							class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
+							class="rounded-lg px-3 py-1.5 text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
 							:class="mainTab === 'comparison'
-								? 'bg-default text-default shadow-sm'
-								: 'text-muted hover:text-default'"
+								? 'bg-primary text-inverted shadow-sm'
+								: 'text-muted hover:bg-default hover:text-default'"
 							@click="mainTab = 'comparison'"
 						>
-							Сравнение
+							{{ t('inbox.comparisonTab') }}
 						</button>
 					</div>
 

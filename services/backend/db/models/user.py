@@ -34,6 +34,15 @@ class User(IDMixinUUID, TimestampMixin, Base):
     is_admin: Mapped[bool] = mapped_column(default=False)
     agree_terms: Mapped[bool] = mapped_column(default=True)
     agree_marketing: Mapped[bool] = mapped_column(default=False)
+    consent_revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    deleted_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     ref_by: Mapped[str | None] = mapped_column(String(150), nullable=True)
     referral_invitation_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),

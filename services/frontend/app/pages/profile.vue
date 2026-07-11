@@ -9,8 +9,10 @@
 							<UIcon name="i-lucide-settings" class="w-4.5 h-4.5 text-primary" />
 						</div>
 						<div>
-							<h1 class="text-lg font-bold text-highlighted leading-tight">Настройки</h1>
-							<p class="text-xs text-muted">Настройте параметры вашей учетной записи</p>
+							<h1 class="text-lg font-bold text-highlighted leading-tight">
+								{{ t('profile.settingsTitle') }}
+							</h1>
+							<p class="text-xs text-muted">{{ t('profile.settingsDescription') }}</p>
 						</div>
 					</div>
 				</template>
@@ -72,33 +74,33 @@ block :loading="savingCard" leading-icon="i-lucide-save"
 
 					<template #profile>
 						<div>
-							<h2 class="text-base font-semibold mb-0.5">Профиль</h2>
-							<p class="text-sm text-muted mb-5">Обновите личные данные</p>
+							<h2 class="text-base font-semibold mb-0.5">{{ t('profile.profileTitle') }}</h2>
+							<p class="text-sm text-muted mb-5">{{ t('profile.profileDescription') }}</p>
 
 							<div class="space-y-4">
-								<UFormField label="Полное имя" name="full_name">
+								<UFormField :label="t('profile.fullNameLabel')" name="full_name">
 									<UInput
 v-model="form.full_name" placeholder="Иван Иванов" icon="i-lucide-user"
 										class="w-full" />
 								</UFormField>
 
-								<UFormField label="Название компании" name="company_name">
+								<UFormField :label="t('profile.companyNameLabel')" name="company_name">
 									<UInput
 v-model="form.company_name" placeholder="ООО «Ваша компания»"
 										icon="i-lucide-building-2" class="w-full" />
 								</UFormField>
 
-								<UFormField label="Контактный email" name="contact_email">
+								<UFormField :label="t('profile.contactEmailLabel')" name="contact_email">
 									<UInput
 v-model="form.contact_email" type="email" placeholder="sales@company.ru"
 										icon="i-lucide-mail" class="w-full" />
 								</UFormField>
 
 								<UFormField
-label="Телефон" name="phone"
-									hint="Указан при регистрации, изменить нельзя">
+									:label="t('profile.phoneLabel')" name="phone"
+									:hint="t('profile.phoneLockedHint')">
 									<UInput
-:model-value="user?.phone || 'Не указан'" icon="i-lucide-phone"
+:model-value="user?.phone || t('profile.phoneMissing')" icon="i-lucide-phone"
 										class="w-full" disabled />
 								</UFormField>
 
@@ -108,11 +110,11 @@ v-if="profileError" color="error" variant="soft" icon="i-lucide-circle-alert"
 
 								<UAlert
 v-if="profileSuccess" color="success" variant="soft" icon="i-lucide-check"
-									description="Профиль обновлён" />
+									:description="t('profile.profileSaved')" />
 
 								<div class="flex justify-end">
 									<UButton :loading="savingProfile" leading-icon="i-lucide-save" @click="saveProfile">
-										Сохранить
+										{{ t('profile.save') }}
 									</UButton>
 								</div>
 							</div>
@@ -257,8 +259,8 @@ v-if="profileSuccess" color="success" variant="soft" icon="i-lucide-check"
 
 					<template #contact>
 						<div>
-							<h2 class="text-base font-semibold mb-0.5">Контактная информация</h2>
-							<p class="text-sm text-muted mb-5">Служба поддержки</p>
+							<h2 class="text-base font-semibold mb-0.5">{{ t('profile.contactTitle') }}</h2>
+							<p class="text-sm text-muted mb-5">{{ t('profile.contactDescription') }}</p>
 
 							<div class="space-y-3">
 								<div class="flex items-center gap-3 p-3 rounded-xl bg-elevated/50">
@@ -301,40 +303,166 @@ v-if="profileSuccess" color="success" variant="soft" icon="i-lucide-check"
 				<template #header>
 					<div class="flex items-center gap-2">
 						<UIcon name="i-lucide-log-out" class="w-4.5 h-4.5 text-muted" />
-						<h2 class="font-semibold">Учетная запись</h2>
+						<h2 class="font-semibold">{{ t('profile.accountTitle') }}</h2>
 					</div>
 				</template>
 
 				<div class="space-y-4">
 					<div>
 						<p class="text-sm text-muted">
-							Вы вошли как:
+							{{ t('profile.signedInAs') }}
 							<span class="text-primary font-medium">{{ user?.email }}</span>
 						</p>
 					</div>
 
 					<p class="text-sm text-muted">
-						Нажмите на кнопку ниже, чтобы выйти из системы и завершить сессию.
+						{{ t('profile.logoutDescription') }}
 					</p>
 
-					<UButton color="error" variant="soft" leading-icon="i-lucide-log-out" @click="handleLogout">
-						Выйти
-					</UButton>
+					<div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+						<UButton color="error" variant="soft" leading-icon="i-lucide-log-out" @click="handleLogout">
+							{{ t('profile.logout') }}
+						</UButton>
+					</div>
+
+					<USeparator />
+
+					<div class="space-y-3 rounded-xl border border-error/20 bg-error/5 p-4">
+						<div>
+							<h3 class="text-sm font-semibold text-highlighted">
+								{{ t('profile.consentActionsTitle') }}
+							</h3>
+							<p class="mt-1 text-sm text-muted">
+								{{ t('profile.consentActionsDescription') }}
+							</p>
+						</div>
+						<div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+							<UButton
+								color="warning"
+								variant="soft"
+								leading-icon="i-lucide-file-x"
+								@click="openDestructiveAction('revoke')"
+							>
+								{{ t('profile.revokeConsent') }}
+							</UButton>
+							<UButton
+								color="error"
+								variant="solid"
+								leading-icon="i-lucide-trash-2"
+								@click="openDestructiveAction('delete')"
+							>
+								{{ t('profile.deleteAccount') }}
+							</UButton>
+						</div>
+					</div>
 				</div>
 			</UCard>
+
+			<div
+				v-if="destructiveModalOpen"
+				class="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4"
+				role="dialog"
+				aria-modal="true"
+				:aria-label="destructiveTitle"
+				@click.self="handleDestructiveOverlayClose"
+			>
+				<div class="flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-default bg-default shadow-2xl">
+					<div class="flex items-start justify-between gap-3 border-b border-default p-4 sm:p-5">
+						<div>
+							<h2 class="text-base font-semibold text-highlighted">
+								{{ destructiveTitle }}
+							</h2>
+							<p class="mt-1 text-sm text-muted">
+								{{ destructiveDescription }}
+							</p>
+						</div>
+						<button
+							type="button"
+							class="rounded-md p-1 text-muted transition-colors hover:bg-elevated hover:text-default disabled:cursor-not-allowed disabled:opacity-50"
+							:aria-label="t('profile.destructiveCancel')"
+							:disabled="destructiveLoading"
+							@click="handleDestructiveBack"
+						>
+							<UIcon name="i-lucide-x" class="size-5" />
+						</button>
+					</div>
+
+					<div class="space-y-4 overflow-y-auto p-4 sm:p-5">
+						<UAlert
+							color="warning"
+							variant="soft"
+							icon="i-lucide-triangle-alert"
+							:description="destructiveBody"
+						/>
+
+						<UFormField :label="t('profile.destructiveReasonLabel')">
+							<UTextarea
+								v-model="destructiveReason"
+								:placeholder="t('profile.destructiveReasonPlaceholder')"
+								:rows="3"
+								class="w-full"
+							/>
+						</UFormField>
+
+						<div v-if="destructiveStep === 'confirm'" class="rounded-xl border border-error/30 p-3">
+							<p class="mb-3 text-sm font-medium text-highlighted">
+								{{ t('profile.destructiveSecondStep') }}
+							</p>
+							<UCheckbox v-model="destructiveAcknowledged" :label="t('profile.destructiveAcknowledge')" />
+						</div>
+					</div>
+
+					<div class="border-t border-default p-4 sm:p-5">
+					<div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+						<button
+							type="button"
+							class="inline-flex cursor-pointer items-center justify-center rounded-md border border-default px-3 py-2 text-sm font-medium text-default transition-colors hover:bg-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
+							:disabled="destructiveLoading"
+							@click="handleDestructiveBack"
+						>
+							{{ destructiveStep === 'confirm'
+								? t('profile.destructiveBack')
+								: t('profile.destructiveCancel') }}
+						</button>
+						<button
+							type="button"
+							class="inline-flex cursor-pointer items-center justify-center rounded-md px-3 py-2 text-sm font-medium text-inverted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
+							:class="destructiveAction === 'delete'
+								? 'bg-error hover:bg-error/90'
+								: 'bg-warning hover:bg-warning/90'"
+							:disabled="destructiveLoading || (destructiveStep === 'confirm' && !destructiveAcknowledged)"
+							@click="handleDestructiveContinue"
+						>
+							<UIcon
+								v-if="destructiveLoading"
+								name="i-lucide-loader-circle"
+								class="mr-2 size-4 animate-spin"
+							/>
+							{{ destructiveConfirmLabel }}
+						</button>
+					</div>
+					</div>
+				</div>
+			</div>
 
 		</div>
 	</UContainer>
 </template>
 
 <script lang="ts" setup>
-import type { UserResponse, UserUpdate, UserEmailSettingsResponse, UserEmailSettingsUpdate } from '#shared/types'
+import type {
+	ConsentActionResponse,
+	UserEmailSettingsResponse,
+	UserEmailSettingsUpdate,
+	UserResponse,
+	UserUpdate,
+} from '#shared/types'
 import { getApiErrorDetail } from '#shared/utils/apiError'
 import { t } from '~/constants/translations'
 
 definePageMeta({ layout: 'default' })
 
-const { get, patch } = useApi()
+const { get, patch, post, del } = useApi()
 const auth = useAuthStore()
 const route = useRoute()
 const { public: publicConfig } = useRuntimeConfig()
@@ -358,11 +486,11 @@ const form = reactive({
 })
 
 const tabs = computed(() => [
-	{ label: 'Акты', slot: 'acts', value: 'acts', icon: 'i-lucide-file-text' },
-	{ label: 'Визитная карточка', slot: 'business_card', value: 'business_card', icon: 'i-lucide-id-card' },
+	{ label: t('profile.actsTab'), slot: 'acts', value: 'acts', icon: 'i-lucide-file-text' },
+	{ label: t('profile.businessCardTitle'), slot: 'business_card', value: 'business_card', icon: 'i-lucide-id-card' },
 	{ label: t('profile.mailTab'), slot: 'mail', value: 'mail', icon: 'i-lucide-mail' },
-	{ label: 'Профиль', slot: 'profile', value: 'profile', icon: 'i-lucide-user' },
-	{ label: 'Свяжитесь с нами', slot: 'contact', value: 'contact', icon: 'i-lucide-headphones' },
+	{ label: t('profile.profileTab'), slot: 'profile', value: 'profile', icon: 'i-lucide-user' },
+	{ label: t('profile.contactTab'), slot: 'contact', value: 'contact', icon: 'i-lucide-headphones' },
 ])
 
 const tabFromQuery = computed(() => {
@@ -480,7 +608,7 @@ async function saveBusinessCard() {
 		cardSuccess.value = true
 		setTimeout(() => { cardSuccess.value = false }, 3000)
 	} catch (e: unknown) {
-		cardError.value = getApiErrorDetail(e) ?? 'Ошибка при сохранении'
+		cardError.value = getApiErrorDetail(e) ?? t('profile.saveError')
 	} finally {
 		savingCard.value = false
 	}
@@ -505,9 +633,101 @@ async function saveProfile() {
 		profileSuccess.value = true
 		setTimeout(() => { profileSuccess.value = false }, 3000)
 	} catch (e: unknown) {
-		profileError.value = getApiErrorDetail(e) ?? 'Ошибка при сохранении'
+		profileError.value = getApiErrorDetail(e) ?? t('profile.saveError')
 	} finally {
 		savingProfile.value = false
+	}
+}
+
+type DestructiveAction = 'revoke' | 'delete'
+type DestructiveStep = 'details' | 'confirm'
+
+const destructiveModalOpen = ref(false)
+const destructiveAction = ref<DestructiveAction>('revoke')
+const destructiveStep = ref<DestructiveStep>('details')
+const destructiveReason = ref('')
+const destructiveAcknowledged = ref(false)
+const destructiveLoading = ref(false)
+
+const destructiveTitle = computed(() =>
+	destructiveAction.value === 'delete'
+		? t('profile.deleteAccountTitle')
+		: t('profile.revokeConsentTitle'),
+)
+const destructiveDescription = computed(() =>
+	destructiveAction.value === 'delete'
+		? t('profile.deleteAccountDescription')
+		: t('profile.revokeConsentDescription'),
+)
+const destructiveBody = computed(() =>
+	destructiveAction.value === 'delete'
+		? t('profile.deleteAccountBody')
+		: t('profile.revokeConsentBody'),
+)
+const destructiveConfirmLabel = computed(() => {
+	if (destructiveStep.value === 'details') {
+		return t('profile.destructiveSecondStep')
+	}
+	return destructiveAction.value === 'delete'
+		? t('profile.deleteAccountConfirm')
+		: t('profile.revokeConsentConfirm')
+})
+
+function openDestructiveAction(action: DestructiveAction) {
+	destructiveAction.value = action
+	destructiveStep.value = 'details'
+	destructiveReason.value = ''
+	destructiveAcknowledged.value = false
+	destructiveModalOpen.value = true
+}
+
+function handleDestructiveBack() {
+	if (destructiveStep.value === 'confirm') {
+		destructiveStep.value = 'details'
+		destructiveAcknowledged.value = false
+		return
+	}
+	destructiveModalOpen.value = false
+}
+
+function handleDestructiveOverlayClose() {
+	if (destructiveLoading.value) return
+	handleDestructiveBack()
+}
+
+async function handleDestructiveContinue() {
+	if (destructiveStep.value === 'details') {
+		destructiveStep.value = 'confirm'
+		destructiveAcknowledged.value = false
+		return
+	}
+	if (!destructiveAcknowledged.value || destructiveLoading.value) return
+
+	destructiveLoading.value = true
+	const payload = {
+		acknowledged: true,
+		reason: destructiveReason.value.trim() || null,
+	}
+	try {
+		if (destructiveAction.value === 'delete') {
+			await del<ConsentActionResponse>('/auth/me', { data: payload })
+		} else {
+			await post<ConsentActionResponse>('/auth/me/consent/revoke', payload)
+		}
+		auth.clearToken()
+		await navigateTo('/auth')
+	} catch (e: unknown) {
+		const toast = useToast()
+		toast.add({
+			title: getApiErrorDetail(e)
+				?? (destructiveAction.value === 'delete'
+					? t('profile.deleteAccountError')
+					: t('profile.revokeConsentError')),
+			color: 'error',
+			icon: 'i-lucide-circle-alert',
+		})
+	} finally {
+		destructiveLoading.value = false
 	}
 }
 
