@@ -51,7 +51,7 @@ v-model="form.query" placeholder="Промышленные насосы, кар�
 
 						<UFormField label="Регион поиска" name="delivery_region" required>
 							<UInput
-v-model="form.delivery_region" placeholder="Беларусь" icon="i-lucide-map-pin"
+								v-model="form.delivery_region" icon="i-lucide-map-pin"
 								size="lg" class="w-full" :disabled="!canStartSearch" />
 						</UFormField>
 
@@ -92,7 +92,10 @@ const schema = z.object({
 	delivery_region: z.string().min(2, 'Укажите регион').max(100),
 })
 
-const form = reactive({ query: '', delivery_region: '' })
+const form = reactive({
+	query: '',
+	delivery_region: t('requests.defaultDeliveryRegion'),
+})
 const loading = ref(false)
 const searchError = ref<unknown | null>(null)
 

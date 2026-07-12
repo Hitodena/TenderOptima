@@ -1,35 +1,37 @@
 <template>
-	<UModal
-		v-if="isDesktop"
-		v-model:open="isOpen"
-		:title="modalCopy.modalTitle"
-		:description="modalCopy.modalDescription"
-		:ui="{ content: 'max-w-md' }"
-	>
-		<template #body>
-			<ConsultationForm
-				ref="formRef"
-				:initial-request-type="presetRequestType"
-				@success="handleSuccess"
-			/>
-		</template>
-	</UModal>
+	<ClientOnly>
+		<UModal
+			v-if="isDesktop"
+			v-model:open="isOpen"
+			:title="modalCopy.modalTitle"
+			:description="modalCopy.modalDescription"
+			:ui="{ content: 'max-w-md' }"
+		>
+			<template #body>
+				<ConsultationForm
+					ref="formRef"
+					:initial-request-type="presetRequestType"
+					@success="handleSuccess"
+				/>
+			</template>
+		</UModal>
 
-	<UDrawer
-		v-else
-		v-model:open="isOpen"
-		:title="modalCopy.modalTitle"
-		:description="modalCopy.modalDescription"
-		:ui="{ container: 'max-h-[90vh] overflow-y-auto' }"
-	>
-		<template #body>
-			<ConsultationForm
-				ref="formRef"
-				:initial-request-type="presetRequestType"
-				@success="handleSuccess"
-			/>
-		</template>
-	</UDrawer>
+		<UDrawer
+			v-else
+			v-model:open="isOpen"
+			:title="modalCopy.modalTitle"
+			:description="modalCopy.modalDescription"
+			:ui="{ container: 'max-h-[90vh] overflow-y-auto' }"
+		>
+			<template #body>
+				<ConsultationForm
+					ref="formRef"
+					:initial-request-type="presetRequestType"
+					@success="handleSuccess"
+				/>
+			</template>
+		</UDrawer>
+	</ClientOnly>
 </template>
 
 <script lang="ts" setup>

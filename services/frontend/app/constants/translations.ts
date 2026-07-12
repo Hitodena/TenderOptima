@@ -282,6 +282,7 @@ export const translations = {
 		enterprisePrice: 'Стоимость согласуется индивидуально',
 	},
 	requests: {
+		defaultDeliveryRegion: 'Беларусь',
 		mailingCompletedHint: 'Рассылка завершена',
 		mailingCompletedSubhint:
 			'Можно добавить поставщиков и отправить запрос тем, кому письмо ещё не отправлено.',
