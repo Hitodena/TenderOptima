@@ -22,7 +22,7 @@ export function useCookieConsent() {
 		sameSite: 'lax',
 	})
 
-	const hasChoice = computed(() => consent.value !== null)
+	const hasChoice = computed(() => consent.value != null)
 	const preferences = computed(() => consent.value ?? defaultPreferences())
 	const canUseAnalytics = computed(() => preferences.value.analytics)
 	const canUseMarketing = computed(() => preferences.value.marketing)
