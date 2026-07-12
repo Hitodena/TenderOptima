@@ -1,27 +1,27 @@
 services:
   # Local Postgres is disabled because the project now uses the remote
   # Dockerized database provisioned outside this compose stack.
-  db:
-    image: postgres:18-alpine
-    container_name: tenderoptima_db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-    env_file:
-      - .env
-    volumes:
-      - pgdata:/var/lib/postgresql
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 10s
-      timeout: 10s
-      retries: 5
-    networks:
-      - tenderoptima_network
+  # db:
+  #   image: postgres:18-alpine
+  #   container_name: tenderoptima_db
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_USER: ${POSTGRES_USER}
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  #     POSTGRES_DB: ${POSTGRES_DB}
+  #   env_file:
+  #     - .env
+  #   volumes:
+  #     - pgdata:/var/lib/postgresql
+  #   ports:
+  #     - "${POSTGRES_PORT:-5432}:5432"
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+  #     interval: 10s
+  #     timeout: 10s
+  #     retries: 5
+  #   networks:
+  #     - tenderoptima_network
 
   redis:
     image: redis:8.0-alpine
@@ -185,7 +185,7 @@ services:
       - tenderoptima_network
 
 volumes:
-  pgdata:
+  # pgdata:
   redisdata:
   uploads:
 
