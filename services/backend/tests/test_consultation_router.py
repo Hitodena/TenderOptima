@@ -54,12 +54,22 @@ def client():
     app.dependency_overrides.pop(get_session, None)
 
 
-def _patched(count_recent: int = 0):
+def _patched(count_recent: int = 0, existing_email=None, existing_phone=None):
     return (
         patch.object(
             consultation_router.ConsultationDAO,
             "count_recent_by_ip",
             AsyncMock(return_value=count_recent),
+        ),
+        patch.object(
+            consultation_router.ConsultationDAO,
+            "get_by_email",
+            AsyncMock(return_value=existing_email),
+        ),
+        patch.object(
+            consultation_router.ConsultationDAO,
+            "get_by_phone",
+            AsyncMock(return_value=existing_phone),
         ),
         patch.object(
             consultation_router.ConsultationDAO,
@@ -82,7 +92,14 @@ def _patched(count_recent: int = 0):
 
 
 def test_create_consultation_success(client: TestClient):
-    with _patched()[0], _patched()[1], _patched()[2], _patched()[3]:
+    with (
+        _patched()[0],
+        _patched()[1],
+        _patched()[2],
+        _patched()[3],
+        _patched()[4],
+        _patched()[5],
+    ):
         response = client.post("/api/consultations", json=VALID_PAYLOAD)
     assert response.status_code == 201
     data = response.json()
@@ -92,9 +109,18 @@ def test_create_consultation_success(client: TestClient):
 
 def test_create_consultation_rejects_honeypot(client: TestClient):
     payload = {**VALID_PAYLOAD, "honeypot": "spam"}
-    count_patch, create_patch, notify_patch, autoreply_patch = _patched()
+    (
+        count_patch,
+        email_patch,
+        phone_patch,
+        create_patch,
+        notify_patch,
+        autoreply_patch,
+    ) = _patched()
     with (
         count_patch,
+        email_patch,
+        phone_patch,
         create_patch as create_mock,
         notify_patch,
         autoreply_patch,
@@ -105,17 +131,80 @@ def test_create_consultation_rejects_honeypot(client: TestClient):
 
 
 def test_create_consultation_rate_limited(client: TestClient):
-    count_patch, create_patch, notify_patch, autoreply_patch = _patched(
-        count_recent=5
-    )
+    (
+        count_patch,
+        email_patch,
+        phone_patch,
+        create_patch,
+        notify_patch,
+        autoreply_patch,
+    ) = _patched(count_recent=5)
     with (
         count_patch,
+        email_patch,
+        phone_patch,
         create_patch as create_mock,
         notify_patch,
         autoreply_patch,
     ):
         response = client.post("/api/consultations", json=VALID_PAYLOAD)
     assert response.status_code == 429
+    create_mock.assert_not_called()
+
+
+def test_create_consultation_rejects_duplicate_email(client: TestClient):
+    existing = _FakeConsultationRow(
+        name="Existing",
+        email=VALID_PAYLOAD["email"],
+        phone="+375291111111",
+    )
+    (
+        count_patch,
+        email_patch,
+        phone_patch,
+        create_patch,
+        notify_patch,
+        autoreply_patch,
+    ) = _patched(existing_email=existing)
+    with (
+        count_patch,
+        email_patch,
+        phone_patch,
+        create_patch as create_mock,
+        notify_patch,
+        autoreply_patch,
+    ):
+        response = client.post("/api/consultations", json=VALID_PAYLOAD)
+    assert response.status_code == 409
+    assert "email" in response.json()["detail"].lower()
+    create_mock.assert_not_called()
+
+
+def test_create_consultation_rejects_duplicate_phone(client: TestClient):
+    existing = _FakeConsultationRow(
+        name="Existing",
+        email="other@example.com",
+        phone="+375291234567",
+    )
+    (
+        count_patch,
+        email_patch,
+        phone_patch,
+        create_patch,
+        notify_patch,
+        autoreply_patch,
+    ) = _patched(existing_phone=existing)
+    with (
+        count_patch,
+        email_patch,
+        phone_patch,
+        create_patch as create_mock,
+        notify_patch,
+        autoreply_patch,
+    ):
+        response = client.post("/api/consultations", json=VALID_PAYLOAD)
+    assert response.status_code == 409
+    assert "телефон" in response.json()["detail"].lower()
     create_mock.assert_not_called()
 
 

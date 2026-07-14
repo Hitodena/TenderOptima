@@ -47,6 +47,40 @@ class UserDAO(BaseDAO[User]):
             raise
 
     @classmethod
+    async def get_by_phone(
+        cls, session: AsyncSession, phone: str
+    ) -> User | None:
+        """Load a user by unique phone number."""
+        logger.debug("Getting user by phone", model=cls.model, phone=phone)
+        try:
+            stmt = select(cls.model).where(cls.model.phone == phone)
+            result = await session.execute(stmt)
+            instance = result.scalar_one_or_none()
+            if instance:
+                logger.info(
+                    "Got user",
+                    instance=instance,
+                    model=cls.model,
+                    phone=phone,
+                )
+            else:
+                logger.info(
+                    "User not found",
+                    model=cls.model,
+                    phone=phone,
+                )
+            return instance
+        except Exception as exc:
+            await session.rollback()
+            logger.exception(
+                "Failed to get user by phone",
+                error=str(exc),
+                model=cls.model,
+                phone=phone,
+            )
+            raise
+
+    @classmethod
     async def update_contact_info(
         cls,
         session: AsyncSession,

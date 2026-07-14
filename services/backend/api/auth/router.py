@@ -50,7 +50,7 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
     responses={
         201: {"description": "User successfully created and JWT returned"},
         403: {"description": "Referral invitation is missing or already used"},
-        409: {"description": "Email already exists in the system"},
+        409: {"description": "Email or phone already exists in the system"},
         422: {"description": "Validation error in request payload"},
     },
 )
@@ -66,6 +66,12 @@ async def register(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="User with this email already exists",
+        )
+    existing_phone = await UserDAO.get_by_phone(session, request.phone)
+    if existing_phone:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="User with this phone already exists",
         )
     if not request.agree_terms:
         raise HTTPException(

@@ -16,8 +16,10 @@ class Consultation(IDMixinUUID, TimestampMixin, Base):
 
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     company: Mapped[str] = mapped_column(String(150), nullable=False)
-    email: Mapped[str] = mapped_column(String(255), nullable=False)
-    phone: Mapped[str] = mapped_column(String(32), nullable=False)
+    email: Mapped[str] = mapped_column(
+        String(255), unique=True, nullable=False
+    )
+    phone: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
     role: Mapped[ConsultationRole] = mapped_column(String(30), nullable=False)
     request_type: Mapped[ConsultationRequestType] = mapped_column(
         String(20),

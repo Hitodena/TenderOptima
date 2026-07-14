@@ -12,6 +12,28 @@ class ConsultationDAO(BaseDAO[Consultation]):
     model = Consultation
 
     @classmethod
+    async def get_by_email(
+        cls,
+        session: AsyncSession,
+        email: str,
+    ) -> Consultation | None:
+        """Load a consultation by unique email address."""
+        stmt = select(cls.model).where(cls.model.email == email)
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @classmethod
+    async def get_by_phone(
+        cls,
+        session: AsyncSession,
+        phone: str,
+    ) -> Consultation | None:
+        """Load a consultation by unique phone number."""
+        stmt = select(cls.model).where(cls.model.phone == phone)
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @classmethod
     async def count_recent_by_ip(
         cls,
         session: AsyncSession,

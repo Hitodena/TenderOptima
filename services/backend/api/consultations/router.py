@@ -88,6 +88,20 @@ async def create_consultation(
             detail="Слишком много заявок. Повторите попытку позже.",
         )
 
+    existing_by_email = await ConsultationDAO.get_by_email(session, body.email)
+    if existing_by_email:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Заявка с этим email уже отправлена",
+        )
+
+    existing_by_phone = await ConsultationDAO.get_by_phone(session, body.phone)
+    if existing_by_phone:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Заявка с этим номером телефона уже отправлена",
+        )
+
     row = await ConsultationDAO.create(
         session,
         name=body.name,

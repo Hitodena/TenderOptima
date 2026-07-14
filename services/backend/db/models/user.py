@@ -16,7 +16,9 @@ class User(IDMixinUUID, TimestampMixin, Base):
 
     full_name: Mapped[str] = mapped_column(nullable=False)
     company_name: Mapped[str | None] = mapped_column()
-    phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    phone: Mapped[str | None] = mapped_column(
+        String(50), unique=True, nullable=True
+    )
 
     contact_email: Mapped[str | None] = mapped_column()
     business_info: Mapped[str | None] = mapped_column(Text)

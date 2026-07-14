@@ -60,6 +60,35 @@ class FakeSession:
 
 
 @pytest.mark.asyncio
+async def test_register_rejects_duplicate_phone():
+    session = FakeSession()
+    request = RegisterCreate(**VALID_PAYLOAD)
+    existing_user = User(
+        email="other@example.com",
+        hashed_password="hash",
+        full_name="Existing User",
+        phone=VALID_PAYLOAD["phone"],
+    )
+
+    with (
+        patch(
+            "backend.api.auth.router.UserDAO.get_by_email",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "backend.api.auth.router.UserDAO.get_by_phone",
+            AsyncMock(return_value=existing_user),
+        ),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await register(request, session)  # type: ignore[arg-type]
+
+    assert exc.value.status_code == 409
+    assert "phone" in exc.value.detail.lower()
+    assert session.added == []
+
+
+@pytest.mark.asyncio
 async def test_register_requires_available_referral():
     session = FakeSession()
     request = RegisterCreate(**VALID_PAYLOAD)
@@ -67,6 +96,10 @@ async def test_register_requires_available_referral():
     with (
         patch(
             "backend.api.auth.router.UserDAO.get_by_email",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "backend.api.auth.router.UserDAO.get_by_phone",
             AsyncMock(return_value=None),
         ),
         patch(
@@ -86,9 +119,15 @@ async def test_register_rejects_missing_required_consent():
     session = FakeSession()
     request = RegisterCreate(**{**VALID_PAYLOAD, "agree_terms": False})
 
-    with patch(
-        "backend.api.auth.router.UserDAO.get_by_email",
-        AsyncMock(return_value=None),
+    with (
+        patch(
+            "backend.api.auth.router.UserDAO.get_by_email",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "backend.api.auth.router.UserDAO.get_by_phone",
+            AsyncMock(return_value=None),
+        ),
     ):
         with pytest.raises(HTTPException) as exc:
             await register(request, session)  # type: ignore[arg-type]
@@ -109,6 +148,10 @@ async def test_register_consumes_referral_and_sets_user_ref_by():
     with (
         patch(
             "backend.api.auth.router.UserDAO.get_by_email",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "backend.api.auth.router.UserDAO.get_by_phone",
             AsyncMock(return_value=None),
         ),
         patch(
