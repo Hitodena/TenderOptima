@@ -84,14 +84,21 @@ v-if="request.status == RequestStatus.DRAFT" size="lg" variant="outline" color="
 						Поиск поставщиков
 					</UButton>
 
-					<UButton
+					<UTooltip
 						v-if="showSendButton"
-						size="lg"
-						leading-icon="i-lucide-send"
-						:disabled="!canLaunchMailing"
-						@click="showParamsModal = true">
-						Отправить запрос поставщикам
-					</UButton>
+						:text="sendButtonTooltip"
+						:disabled="!sendButtonTooltip"
+					>
+						<span class="inline-flex">
+							<UButton
+								size="lg"
+								leading-icon="i-lucide-send"
+								:disabled="!canLaunchMailing"
+								@click="showParamsModal = true">
+								Отправить запрос поставщикам
+							</UButton>
+						</span>
+					</UTooltip>
 
 					<UButton
 						v-if="canManageSuppliers"
@@ -488,7 +495,12 @@ const pendingEnabledCount = computed(() =>
 
 const showSendButton = computed(() => {
 	if (isLockedStatus.value || suppliers.value.length === 0) return false
-	return pendingEnabledCount.value > 0
+	return true
+})
+
+const sendButtonTooltip = computed(() => {
+	if (pendingEnabledCount.value > 0) return ''
+	return 'Выберите хотя бы одного поставщика для отправки'
 })
 
 const filteredSuppliers = computed(() => {

@@ -59,6 +59,14 @@ color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 					description="Загрузите техническое задание и запустите анализ. После извлечения требований вы сможете проверить их и загрузить коммерческие предложения." />
 
 				<UAlert
+					color="warning"
+					variant="soft"
+					icon="i-lucide-lightbulb"
+					class="mb-4"
+					description="Загружайте только разделы ТЗ, связанные с техническими параметрами оборудования — это снижает нагрузку на анализ и ускоряет обработку."
+				/>
+
+				<UAlert
 					v-if="isTestPlan(user?.subscription)"
 					color="info"
 					variant="soft"
@@ -121,7 +129,7 @@ color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 				</UCard>
 			</template>
 
-			<template v-else-if="analysis.status === TZAnalysisRunStatus.FAILED">
+			<template v-else-if="analysis.status === TZAnalysisRunStatus.FAILED && !isTzConfirmed && !kpAnalysisStarted">
 				<UAlert
 color="error" variant="soft" icon="i-lucide-circle-alert"
 					description="Не удалось выполнить анализ. Создайте новый анализ и попробуйте снова." />
@@ -320,6 +328,32 @@ v-if="isTzReviewPhase && !isAnalysisClosed"
 									<UAlert
 color="neutral" variant="soft" icon="i-lucide-lock"
 										description="Анализ завершён без сравнения с КП. Этот раздел недоступен." />
+								</template>
+
+								<template v-else-if="showKpAnalysisError">
+									<div
+										class="flex flex-col items-center justify-center gap-4 min-h-[40vh] rounded-xl border border-error/25 bg-error/5 px-4 py-10"
+									>
+										<UIcon name="i-lucide-circle-alert" class="w-8 h-8 text-error" />
+										<div class="space-y-1 text-center max-w-md">
+											<p class="text-sm font-medium text-highlighted">
+												Непредвиденная ошибка при обработке
+											</p>
+											<p class="text-xs text-muted">
+												Попробуйте запустить анализ снова. Список поставщиков сохранён.
+											</p>
+										</div>
+										<UButton
+											color="warning"
+											variant="solid"
+											leading-icon="i-lucide-refresh-cw"
+											:loading="kpAnalyzing"
+											:disabled="!canRunKpAnalysis"
+											@click="runKpAnalysis"
+										>
+											Запустить снова
+										</UButton>
+									</div>
 								</template>
 
 								<template v-else-if="isTzConfirmed && !hasComparisonResults && !isCompleted && !isKpProcessing">
@@ -1695,6 +1729,14 @@ const showSelectedSupplierProcessing = computed(() => {
 		supplier.status === TZAnalysisSupplierStatus.PROCESSING
 		|| (isKpProcessing.value && supplier.status === TZAnalysisSupplierStatus.PENDING)
 	)
+})
+
+const showKpAnalysisError = computed(() => {
+	if (!isTzConfirmed.value || isAnalysisClosed.value || isCompleted.value) return false
+	if (showSelectedSupplierProcessing.value || isKpProcessing.value) return false
+	if (showComparisonResultsCard.value) return false
+	if (analysis.value?.status === TZAnalysisRunStatus.FAILED) return true
+	return selectedSupplier.value?.status === TZAnalysisSupplierStatus.FAILED
 })
 
 const selectedSupplierProcessingLabel = computed(() => {

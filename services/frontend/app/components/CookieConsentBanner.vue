@@ -29,9 +29,19 @@
 						</p>
 					</div>
 
-					<UButton class="shrink-0 justify-center" @click="saveNecessaryOnly">
-						{{ t('cookies.noticeAccept') }}
-					</UButton>
+					<div class="flex shrink-0 flex-col gap-2 sm:flex-row">
+						<UButton class="justify-center" @click="saveAcceptAll">
+							{{ t('cookies.acceptAll') }}
+						</UButton>
+						<UButton
+							class="justify-center"
+							variant="outline"
+							color="neutral"
+							@click="saveNecessaryOnly"
+						>
+							{{ t('cookies.declineAll') }}
+						</UButton>
+					</div>
 				</div>
 			</UCard>
 		</div>
@@ -88,6 +98,7 @@ const {
 	hasChoice,
 	preferences,
 	saveChoice,
+	acceptAll,
 	necessaryOnly,
 } = useCookieConsent()
 
@@ -112,6 +123,12 @@ function saveCurrentChoice() {
 		captureFromRoute()
 	}
 	settingsOpen.value = false
+}
+
+function saveAcceptAll() {
+	analytics.value = true
+	acceptAll()
+	captureFromRoute()
 }
 
 function saveNecessaryOnly() {

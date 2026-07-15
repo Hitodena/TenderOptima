@@ -47,6 +47,14 @@ _TZ_EXTRACT_SOFT_LIMIT = 7000  # 1 h 57 min
 _TZ_EXTRACT_TIME_LIMIT = 7200  # 2 h
 _KP_COMPARE_SOFT_LIMIT = 21000  # 5 h 50 min
 _KP_COMPARE_TIME_LIMIT = 21600  # 6 h
+_ANALYSIS_MAX_RETRIES = 2
+_ANALYSIS_RETRY_COUNTDOWN_SEC = 30
+
+
+def _retry_or_fail(task, exc: Exception) -> None:
+    """Raise Celery retry while attempts remain; otherwise return to mark FAILED."""
+    if task.request.retries < task.max_retries:
+        raise task.retry(exc=exc, countdown=_ANALYSIS_RETRY_COUNTDOWN_SEC)
 
 
 def _merge_supplier_kp_result(
@@ -235,7 +243,7 @@ async def _load_email_analysis_context(
     bind=True,
     soft_time_limit=_TZ_EXTRACT_SOFT_LIMIT,
     time_limit=_TZ_EXTRACT_TIME_LIMIT,
-    max_retries=0,
+    max_retries=_ANALYSIS_MAX_RETRIES,
 )
 @async_task
 async def run_tz_extract(self, analysis_id: str) -> dict:
@@ -297,7 +305,10 @@ async def run_tz_extract(self, analysis_id: str) -> dict:
             analysis_id=analysis_id,
             user_id=user_id,
             error=str(exc),
+            retries=self.request.retries,
+            max_retries=self.max_retries,
         )
+        _retry_or_fail(self, exc)
         async with db_manager.session() as session:
             await TZAnalysisDAO.update_fields(
                 session,
@@ -351,7 +362,7 @@ async def run_tz_extract(self, analysis_id: str) -> dict:
     bind=True,
     soft_time_limit=_KP_COMPARE_SOFT_LIMIT,
     time_limit=_KP_COMPARE_TIME_LIMIT,
-    max_retries=0,
+    max_retries=_ANALYSIS_MAX_RETRIES,
 )
 @async_task
 async def run_tz_kp_compare(self, analysis_id: str) -> dict:
@@ -479,7 +490,10 @@ async def run_tz_kp_compare(self, analysis_id: str) -> dict:
             analysis_id=analysis_id,
             user_id=user_id,
             error=str(exc),
+            retries=self.request.retries,
+            max_retries=self.max_retries,
         )
+        _retry_or_fail(self, exc)
         async with db_manager.session() as session:
             await TZAnalysisDAO.update_fields(
                 session,
@@ -521,7 +535,7 @@ async def run_tz_kp_compare(self, analysis_id: str) -> dict:
     bind=True,
     soft_time_limit=_KP_COMPARE_SOFT_LIMIT,
     time_limit=_KP_COMPARE_TIME_LIMIT,
-    max_retries=0,
+    max_retries=_ANALYSIS_MAX_RETRIES,
 )
 @async_task
 async def run_tz_compare(self, analysis_id: str) -> dict:
@@ -627,7 +641,10 @@ async def run_tz_compare(self, analysis_id: str) -> dict:
             analysis_id=analysis_id,
             user_id=user_id,
             error=str(exc),
+            retries=self.request.retries,
+            max_retries=self.max_retries,
         )
+        _retry_or_fail(self, exc)
         async with db_manager.session() as session:
             await TZAnalysisDAO.update_fields(
                 session,
@@ -669,7 +686,7 @@ async def run_tz_compare(self, analysis_id: str) -> dict:
     bind=True,
     soft_time_limit=_KP_COMPARE_SOFT_LIMIT,
     time_limit=_KP_COMPARE_TIME_LIMIT,
-    max_retries=0,
+    max_retries=_ANALYSIS_MAX_RETRIES,
 )
 @async_task
 async def run_supplier_kp_process(
@@ -768,7 +785,10 @@ async def run_supplier_kp_process(
             analysis_id=analysis_id,
             supplier_id=supplier_id,
             error=str(exc),
+            retries=self.request.retries,
+            max_retries=self.max_retries,
         )
+        _retry_or_fail(self, exc)
         async with db_manager.session() as session:
             await TZAnalysisSupplierDAO.update_fields(
                 session,

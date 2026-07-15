@@ -260,6 +260,7 @@ export const translations = {
 		marketingDescription:
 			'Сохраняют параметры рекламных переходов и помогают оценивать эффективность коммуникаций.',
 		acceptAll: 'Принять все',
+		declineAll: 'Отклонить все (кроме необходимых)',
 		saveChoice: 'Сохранить мой выбор',
 		necessaryOnly: 'Только необходимые',
 		openSettings: 'Настроить cookie',

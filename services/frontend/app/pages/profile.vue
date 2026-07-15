@@ -43,7 +43,7 @@
 								<UFormField :label="t('profile.businessCardTextLabel')" class="mb-2">
 									<UTextarea
 										v-model="form.business_info"
-										:rows="5"
+										:rows="8"
 										:maxrows="14"
 										class="w-full"
 										:placeholder="t('profile.businessCardPlaceholder')"
@@ -51,7 +51,7 @@
 									/>
 								</UFormField>
 
-								<p class="text-xs text-primary mb-5">
+								<p v-if="!form.business_info" class="text-xs text-primary mb-5">
 									{{ t('profile.businessCardHint') }}
 								</p>
 
@@ -395,7 +395,10 @@ v-if="profileSuccess" color="success" variant="soft" icon="i-lucide-check"
 							:description="destructiveBody"
 						/>
 
-						<UFormField :label="t('profile.destructiveReasonLabel')">
+						<UFormField
+							v-if="destructiveAction === 'delete'"
+							:label="t('profile.destructiveReasonLabel')"
+						>
 							<UTextarea
 								v-model="destructiveReason"
 								:placeholder="t('profile.destructiveReasonPlaceholder')"
@@ -706,7 +709,9 @@ async function handleDestructiveContinue() {
 	destructiveLoading.value = true
 	const payload = {
 		acknowledged: true,
-		reason: destructiveReason.value.trim() || null,
+		reason: destructiveAction.value === 'delete'
+			? (destructiveReason.value.trim() || null)
+			: null,
 	}
 	try {
 		if (destructiveAction.value === 'delete') {

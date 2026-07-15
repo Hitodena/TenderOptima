@@ -455,6 +455,7 @@ v-if="!showParamsPanel" size="xs" variant="ghost" color="neutral"
 								<div
 									v-for="msg in messages"
 									:key="msg.id"
+									:data-message-id="msg.id"
 									class="flex gap-2 md:gap-3"
 									:class="msg.direction === 'outgoing' ? 'flex-row-reverse' : ''"
 								>
@@ -1074,9 +1075,36 @@ async function fetchMessages(rsId: string, options?: { silent?: boolean }): Prom
 		return false
 	} finally {
 		if (!silent) loadingMessages.value = false
-		await nextTick()
-		scrollToBottom()
+		if (!silent) {
+			await nextTick()
+			scrollToDefaultMessage()
+		}
 	}
+}
+
+function resolveDefaultScrollMessageId(): string | null {
+	const lastIncoming = [...messages.value]
+		.reverse()
+		.find(m => m.direction === 'incoming')
+	if (lastIncoming) return lastIncoming.id
+	const firstOutgoing = messages.value.find(m => m.direction === 'outgoing')
+	return firstOutgoing?.id ?? messages.value[0]?.id ?? null
+}
+
+function scrollToDefaultMessage() {
+	const targetId = resolveDefaultScrollMessageId()
+	if (!targetId || !messagesContainer.value) {
+		scrollToBottom()
+		return
+	}
+	const el = messagesContainer.value.querySelector(
+		`[data-message-id="${CSS.escape(targetId)}"]`,
+	) as HTMLElement | null
+	if (el) {
+		el.scrollIntoView({ block: 'start' })
+		return
+	}
+	scrollToBottom()
 }
 
 function scrollToBottom() {
