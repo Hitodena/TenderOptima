@@ -910,6 +910,12 @@ async function fetchThreads(silent = false) {
 	}
 }
 
+function selectDefaultThread() {
+	if (selectedRsId.value) return
+	const first = sortedThreads.value[0]
+	if (first) selectThread(first.rs_id)
+}
+
 const THREAD_POLL_MS = 45_000
 const { pause: pauseThreadPoll, resume: resumeThreadPoll } = useIntervalFn(
 	async () => {
@@ -959,8 +965,9 @@ async function refreshAll() {
 	}
 }
 
-onMounted(() => {
-	fetchThreads()
+onMounted(async () => {
+	await fetchThreads()
+	selectDefaultThread()
 	resumeThreadPoll()
 })
 

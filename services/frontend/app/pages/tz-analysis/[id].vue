@@ -53,7 +53,15 @@ type="button" class="truncate max-w-full text-primary hover:underline text-left"
 				</div>
 			</div>
 
-			<template v-if="isDraft">
+			<template v-if="showTzUploadForm">
+				<UAlert
+					v-if="isTzExtractFailed"
+					color="error"
+					variant="soft"
+					icon="i-lucide-circle-alert"
+					class="mb-4"
+					description="Непредвиденная ошибка при обработке ТЗ. Проверьте файл и запустите анализ снова." />
+
 				<UAlert
 color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 					description="Загрузите техническое задание и запустите анализ. После извлечения требований вы сможете проверить их и загрузить коммерческие предложения." />
@@ -97,12 +105,12 @@ color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 						block
 						size="lg"
 						class="mt-5"
-						leading-icon="i-lucide-scan-search"
+						:leading-icon="isTzExtractFailed ? 'i-lucide-refresh-cw' : 'i-lucide-scan-search'"
 						:loading="tzAnalyzing"
 						:disabled="!tzFile || !canRunTzAnalysis"
 						@click="runTzAnalysis"
 					>
-						Анализировать ТЗ
+						{{ isTzExtractFailed ? 'Запустить снова' : 'Анализировать ТЗ' }}
 					</UButton>
 					<p v-if="module2BlockReason" class="text-xs text-muted mt-2">
 						{{ module2BlockReason }}
@@ -127,12 +135,6 @@ color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 						<UProgress animation="carousel" size="sm" class="w-full max-w-md" />
 					</div>
 				</UCard>
-			</template>
-
-			<template v-else-if="analysis.status === TZAnalysisRunStatus.FAILED && !isTzConfirmed && !kpAnalysisStarted">
-				<UAlert
-color="error" variant="soft" icon="i-lucide-circle-alert"
-					description="Не удалось выполнить анализ. Создайте новый анализ и попробуйте снова." />
 			</template>
 
 			<template v-else-if="isTzReviewPhase || isTzConfirmed || kpAnalysisStarted">
@@ -1028,6 +1030,12 @@ function inferProcessingPhase(data: TZAnalysisSession): 'tz' | 'kp' {
 }
 
 const isDraft = computed(() => analysis.value?.status === TZAnalysisRunStatus.DRAFT)
+const isTzExtractFailed = computed(() =>
+	analysis.value?.status === TZAnalysisRunStatus.FAILED
+	&& !isTzConfirmed.value
+	&& !kpAnalysisStarted.value,
+)
+const showTzUploadForm = computed(() => isDraft.value || isTzExtractFailed.value)
 const processingStatusLabel = computed(() => 'Извлечение требований из ТЗ')
 const processingWaitHint = computed(() =>
 	'Ожидайте результатов до 15 минут. Страница обновится автоматически.',

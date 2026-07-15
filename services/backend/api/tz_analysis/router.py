@@ -323,7 +323,10 @@ async def run_tz_analysis(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Analysis not found",
         )
-    if row.status != TZAnalysisRunStatus.DRAFT.value:
+    if row.status not in (
+        TZAnalysisRunStatus.DRAFT.value,
+        TZAnalysisRunStatus.FAILED.value,
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot run analysis in status '{row.status}'",
