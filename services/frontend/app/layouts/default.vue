@@ -117,7 +117,10 @@ import {
 	subscriptionNavBadge,
 	subscriptionPlansPath,
 } from '#shared/utils/subscriptionDisplay'
-import { LANDING_CTA_LABEL } from '#shared/constants/landing'
+import {
+	LANDING_CTA_LABEL,
+	SHOW_LANDING_PRICING_TEASER,
+} from '#shared/constants/landing'
 import { t } from '~/constants/translations'
 
 const auth = useAuthStore()
@@ -160,42 +163,49 @@ const isProfileSubscriptionActive = computed(
 )
 const subscriptionBadge = computed(() => subscriptionNavBadge(user.value?.subscription))
 
-const landingNavItems = computed<NavigationMenuItem[]>(() => [
-	{
-		label: 'Продукт',
-		icon: 'i-lucide-layout-grid',
-		to: '/#supplier-search',
-		children: [
-			{
-				label: 'Поиск поставщиков',
-				icon: 'i-lucide-search',
-				to: '/#supplier-search',
-				description: 'Автопоиск компаний по запросу и региону',
-			},
-			{
-				label: 'Рассылка и переписка',
-				icon: 'i-lucide-send',
-				to: '/#requests',
-				description: 'Запросы поставщикам и входящие ответы в одном окне',
-			},
-			{
-				label: 'Анализ ТЗ и КП',
-				icon: 'i-lucide-scan-search',
-				to: '/#tz-analysis',
-				description: 'AI-сверка коммерческих предложений с требованиями',
-			},
-			{
-				label: 'Для кого',
-				icon: 'i-lucide-users',
-				to: '/#icp',
-				description: 'От специалиста по закупкам до руководителя',
-			},
-		],
-	},
-	{ label: 'Тарифы', icon: 'i-lucide-credit-card', to: '/#pricing' },
-	{ label: 'Кейсы', icon: 'i-lucide-briefcase', to: '/#cases' },
-	{ label: 'Контакты', icon: 'i-lucide-mail', to: '/#contacts' },
-])
+const landingNavItems = computed<NavigationMenuItem[]>(() => {
+	const items: NavigationMenuItem[] = [
+		{
+			label: 'Продукт',
+			icon: 'i-lucide-layout-grid',
+			to: '/#supplier-search',
+			children: [
+				{
+					label: 'Поиск поставщиков',
+					icon: 'i-lucide-search',
+					to: '/#supplier-search',
+					description: 'Автопоиск компаний по запросу и региону',
+				},
+				{
+					label: 'Рассылка и переписка',
+					icon: 'i-lucide-send',
+					to: '/#requests',
+					description: 'Запросы поставщикам и входящие ответы в одном окне',
+				},
+				{
+					label: 'Анализ ТЗ и КП',
+					icon: 'i-lucide-scan-search',
+					to: '/#tz-analysis',
+					description: 'AI-сверка коммерческих предложений с требованиями',
+				},
+				{
+					label: 'Для кого',
+					icon: 'i-lucide-users',
+					to: '/#icp',
+					description: 'От специалиста по закупкам до руководителя',
+				},
+			],
+		},
+	]
+	if (SHOW_LANDING_PRICING_TEASER) {
+		items.push({ label: 'Тарифы', icon: 'i-lucide-credit-card', to: '/#pricing' })
+	}
+	items.push(
+		{ label: 'Кейсы', icon: 'i-lucide-briefcase', to: '/#cases' },
+		{ label: 'Контакты', icon: 'i-lucide-mail', to: '/#contacts' },
+	)
+	return items
+})
 
 const navItems = computed<NavigationMenuItem[]>(() => [
 	{

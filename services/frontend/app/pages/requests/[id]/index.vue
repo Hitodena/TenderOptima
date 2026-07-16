@@ -357,6 +357,7 @@ v-else size="sm" color="error" variant="ghost" icon="i-lucide-trash-2"
 				v-model:open="showSaveToBookmarkModal"
 				:source-supplier="saveToBookmarkSupplier"
 			/>
+			<BusinessCardHintModal v-model:open="showBusinessCardHint" />
 
 		</template>
 
@@ -401,14 +402,18 @@ import { subscriptionPlansPath } from '#shared/utils/subscriptionDisplay'
 import { t } from '~/constants/translations'
 import type { TableColumn, TableRow } from '@nuxt/ui'
 import SupplierBookmarkModal from '~/components/SupplierBookmarkModal.vue'
+import BusinessCardHintModal from '~/components/BusinessCardHintModal.vue'
 
 const route = useRoute()
 const id = route.params.id as string
 const { get, post } = useApi()
 const toast = useToast()
 const { formatDate } = useFormatDate()
+const { hasSeen: businessCardHintSeen, markSeen: markBusinessCardHintSeen } = useBusinessCardHint()
 
 const subscription = ref<SubscriptionResponse | null>(null)
+const showBusinessCardHint = ref(false)
+const businessCardHintChecked = ref(false)
 
 const canStartModule1 = computed(() => canStartModule1Work(subscription.value))
 const module1BlockReason = computed(() => module1WorkBlockMessage(subscription.value))
@@ -618,6 +623,31 @@ onMounted(async () => {
 	}
 	if (request.value) await fetchSuppliersAndEnforceQuota()
 })
+
+async function maybeShowBusinessCardHint() {
+	if (businessCardHintChecked.value || businessCardHintSeen.value) return
+	if (!request.value?.is_first_request) return
+	// ACTIVE = first supplier search finished (COMPLETED means mailing done).
+	if (request.value.status !== RequestStatus.ACTIVE) return
+
+	businessCardHintChecked.value = true
+	try {
+		const user = await get<UserResponse>('/auth/me')
+		if (user.business_info?.trim()) {
+			markBusinessCardHintSeen()
+			return
+		}
+		showBusinessCardHint.value = true
+	} catch {
+		// Ignore — hint is optional onboarding UX.
+	}
+}
+
+watch(
+	() => [request.value?.status, request.value?.is_first_request] as const,
+	() => { void maybeShowBusinessCardHint() },
+	{ immediate: true },
+)
 
 async function fetchSuppliersAndEnforceQuota(silent = false) {
 	await fetchSuppliers(silent)

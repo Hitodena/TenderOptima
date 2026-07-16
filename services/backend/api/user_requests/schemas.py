@@ -141,6 +141,16 @@ class RequestResponse(BaseModel):
             description="Suppliers that sent at least one incoming email",
         ),
     ] = 0
+    is_first_request: Annotated[
+        bool,
+        Field(
+            default=False,
+            description=(
+                "True when this is the user's only request "
+                "(used for first-search onboarding hints)"
+            ),
+        ),
+    ] = False
 
     @classmethod
     def from_model(
@@ -151,6 +161,7 @@ class RequestResponse(BaseModel):
         supplier_messages_incoming: int = 0,
         supplier_messages_unread: int = 0,
         supplier_messages_incoming_suppliers: int = 0,
+        is_first_request: bool = False,
     ) -> "RequestResponse":
         """Build response from ORM row plus optional message aggregates."""
         base = cls.model_validate(request)
@@ -162,6 +173,7 @@ class RequestResponse(BaseModel):
                 "supplier_messages_incoming_suppliers": (
                     supplier_messages_incoming_suppliers
                 ),
+                "is_first_request": is_first_request,
             }
         )
 

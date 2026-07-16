@@ -51,6 +51,8 @@ router = APIRouter(prefix="/requests", tags=["Requests"])
 async def _request_responses_with_stats(
     session: AsyncSession,
     requests: list,
+    *,
+    total_count: int | None = None,
 ) -> list[RequestResponse]:
     """Attach supplier message aggregates to request list rows."""
     if not requests:
@@ -58,6 +60,7 @@ async def _request_responses_with_stats(
     ids = [r.id for r in requests]
     stats = await EmailMessageDAO.get_message_stats_for_requests(session, ids)
     empty_stats = (0, 0, 0, 0)
+    is_first = total_count == 1
     return [
         RequestResponse.from_model(
             r,
@@ -67,6 +70,7 @@ async def _request_responses_with_stats(
             supplier_messages_incoming_suppliers=stats.get(r.id, empty_stats)[
                 3
             ],
+            is_first_request=is_first,
         )
         for r in requests
     ]
@@ -219,7 +223,9 @@ async def get_requests(
         user_id=current_user.id,
         order_by=RequestDAO.model.created_at.desc(),
     )
-    return await _request_responses_with_stats(session, requests)
+    return await _request_responses_with_stats(
+        session, requests, total_count=len(requests)
+    )
 
 
 @router.get(
@@ -234,7 +240,10 @@ async def get_request(
 ) -> RequestResponse:
     """Return one request by id if it belongs to the current user."""
     request = await get_request_or_404(request_id, session, current_user)
-    rows = await _request_responses_with_stats(session, [request])
+    all_requests = await RequestDAO.get_all(session, user_id=current_user.id)
+    rows = await _request_responses_with_stats(
+        session, [request], total_count=len(all_requests)
+    )
     return rows[0]
 
 

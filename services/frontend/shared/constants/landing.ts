@@ -1,3 +1,6 @@
+/** Temporary flag: hide pricing teaser + nav link on the marketing landing. */
+export const SHOW_LANDING_PRICING_TEASER = false
+
 export interface TrustStripItem {
 	icon: string
 	label: string

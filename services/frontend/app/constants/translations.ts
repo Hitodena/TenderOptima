@@ -295,6 +295,15 @@ export const translations = {
 			'Выберите поставщиков без отправленного письма и нажмите «Отправить запрос»',
 		receivedLettersStats:
 			'Получено {emails} {emailsLabel} от {suppliers} {suppliersLabel}',
+		businessCardHintTitle: 'Заполните визитную карточку',
+		businessCardHintSubtitle: 'Это повысит конверсию ответов от поставщиков',
+		businessCardHintBody:
+			'Текст визитной карточки добавляется в письма поставщикам. Полные реквизиты организации помогают получать корректно оформленные КП и повышают доверие к запросу.',
+		businessCardHintItem1: 'Укажите ФИО, должность и название компании',
+		businessCardHintItem2: 'Добавьте контакты и реквизиты организации',
+		businessCardHintItem3: 'Визитка подставляется в письма одним кликом',
+		businessCardHintCta: 'Заполнить визитку',
+		businessCardHintLater: 'Позже',
 	},
 	tzAnalysis: {
 		comparisonTitle: 'Соответствия и несоответствия',

@@ -263,8 +263,8 @@
 
 				<RequestBroadcastBlock />
 
-				<!-- Pricing teaser -->
-				<LandingPricingTeaser />
+				<!-- Pricing teaser (temporarily hidden) -->
+				<LandingPricingTeaser v-if="showLandingPricingTeaser" />
 
 				<!-- Case studies preview -->
 				<section
@@ -383,6 +383,7 @@ import {
 	LANDING_CTA_FORM_SUBMIT_LABEL,
 	LANDING_CTA_LABEL,
 	LANDING_CTA_SECTION_TITLE,
+	SHOW_LANDING_PRICING_TEASER,
 } from '#shared/constants/landing'
 import { subscriptionPlansPath } from '#shared/utils/subscriptionDisplay'
 import { useScrollReveal } from '~/composables/useScrollReveal'
@@ -436,6 +437,7 @@ const heroTrustBadges = HERO_TRUST_BADGES
 const landingCtaLabel = LANDING_CTA_LABEL
 const landingCtaFormSubmitLabel = LANDING_CTA_FORM_SUBMIT_LABEL
 const landingCtaSectionTitle = LANDING_CTA_SECTION_TITLE
+const showLandingPricingTeaser = SHOW_LANDING_PRICING_TEASER
 
 const faqAccordionItems = computed<AccordionItem[]>(() =>
 	FAQ_ITEMS.map((item, index) => ({
