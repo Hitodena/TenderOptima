@@ -12,7 +12,10 @@
 				{{ study.title }}
 			</h3>
 
-			<p class="case-metric mb-4 text-lg font-semibold leading-snug tracking-tight text-primary sm:mb-5 sm:text-xl sm:font-bold lg:text-2xl xl:text-3xl">
+			<p
+				v-if="study.metric"
+				class="case-metric mb-4 text-lg font-semibold leading-snug tracking-tight text-primary sm:mb-5 sm:text-xl sm:font-bold lg:text-2xl xl:text-3xl"
+			>
 				{{ study.metric }}
 			</p>
 
@@ -83,7 +86,7 @@
 							<span>12/12</span>
 						</div>
 						<div class="case-visual-extract__bar">
-							<span/>
+							<span></span>
 						</div>
 						<ul class="case-visual-extract__list">
 							<li><span>Мощность, кВт</span><strong>✓</strong></li>

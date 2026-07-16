@@ -173,29 +173,13 @@
 						<div class="landing-hero-grid gap-4 text-center lg:gap-10 lg:text-left">
 							<div class="pb-4 sm:pb-6 lg:pb-2">
 								<h1
-									class="landing-hero-title mb-4 text-4xl font-extrabold leading-tight tracking-tight md:text-6xl"
+									class="landing-hero-title landing-hero-title--multiline mx-auto mb-5 flex max-w-xl flex-col gap-2.5 text-2xl font-bold leading-snug tracking-tight sm:gap-3 sm:text-3xl lg:mx-0 lg:mb-6 lg:gap-3.5 lg:text-[2rem] xl:text-4xl"
 								>
-									Упростите процессы закупок
+									<span
+										v-for="(line, index) in heroTitleLines"
+										:key="index"
+									>{{ line }}</span>
 								</h1>
-								<ul class="mx-auto mb-6 flex flex-col gap-y-2.5 lg:mx-0 md:gap-y-3">
-									<li
-										v-for="point in heroBulletPoints"
-										:key="point.desktop"
-										class="flex items-center gap-2 md:items-start md:gap-2.5"
-									>
-										<UIcon
-											name="i-lucide-check"
-											class="size-4 shrink-0 text-orange-600 md:mt-0.5 md:size-[17px]"
-											aria-hidden="true"
-										/>
-										<span class="text-left text-sm leading-snug text-gray-600 dark:text-gray-400 md:hidden">
-											{{ point.mobile }}
-										</span>
-										<span class="hidden text-left text-base font-normal leading-snug text-gray-600 dark:text-gray-400 md:inline">
-											{{ point.desktop }}
-										</span>
-									</li>
-								</ul>
 								<div class="flex w-full flex-col items-center gap-3 lg:items-start">
 									<UButton
 										size="lg"
@@ -378,7 +362,7 @@ import RoiPaybackBand from '~/components/landing/RoiPaybackBand.vue'
 import TrustBadge from '~/components/landing/TrustBadge.vue'
 import {
 	FAQ_ITEMS,
-	HERO_BULLET_POINTS,
+	HERO_TITLE_LINES,
 	HERO_TRUST_BADGES,
 	LANDING_CTA_FORM_SUBMIT_LABEL,
 	LANDING_CTA_LABEL,
@@ -432,7 +416,7 @@ const { target: casesReveal, isVisible: casesVisible } = useScrollReveal()
 const { target: faqReveal, isVisible: faqVisible } = useScrollReveal()
 const { target: ctaReveal, isVisible: ctaVisible } = useScrollReveal()
 
-const heroBulletPoints = HERO_BULLET_POINTS
+const heroTitleLines = HERO_TITLE_LINES
 const heroTrustBadges = HERO_TRUST_BADGES
 const landingCtaLabel = LANDING_CTA_LABEL
 const landingCtaFormSubmitLabel = LANDING_CTA_FORM_SUBMIT_LABEL

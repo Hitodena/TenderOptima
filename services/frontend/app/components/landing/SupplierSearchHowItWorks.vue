@@ -96,7 +96,7 @@
 												<span class="mock-field__label">Запрос на закупку</span>
 												<span class="mock-field__input">
 													<span class="mock-typewriter">Кабель ВВГнг(А)-LSLTx 3×2,5</span>
-													<span class="mock-caret" aria-hidden="true"/>
+													<span class="mock-caret" aria-hidden="true"></span>
 												</span>
 											</div>
 											<div class="mock-field mock-field--sm">
@@ -190,7 +190,7 @@
 												<li class="mock-param" style="--i:2"><span>Условия оплаты</span><b>30 дней</b></li>
 												<li class="mock-param" style="--i:3"><span>Наличие</span><b>на складе</b></li>
 											</ul>
-											<span class="mock-mail__scan" aria-hidden="true"/>
+											<span class="mock-mail__scan" aria-hidden="true"></span>
 										</div>
 									</div>
 
@@ -376,7 +376,7 @@ function toStepIndex(index: number | string): number {
 }
 
 function formatStepNumber(index: number | string): string {
-	return String(toStepIndex(index) + 1).padStart(2, '0')
+	return String(toStepIndex(index) + 1)
 }
 
 function isStepActive(index: number | string): boolean {
@@ -501,30 +501,14 @@ onBeforeUnmount(stopAutoplay)
 	padding-left: 0;
 }
 
-.landing-hiw-step:not(:last-child)::after {
-	content: '';
-	position: absolute;
-	left: 19px;
-	top: 40px;
-	bottom: 0;
-	width: 2px;
-	background: color-mix(in oklab, var(--ui-primary) 22%, var(--ui-border));
-	transform: translateX(-50%);
-	pointer-events: none;
-}
-
-.landing-hiw-step.is-complete:not(:last-child)::after {
-	background: color-mix(in oklab, var(--ui-primary) 55%, var(--ui-border));
-}
-
 .landing-hiw-step__button {
 	position: relative;
 	z-index: 1;
 	width: 100%;
 	display: grid;
-	grid-template-columns: 40px minmax(0, 1fr);
-	gap: 0.875rem;
-	padding: 0 0 1.25rem;
+	grid-template-columns: 2.25rem minmax(0, 1fr);
+	gap: 0.75rem;
+	padding: 0 0 1.5rem;
 	text-align: left;
 	border: 0;
 	background: transparent;
@@ -539,36 +523,29 @@ onBeforeUnmount(stopAutoplay)
 .landing-hiw-step__marker {
 	position: relative;
 	display: flex;
-	justify-content: center;
-	width: 40px;
+	align-items: flex-start;
+	justify-content: flex-start;
+	width: 2.25rem;
 	flex-shrink: 0;
+	padding-top: 0.1rem;
 }
 
 .landing-hiw-step__index {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 40px;
-	height: 40px;
-	border-radius: 999px;
-	background: var(--ui-bg);
-	border: 2px solid var(--ui-border);
-	color: var(--ui-text-muted);
-	font-size: 0.8125rem;
+	display: block;
+	font-size: clamp(1.75rem, 2.8vw, 2.25rem);
 	font-weight: 700;
 	line-height: 1;
+	letter-spacing: -0.04em;
 	font-variant-numeric: tabular-nums;
-	transition:
-		background 200ms ease,
-		border-color 200ms ease,
-		color 200ms ease,
-		box-shadow 200ms ease;
+	color: color-mix(in oklab, var(--ui-primary) 18%, var(--ui-border));
+	transition: color 200ms ease, opacity 200ms ease;
+	user-select: none;
 }
 
 .landing-hiw-step__content {
 	display: grid;
 	gap: 0.375rem;
-	padding-top: 0.375rem;
+	padding-top: 0.2rem;
 }
 
 .landing-hiw-step__title {
@@ -587,12 +564,12 @@ onBeforeUnmount(stopAutoplay)
 	max-width: 36rem;
 }
 
-.landing-hiw-step.is-active .landing-hiw-step__index,
 .landing-hiw-step.is-complete .landing-hiw-step__index {
-	background: var(--ui-primary);
-	border-color: var(--ui-primary);
-	color: var(--ui-primary-foreground, white);
-	box-shadow: 0 4px 14px color-mix(in oklab, var(--ui-primary) 35%, transparent);
+	color: color-mix(in oklab, var(--ui-primary) 55%, var(--ui-border));
+}
+
+.landing-hiw-step.is-active .landing-hiw-step__index {
+	color: var(--ui-primary);
 }
 
 .landing-hiw-step.is-active .landing-hiw-step__title {
@@ -664,23 +641,17 @@ onBeforeUnmount(stopAutoplay)
 
 @media (max-width: 640px) {
 	.landing-hiw-step__button {
-		grid-template-columns: 36px minmax(0, 1fr);
-		gap: 0.75rem;
+		grid-template-columns: 1.75rem minmax(0, 1fr);
+		gap: 0.625rem;
+		padding-bottom: 1.25rem;
 	}
 
 	.landing-hiw-step__marker {
-		width: 36px;
+		width: 1.75rem;
 	}
 
 	.landing-hiw-step__index {
-		width: 36px;
-		height: 36px;
-		font-size: 0.75rem;
-	}
-
-	.landing-hiw-step:not(:last-child)::after {
-		left: 17px;
-		top: 36px;
+		font-size: 1.5rem;
 	}
 
 	.landing-hiw__panel {

@@ -230,6 +230,16 @@ input[type='number'] {
 	color: var(--ui-text-highlighted);
 }
 
+.landing-hero-title--multiline {
+	line-height: 1.25;
+}
+
+@media (min-width: 1024px) {
+	.landing-hero-title--multiline {
+		line-height: 1.2;
+	}
+}
+
 .dark .landing-hero-title {
 	color: white;
 }

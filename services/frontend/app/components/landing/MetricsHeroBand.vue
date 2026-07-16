@@ -43,12 +43,12 @@ withDefaults(
 
 const metrics = [
 	{
-		value: '10+',
-		numericValue: 10,
+		value: '5+ раз',
+		numericValue: 5,
 		prefix: '',
-		suffix: '+',
-		icon: 'i-lucide-zap',
-		label: 'Скорость анализа объёмных технических предложений',
+		suffix: '+ раз',
+		icon: 'i-lucide-users',
+		label: 'Скорость взаимодействия с поставщиками',
 	},
 	{
 		value: 'до 95%',
@@ -59,12 +59,12 @@ const metrics = [
 		label: 'Точность проверки по заданным параметрам',
 	},
 	{
-		value: '-80%',
-		numericValue: 80,
-		prefix: '-',
-		suffix: '%',
-		icon: 'i-lucide-shield-check',
-		label: 'Снижение закупочных рисков',
+		value: '10+',
+		numericValue: 10,
+		prefix: '',
+		suffix: '+',
+		icon: 'i-lucide-zap',
+		label: 'Скорость анализа объёмных технических предложений',
 	},
 ]
 
