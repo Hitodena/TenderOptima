@@ -466,15 +466,7 @@ const MiniMock = defineComponent({
 
 						<div class="grid grid-cols-1 gap-0 md:grid-cols-[1.1fr_0.9fr]">
 							<div class="p-6 md:p-8">
-								<div class="flex flex-wrap items-center gap-2">
-									<span class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
-										<UIcon name="i-lucide-triangle-alert" class="size-3.5" />
-										Боль
-									</span>
-									<span class="inline-flex items-center gap-1.5 rounded-full bg-elevated px-3 py-1 text-xs font-medium text-muted ring-1 ring-default">Триггер</span>
-								</div>
-
-								<h3 class="mt-4 text-xl font-bold tracking-tight text-highlighted sm:text-2xl">
+								<h3 class="text-xl font-bold tracking-tight text-highlighted sm:text-2xl">
 									{{ activeRole.title }}
 								</h3>
 

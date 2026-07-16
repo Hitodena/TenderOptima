@@ -13,7 +13,10 @@
 			</h3>
 		</div>
 
-		<p class="mt-3 text-xs font-medium leading-snug text-primary sm:mt-4 sm:text-sm sm:font-semibold">
+		<p
+			v-if="study.metric"
+			class="mt-3 text-xs font-medium leading-snug text-primary sm:mt-4 sm:text-sm sm:font-semibold"
+		>
 			{{ study.metric }}
 		</p>
 	</article>
