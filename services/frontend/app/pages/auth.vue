@@ -3,10 +3,9 @@
 		<div class="w-full max-w-md">
 
 			<div class="text-center mb-8">
-				<div class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-primary mb-4">
-					<UIcon name="i-lucide-package-search" class="w-6 h-6 text-white" />
+				<div class="flex justify-center mb-4">
+					<AppLogo size="large" />
 				</div>
-				<h1 class="text-2xl font-bold text-highlighted">TenderOptima</h1>
 				<p class="text-sm text-muted mt-1">{{ t('auth.subtitle') }}</p>
 			</div>
 
