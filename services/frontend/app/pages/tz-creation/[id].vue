@@ -88,73 +88,77 @@
 			</div>
 
 			<template v-if="showUploadForm">
-				<UAlert
-					v-if="session.status === 'failed'"
-					color="error"
-					variant="soft"
-					icon="i-lucide-circle-alert"
-					class="mb-4"
-					description="Не удалось обработать загруженное ТЗ. Проверьте файл и попробуйте снова."
-				/>
-				<UAlert
-					color="info"
-					variant="soft"
-					icon="i-lucide-info"
-					class="mb-4"
-					description="Загрузите техническое задание — ИИ извлечёт структуру, найдёт пробелы и подводные камни с учётом выбранного типа закупки, и начнёт диалог с уточняющими вопросами."
-				/>
-				<UCard class="shadow-sm max-w-2xl">
-					<UFormField label="Техническое задание" required>
-						<UFileUpload
-							:model-value="uploadFile"
-							:accept="fileAccept"
-							:interactive="false"
-							description="PDF, DOCX, XLSX, TXT, изображения"
-							layout="list"
-							class="w-full min-h-32"
-							position="inside"
-							@update:model-value="onUploadFileChange"
-						>
-							<template #actions="{ open }">
-								<UButton type="button" variant="outline" size="sm" @click="open()">
-									<UIcon name="i-lucide-file-text" class="w-4 h-4" />
-									Выбрать файл
-								</UButton>
-							</template>
-						</UFileUpload>
-					</UFormField>
-
-					<UButton
-						block
-						size="lg"
-						class="mt-5"
-						leading-icon="i-lucide-scan-search"
-						:loading="uploading"
-						:disabled="!uploadFile"
-						@click="submitUpload"
-					>
-						Загрузить и начать анализ
-					</UButton>
-
-					<SubscriptionErrorAlert
-						v-if="uploadError"
-						:error="uploadError"
-						fallback="Не удалось загрузить файл. Попробуйте ещё раз."
-						class="mt-4"
+				<div class="max-w-2xl mx-auto">
+					<UAlert
+						v-if="session.status === 'failed'"
+						color="error"
+						variant="soft"
+						icon="i-lucide-circle-alert"
+						class="mb-4"
+						description="Не удалось обработать загруженное ТЗ. Проверьте файл и попробуйте снова."
 					/>
-				</UCard>
+					<UAlert
+						color="info"
+						variant="soft"
+						icon="i-lucide-info"
+						class="mb-4"
+						description="Загрузите техническое задание — ИИ извлечёт структуру, найдёт пробелы и подводные камни с учётом выбранного типа закупки, и начнёт диалог с уточняющими вопросами."
+					/>
+					<UCard class="shadow-sm">
+						<UFormField label="Техническое задание" required>
+							<UFileUpload
+								:model-value="uploadFile"
+								:accept="fileAccept"
+								:interactive="false"
+								description="PDF, DOCX, XLSX, TXT, изображения"
+								layout="list"
+								class="w-full min-h-32"
+								position="inside"
+								@update:model-value="onUploadFileChange"
+							>
+								<template #actions="{ open }">
+									<UButton type="button" variant="outline" size="sm" @click="open()">
+										<UIcon name="i-lucide-file-text" class="w-4 h-4" />
+										Выбрать файл
+									</UButton>
+								</template>
+							</UFileUpload>
+						</UFormField>
+
+						<UButton
+							block
+							size="lg"
+							class="mt-5"
+							leading-icon="i-lucide-scan-search"
+							:loading="uploading"
+							:disabled="!uploadFile"
+							@click="submitUpload"
+						>
+							Загрузить и начать анализ
+						</UButton>
+
+						<SubscriptionErrorAlert
+							v-if="uploadError"
+							:error="uploadError"
+							fallback="Не удалось загрузить файл. Попробуйте ещё раз."
+							class="mt-4"
+						/>
+					</UCard>
+				</div>
 			</template>
 
 			<template v-else-if="session.status === 'processing'">
-				<UCard class="shadow-sm max-w-2xl">
-					<div class="flex flex-col items-center justify-center gap-3 py-8 text-muted">
-						<UIcon name="i-lucide-loader" class="w-8 h-8 animate-spin text-primary" />
-						<p class="text-sm text-center">
-							Извлекаем требования и анализируем пробелы в загруженном ТЗ…
-						</p>
-						<UProgress animation="carousel" size="sm" class="w-full max-w-xs" />
-					</div>
-				</UCard>
+				<div class="max-w-2xl mx-auto">
+					<UCard class="shadow-sm">
+						<div class="flex flex-col items-center justify-center gap-3 py-10 text-muted">
+							<UIcon name="i-lucide-loader" class="w-8 h-8 animate-spin text-primary" />
+							<p class="text-sm text-center">
+								Извлекаем требования и анализируем пробелы в загруженном ТЗ…
+							</p>
+							<UProgress animation="carousel" size="sm" class="w-full max-w-xs" />
+						</div>
+					</UCard>
+				</div>
 			</template>
 
 			<template v-else>
