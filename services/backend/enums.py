@@ -123,3 +123,27 @@ class ConsultationStatus(StrEnum):
     IN_PROGRESS = "in_progress"
     DONE = "done"
     REJECTED = "rejected"
+
+
+class TZCreationMode(StrEnum):
+    """How a TZ creation wizard session was started (Module 3)."""
+
+    FROM_SCRATCH = "from_scratch"  # user describes an abstract idea
+    REFINE_EXISTING = "refine_existing"  # user uploads an existing TZ
+
+
+class TZCreationStatus(StrEnum):
+    """Lifecycle of a TZ creation wizard session."""
+
+    DRAFT = "draft"  # created, refine_existing waiting for TZ upload
+    PROCESSING = "processing"  # extracting an uploaded TZ file
+    ACTIVE = "active"  # ready for chat turns
+    COMPLETED = "completed"  # finalized into a TZAnalysis row
+    FAILED = "failed"
+
+
+class TZCreationMessageRole(StrEnum):
+    """Author of a single TZ creation wizard chat message."""
+
+    USER = "user"
+    ASSISTANT = "assistant"
