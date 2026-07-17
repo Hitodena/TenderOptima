@@ -224,7 +224,7 @@
 									? `Осталось ${messagesRemaining} сообщений в этой сессии`
 									: 'Лимит сообщений в этой сессии исчерпан'"
 							/>
-							<div class="flex gap-2">
+							<div class="flex items-end gap-2">
 								<UTextarea
 									v-model="messageText"
 									:rows="1"
@@ -237,6 +237,7 @@
 								/>
 								<UButton
 									icon="i-lucide-send"
+									class="w-9 h-9 shrink-0 justify-center"
 									:loading="sending"
 									:disabled="!canChat || !messageText.trim()"
 									@click="sendMessage"
