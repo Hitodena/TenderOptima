@@ -8,6 +8,9 @@ import type {
 	TZAnalysisHistoryGroup,
 	TZAnalysisRunStatus,
 	TZAnalysisSupplierStatus,
+	TZCreationMessageRole,
+	TZCreationMode,
+	TZCreationStatus,
 } from './enums';
 
 export interface TokenResponse {
@@ -762,4 +765,84 @@ export interface IdeaSuggestionPageResponse {
 	page: number;
 	size: number;
 	total: number;
+}
+
+export type TZCreationDomain = 'equipment' | 'food' | 'services' | 'other';
+
+export interface TZCreationContext {
+	domain: TZCreationDomain;
+	note: string;
+}
+
+export interface TZCreationField {
+	key: string;
+	label: string;
+	value: string;
+	status: string;
+}
+
+export interface TZCreationMessageItem {
+	role: TZCreationMessageRole;
+	content: string;
+	created_at: string;
+}
+
+export interface TZCreationSessionCreateRequest {
+	title?: string;
+	mode: TZCreationMode;
+	context?: Partial<TZCreationContext>;
+}
+
+export interface TZCreationSession {
+	id: string;
+	mode: TZCreationMode;
+	title: string;
+	context: TZCreationContext;
+	source_tz_filename: string | null;
+	draft_hierarchy: RequirementsHierarchy;
+	fields: TZCreationField[];
+	status: TZCreationStatus;
+	llm_model: string;
+	messages_used: number;
+	messages_limit: number;
+	resulting_tz_analysis_id: string | null;
+	created_at: string;
+	messages: TZCreationMessageItem[];
+}
+
+export interface TZCreationSessionListItem {
+	id: string;
+	mode: TZCreationMode;
+	title: string;
+	status: TZCreationStatus;
+	resulting_tz_analysis_id: string | null;
+	created_at: string;
+}
+
+export interface TZCreationHistoryPageResponse {
+	items: TZCreationSessionListItem[];
+	page: number;
+	size: number;
+	has_more: boolean;
+}
+
+export interface TZCreationMessageRequest {
+	message: string;
+}
+
+export interface TZCreationHierarchyUpdateRequest {
+	draft_hierarchy: RequirementsHierarchy;
+}
+
+export interface TZCreationFieldsUpdateRequest {
+	fields: TZCreationField[];
+}
+
+export interface TZCreationFinalizeResponse {
+	tz_analysis_id: string;
+}
+
+export interface TZCreationExportRequest {
+	title?: string;
+	requirements_tz: RequirementsHierarchy;
 }
