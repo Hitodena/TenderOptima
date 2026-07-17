@@ -98,7 +98,7 @@
 import type { TZCreationSessionListItem } from '#shared/types'
 import { getTzCreationStatusColor, getTzCreationStatusLabel } from '#shared/types'
 
-definePageMeta({ layout: 'default' })
+definePageMeta({ layout: 'default', middleware: 'admin' })
 
 const { get } = useApi()
 const { formatDate } = useFormatDate()

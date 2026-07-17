@@ -161,7 +161,7 @@ import { subscriptionPlansPath } from '#shared/utils/subscriptionDisplay'
 import { t } from '~/constants/translations'
 import { z } from 'zod'
 
-definePageMeta({ layout: 'default' })
+definePageMeta({ layout: 'default', middleware: 'admin' })
 
 const { post } = useApi()
 const { user, loaded, ensureLoaded } = useCurrentUser()

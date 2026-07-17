@@ -16,7 +16,7 @@ from fastapi.responses import Response
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import get_current_user, get_session
+from backend.api.deps import get_admin, get_current_user, get_session
 from backend.api.subscriptions.enforcement import (
     ensure_can_process_pages,
     ensure_module_2_work_allowed,
@@ -68,7 +68,11 @@ from backend.utils.requirements_struct import (
 )
 from backend.utils.tz_storage import save_tz_creation_file
 
-router = APIRouter(prefix="/tz-creation", tags=["TZ Creation"])
+router = APIRouter(
+    prefix="/tz-creation",
+    tags=["TZ Creation"],
+    dependencies=[Depends(get_admin)],
+)
 config = get_config()
 
 _DOCX_MEDIA_TYPE = (

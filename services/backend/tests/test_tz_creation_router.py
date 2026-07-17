@@ -19,6 +19,7 @@ from fastapi.testclient import TestClient
 class _FakeUser:
     def __init__(self) -> None:
         self.id = uuid.uuid4()
+        self.is_admin = True
 
 
 class _FakeMessage:
@@ -90,6 +91,21 @@ def test_create_session_from_scratch(client, fake_user):
     assert body["status"] == "active"
     assert body["messages_used"] == 0
     assert body["messages_limit"] > 0
+
+
+def test_non_admin_cannot_access_tz_creation(fake_user):
+    fake_user.is_admin = False
+    app.dependency_overrides[get_session] = lambda: None
+    app.dependency_overrides[get_current_user] = lambda: fake_user
+    try:
+        with TestClient(app) as test_client:
+            response = test_client.get("/api/tz-creation/")
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+        app.dependency_overrides.pop(get_current_user, None)
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Required admin status"
 
 
 def test_send_message_runs_kickoff_turn_for_first_from_scratch_message(

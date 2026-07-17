@@ -383,7 +383,7 @@ import {
 } from '#shared/utils/requirementsStruct'
 import RequirementTreeEditor from '~/components/tz-analysis/RequirementTreeEditor.vue'
 
-definePageMeta({ layout: 'default' })
+definePageMeta({ layout: 'default', middleware: 'admin' })
 
 const route = useRoute()
 const sessionId = route.params.id as string

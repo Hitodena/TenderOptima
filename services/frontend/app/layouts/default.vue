@@ -208,77 +208,83 @@ const landingNavItems = computed<NavigationMenuItem[]>(() => {
 	return items
 })
 
-const navItems = computed<NavigationMenuItem[]>(() => [
-	{
-		label: 'Запросы',
-		icon: 'i-lucide-layers',
-		active: isRequestsActive.value,
-		to: '/requests',
-		badge: user.value?.subscription?.module_1_enabled === false
-			? { label: 'М1 выкл.', color: 'warning' as const, variant: 'subtle' as const, size: 'sm' as const }
-			: undefined,
-		children: [
-			{
-				label: 'Поиск',
-				icon: 'i-lucide-search',
-				to: '/requests',
-				description: "Начать новый поиск."
-			},
-			{
-				label: 'История',
-				icon: 'i-lucide-history',
-				to: '/requests/history',
-				description: "Показать полную историю запросов."
-			},
-		],
-	},
-	{
-		label: 'Анализ Предложений',
-		icon: 'i-lucide-file-search',
-		active: isTzAnalysisActive.value,
-		to: '/tz-analysis',
-		badge: user.value?.subscription?.module_2_enabled === false
-			? { label: 'М2 выкл.', color: 'warning' as const, variant: 'subtle' as const, size: 'sm' as const }
-			: undefined,
-		children: [
-			{
-				label: 'Новый анализ',
-				icon: 'i-lucide-scan-search',
-				to: '/tz-analysis',
-				description: 'Сравнение ТЗ с коммерческим предложением',
-			},
-			{
-				label: t('navigation.offerHistory'),
-				icon: 'i-lucide-history',
-				to: '/tz-analysis/history',
-				description: 'Активные, в обработке и завершённые анализы',
-			},
-		],
-	},
-	{
-		label: 'Конструктор ТЗ',
-		icon: 'i-lucide-file-plus-2',
-		active: isTzCreationActive.value,
-		to: '/tz-creation',
-		badge: user.value?.subscription?.module_2_enabled === false
-			? { label: 'М2 выкл.', color: 'warning' as const, variant: 'subtle' as const, size: 'sm' as const }
-			: undefined,
-		children: [
-			{
-				label: 'Новое ТЗ',
-				icon: 'i-lucide-sparkles',
-				to: '/tz-creation',
-				description: 'Создать ТЗ с нуля или дополнить загруженное',
-			},
-			{
-				label: 'История',
-				icon: 'i-lucide-history',
-				to: '/tz-creation/history',
-				description: 'Ранее созданные и завершённые сессии конструктора',
-			},
-		],
-	},
-	{
+const navItems = computed<NavigationMenuItem[]>(() => {
+	const items: NavigationMenuItem[] = [
+		{
+			label: 'Запросы',
+			icon: 'i-lucide-layers',
+			active: isRequestsActive.value,
+			to: '/requests',
+			badge: user.value?.subscription?.module_1_enabled === false
+				? { label: 'М1 выкл.', color: 'warning' as const, variant: 'subtle' as const, size: 'sm' as const }
+				: undefined,
+			children: [
+				{
+					label: 'Поиск',
+					icon: 'i-lucide-search',
+					to: '/requests',
+					description: 'Начать новый поиск.',
+				},
+				{
+					label: 'История',
+					icon: 'i-lucide-history',
+					to: '/requests/history',
+					description: 'Показать полную историю запросов.',
+				},
+			],
+		},
+		{
+			label: 'Анализ Предложений',
+			icon: 'i-lucide-file-search',
+			active: isTzAnalysisActive.value,
+			to: '/tz-analysis',
+			badge: user.value?.subscription?.module_2_enabled === false
+				? { label: 'М2 выкл.', color: 'warning' as const, variant: 'subtle' as const, size: 'sm' as const }
+				: undefined,
+			children: [
+				{
+					label: 'Новый анализ',
+					icon: 'i-lucide-scan-search',
+					to: '/tz-analysis',
+					description: 'Сравнение ТЗ с коммерческим предложением',
+				},
+				{
+					label: t('navigation.offerHistory'),
+					icon: 'i-lucide-history',
+					to: '/tz-analysis/history',
+					description: 'Активные, в обработке и завершённые анализы',
+				},
+			],
+		},
+	]
+
+	if (user.value?.is_admin) {
+		items.push({
+			label: 'Конструктор ТЗ',
+			icon: 'i-lucide-file-plus-2',
+			active: isTzCreationActive.value,
+			to: '/tz-creation',
+			badge: user.value?.subscription?.module_2_enabled === false
+				? { label: 'М2 выкл.', color: 'warning' as const, variant: 'subtle' as const, size: 'sm' as const }
+				: undefined,
+			children: [
+				{
+					label: 'Новое ТЗ',
+					icon: 'i-lucide-sparkles',
+					to: '/tz-creation',
+					description: 'Создать ТЗ с нуля или дополнить загруженное',
+				},
+				{
+					label: 'История',
+					icon: 'i-lucide-history',
+					to: '/tz-creation/history',
+					description: 'Ранее созданные и завершённые сессии конструктора',
+				},
+			],
+		})
+	}
+
+	items.push({
 		label: 'Подписка',
 		icon: 'i-lucide-credit-card',
 		active: isProfileSubscriptionActive.value,
@@ -290,8 +296,10 @@ const navItems = computed<NavigationMenuItem[]>(() => [
 			variant: 'subtle',
 			size: 'sm',
 		},
-	},
-])
+	})
+
+	return items
+})
 
 
 
