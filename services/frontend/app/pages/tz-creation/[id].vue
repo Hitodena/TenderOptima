@@ -172,9 +172,12 @@
 				<div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_20rem] gap-4 items-start">
 					<UCard
 						class="shadow-sm flex flex-col overflow-hidden"
-						:class="activePanel === 'chat' ? 'block' : 'hidden xl:block'"
+						:class="activePanel === 'chat' ? undefined : 'max-xl:hidden'"
 						style="height: min(72vh, 680px)"
-						:ui="{ body: 'flex-1 flex flex-col p-0 overflow-hidden min-h-0' }"
+						:ui="{
+							root: 'flex flex-col',
+							body: 'flex-1 flex flex-col p-0 overflow-hidden min-h-0',
+						}"
 					>
 						<template #header>
 							<div class="flex items-center justify-between gap-2">
