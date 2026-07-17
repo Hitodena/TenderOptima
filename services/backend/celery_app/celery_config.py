@@ -166,6 +166,10 @@ class CeleryConfig:
             "queue": "analysis",
             "routing_key": "analysis",
         },
+        "tz_creation.extract_and_analyze": {
+            "queue": "analysis",
+            "routing_key": "analysis",
+        },
         "billing.send_document_email": {
             "queue": "mail_send",
             "routing_key": "mail.send",
@@ -187,6 +191,7 @@ class CeleryConfig:
         "backend.celery_app.tasks.analysis_tasks",
         "backend.celery_app.tasks.security_tasks",
         "backend.celery_app.tasks.consultation_tasks",
+        "backend.celery_app.tasks.tz_creation_tasks",
     ]
 
     # Logging

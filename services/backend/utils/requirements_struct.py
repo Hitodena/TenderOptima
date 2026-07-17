@@ -373,6 +373,31 @@ def _count_leaves_in_node(node: RequirementNode) -> int:
     return sum(_count_leaves_in_node(child) for child in children.values())
 
 
+def iter_hierarchy_rows(
+    hierarchy: dict[str, RequirementNode],
+) -> list[tuple[str, int, RequirementNode]]:
+    """Flatten a hierarchy into document-order ``(key, depth, node)`` rows.
+
+    Depth is 0 for top-level keys (``1``, ``2``, ...), 1 for their direct
+    children (``1.1``, ``1.2``, ...), and so on. Order follows
+    ``_version_sort_key`` at every level, matching the numbering a reader
+    expects (``1 -> 1.1 -> 1.2 -> 1.2.1 -> 1.2.2 -> 2 -> ...``).
+    """
+    normalized = normalize_tz_requirements(hierarchy)
+    rows: list[tuple[str, int, RequirementNode]] = []
+
+    def walk(nodes: dict[str, RequirementNode], depth: int) -> None:
+        for key in sorted(nodes.keys(), key=_version_sort_key):
+            node = _normalize_node(nodes[key])
+            rows.append((str(key), depth, node))
+            children = _node_children(node)
+            if children:
+                walk(children, depth + 1)
+
+    walk(normalized, 0)
+    return rows
+
+
 def collect_tz_sections(
     hierarchy: dict[str, RequirementNode],
 ) -> list[tuple[str, str, int]]:

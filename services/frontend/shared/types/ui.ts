@@ -4,6 +4,7 @@ import {
 	RequestSupplierStatus,
 	TZAnalysisRunStatus,
 	TZAnalysisSupplierStatus,
+	TZCreationStatus,
 } from './enums';
 
 type BadgeColor =
@@ -138,4 +139,28 @@ export function getSupplierStatusColor(s: string): BadgeColor {
 
 export function getSupplierStatusLabel(s: string): string {
 	return SUPPLIER_STATUS_LABEL[s as RequestSupplierStatus] ?? s;
+}
+
+export const TZ_CREATION_STATUS_COLOR: Record<TZCreationStatus, BadgeColor> = {
+	[TZCreationStatus.DRAFT]: 'neutral',
+	[TZCreationStatus.PROCESSING]: 'warning',
+	[TZCreationStatus.ACTIVE]: 'primary',
+	[TZCreationStatus.COMPLETED]: 'primary',
+	[TZCreationStatus.FAILED]: 'error',
+};
+
+export const TZ_CREATION_STATUS_LABEL: Record<TZCreationStatus, string> = {
+	[TZCreationStatus.DRAFT]: 'Ожидает загрузки ТЗ',
+	[TZCreationStatus.PROCESSING]: 'В обработке',
+	[TZCreationStatus.ACTIVE]: 'Активная сессия',
+	[TZCreationStatus.COMPLETED]: 'Завершено',
+	[TZCreationStatus.FAILED]: 'Ошибка',
+};
+
+export function getTzCreationStatusColor(s: string): BadgeColor {
+	return TZ_CREATION_STATUS_COLOR[s as TZCreationStatus] ?? 'neutral';
+}
+
+export function getTzCreationStatusLabel(s: string): string {
+	return TZ_CREATION_STATUS_LABEL[s as TZCreationStatus] ?? s;
 }

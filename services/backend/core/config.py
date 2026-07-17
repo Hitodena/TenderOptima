@@ -78,6 +78,7 @@ class Config(BaseSettings):
     openai_model: str
     openai_model_tz: str = ""
     openai_model_kp: str = ""
+    openai_model_tz_create: str = ""
     openai_base_url: str
 
     def openai_model_for_tz(self) -> str:
@@ -90,11 +91,19 @@ class Config(BaseSettings):
         kp = self.openai_model_kp.strip()
         return kp if kp else self.openai_model
 
+    def openai_model_for_tz_create(self) -> str:
+        """TZ creation wizard model; falls back to the TZ extraction model."""
+        tz_create = self.openai_model_tz_create.strip()
+        return tz_create if tz_create else self.openai_model_for_tz()
+
     # Upload
     upload_dir: str = "/app/uploads"
     max_upload_files: int = 2
     max_upload_size: int = 10 * 1024 * 1024
     max_tz_upload_size: int = 100 * 1024 * 1024
+
+    # TZ creation wizard (Module 3)
+    tz_creation_max_messages_per_session: int = 40
 
     # BILLING_ISSUER_* — получатель услуг в счёте-фактуре (из env)
     billing_issuer_organization_form: str = (

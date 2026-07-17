@@ -156,6 +156,7 @@ const headerUi = computed(() => {
 
 const isRequestsActive = computed(() => route.path.startsWith('/requests'))
 const isTzAnalysisActive = computed(() => route.path.startsWith('/tz-analysis'))
+const isTzCreationActive = computed(() => route.path.startsWith('/tz-creation'))
 const isProfileSubscriptionActive = computed(
 	() =>
 		route.path === '/subscription'
@@ -251,6 +252,29 @@ const navItems = computed<NavigationMenuItem[]>(() => [
 				icon: 'i-lucide-history',
 				to: '/tz-analysis/history',
 				description: 'Активные, в обработке и завершённые анализы',
+			},
+		],
+	},
+	{
+		label: 'Конструктор ТЗ',
+		icon: 'i-lucide-file-plus-2',
+		active: isTzCreationActive.value,
+		to: '/tz-creation',
+		badge: user.value?.subscription?.module_2_enabled === false
+			? { label: 'М2 выкл.', color: 'warning' as const, variant: 'subtle' as const, size: 'sm' as const }
+			: undefined,
+		children: [
+			{
+				label: 'Новое ТЗ',
+				icon: 'i-lucide-sparkles',
+				to: '/tz-creation',
+				description: 'Создать ТЗ с нуля или дополнить загруженное',
+			},
+			{
+				label: 'История',
+				icon: 'i-lucide-history',
+				to: '/tz-creation/history',
+				description: 'Ранее созданные и завершённые сессии конструктора',
 			},
 		],
 	},

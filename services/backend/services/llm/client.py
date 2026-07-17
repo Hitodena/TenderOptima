@@ -19,13 +19,24 @@ class LLMClient:
         system: str,
         user: str,
         model: str = config.openai_model,
+        history: list[dict[str, str]] | None = None,
     ) -> dict:
+        """Run a single JSON-mode completion.
+
+        ``history`` optionally carries prior turns (``{"role": "user"|
+        "assistant", "content": ...}``) inserted between the system
+        prompt and the final user message, enabling multi-turn chat
+        features (e.g. the TZ creation wizard) without changing the
+        single-shot contract for existing callers.
+        """
+        messages = [{"role": "system", "content": system}]
+        if history:
+            messages.extend(history)
+        messages.append({"role": "user", "content": user})
+
         response = await self._client.chat.completions.create(
             model=model,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
+            messages=messages,
             temperature=0.0,
             response_format={"type": "json_object"},
         )
