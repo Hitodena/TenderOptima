@@ -9,6 +9,33 @@ def tz_analysis_dir(analysis_id: uuid.UUID) -> Path:
     return Path(get_config().upload_dir) / "tz_analyses" / str(analysis_id)
 
 
+def tz_creation_dir(session_id: uuid.UUID) -> Path:
+    """Upload directory for a Module 3 TZ creation wizard session."""
+    return (
+        Path(get_config().upload_dir)
+        / "tz_creation_sessions"
+        / str(session_id)
+    )
+
+
+def save_tz_creation_file(session_id: uuid.UUID, tz_path: Path) -> Path:
+    """Copy an uploaded TZ file into the wizard session's upload directory."""
+    dest = tz_creation_dir(session_id)
+    dest.mkdir(parents=True, exist_ok=True)
+    tz_dest = dest / f"tz{tz_path.suffix.lower()}"
+    shutil.copy2(tz_path, tz_dest)
+    return tz_dest
+
+
+def resolve_tz_creation_file(session_id: uuid.UUID) -> Path | None:
+    """Return the uploaded TZ path for a wizard session, if any."""
+    dest = tz_creation_dir(session_id)
+    if not dest.is_dir():
+        return None
+    tz_files = sorted(dest.glob("tz*"))
+    return tz_files[0] if tz_files else None
+
+
 def supplier_dir(analysis_id: uuid.UUID, supplier_id: uuid.UUID) -> Path:
     return tz_analysis_dir(analysis_id) / "s" / str(supplier_id)
 
