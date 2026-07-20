@@ -124,6 +124,11 @@ class TZCreationFinalizeResponse(BaseModel):
     tz_analysis_id: uuid.UUID
 
 
+class TZCreationCompleteResponse(BaseModel):
+    id: uuid.UUID
+    status: TZCreationStatus
+
+
 class TZCreationExportRequest(BaseModel):
     """Stateless export payload — no session required."""
 

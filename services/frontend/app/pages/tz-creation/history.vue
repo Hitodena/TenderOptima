@@ -67,7 +67,35 @@
 									</span>
 								</p>
 							</div>
-							<UIcon name="i-lucide-chevron-right" class="w-4 h-4 text-muted shrink-0" />
+							<div class="flex items-center gap-1 shrink-0">
+								<template v-if="canComplete(item.status)">
+									<UButton
+										:color="confirmCompleteId === item.id ? 'warning' : 'neutral'"
+										variant="ghost"
+										size="md"
+										:leading-icon="confirmCompleteId === item.id ? 'i-lucide-check' : 'i-lucide-archive'"
+										:label="confirmCompleteId === item.id ? 'Подтвердить' : 'Завершить'"
+										:loading="completingId === item.id"
+										class="opacity-0 group-hover:opacity-100"
+										:class="confirmCompleteId === item.id ? 'opacity-100' : ''"
+										@click.stop="handleCompleteClick(item.id)"
+									/>
+									<UIcon
+										v-if="confirmCompleteId !== item.id"
+										name="i-lucide-chevron-right"
+										class="w-4 h-4 text-muted"
+									/>
+									<UButton
+										v-if="confirmCompleteId === item.id"
+										color="neutral"
+										variant="ghost"
+										size="xs"
+										icon="i-lucide-x"
+										@click.stop="confirmCompleteId = null"
+									/>
+								</template>
+								<UIcon v-else name="i-lucide-chevron-right" class="w-4 h-4 text-muted" />
+							</div>
 						</div>
 					</UCard>
 				</div>
@@ -96,11 +124,15 @@
 
 <script lang="ts" setup>
 import type { TZCreationSessionListItem } from '#shared/types'
-import { getTzCreationStatusColor, getTzCreationStatusLabel } from '#shared/types'
+import {
+	getTzCreationStatusColor,
+	getTzCreationStatusLabel,
+	TZCreationStatus,
+} from '#shared/types'
 
 definePageMeta({ layout: 'default', middleware: 'admin' })
 
-const { get } = useApi()
+const { get, post } = useApi()
 const { formatDate } = useFormatDate()
 
 const PAGE_SIZE = 10
@@ -110,6 +142,8 @@ const loadingHistory = ref(true)
 const loadingMore = ref(false)
 const page = ref(1)
 const search = ref('')
+const confirmCompleteId = ref<string | null>(null)
+const completingId = ref<string | null>(null)
 const activeTab = ref<'active' | 'completed'>('active')
 
 const tabs = [
@@ -154,8 +188,36 @@ const emptyMessage = computed(() => {
 		: 'Завершённых сессий пока нет'
 })
 
+function canComplete(status: string) {
+	return status === TZCreationStatus.ACTIVE
+}
+
 function openSession(item: TZCreationSessionListItem) {
 	navigateTo(`/tz-creation/${item.id}`)
+}
+
+async function handleCompleteClick(id: string) {
+	if (confirmCompleteId.value !== id) {
+		confirmCompleteId.value = id
+		return
+	}
+	completingId.value = id
+	confirmCompleteId.value = null
+	try {
+		await post(`/tz-creation/${id}/complete`)
+		const idx = allSessions.value.findIndex((r) => r.id === id)
+		const existing = idx >= 0 ? allSessions.value[idx] : undefined
+		if (existing) {
+			allSessions.value[idx] = {
+				...existing,
+				status: TZCreationStatus.COMPLETED,
+			}
+		}
+	} catch {
+		// ignore
+	} finally {
+		completingId.value = null
+	}
 }
 
 async function fetchHistory() {
@@ -177,7 +239,16 @@ onMounted(() => {
 })
 
 watch(search, () => { page.value = 1 })
-watch(activeTab, () => { page.value = 1 })
+watch(activeTab, () => {
+	page.value = 1
+	confirmCompleteId.value = null
+})
+
+onMounted(() => {
+	const dismissConfirm = () => { confirmCompleteId.value = null }
+	document.addEventListener('click', dismissConfirm)
+	onUnmounted(() => document.removeEventListener('click', dismissConfirm))
+})
 
 const sentinel = ref<HTMLElement | null>(null)
 

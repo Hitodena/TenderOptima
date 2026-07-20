@@ -275,6 +275,65 @@ def test_finalize_rejects_empty_draft(client, fake_user):
     assert response.status_code == 400
 
 
+def test_complete_archives_active_session_without_tz_analysis(
+    client, fake_user
+):
+    row = _FakeSession(
+        user_id=fake_user.id,
+        mode="from_scratch",
+        status="active",
+    )
+    updated = _FakeSession(
+        id=row.id,
+        user_id=fake_user.id,
+        mode="from_scratch",
+        status="completed",
+    )
+    with (
+        patch.object(
+            tz_creation_router.TZCreationSessionDAO,
+            "get_by_id_and_user",
+            new=AsyncMock(return_value=row),
+        ),
+        patch.object(
+            tz_creation_router.TZCreationSessionDAO,
+            "update_fields",
+            new=AsyncMock(return_value=updated),
+        ) as update_mock,
+        patch.object(
+            tz_creation_router.TZAnalysisDAO,
+            "create",
+            new=AsyncMock(),
+        ) as create_mock,
+    ):
+        response = client.post(f"/api/tz-creation/{row.id}/complete")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == str(row.id)
+    assert body["status"] == "completed"
+    create_mock.assert_not_called()
+    _, update_kwargs = update_mock.call_args
+    assert update_kwargs["status"] == TZCreationStatus.COMPLETED.value
+    assert "resulting_tz_analysis_id" not in update_kwargs
+
+
+def test_complete_rejects_non_active_session(client, fake_user):
+    row = _FakeSession(
+        user_id=fake_user.id,
+        mode="from_scratch",
+        status="draft",
+    )
+    with patch.object(
+        tz_creation_router.TZCreationSessionDAO,
+        "get_by_id_and_user",
+        new=AsyncMock(return_value=row),
+    ):
+        response = client.post(f"/api/tz-creation/{row.id}/complete")
+
+    assert response.status_code == 400
+
+
 def test_export_preview_docx_returns_docx_bytes(client):
     response = client.post(
         "/api/tz-creation/export-preview.docx",

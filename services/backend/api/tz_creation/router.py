@@ -23,6 +23,7 @@ from backend.api.subscriptions.enforcement import (
     tz_kp_upload_limit_for_user,
 )
 from backend.api.tz_creation.schemas import (
+    TZCreationCompleteResponse,
     TZCreationContextPayload,
     TZCreationExportRequest,
     TZCreationFieldsUpdateRequest,
@@ -481,6 +482,54 @@ async def export_tz_creation_docx(
         content=docx_bytes,
         media_type=_DOCX_MEDIA_TYPE,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post(
+    "/{session_id}/complete",
+    response_model=TZCreationCompleteResponse,
+    summary="Mark TZ creation session as completed (archived)",
+)
+async def complete_tz_creation_session(
+    session_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> TZCreationCompleteResponse:
+    """Archive a session without creating a TZAnalysis for KP comparison."""
+    row = await _get_owned_session(session, session_id, current_user.id)
+    if row.status == TZCreationStatus.COMPLETED.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Session already completed",
+        )
+    if row.status == TZCreationStatus.PROCESSING.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Session is still processing",
+        )
+    if row.status != TZCreationStatus.ACTIVE.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot complete session in status '{row.status}'",
+        )
+    updated = await TZCreationSessionDAO.update_fields(
+        session,
+        row.id,
+        status=TZCreationStatus.COMPLETED.value,
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="TZ creation session not found",
+        )
+    logger.info(
+        "TZ creation session completed",
+        session_id=str(row.id),
+        user_id=str(current_user.id),
+    )
+    return TZCreationCompleteResponse(
+        id=updated.id,
+        status=TZCreationStatus(updated.status),
     )
 
 

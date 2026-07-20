@@ -162,6 +162,10 @@
 			</template>
 
 			<template v-else>
+				<div v-if="session.status === 'active'" class="mb-4 space-y-3">
+					<TzCreationWorkspaceChecklist :state="checklistState" />
+				</div>
+
 				<UTabs
 					v-model="activePanel"
 					:items="mobilePanelTabs"
@@ -171,8 +175,11 @@
 
 				<div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_20rem] gap-4 items-start">
 					<UCard
-						class="shadow-sm flex flex-col overflow-hidden"
-						:class="activePanel === 'chat' ? undefined : 'max-xl:hidden'"
+						class="shadow-sm flex flex-col overflow-hidden motion-safe:transition-[box-shadow,ring] motion-safe:duration-200"
+						:class="[
+							activePanel === 'chat' ? undefined : 'max-xl:hidden',
+							tourHighlight === 'chat' ? 'ring-2 ring-primary shadow-md' : undefined,
+						]"
 						style="height: min(72vh, 680px)"
 						:ui="{
 							root: 'flex flex-col',
@@ -255,8 +262,11 @@
 					</UCard>
 
 					<UCard
-						class="shadow-sm"
-						:class="activePanel === 'structure' ? 'block' : 'hidden xl:block'"
+						class="shadow-sm motion-safe:transition-[box-shadow,ring] motion-safe:duration-200"
+						:class="[
+							activePanel === 'structure' ? 'block' : 'hidden xl:block',
+							tourHighlight === 'structure' ? 'ring-2 ring-primary shadow-md' : undefined,
+						]"
 					>
 						<template #header>
 							<div class="flex items-center justify-between gap-2 flex-wrap">
@@ -317,8 +327,11 @@
 					</UCard>
 
 					<UCard
-						class="shadow-sm"
-						:class="activePanel === 'fields' ? 'block' : 'hidden xl:block'"
+						class="shadow-sm motion-safe:transition-[box-shadow,ring] motion-safe:duration-200"
+						:class="[
+							activePanel === 'fields' ? 'block' : 'hidden xl:block',
+							tourHighlight === 'fields' ? 'ring-2 ring-primary shadow-md' : undefined,
+						]"
 					>
 						<template #header>
 							<div class="flex items-center justify-between gap-2">
@@ -361,6 +374,12 @@
 						</div>
 					</UCard>
 				</div>
+
+				<TzCreationWorkspaceTour
+					:enabled="session.status === 'active'"
+					@highlight="tourHighlight = $event"
+					@set-panel="activePanel = $event"
+				/>
 			</template>
 		</template>
 	</UContainer>
@@ -382,6 +401,9 @@ import {
 	type EditableRequirementRow,
 } from '#shared/utils/requirementsStruct'
 import RequirementTreeEditor from '~/components/tz-analysis/RequirementTreeEditor.vue'
+import TzCreationWorkspaceChecklist from '~/components/tz-creation/TzCreationWorkspaceChecklist.vue'
+import TzCreationWorkspaceTour from '~/components/tz-creation/TzCreationWorkspaceTour.vue'
+import type { WorkspaceTourPanel } from '~/components/tz-creation/TzCreationWorkspaceTour.vue'
 
 definePageMeta({ layout: 'default', middleware: 'admin' })
 
@@ -464,6 +486,7 @@ const showUploadForm = computed(() =>
 )
 
 const activePanel = ref<'chat' | 'structure' | 'fields'>('chat')
+const tourHighlight = ref<WorkspaceTourPanel | null>(null)
 const mobilePanelTabs = [
 	{ label: 'Чат', icon: 'i-lucide-message-circle', value: 'chat' as const },
 	{ label: 'Структура', icon: 'i-lucide-list-tree', value: 'structure' as const },
@@ -723,6 +746,20 @@ const finalizing = ref(false)
 const canFinalize = computed(() =>
 	session.value?.status === 'active' && hasAnyRequirement.value,
 )
+
+const fieldsReady = computed(() => {
+	if (!editableFields.value.length) return false
+	return editableFields.value.every(
+		(field) => field.status === 'answered' || field.status === 'suggested',
+	)
+})
+
+const checklistState = computed(() => ({
+	hasMessages: (session.value?.messages.length ?? 0) > 0,
+	hasRequirements: hasAnyRequirement.value,
+	fieldsReady: fieldsReady.value,
+	canFinalize: canFinalize.value,
+}))
 
 async function finalizeSession() {
 	if (!session.value || finalizing.value || !canFinalize.value) return
