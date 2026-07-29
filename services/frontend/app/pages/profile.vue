@@ -296,66 +296,69 @@ v-if="profileSuccess" color="success" variant="soft" icon="i-lucide-check"
 						</div>
 					</template>
 
-			</UTabs>
-			</UCard>
-
-			<UCard>
-				<template #header>
-					<div class="flex items-center gap-2">
-						<UIcon name="i-lucide-log-out" class="w-4.5 h-4.5 text-muted" />
-						<h2 class="font-semibold">{{ t('profile.accountTitle') }}</h2>
-					</div>
-				</template>
-
-				<div class="space-y-4">
-					<div>
-						<p class="text-sm text-muted">
-							{{ t('profile.signedInAs') }}
-							<span class="text-primary font-medium">{{ user?.email }}</span>
-						</p>
-					</div>
-
-					<p class="text-sm text-muted">
-						{{ t('profile.logoutDescription') }}
-					</p>
-
-					<div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-						<UButton color="error" variant="soft" leading-icon="i-lucide-log-out" @click="handleLogout">
-							{{ t('profile.logout') }}
-						</UButton>
-					</div>
-
-					<USeparator />
-
-					<div class="space-y-3 rounded-xl border border-error/20 bg-error/5 p-4">
+					<template #account>
 						<div>
-							<h3 class="text-sm font-semibold text-highlighted">
-								{{ t('profile.consentActionsTitle') }}
-							</h3>
-							<p class="mt-1 text-sm text-muted">
-								{{ t('profile.consentActionsDescription') }}
+							<h2 class="text-base font-semibold mb-0.5 text-muted">
+								{{ t('profile.accountTitle') }}
+							</h2>
+							<p class="text-sm text-muted mb-5">
+								{{ t('profile.logoutDescription') }}
 							</p>
+
+							<div class="space-y-4">
+								<div>
+									<p class="text-sm text-muted">
+										{{ t('profile.signedInAs') }}
+										<span class="text-default font-medium">{{ user?.email }}</span>
+									</p>
+								</div>
+
+								<div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+									<UButton
+										color="neutral"
+										variant="soft"
+										leading-icon="i-lucide-log-out"
+										@click="handleLogout"
+									>
+										{{ t('profile.logout') }}
+									</UButton>
+								</div>
+
+								<USeparator />
+
+								<div class="space-y-3 rounded-xl border border-default bg-elevated/50 p-4">
+									<div>
+										<h3 class="text-sm font-medium text-muted">
+											{{ t('profile.consentActionsTitle') }}
+										</h3>
+										<p class="mt-1 text-sm text-muted">
+											{{ t('profile.consentActionsDescription') }}
+										</p>
+									</div>
+									<div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+										<UButton
+											color="warning"
+											variant="soft"
+											leading-icon="i-lucide-file-x"
+											@click="openDestructiveAction('revoke')"
+										>
+											{{ t('profile.revokeConsent') }}
+										</UButton>
+										<UButton
+											color="error"
+											variant="soft"
+											leading-icon="i-lucide-trash-2"
+											@click="openDestructiveAction('delete')"
+										>
+											{{ t('profile.deleteAccount') }}
+										</UButton>
+									</div>
+								</div>
+							</div>
 						</div>
-						<div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-							<UButton
-								color="warning"
-								variant="soft"
-								leading-icon="i-lucide-file-x"
-								@click="openDestructiveAction('revoke')"
-							>
-								{{ t('profile.revokeConsent') }}
-							</UButton>
-							<UButton
-								color="error"
-								variant="solid"
-								leading-icon="i-lucide-trash-2"
-								@click="openDestructiveAction('delete')"
-							>
-								{{ t('profile.deleteAccount') }}
-							</UButton>
-						</div>
-					</div>
-				</div>
+					</template>
+
+			</UTabs>
 			</UCard>
 
 			<div
@@ -494,6 +497,7 @@ const tabs = computed(() => [
 	{ label: t('profile.mailTab'), slot: 'mail', value: 'mail', icon: 'i-lucide-mail' },
 	{ label: t('profile.profileTab'), slot: 'profile', value: 'profile', icon: 'i-lucide-user' },
 	{ label: t('profile.contactTab'), slot: 'contact', value: 'contact', icon: 'i-lucide-headphones' },
+	{ label: t('profile.accountTab'), slot: 'account', value: 'account', icon: 'i-lucide-user-cog', class: 'text-muted' },
 ])
 
 const tabFromQuery = computed(() => {

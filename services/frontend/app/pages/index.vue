@@ -40,7 +40,7 @@
 							<!-- Text -->
 							<div class="flex-1">
 								<h2 class="mb-3 text-2xl font-bold text-highlighted">
-									Выбор поставщика
+									Подбор поставщика
 								</h2>
 								<p class="text-base leading-relaxed text-muted">
 									Инструменты и возможности для быстрого поиска поставщиков и отправки запросов
@@ -82,7 +82,7 @@
 							<!-- Text -->
 							<div class="flex-1">
 								<h2 class="mb-3 text-2xl font-bold text-highlighted">
-									Технический анализ
+									Технический анализ предложений
 								</h2>
 								<p class="text-base leading-relaxed text-muted">
 									Полный цикл тендерных процедур с техническим анализом и сравнением предложений

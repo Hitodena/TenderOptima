@@ -11,26 +11,31 @@ from backend.enums import (
 )
 from backend.utils.requirements_struct import normalize_tz_requirements
 
-_ALLOWED_DOMAINS = {"equipment", "food", "services", "other"}
-
 
 class TZCreationContextPayload(BaseModel):
     """Domain context injected into every wizard prompt."""
 
-    domain: Annotated[
+    industry: Annotated[
         str,
-        Field(default="other", description="equipment|food|services|other"),
-    ] = "other"
+        Field(
+            default="",
+            max_length=200,
+            description="Free-text industry / direction of procurement",
+        ),
+    ] = ""
     note: Annotated[
         str,
         Field(default="", max_length=1000, description="Free-text context"),
     ] = ""
 
-    @field_validator("domain", mode="before")
-    @classmethod
-    def coerce_domain(cls, value: object) -> str:
-        text = str(value or "other").strip().lower()
-        return text if text in _ALLOWED_DOMAINS else "other"
+
+class TZCreationContextUpdateRequest(BaseModel):
+    """Partial update for session context (industry field in workspace)."""
+
+    industry: Annotated[
+        str,
+        Field(default="", max_length=200, description="Industry / direction"),
+    ] = ""
 
 
 class TZCreationFieldItem(BaseModel):
@@ -39,6 +44,7 @@ class TZCreationFieldItem(BaseModel):
     value: str = ""
     status: str = "pending"
     requirement_key: str | None = None
+    confirmed: bool = False
 
 
 class TZCreationRequirementHint(BaseModel):
@@ -75,6 +81,7 @@ class TZCreationSessionDetailResponse(BaseModel):
     source_tz_filename: str | None = None
     draft_hierarchy: dict = {}
     fields: list[TZCreationFieldItem] = []
+    open_questions: list[str] = []
     requirement_hints: dict[str, TZCreationRequirementHint] = {}
     status: TZCreationStatus
     llm_model: str = ""
@@ -93,6 +100,13 @@ class TZCreationSessionDetailResponse(BaseModel):
     @classmethod
     def coerce_hints(cls, value: object) -> dict:
         return value if isinstance(value, dict) else {}
+
+    @field_validator("open_questions", mode="before")
+    @classmethod
+    def coerce_open_questions(cls, value: object) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        return [str(item).strip() for item in value if str(item).strip()]
 
 
 class TZCreationSessionListItem(BaseModel):

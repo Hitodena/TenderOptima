@@ -14,26 +14,19 @@
 		<UNavigationMenu
 			v-if="auth.isAuthenticated.value"
 			:items="navItems"
+			content-orientation="vertical"
 			class="w-full justify-center"
-		/>
-		<div
-			v-else-if="isLandingPage"
-			class="hidden w-full min-w-0 justify-center lg:flex"
 		>
-			<UDropdownMenu
-				:items="landingDropdownItems"
-				:content="{ align: 'center' }"
-				:ui="{ content: 'min-w-56' }"
-			>
-				<UButton
-					color="neutral"
-					variant="ghost"
-					size="lg"
-					trailing-icon="i-lucide-chevron-down"
-					label="Меню"
-				/>
-			</UDropdownMenu>
-		</div>
+			<template #subscription-content>
+				<AppSubscriptionMenu :subscription="user?.subscription" />
+			</template>
+		</UNavigationMenu>
+		<UNavigationMenu
+			v-else-if="isLandingPage"
+			:items="landingNavItems"
+			arrow
+			class="hidden w-full min-w-0 justify-center lg:flex"
+		/>
 
 		<template #body>
 			<UNavigationMenu
@@ -41,7 +34,11 @@
 				:items="navItems"
 				orientation="vertical"
 				class="-mx-2.5"
-			/>
+			>
+				<template #subscription-content>
+					<AppSubscriptionMenu :subscription="user?.subscription" />
+				</template>
+			</UNavigationMenu>
 			<UNavigationMenu
 				v-else-if="isLandingPage"
 				:items="landingNavItems"
@@ -78,7 +75,8 @@
 					variant="ghost"
 					icon="i-lucide-lightbulb"
 					size="lg"
-					title="Предложить идею"
+					title="Идея или проблема"
+					aria-label="Идея или проблема"
 					@click="ideaModalOpen = true"
 				/>
 				<UButton
@@ -126,7 +124,6 @@
 <script lang="ts" setup>
 import type { DropdownMenuItem, NavigationMenuItem } from '@nuxt/ui'
 import {
-	subscriptionModulesSummary,
 	subscriptionNavBadge,
 	subscriptionPlansPath,
 } from '#shared/utils/subscriptionDisplay'
@@ -173,7 +170,8 @@ const isTzCreationActive = computed(() => route.path.startsWith('/tz-creation'))
 const isProfileSubscriptionActive = computed(
 	() =>
 		route.path === '/subscription'
-		|| (route.path === '/profile' && (route.query.tab === 'subscription' || route.query.tab === 'acts')),
+		|| (route.path === '/profile'
+			&& (route.query.tab === 'subscription' || route.query.tab === 'acts')),
 )
 const subscriptionBadge = computed(() => subscriptionNavBadge(user.value?.subscription))
 
@@ -219,21 +217,6 @@ const landingNavItems = computed<NavigationMenuItem[]>(() => {
 		{ label: 'Контакты', icon: 'i-lucide-mail', to: '/#contacts' },
 	)
 	return items
-})
-
-const landingDropdownItems = computed<DropdownMenuItem[][]>(() => {
-	const productChildren = (landingNavItems.value[0]?.children ?? []).map((item) => ({
-		label: item.label,
-		icon: item.icon,
-		to: item.to,
-		description: item.description,
-	}))
-	const rest = landingNavItems.value.slice(1).map((item) => ({
-		label: item.label,
-		icon: item.icon,
-		to: item.to,
-	}))
-	return [productChildren, rest]
 })
 
 const navItems = computed<NavigationMenuItem[]>(() => {
@@ -317,12 +300,15 @@ const navItems = computed<NavigationMenuItem[]>(() => {
 		icon: 'i-lucide-credit-card',
 		active: isProfileSubscriptionActive.value,
 		to: subscriptionPlansPath(),
-		description: subscriptionModulesSummary(user.value?.subscription),
+		slot: 'subscription',
 		badge: {
 			label: subscriptionBadge.value.label,
 			color: subscriptionBadge.value.color,
 			variant: 'subtle',
 			size: 'sm',
+		},
+		ui: {
+			content: 'w-80',
 		},
 	})
 

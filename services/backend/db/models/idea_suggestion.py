@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import ForeignKey, Text
+from sqlalchemy import JSON, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -20,6 +20,7 @@ class IdeaSuggestion(IDMixinUUID, TimestampMixin, Base):
     )
 
     message: Mapped[str] = mapped_column(Text, nullable=False)
+    attachment_paths: Mapped[list | None] = mapped_column(JSON)
 
     user: Mapped["User"] = relationship(  # noqa: F821 # type: ignore
         back_populates="idea_suggestions",

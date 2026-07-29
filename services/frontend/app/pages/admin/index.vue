@@ -9,7 +9,7 @@
 						</div>
 						<div>
 							<h1 class="text-lg font-bold text-highlighted leading-tight">Админка</h1>
-							<p class="text-xs text-muted">Ошибки фронтенда и идеи пользователей</p>
+							<p class="text-xs text-muted">Ошибки фронтенда, идеи и проблемы пользователей</p>
 						</div>
 					</div>
 				</template>
@@ -330,7 +330,7 @@
 						<div class="space-y-4">
 							<div class="flex items-center justify-between flex-wrap gap-3">
 								<p class="text-sm text-muted">
-									Всего идей: <span class="font-semibold text-highlighted">{{ ideasTotal }}</span>
+									Всего: <span class="font-semibold text-highlighted">{{ ideasTotal }}</span>
 								</p>
 							</div>
 
@@ -339,12 +339,12 @@
 									:data="ideas"
 									:columns="ideaColumns"
 									:loading="loadingIdeas"
-									class="min-w-[500px]"
+									class="min-w-[640px]"
 								>
 									<template #empty>
 										<div class="flex flex-col items-center justify-center py-12 gap-3">
 											<UIcon name="i-lucide-lightbulb" class="w-10 h-10 text-muted opacity-40" />
-											<p class="text-muted">Идей пока нет</p>
+											<p class="text-muted">Сообщений пока нет</p>
 										</div>
 									</template>
 
@@ -370,6 +370,40 @@
 												<span v-else class="whitespace-pre-wrap wrap-break-word">{{ row.original.message }}</span>
 											</p>
 										</div>
+									</template>
+
+									<template #attachments-cell="{ row }">
+										<div
+											v-if="row.original.attachments?.length"
+											class="flex flex-wrap gap-1.5 max-w-56"
+										>
+											<button
+												v-for="att in row.original.attachments"
+												:key="`${att.path}-${att.filename}`"
+												type="button"
+												class="inline-flex max-w-full cursor-pointer items-center gap-1.5 rounded-md border border-default bg-elevated/50 px-2 py-1 text-xs transition-colors hover:bg-elevated disabled:cursor-not-allowed disabled:opacity-50"
+												:disabled="!att.path || downloadingAttachmentPath === att.path"
+												:title="att.filename"
+												@click="downloadIdeaAttachment(att)"
+											>
+												<UIcon
+													v-if="downloadingAttachmentPath === att.path"
+													name="i-lucide-loader-circle"
+													class="size-3.5 shrink-0 animate-spin text-muted"
+												/>
+												<UIcon
+													v-else
+													:name="fileIcon(att.content_type)"
+													class="size-3.5 shrink-0 text-primary"
+												/>
+												<span class="truncate">{{ att.filename }}</span>
+												<span
+													v-if="att.size"
+													class="shrink-0 text-muted"
+												>{{ formatBytes(att.size) }}</span>
+											</button>
+										</div>
+										<span v-else class="text-xs text-muted">—</span>
 									</template>
 								</UTable>
 							</div>
@@ -482,6 +516,7 @@ import type { TableColumn } from '@nuxt/ui'
 import type {
 	BlacklistResponse,
 	FrontendErrorLogResponse,
+	IdeaAttachment,
 	IdeaSuggestionResponse,
 	ReferralInvitationCreate,
 	ReferralInvitationResponse,
@@ -515,7 +550,7 @@ const tabs = [
 	{ label: t('admin.emailRouting.tabLabel'), slot: 'email', value: 'email', icon: 'i-lucide-mail' },
 	{ label: t('admin.referrals.tabLabel'), slot: 'referrals', value: 'referrals', icon: 'i-lucide-ticket' },
 	{ label: 'Ошибки', slot: 'errors', value: 'errors', icon: 'i-lucide-bug' },
-	{ label: 'Идеи', slot: 'ideas', value: 'ideas', icon: 'i-lucide-lightbulb' },
+	{ label: 'Идеи и проблемы', slot: 'ideas', value: 'ideas', icon: 'i-lucide-lightbulb' },
 	{ label: 'Блэклист', slot: 'blacklist', value: 'blacklist', icon: 'i-lucide-shield-ban' },
 ]
 
@@ -677,8 +712,47 @@ const loadingIdeas = ref(false)
 const ideaColumns: TableColumn<IdeaSuggestionResponse>[] = [
 	{ accessorKey: 'created_at', header: 'Дата' },
 	{ accessorKey: 'user', header: 'Пользователь' },
-	{ accessorKey: 'message', header: 'Идея' },
+	{ accessorKey: 'message', header: 'Сообщение' },
+	{ accessorKey: 'attachments', header: 'Файлы' },
 ]
+
+const downloadingAttachmentPath = ref<string | null>(null)
+
+function formatBytes(b: number) {
+	if (b < 1024) return `${b} Б`
+	if (b < 1048576) return `${(b / 1024).toFixed(1)} КБ`
+	return `${(b / 1048576).toFixed(1)} МБ`
+}
+
+function fileIcon(contentType: string | null) {
+	if (!contentType) return 'i-lucide-file'
+	if (contentType.includes('pdf')) return 'i-lucide-file-text'
+	if (contentType.includes('image')) return 'i-lucide-image'
+	if (contentType.includes('sheet') || contentType.includes('excel')) return 'i-lucide-table'
+	if (contentType.includes('word')) return 'i-lucide-file-text'
+	return 'i-lucide-file'
+}
+
+async function downloadIdeaAttachment(att: IdeaAttachment) {
+	if (!att.path || downloadingAttachmentPath.value) return
+	downloadingAttachmentPath.value = att.path
+	try {
+		const blob = await get<Blob>(
+			`/feedback/ideas/attachments/serve?attachment_path=${encodeURIComponent(att.path)}`,
+			{ responseType: 'blob' },
+		)
+		const url = URL.createObjectURL(blob)
+		const a = document.createElement('a')
+		a.href = url
+		a.download = att.filename || 'attachment'
+		a.click()
+		URL.revokeObjectURL(url)
+	} catch {
+		toast.add({ title: 'Не удалось скачать файл', color: 'error' })
+	} finally {
+		downloadingAttachmentPath.value = null
+	}
+}
 
 async function fetchIdeas() {
 	loadingIdeas.value = true

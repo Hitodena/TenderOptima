@@ -55,6 +55,7 @@ class Subscription(IDMixinUUID, TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(
         Boolean, default=True, nullable=False
     )
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
     )

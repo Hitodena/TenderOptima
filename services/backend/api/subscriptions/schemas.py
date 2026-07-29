@@ -27,6 +27,7 @@ class SubscriptionResponse(BaseModel):
     price_module_2_monthly: Decimal | None
     price_bundle_monthly: Decimal | None
     is_active: bool
+    starts_at: datetime | None = None
     expires_at: datetime | None = None
     searches_used_this_month: int = 0
     emails_sent_this_month: int = 0
@@ -53,4 +54,21 @@ class SubscriptionUpdate(BaseModel):
     price_module_2_monthly: Decimal | None = None
     price_bundle_monthly: Decimal | None = None
     is_active: bool | None = None
+    starts_at: datetime | None = None
     expires_at: datetime | None = None
+
+
+class ChangePlanRequest(BaseModel):
+    """Authenticated user request to switch to another plan."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    plan: SubscriptionPlan
+    module_tab: Annotated[
+        str,
+        Field(
+            default="module1",
+            pattern="^(module1|module2|complex)$",
+            description="Module selection: module1, module2, or complex",
+        ),
+    ] = "module1"

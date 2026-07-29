@@ -1,8 +1,9 @@
 """Business logic for the TZ creation wizard (Module 3).
 
-Owns the chat-turn contract (kickoff / gap-analysis / follow-up turns)
-and merges LLM responses into session state (draft hierarchy + side
-panel fields), keeping the API router focused on HTTP/DB glue.
+Owns the chat-turn contract (orienting / intake / kickoff / gap-analysis /
+follow-up turns) and merges LLM responses into session state (draft
+hierarchy + side panel fields + open questions), keeping the API router
+focused on HTTP/DB glue.
 """
 
 import hashlib
@@ -17,6 +18,8 @@ from backend.services.llm.prompts.tz_creation import (
     build_tz_creation_turn_prompt,
     build_tz_gap_analysis_prompt,
     build_tz_kickoff_prompt,
+    build_tz_orienting_questions_prompt,
+    build_tz_post_upload_intake_prompt,
 )
 from backend.utils.requirements_struct import (
     RequirementNode,
@@ -27,7 +30,7 @@ from backend.utils.requirements_struct import (
 
 config = get_config()
 
-TZCreationField = dict[str, str | None]
+TZCreationField = dict[str, str | bool | None]
 
 
 class TZCreationTurnError(Exception):
@@ -38,6 +41,26 @@ def requirement_text_hash(text: str) -> str:
     """Stable hash of requirement text used for hint cache invalidation."""
     normalized = (text or "").strip()
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def _parse_assistant_message_only(raw: object) -> dict:
+    if not isinstance(raw, dict):
+        raise TZCreationTurnError("Malformed LLM response for TZ wizard turn")
+    message = str(raw.get("assistant_message") or "").strip()
+    if not message:
+        raise TZCreationTurnError("Empty assistant_message from LLM")
+    return {"assistant_message": message}
+
+
+def _parse_open_questions(raw: object) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    result: list[str] = []
+    for item in raw:
+        text = str(item or "").strip()
+        if text:
+            result.append(text)
+    return result
 
 
 def _parse_turn_result(raw: object) -> dict:
@@ -53,6 +76,7 @@ def _parse_turn_result(raw: object) -> dict:
         "fields_update": fields_update
         if isinstance(fields_update, list)
         else [],
+        "open_questions": _parse_open_questions(raw.get("open_questions")),
         "suggested_done": bool(raw.get("suggested_done")),
     }
 
@@ -61,7 +85,12 @@ def _merge_fields(
     existing: list[TZCreationField],
     updates: list[object],
 ) -> list[TZCreationField]:
-    """Upsert fields by ``key``, preserving order of first appearance."""
+    """Upsert fields by ``key``, preserving order of first appearance.
+
+    ``confirmed`` is user-owned: reset to False when the LLM sends a new
+    non-empty ``value`` that differs from the current one; otherwise keep
+    the existing flag. LLM responses never set ``confirmed`` themselves.
+    """
     merged: dict[str, TZCreationField] = {}
     order: list[str] = []
     for field in existing:
@@ -78,6 +107,7 @@ def _merge_fields(
             "value": str(field.get("value") or ""),
             "status": str(field.get("status") or "pending"),
             "requirement_key": req_key_text or None,
+            "confirmed": bool(field.get("confirmed")),
         }
         order.append(key)
 
@@ -92,12 +122,21 @@ def _merge_fields(
         if req_key is None:
             req_key = current.get("requirement_key")
         req_key_text = str(req_key).strip() if req_key is not None else ""
+        new_value = str(update.get("value") or current.get("value") or "")
+        old_value = str(current.get("value") or "")
+        value_changed_by_llm = (
+            "value" in update and new_value != old_value and bool(new_value)
+        )
+        confirmed = bool(current.get("confirmed"))
+        if value_changed_by_llm:
+            confirmed = False
         merged[key] = {
             "key": key,
             "label": str(update.get("label") or current.get("label") or key),
-            "value": str(update.get("value") or current.get("value") or ""),
+            "value": new_value,
             "status": str(update.get("status") or "pending"),
             "requirement_key": req_key_text or None,
+            "confirmed": confirmed,
         }
         if key not in order:
             order.append(key)
@@ -117,14 +156,42 @@ def _merge_hierarchy_patch(
     return normalize_tz_requirements(merged)
 
 
+async def run_orienting_questions_turn(
+    context: TZCreationContext | None,
+) -> dict:
+    """Opening assistant message for from_scratch (no structure yet)."""
+    system, user = build_tz_orienting_questions_prompt(context)
+    raw = await llm_client.complete(
+        system, user, model=config.openai_model_for_tz_create()
+    )
+    return _parse_assistant_message_only(raw)
+
+
+async def run_post_upload_intake_turn(
+    hierarchy: dict[str, RequirementNode],
+    context: TZCreationContext | None,
+) -> dict:
+    """Opening assistant message after refine_existing extract."""
+    system, user = build_tz_post_upload_intake_prompt(hierarchy, context)
+    raw = await llm_client.complete(
+        system, user, model=config.openai_model_for_tz_create()
+    )
+    return _parse_assistant_message_only(raw)
+
+
 async def run_kickoff_turn(
     user_idea: str,
     context: TZCreationContext | None,
+    *,
+    history: list[dict[str, str]] | None = None,
 ) -> dict:
-    """First turn for the "from scratch" scenario."""
+    """First generative turn for the "from scratch" scenario."""
     system, user = build_tz_kickoff_prompt(user_idea, context)
     raw = await llm_client.complete(
-        system, user, model=config.openai_model_for_tz_create()
+        system,
+        user,
+        model=config.openai_model_for_tz_create(),
+        history=history,
     )
     return _parse_turn_result(raw)
 
@@ -132,12 +199,16 @@ async def run_kickoff_turn(
 async def run_gap_analysis_turn(
     hierarchy: dict[str, RequirementNode],
     context: TZCreationContext | None,
+    *,
+    history: list[dict[str, str]] | None = None,
 ) -> dict:
-    """Opening turn for the "refine existing" scenario, run right after
-    the uploaded TZ has been extracted into a hierarchy."""
+    """Opening generative turn for refine_existing after user intake reply."""
     system, user = build_tz_gap_analysis_prompt(hierarchy, context)
     raw = await llm_client.complete(
-        system, user, model=config.openai_model_for_tz_create()
+        system,
+        user,
+        model=config.openai_model_for_tz_create(),
+        history=history,
     )
     return _parse_turn_result(raw)
 
@@ -282,10 +353,11 @@ def apply_turn_result(
     draft_hierarchy: dict[str, RequirementNode],
     fields: list[TZCreationField],
     result: dict,
-) -> tuple[dict[str, RequirementNode], list[TZCreationField]]:
+) -> tuple[dict[str, RequirementNode], list[TZCreationField], list[str]]:
     """Merge a parsed turn result into session state."""
     merged_hierarchy = _merge_hierarchy_patch(
         draft_hierarchy, result["hierarchy_patch"]
     )
     merged_fields = _merge_fields(fields, result["fields_update"])
-    return merged_hierarchy, merged_fields
+    open_questions = list(result.get("open_questions") or [])
+    return merged_hierarchy, merged_fields, open_questions

@@ -14,6 +14,7 @@ from backend.api.response_analysis.router import (
 )
 from backend.api.responses.router import router as responses_router
 from backend.api.search_history.router import router as search_history_router
+from backend.api.subscriptions.router import router as subscriptions_router
 from backend.api.supplier_bookmarks.router import (
     router as supplier_bookmarks_router,
 )
@@ -32,6 +33,7 @@ api_router.include_router(admin_router)
 api_router.include_router(consultations_router)
 api_router.include_router(feedback_router)
 api_router.include_router(billing_router)
+api_router.include_router(subscriptions_router)
 api_router.include_router(email_templates_router)
 api_router.include_router(supplier_bookmarks_router)
 api_router.include_router(auth_router)

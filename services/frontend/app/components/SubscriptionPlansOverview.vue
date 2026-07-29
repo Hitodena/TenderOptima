@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import type { SubscriptionResponse } from '#shared/types'
+import type { SubscriptionPlan, SubscriptionResponse } from '#shared/types'
 import type { PricingPlanProps, TabsItem } from '@nuxt/ui'
 import {
 	PRICING_CURRENCY,
@@ -19,12 +19,20 @@ import { t } from '~/constants/translations'
 
 const props = withDefaults(defineProps<{
 	subscription?: SubscriptionResponse | null
+	selectable?: boolean
 }>(), {
 	subscription: null,
+	selectable: false,
+})
+
+const selectedPlan = defineModel<SubscriptionPlan | null>('selectedPlan', {
+	default: null,
+})
+const moduleTab = defineModel<PricingModuleTab>('moduleTab', {
+	default: 'module1',
 })
 
 const currentPlan = computed(() => props.subscription?.plan ?? null)
-const activeModuleTab = ref<PricingModuleTab>('module1')
 
 const moduleTabItems = computed<TabsItem[]>(() =>
 	[
@@ -87,10 +95,53 @@ function planScope(tab: PricingModuleTab): string {
 	return t('subscription.complexScope')
 }
 
+function selectPlan(planId: SubscriptionPlan) {
+	selectedPlan.value = planId
+}
+
+function planButton(
+	plan: PricingPlan,
+	isCurrent: boolean,
+	isUnavailable: boolean,
+): PricingPlanProps['button'] {
+	if (isUnavailable) {
+		return {
+			label: t('subscription.unavailablePlan'),
+			color: 'neutral',
+			variant: 'outline',
+			disabled: true,
+		}
+	}
+	if (isCurrent) {
+		return {
+			label: t('subscription.currentPlan'),
+			color: 'neutral',
+			variant: 'soft',
+			disabled: selectedPlan.value === plan.id,
+			onClick: () => selectPlan(plan.id),
+		}
+	}
+	if (selectedPlan.value === plan.id) {
+		return {
+			label: t('subscription.selectedPlan'),
+			color: 'primary',
+			variant: 'solid',
+			onClick: () => selectPlan(plan.id),
+		}
+	}
+	return {
+		label: t('subscription.selectPlan'),
+		color: 'primary',
+		variant: 'outline',
+		onClick: () => selectPlan(plan.id),
+	}
+}
+
 function buildPricingPlan(plan: PricingPlan): PricingPlanProps {
-	const tab = activeModuleTab.value
+	const tab = moduleTab.value
 	const tier = planTierForTab(plan, tab)
 	const isCurrent = currentPlan.value === plan.id
+	const isSelected = selectedPlan.value === plan.id
 	const isUnavailable = !plan.isEnterprise && !isPlanAvailableForTab(plan.id, tab)
 
 	if (plan.isEnterprise) {
@@ -102,10 +153,13 @@ function buildPricingPlan(plan: PricingPlan): PricingPlanProps {
 			terms: `${t('subscription.enterprisePrice')} · ${t('subscription.priceWithoutVat')}`,
 			features: planFeatures(plan, tab),
 			orientation: 'horizontal',
-			variant: isCurrent ? 'subtle' : 'outline',
-			highlight: isCurrent,
+			variant: isSelected || isCurrent ? 'subtle' : 'outline',
+			highlight: isSelected || isCurrent,
 			badge: isCurrent
 				? { label: t('subscription.currentPlan'), color: 'primary', variant: 'subtle' }
+				: undefined,
+			button: props.selectable
+				? planButton(plan, isCurrent, false)
 				: undefined,
 			ui: {
 				root: 'min-w-0 w-full',
@@ -128,13 +182,16 @@ function buildPricingPlan(plan: PricingPlan): PricingPlanProps {
 			: undefined,
 		features: planFeatures(plan, tab),
 		orientation: 'horizontal',
-		variant: isCurrent ? 'subtle' : 'outline',
-		highlight: isCurrent,
+		variant: isSelected || isCurrent ? 'subtle' : 'outline',
+		highlight: isSelected || isCurrent,
 		badge: isCurrent
 			? { label: t('subscription.currentPlan'), color: 'primary', variant: 'subtle' }
 			: plan.isPopular && !isUnavailable
 				? { label: t('subscription.popularPlan'), color: 'success', variant: 'subtle' }
 				: undefined,
+		button: props.selectable
+			? planButton(plan, isCurrent, isUnavailable)
+			: undefined,
 		ui: {
 			root: 'min-w-0 w-full',
 			featureTitle: 'text-muted text-sm text-pretty break-words',
@@ -152,7 +209,7 @@ const pricingPlans = computed(() =>
 <template>
 	<div class="min-w-0 space-y-5">
 		<UTabs
-			v-model="activeModuleTab"
+			v-model="moduleTab"
 			:items="moduleTabItems"
 			:content="false"
 			variant="pill"
@@ -162,7 +219,7 @@ const pricingPlans = computed(() =>
 			}"
 		/>
 		<p class="text-sm text-muted">
-			{{ featureTableTitle(activeModuleTab) }}
+			{{ featureTableTitle(moduleTab) }}
 		</p>
 		<UPricingPlans
 			orientation="vertical"

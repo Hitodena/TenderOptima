@@ -54,7 +54,7 @@
 <script lang="ts" setup>
 export type WorkspaceTourPanel = 'chat' | 'structure' | 'fields'
 
-const TOUR_STORAGE_KEY = 'tz-creation-workspace-tour-v1'
+const TOUR_STORAGE_KEY = 'tz-creation-workspace-tour-v2'
 
 const props = defineProps<{
 	enabled: boolean
@@ -73,17 +73,17 @@ const steps: Array<{
 	{
 		panel: 'chat',
 		title: 'Диалог с ИИ',
-		description: 'Опишите закупку или ответьте на вопросы — ИИ дополнит структуру и параметры ТЗ.',
-	},
-	{
-		panel: 'structure',
-		title: 'Структура ТЗ',
-		description: 'Здесь формируется дерево требований. Можно править вручную и сохранять изменения.',
+		description: 'Ответьте на наводящие вопросы — ИИ сформирует структуру ТЗ и будет уточнять детали в чате.',
 	},
 	{
 		panel: 'fields',
 		title: 'Параметры ТЗ',
-		description: 'Ключевые поля закупки. Уточните значения со статусом «Нужно уточнить».',
+		description: 'Здесь отрасль, открытые вопросы и предложенные значения. Подтвердите варианты галочкой.',
+	},
+	{
+		panel: 'structure',
+		title: 'Пункты ТЗ',
+		description: 'Вкладка с деревом требований. Можно править вручную и сохранять изменения.',
 	},
 ]
 

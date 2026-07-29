@@ -72,6 +72,7 @@ class SubscriptionDAO(BaseDAO[Subscription]):
                     "price_bundle_monthly", catalog.price_bundle_monthly
                 ),
                 "is_active": values.get("is_active", True),
+                "starts_at": values.get("starts_at"),
                 "expires_at": values.get("expires_at"),
             }
             defaults.update(values)

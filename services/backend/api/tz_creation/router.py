@@ -25,6 +25,7 @@ from backend.api.subscriptions.enforcement import (
 from backend.api.tz_creation.schemas import (
     TZCreationCompleteResponse,
     TZCreationContextPayload,
+    TZCreationContextUpdateRequest,
     TZCreationExportRequest,
     TZCreationFieldsUpdateRequest,
     TZCreationFinalizeResponse,
@@ -61,7 +62,9 @@ from backend.services.analysis.tz_creation import (
     resolve_requirement_text,
     run_chat_turn,
     run_field_hint_turn,
+    run_gap_analysis_turn,
     run_kickoff_turn,
+    run_orienting_questions_turn,
     run_requirement_hint_turn,
 )
 from backend.services.analysis.tz_creation_docx import (
@@ -139,14 +142,26 @@ async def _session_response(
     row,
 ) -> TZCreationSessionDetailResponse:
     messages = await TZCreationMessageDAO.list_by_session(session, row.id)
+    raw_context = dict(row.context or {})
+    # Legacy sessions stored domain enum; map known labels into industry.
+    if "industry" not in raw_context and raw_context.get("domain"):
+        legacy_domain_labels = {
+            "equipment": "Оборудование",
+            "food": "Пищевая продукция",
+            "services": "Услуги",
+            "other": "",
+        }
+        domain = str(raw_context.get("domain") or "").strip().lower()
+        raw_context["industry"] = legacy_domain_labels.get(domain, domain)
     return TZCreationSessionDetailResponse(
         id=row.id,
         mode=TZCreationMode(row.mode),
         title=row.title or "",
-        context=TZCreationContextPayload(**(row.context or {})),
+        context=TZCreationContextPayload(**raw_context),
         source_tz_filename=row.source_tz_filename,
         draft_hierarchy=normalize_tz_requirements(row.draft_hierarchy),
         fields=list(row.fields or []),
+        open_questions=list(getattr(row, "open_questions", None) or []),
         requirement_hints=_serialize_requirement_hints(
             getattr(row, "requirement_hints", None)
         ),
@@ -176,8 +191,9 @@ async def create_tz_creation_session(
 ) -> TZCreationSessionDetailResponse:
     """Start a wizard session in either mode.
 
-    ``from_scratch`` sessions are immediately active and wait for the
-    user's first chat message (the idea seed). ``refine_existing``
+    ``from_scratch`` sessions are immediately active: the backend writes
+    an orienting-questions assistant message (does not count toward
+    ``messages_used``) and waits for the user's first reply. ``refine_existing``
     sessions stay in ``draft`` until a TZ file is uploaded.
     """
     await ensure_module_2_work_allowed(session, current_user)
@@ -196,19 +212,59 @@ async def create_tz_creation_session(
         source_tz_filename=None,
         draft_hierarchy={},
         fields=[],
+        open_questions=[],
         requirement_hints={},
         status=initial_status,
         llm_model="",
         messages_used=0,
         resulting_tz_analysis_id=None,
     )
+
+    if body.mode == TZCreationMode.FROM_SCRATCH:
+        try:
+            orient = await run_orienting_questions_turn(row.context)
+            await TZCreationMessageDAO.create(
+                session,
+                session_id=row.id,
+                role=TZCreationMessageRole.ASSISTANT.value,
+                content=orient["assistant_message"],
+            )
+            await TZCreationSessionDAO.update_fields(
+                session,
+                row.id,
+                llm_model=config.openai_model_for_tz_create(),
+            )
+        except Exception as exc:
+            logger.warning(
+                "TZ creation orienting questions failed",
+                session_id=str(row.id),
+                error=str(exc),
+            )
+            await TZCreationMessageDAO.create(
+                session,
+                session_id=row.id,
+                role=TZCreationMessageRole.ASSISTANT.value,
+                content=(
+                    "Чтобы составить ТЗ, ответьте на несколько вопросов:\n"
+                    "1. Что именно нужно закупить?\n"
+                    "2. Какой объём / масштаб / производительность?\n"
+                    "3. Есть ли критичные ограничения (сроки, бюджет, "
+                    "совместимость, нормативка)?\n"
+                    "4. Что особенно важно учесть?\n\n"
+                    "Отрасль/направление можно указать в поле "
+                    "«Отрасль/направление» справа (например, «пищевая отрасль»). "
+                    "После вашего ответа сформирую черновую структуру ТЗ."
+                ),
+            )
+
     logger.info(
         "TZ creation session created",
         session_id=str(row.id),
         user_id=str(current_user.id),
         mode=body.mode.value,
     )
-    return await _session_response(session, row)
+    refreshed = await _get_owned_session(session, row.id, current_user.id)
+    return await _session_response(session, refreshed)
 
 
 @router.post(
@@ -317,24 +373,38 @@ async def send_tz_creation_message(
         row.messages_used == 0
         and row.mode == TZCreationMode.FROM_SCRATCH.value
     )
+    is_first_refine = (
+        row.messages_used == 0
+        and row.mode == TZCreationMode.REFINE_EXISTING.value
+    )
 
     message_text = body.message.strip()
+    history = [
+        {"role": message.role, "content": message.content}
+        for message in prior_messages
+    ]
+    context = dict(row.context or {})
+
     if is_first_from_scratch:
-        result = await run_kickoff_turn(message_text, row.context)
+        context["note"] = message_text[:1000]
+        result = await run_kickoff_turn(message_text, context, history=history)
+    elif is_first_refine:
+        context["note"] = message_text[:1000]
+        result = await run_gap_analysis_turn(
+            normalize_tz_requirements(row.draft_hierarchy),
+            context,
+            history=history,
+        )
     else:
-        history = [
-            {"role": message.role, "content": message.content}
-            for message in prior_messages
-        ]
         result = await run_chat_turn(
             row.draft_hierarchy,
             list(row.fields or []),
             message_text,
-            row.context,
+            context,
             history=history,
         )
 
-    hierarchy, fields = apply_turn_result(
+    hierarchy, fields, open_questions = apply_turn_result(
         draft_hierarchy=row.draft_hierarchy,
         fields=list(row.fields or []),
         result=result,
@@ -352,13 +422,19 @@ async def send_tz_creation_message(
         role=TZCreationMessageRole.ASSISTANT.value,
         content=result["assistant_message"],
     )
+    update_kwargs: dict = {
+        "draft_hierarchy": hierarchy,
+        "fields": fields,
+        "open_questions": open_questions,
+        "messages_used": row.messages_used + 1,
+        "llm_model": config.openai_model_for_tz_create(),
+    }
+    if is_first_from_scratch or is_first_refine:
+        update_kwargs["context"] = context
     updated = await TZCreationSessionDAO.update_fields(
         session,
         row.id,
-        draft_hierarchy=hierarchy,
-        fields=fields,
-        messages_used=row.messages_used + 1,
-        llm_model=config.openai_model_for_tz_create(),
+        **update_kwargs,
     )
     if not updated:
         raise HTTPException(
@@ -561,6 +637,37 @@ async def update_tz_creation_hierarchy(
         session,
         row.id,
         draft_hierarchy=body.draft_hierarchy,
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="TZ creation session not found",
+        )
+    return await _session_response(session, updated)
+
+
+@router.patch(
+    "/{session_id}/context",
+    response_model=TZCreationSessionDetailResponse,
+    summary="Update industry / direction context for the wizard session",
+)
+async def update_tz_creation_context(
+    session_id: uuid.UUID,
+    body: TZCreationContextUpdateRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> TZCreationSessionDetailResponse:
+    row = await _get_owned_session(session, session_id, current_user.id)
+    context = dict(row.context or {})
+    context["industry"] = body.industry.strip()
+    # Drop legacy domain key if present so industry is the source of truth.
+    context.pop("domain", None)
+    if "note" not in context:
+        context["note"] = ""
+    updated = await TZCreationSessionDAO.update_fields(
+        session,
+        row.id,
+        context=context,
     )
     if not updated:
         raise HTTPException(

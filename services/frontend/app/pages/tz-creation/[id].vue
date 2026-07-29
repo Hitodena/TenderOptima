@@ -1,5 +1,5 @@
 <template>
-	<UContainer class="py-8 max-w-7xl">
+	<UContainer class="py-6 max-w-[90rem]">
 		<template v-if="loading">
 			<div class="space-y-4">
 				<USkeleton class="h-10 w-72" />
@@ -19,7 +19,7 @@
 		</template>
 
 		<template v-else-if="session">
-			<div class="flex items-start justify-between mb-6 gap-4 flex-wrap">
+			<div class="flex items-start justify-between mb-4 gap-4 flex-wrap">
 				<div class="min-w-0">
 					<UButton
 						to="/tz-creation/history"
@@ -47,9 +47,12 @@
 							<UIcon name="i-lucide-calendar" class="w-3.5 h-3.5" />
 							{{ formatDate(session.created_at) }}
 						</span>
-						<span class="flex items-center gap-1">
-							<UIcon name="i-lucide-tag" class="w-3.5 h-3.5" />
-							{{ domainLabel(session.context.domain) }}
+						<span
+							v-if="session.context.industry"
+							class="flex items-center gap-1"
+						>
+							<UIcon name="i-lucide-factory" class="w-3.5 h-3.5" />
+							{{ session.context.industry }}
 						</span>
 					</div>
 				</div>
@@ -102,7 +105,7 @@
 						variant="soft"
 						icon="i-lucide-info"
 						class="mb-4"
-						description="Загрузите техническое задание — ИИ извлечёт структуру, найдёт пробелы и подводные камни с учётом выбранного типа закупки, и начнёт диалог с уточняющими вопросами."
+						description="Загрузите техническое задание — ИИ извлечёт структуру и спросит, что улучшить. Отрасль можно указать позже в панели параметров."
 					/>
 					<UCard class="shadow-sm">
 						<UFormField label="Техническое задание" required>
@@ -153,7 +156,7 @@
 						<div class="flex flex-col items-center justify-center gap-3 py-10 text-muted">
 							<UIcon name="i-lucide-loader" class="w-8 h-8 animate-spin text-primary" />
 							<p class="text-sm text-center">
-								Извлекаем требования и анализируем пробелы в загруженном ТЗ…
+								Извлекаем требования из загруженного ТЗ…
 							</p>
 							<UProgress animation="carousel" size="sm" class="w-full max-w-xs" />
 						</div>
@@ -167,20 +170,21 @@
 				</div>
 
 				<UTabs
-					v-model="activePanel"
-					:items="mobilePanelTabs"
+					v-model="activeTab"
+					:items="workspaceTabs"
 					:content="false"
-					class="mb-4 xl:hidden"
+					class="mb-4"
 				/>
 
-				<div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_20rem] gap-4 items-start">
+				<!-- Tab: Chat + Parameters -->
+				<div
+					v-show="activeTab === 'chat'"
+					class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_22rem] gap-4 items-start"
+				>
 					<UCard
 						class="shadow-sm flex flex-col overflow-hidden motion-safe:transition-[box-shadow,ring] motion-safe:duration-200"
-						:class="[
-							activePanel === 'chat' ? undefined : 'max-xl:hidden',
-							tourHighlight === 'chat' ? 'ring-2 ring-primary shadow-md' : undefined,
-						]"
-						style="height: min(72vh, 680px)"
+						:class="tourHighlight === 'chat' ? 'ring-2 ring-primary shadow-md' : undefined"
+						style="height: min(80vh, 780px)"
 						:ui="{
 							root: 'flex flex-col',
 							body: 'flex-1 flex flex-col p-0 overflow-hidden min-h-0',
@@ -239,8 +243,8 @@
 									v-model="messageText"
 									:rows="1"
 									autoresize
-									:maxrows="5"
-									placeholder="Опишите требования или ответьте на вопрос ИИ..."
+									:maxrows="6"
+									:placeholder="chatPlaceholder"
 									class="flex-1"
 									:disabled="!canChat || sending"
 									@keydown.enter.exact.prevent="sendMessage"
@@ -263,16 +267,130 @@
 
 					<UCard
 						class="shadow-sm motion-safe:transition-[box-shadow,ring] motion-safe:duration-200"
-						:class="[
-							activePanel === 'structure' ? 'block' : 'hidden xl:block',
-							tourHighlight === 'structure' ? 'ring-2 ring-primary shadow-md' : undefined,
-						]"
+						:class="tourHighlight === 'fields' ? 'ring-2 ring-primary shadow-md' : undefined"
+						:ui="{ body: 'space-y-4' }"
+					>
+						<template #header>
+							<div class="flex items-center justify-between gap-2">
+								<p class="font-semibold text-sm">Параметры ТЗ</p>
+								<UButton
+									v-if="fieldsDirty"
+									size="xs"
+									color="primary"
+									:loading="savingFields"
+									@click="saveFields"
+								>
+									Сохранить
+								</UButton>
+							</div>
+						</template>
+
+						<div class="space-y-1.5">
+							<p class="text-xs font-medium text-muted">Отрасль / направление</p>
+							<UInput
+								v-model="industryDraft"
+								size="sm"
+								class="w-full"
+								placeholder="Пищевая отрасль"
+								:disabled="session.status !== 'active' && session.status !== 'completed'"
+								@blur="saveIndustry"
+								@keydown.enter.prevent="saveIndustry"
+							/>
+							<p v-if="savingIndustry" class="text-[11px] text-muted">Сохранение…</p>
+						</div>
+
+						<div
+							v-if="openQuestions.length"
+							class="rounded-lg border border-default bg-elevated/40 p-3 space-y-2"
+						>
+							<p class="text-xs font-semibold text-highlighted">
+								Открытые вопросы
+							</p>
+							<p class="text-[11px] text-muted">
+								Ответьте на них в чате — список обновится после ответа ИИ
+							</p>
+							<ul class="space-y-1.5 list-disc pl-4">
+								<li
+									v-for="(question, qi) in openQuestions"
+									:key="qi"
+									class="text-xs text-default leading-relaxed"
+								>
+									{{ question }}
+								</li>
+							</ul>
+						</div>
+
+						<div class="max-h-[min(50vh,520px)] overflow-y-auto pr-1 space-y-3">
+							<p v-if="!editableFields.length" class="text-sm text-muted text-center py-6">
+								Параметры появятся по ходу диалога с ИИ
+							</p>
+							<div
+								v-for="field in editableFields"
+								:key="field.key"
+								class="space-y-1.5 rounded-lg border border-default/60 p-2.5"
+							>
+								<div class="flex items-center justify-between gap-2">
+									<div class="min-w-0">
+										<p class="text-xs font-medium text-muted">{{ field.label }}</p>
+										<p
+											v-if="field.requirement_key"
+											class="text-[11px] text-muted/90 mt-0.5"
+										>
+											Пункт ТЗ: {{ field.requirement_key }}
+										</p>
+									</div>
+									<div class="flex items-center gap-1 shrink-0">
+										<UButton
+											type="button"
+											variant="ghost"
+											color="neutral"
+											size="sm"
+											icon="i-lucide-lightbulb"
+											:loading="hintLoadingKey === fieldHintKey(field)"
+											aria-label="Подсказка ИИ по параметру"
+											title="Подсказка ИИ"
+											@click="requestFieldHint(field)"
+										/>
+										<UBadge :color="fieldStatusColor(field)" variant="subtle" size="xs">
+											{{ fieldStatusLabel(field) }}
+										</UBadge>
+									</div>
+								</div>
+								<UInput
+									v-model="field.value"
+									size="sm"
+									class="w-full"
+									placeholder="Вариант / значение"
+									@update:model-value="onFieldValueChange(field)"
+								/>
+								<UCheckbox
+									:model-value="Boolean(field.confirmed)"
+									label="Подтверждено"
+									size="sm"
+									@update:model-value="(v: boolean | 'indeterminate') => onFieldConfirmed(field, v === true)"
+								/>
+								<p
+									v-if="fieldHintText(field)"
+									class="text-xs text-muted leading-relaxed"
+								>
+									{{ fieldHintText(field) }}
+								</p>
+							</div>
+						</div>
+					</UCard>
+				</div>
+
+				<!-- Tab: Structure / Пункты ТЗ -->
+				<div v-show="activeTab === 'structure'">
+					<UCard
+						class="shadow-sm motion-safe:transition-[box-shadow,ring] motion-safe:duration-200"
+						:class="tourHighlight === 'structure' ? 'ring-2 ring-primary shadow-md' : undefined"
 					>
 						<template #header>
 							<div class="space-y-3">
 								<div class="flex items-center justify-between gap-2 flex-wrap">
 									<div class="flex items-center gap-2">
-										<p class="font-semibold text-sm">Структура ТЗ</p>
+										<p class="font-semibold text-sm">Пункты ТЗ</p>
 										<UBadge color="neutral" variant="subtle" size="xs">
 											{{ requirementsCount }} {{ requirementWord(requirementsCount) }}
 										</UBadge>
@@ -332,7 +450,7 @@
 							</div>
 						</template>
 
-						<div class="max-h-[min(60vh,640px)] overflow-y-auto pr-1">
+						<div class="max-h-[min(70vh,760px)] overflow-y-auto pr-1">
 							<RequirementTreeEditor
 								v-if="editableRows.length"
 								:rows="editableRows"
@@ -362,87 +480,12 @@
 							</div>
 						</div>
 					</UCard>
-
-					<UCard
-						class="shadow-sm motion-safe:transition-[box-shadow,ring] motion-safe:duration-200"
-						:class="[
-							activePanel === 'fields' ? 'block' : 'hidden xl:block',
-							tourHighlight === 'fields' ? 'ring-2 ring-primary shadow-md' : undefined,
-						]"
-					>
-						<template #header>
-							<div class="flex items-center justify-between gap-2">
-								<p class="font-semibold text-sm">Параметры ТЗ</p>
-								<UButton
-									v-if="fieldsDirty"
-									size="xs"
-									color="primary"
-									:loading="savingFields"
-									@click="saveFields"
-								>
-									Сохранить
-								</UButton>
-							</div>
-						</template>
-
-						<div class="max-h-[min(60vh,640px)] overflow-y-auto pr-1 space-y-3">
-							<p v-if="!editableFields.length" class="text-sm text-muted text-center py-6">
-								Параметры появятся по ходу диалога с ИИ
-							</p>
-							<div
-								v-for="field in editableFields"
-								:key="field.key"
-								class="space-y-1.5"
-							>
-								<div class="flex items-center justify-between gap-2">
-									<div class="min-w-0">
-										<p class="text-xs font-medium text-muted">{{ field.label }}</p>
-										<p
-											v-if="field.requirement_key"
-											class="text-[11px] text-muted/90 mt-0.5"
-										>
-											Пункт ТЗ: {{ field.requirement_key }}
-										</p>
-									</div>
-									<div class="flex items-center gap-1 shrink-0">
-										<UButton
-											type="button"
-											variant="ghost"
-											color="neutral"
-											size="sm"
-											icon="i-lucide-lightbulb"
-											:loading="hintLoadingKey === fieldHintKey(field)"
-											aria-label="Подсказка ИИ по параметру"
-											title="Подсказка ИИ"
-											@click="requestFieldHint(field)"
-										/>
-										<UBadge :color="fieldStatusColor(field.status)" variant="subtle" size="xs">
-											{{ fieldStatusLabel(field.status) }}
-										</UBadge>
-									</div>
-								</div>
-								<UInput
-									v-model="field.value"
-									size="sm"
-									class="w-full"
-									placeholder="Значение не указано"
-									@update:model-value="fieldsDirty = true"
-								/>
-								<p
-									v-if="fieldHintText(field)"
-									class="text-xs text-muted leading-relaxed"
-								>
-									{{ fieldHintText(field) }}
-								</p>
-							</div>
-						</div>
-					</UCard>
 				</div>
 
 				<TzCreationWorkspaceTour
 					:enabled="session.status === 'active'"
 					@highlight="tourHighlight = $event"
-					@set-panel="activePanel = $event"
+					@set-panel="onTourSetPanel"
 				/>
 			</template>
 		</template>
@@ -488,17 +531,6 @@ const loading = ref(true)
 const notFound = ref(false)
 const polling = ref(false)
 
-const DOMAIN_LABELS: Record<string, string> = {
-	equipment: 'Оборудование',
-	food: 'Пищевая продукция',
-	services: 'Услуги',
-	other: 'Другое',
-}
-
-function domainLabel(domain: string): string {
-	return DOMAIN_LABELS[domain] ?? domain
-}
-
 function requirementWord(count: number): string {
 	const mod10 = count % 10
 	const mod100 = count % 100
@@ -523,6 +555,7 @@ onMounted(async () => {
 		notFound.value = true
 	} else {
 		session.value = data
+		industryDraft.value = data.context.industry || ''
 		if (data.status === 'processing') polling.value = true
 	}
 	loading.value = false
@@ -531,11 +564,14 @@ onMounted(async () => {
 useRunStatusPolling(
 	polling,
 	fetchSession,
-	(data) => { session.value = data },
+	(data) => {
+		session.value = data
+		industryDraft.value = data.context.industry || ''
+	},
 	async () => {
 		toast.add({
-			title: 'Анализ загруженного ТЗ завершён',
-			description: 'ИИ нашёл первые вопросы и подсказки — продолжите диалог',
+			title: 'ТЗ загружено',
+			description: 'Ответьте ИИ, что именно улучшить — затем начнётся анализ пробелов',
 			color: 'success',
 			icon: 'i-lucide-check',
 		})
@@ -553,19 +589,66 @@ const showUploadForm = computed(() =>
 	&& (session.value.status === 'draft' || session.value.status === 'failed'),
 )
 
-const activePanel = ref<'chat' | 'structure' | 'fields'>('chat')
+const activeTab = ref<'chat' | 'structure'>('chat')
 const tourHighlight = ref<WorkspaceTourPanel | null>(null)
-const mobilePanelTabs = [
+const workspaceTabs = [
 	{ label: 'Чат', icon: 'i-lucide-message-circle', value: 'chat' as const },
-	{ label: 'Структура', icon: 'i-lucide-list-tree', value: 'structure' as const },
-	{ label: 'Параметры ТЗ', icon: 'i-lucide-sliders-horizontal', value: 'fields' as const },
+	{ label: 'Пункты ТЗ', icon: 'i-lucide-list-tree', value: 'structure' as const },
 ]
+
+function onTourSetPanel(panel: WorkspaceTourPanel) {
+	if (panel === 'structure') activeTab.value = 'structure'
+	else activeTab.value = 'chat'
+}
 
 const emptyChatHint = computed(() =>
 	session.value?.mode === 'from_scratch'
-		? 'Опишите абстрактно, что нужно закупить — ИИ предложит структуру ТЗ и уточнит детали'
-		: 'ИИ проанализирует загруженное ТЗ и напишет первым',
+		? 'ИИ задаст наводящие вопросы — ответьте, чтобы начать формирование ТЗ'
+		: 'После загрузки файла ИИ спросит, что улучшить',
 )
+
+const chatPlaceholder = computed(() => {
+	if (!session.value) return 'Сообщение…'
+	if (session.value.messages_used === 0) {
+		return session.value.mode === 'from_scratch'
+			? 'Ответьте на наводящие вопросы ИИ…'
+			: 'Опишите, что улучшить в загруженном ТЗ…'
+	}
+	return 'Опишите требования или ответьте на вопрос ИИ…'
+})
+
+/* --- Industry context --- */
+
+const industryDraft = ref('')
+const savingIndustry = ref(false)
+let industrySaveTimer: ReturnType<typeof setTimeout> | null = null
+
+async function saveIndustry() {
+	if (!session.value) return
+	const next = industryDraft.value.trim()
+	if (next === (session.value.context.industry || '').trim()) return
+	if (industrySaveTimer) clearTimeout(industrySaveTimer)
+	savingIndustry.value = true
+	try {
+		const updated = await patch<TZCreationSession>(
+			`/tz-creation/${session.value.id}/context`,
+			{ industry: next },
+		)
+		session.value = updated
+		industryDraft.value = updated.context.industry || ''
+	} catch {
+		toast.add({ title: 'Не удалось сохранить отрасль', color: 'error' })
+	} finally {
+		savingIndustry.value = false
+	}
+}
+
+watch(industryDraft, () => {
+	if (industrySaveTimer) clearTimeout(industrySaveTimer)
+	industrySaveTimer = setTimeout(() => {
+		void saveIndustry()
+	}, 800)
+})
 
 /* --- Chat --- */
 
@@ -617,6 +700,8 @@ async function sendMessage() {
 }
 
 watch(() => session.value?.messages.length, () => scrollChatToBottom())
+
+const openQuestions = computed(() => session.value?.open_questions ?? [])
 
 /* --- Structure (draft outline) --- */
 
@@ -809,32 +894,54 @@ watch(
 	() => session.value?.fields,
 	(fields) => {
 		if (fieldsDirty.value) return
-		editableFields.value = (fields ?? []).map((field) => ({ ...field }))
+		editableFields.value = (fields ?? []).map((field) => ({
+			...field,
+			confirmed: Boolean(field.confirmed),
+		}))
 	},
 	{ immediate: true, deep: true },
 )
 
-function fieldStatusColor(status: string) {
-	if (status === 'answered') return 'success' as const
-	if (status === 'suggested') return 'primary' as const
+function fieldStatusColor(field: TZCreationField) {
+	if (field.confirmed) return 'success' as const
+	if (field.status === 'suggested' || field.value.trim()) return 'primary' as const
 	return 'neutral' as const
 }
 
-function fieldStatusLabel(status: string) {
-	if (status === 'answered') return 'Уточнено'
-	if (status === 'suggested') return 'Предложено ИИ'
+function fieldStatusLabel(field: TZCreationField) {
+	if (field.confirmed) return 'Подтверждено'
+	if (field.status === 'suggested' || field.value.trim()) return 'Вариант ИИ'
 	return 'Нужно уточнить'
+}
+
+function onFieldValueChange(field: TZCreationField) {
+	fieldsDirty.value = true
+	if (field.confirmed) field.confirmed = false
+}
+
+function onFieldConfirmed(field: TZCreationField, confirmed: boolean) {
+	field.confirmed = confirmed
+	fieldsDirty.value = true
 }
 
 async function saveFields() {
 	if (!session.value) return
 	savingFields.value = true
 	try {
-		const payload = editableFields.value.map((field) => ({
-			...field,
-			requirement_key: field.requirement_key ?? null,
-			status: field.value.trim() ? 'answered' : field.status,
-		}))
+		const payload = editableFields.value.map((field) => {
+			const confirmed = Boolean(field.confirmed)
+			const hasValue = Boolean(field.value.trim())
+			return {
+				...field,
+				requirement_key: field.requirement_key ?? null,
+				confirmed,
+				status: confirmed
+					? 'answered'
+					: hasValue
+						? 'suggested'
+						: 'pending',
+			}
+		})
 		const updated = await patch<TZCreationSession>(
 			`/tz-creation/${session.value.id}/fields`,
 			{ fields: payload },
@@ -914,12 +1021,12 @@ const canFinalize = computed(() =>
 const fieldsReady = computed(() => {
 	if (!editableFields.value.length) return false
 	return editableFields.value.every(
-		(field) => field.status === 'answered' || field.status === 'suggested',
+		(field) => field.confirmed || field.status === 'answered' || field.status === 'suggested',
 	)
 })
 
 const checklistState = computed(() => ({
-	hasMessages: (session.value?.messages.length ?? 0) > 0,
+	hasMessages: (session.value?.messages_used ?? 0) > 0,
 	hasRequirements: hasAnyRequirement.value,
 	fieldsReady: fieldsReady.value,
 	canFinalize: canFinalize.value,
@@ -930,6 +1037,7 @@ async function finalizeSession() {
 	finalizing.value = true
 	try {
 		if (structureDirty.value) await saveStructure()
+		if (fieldsDirty.value) await saveFields()
 		const result = await post<{ tz_analysis_id: string }>(
 			`/tz-creation/${session.value.id}/finalize`,
 		)

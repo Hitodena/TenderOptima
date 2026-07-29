@@ -15,10 +15,7 @@ from backend.celery_app.utils import async_task, get_db_manager
 from backend.db.dao import TZCreationMessageDAO, TZCreationSessionDAO
 from backend.enums import TZCreationMessageRole, TZCreationStatus
 from backend.services.analysis.tz import extract_tz_from_file
-from backend.services.analysis.tz_creation import (
-    apply_turn_result,
-    run_gap_analysis_turn,
-)
+from backend.services.analysis.tz_creation import run_post_upload_intake_turn
 from backend.services.extraction.router import UnsupportedFileTypeError
 from backend.utils.ocr import OcrNotAvailableError
 from backend.utils.requirements_struct import (
@@ -47,7 +44,10 @@ def _retry_or_fail(task, exc: Exception) -> None:
 )
 @async_task
 async def run_tz_creation_extract(self, session_id: str) -> dict:
-    """Extract an uploaded TZ, then run the opening gap-analysis turn."""
+    """Extract an uploaded TZ, then ask what to improve (intake turn).
+
+    Full gap analysis runs later on the user's first chat reply.
+    """
     db_manager = get_db_manager()
     sid = uuid.UUID(session_id)
 
@@ -87,12 +87,10 @@ async def run_tz_creation_extract(self, session_id: str) -> dict:
             user_id=user_id,
         )
         extracted_hierarchy = normalize_tz_requirements(requirements_tz)
-        turn = await run_gap_analysis_turn(extracted_hierarchy, context)
-        hierarchy, fields = apply_turn_result(
-            draft_hierarchy=extracted_hierarchy,
-            fields=[],
-            result=turn,
+        intake = await run_post_upload_intake_turn(
+            extracted_hierarchy, context
         )
+        assistant_message = intake["assistant_message"]
     except (UnsupportedFileTypeError, OcrNotAvailableError, ValueError) as exc:
         logger.warning(
             "TZ creation extract failed",
@@ -126,13 +124,14 @@ async def run_tz_creation_extract(self, session_id: str) -> dict:
             session,
             session_id=sid,
             role=TZCreationMessageRole.ASSISTANT.value,
-            content=turn["assistant_message"],
+            content=assistant_message,
         )
         await TZCreationSessionDAO.update_fields(
             session,
             sid,
-            draft_hierarchy=hierarchy,
-            fields=fields,
+            draft_hierarchy=extracted_hierarchy,
+            fields=[],
+            open_questions=[],
             status=TZCreationStatus.ACTIVE.value,
         )
 
@@ -140,6 +139,6 @@ async def run_tz_creation_extract(self, session_id: str) -> dict:
         "TZ creation extract finished",
         session_id=session_id,
         user_id=user_id,
-        requirements=count_requirements(hierarchy),
+        requirements=count_requirements(extracted_hierarchy),
     )
     return {"session_id": session_id, "status": TZCreationStatus.ACTIVE.value}

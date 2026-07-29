@@ -26,6 +26,13 @@ export default defineNuxtConfig({
 				import.meta.env.MAX_TZ_UPLOAD_SIZE
 					?? (100 * 1024 * 1024).toString(),
 			),
+			maxIdeaUploadFiles: Number(
+				import.meta.env.MAX_IDEA_UPLOAD_FILES ?? '10',
+			),
+			maxIdeaUploadSize: Number(
+				import.meta.env.MAX_IDEA_UPLOAD_SIZE
+					?? (5 * 1024 * 1024).toString(),
+			),
 			contactEmail: String(
 				import.meta.env.CONTACT_EMAIL ?? 'support@tenderoptima.by',
 			),

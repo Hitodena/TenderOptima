@@ -65,7 +65,7 @@
 										<p class="font-semibold text-sm text-highlighted">Создать с нуля</p>
 									</div>
 									<p class="text-xs text-muted">
-										Опишите идею закупки абстрактно — ИИ предложит структуру
+										ИИ задаст наводящие вопросы, затем предложит структуру ТЗ
 										и уточнит детали в диалоге
 									</p>
 								</button>
@@ -86,22 +86,12 @@
 										<p class="font-semibold text-sm text-highlighted">Загрузить готовое ТЗ</p>
 									</div>
 									<p class="text-xs text-muted">
-										ИИ найдёт пробелы и подводные камни в вашем ТЗ и предложит,
-										что стоит уточнить или добавить
+										Загрузите файл — ИИ извлечёт структуру и спросит,
+										что улучшить, затем найдёт пробелы и риски
 									</p>
 								</button>
 							</div>
 						</div>
-
-						<UFormField label="Тип закупки" name="domain" description="Учитывается в подсказках и вопросах ИИ">
-							<USelect
-								v-model="form.domain"
-								:items="domainOptions"
-								size="lg"
-								class="w-full"
-								:disabled="!canCreateSession"
-							/>
-						</UFormField>
 
 						<UFormField label="Название ТЗ" name="title" description="По умолчанию — «Тендер на закупку»">
 							<UInput
@@ -109,20 +99,6 @@
 								placeholder="Тендер на закупку упаковочного оборудования"
 								icon="i-lucide-file-text"
 								size="lg"
-								class="w-full"
-								:disabled="!canCreateSession"
-							/>
-						</UFormField>
-
-						<UFormField
-							label="Дополнительный контекст"
-							name="note"
-							description="Необязательно: любые детали, которые ИИ должен учесть сразу"
-						>
-							<UTextarea
-								v-model="form.note"
-								placeholder="Например: закупка для производственной линии, важна совместимость с существующим оборудованием"
-								:rows="3"
 								class="w-full"
 								:disabled="!canCreateSession"
 							/>
@@ -152,7 +128,7 @@
 </template>
 
 <script lang="ts" setup>
-import type { TZCreationDomain, TZCreationMode, TZCreationSession } from '#shared/types'
+import type { TZCreationMode, TZCreationSession } from '#shared/types'
 import {
 	canStartModule2Work,
 	module2WorkBlockMessage,
@@ -176,24 +152,13 @@ const module2BlockReason = computed(() =>
 	loaded.value ? module2WorkBlockMessage(user.value?.subscription) : null,
 )
 
-const domainOptions: { label: string; value: TZCreationDomain }[] = [
-	{ label: 'Оборудование', value: 'equipment' },
-	{ label: 'Пищевая продукция', value: 'food' },
-	{ label: 'Услуги', value: 'services' },
-	{ label: 'Другое', value: 'other' },
-]
-
 const schema = z.object({
 	title: z.string().max(500).optional(),
-	domain: z.enum(['equipment', 'food', 'services', 'other']),
-	note: z.string().max(1000).optional(),
 })
 
 const form = reactive({
 	mode: 'from_scratch' as TZCreationMode,
 	title: '',
-	domain: 'other' as TZCreationDomain,
-	note: '',
 })
 
 const loading = ref(false)
@@ -208,8 +173,8 @@ async function handleCreate() {
 			title: form.title.trim(),
 			mode: form.mode,
 			context: {
-				domain: form.domain,
-				note: form.note.trim(),
+				industry: '',
+				note: '',
 			},
 		})
 		await navigateTo(`/tz-creation/${created.id}`)

@@ -35,10 +35,11 @@ class _FakeSession:
         self.user_id = values["user_id"]
         self.mode = values.get("mode", TZCreationMode.FROM_SCRATCH.value)
         self.title = values.get("title", "")
-        self.context = values.get("context", {"domain": "other", "note": ""})
+        self.context = values.get("context", {"industry": "", "note": ""})
         self.source_tz_filename = values.get("source_tz_filename")
         self.draft_hierarchy = values.get("draft_hierarchy", {})
         self.fields = values.get("fields", [])
+        self.open_questions = values.get("open_questions", [])
         self.requirement_hints = values.get("requirement_hints", {})
         self.status = values.get("status", TZCreationStatus.ACTIVE.value)
         self.llm_model = values.get("llm_model", "")
@@ -76,9 +77,37 @@ def test_create_session_from_scratch(client, fake_user):
             new=AsyncMock(return_value=created),
         ),
         patch.object(
+            tz_creation_router,
+            "run_orienting_questions_turn",
+            new=AsyncMock(
+                return_value={
+                    "assistant_message": "Что именно нужно закупить?"
+                }
+            ),
+        ) as orient_mock,
+        patch.object(
+            tz_creation_router.TZCreationMessageDAO,
+            "create",
+            new=AsyncMock(return_value=_FakeMessage("assistant", "x")),
+        ),
+        patch.object(
+            tz_creation_router.TZCreationSessionDAO,
+            "update_fields",
+            new=AsyncMock(return_value=created),
+        ),
+        patch.object(
+            tz_creation_router.TZCreationSessionDAO,
+            "get_by_id_and_user",
+            new=AsyncMock(return_value=created),
+        ),
+        patch.object(
             tz_creation_router.TZCreationMessageDAO,
             "list_by_session",
-            new=AsyncMock(return_value=[]),
+            new=AsyncMock(
+                return_value=[
+                    _FakeMessage("assistant", "Что именно нужно закупить?")
+                ]
+            ),
         ),
     ):
         response = client.post(
@@ -92,6 +121,10 @@ def test_create_session_from_scratch(client, fake_user):
     assert body["status"] == "active"
     assert body["messages_used"] == 0
     assert body["messages_limit"] > 0
+    assert body["open_questions"] == []
+    orient_mock.assert_awaited_once()
+    assert len(body["messages"]) == 1
+    assert body["messages"][0]["role"] == "assistant"
 
 
 def test_non_admin_cannot_access_tz_creation(fake_user):
@@ -131,8 +164,10 @@ def test_send_message_runs_kickoff_turn_for_first_from_scratch_message(
                 "label": "Производительность",
                 "value": "",
                 "status": "pending",
+                "confirmed": False,
             }
         ],
+        open_questions=["Какой объём?"],
         llm_model="deepseek-v4-flash",
     )
     kickoff_result = {
@@ -146,8 +181,10 @@ def test_send_message_runs_kickoff_turn_for_first_from_scratch_message(
                 "status": "pending",
             }
         ],
+        "open_questions": ["Какой объём?"],
         "suggested_done": False,
     }
+    prior = [_FakeMessage("assistant", "Что именно нужно закупить?")]
 
     with (
         patch.object(
@@ -158,7 +195,7 @@ def test_send_message_runs_kickoff_turn_for_first_from_scratch_message(
         patch.object(
             tz_creation_router.TZCreationMessageDAO,
             "list_by_session",
-            new=AsyncMock(return_value=[]),
+            new=AsyncMock(return_value=prior),
         ),
         patch.object(
             tz_creation_router,
@@ -183,13 +220,84 @@ def test_send_message_runs_kickoff_turn_for_first_from_scratch_message(
 
     assert response.status_code == 200
     kickoff_mock.assert_awaited_once()
+    call_kwargs = kickoff_mock.await_args.kwargs
+    assert call_kwargs.get("history") is not None
     body = response.json()
     assert body["draft_hierarchy"]["1"]["text"] == "Общие требования"
     assert body["fields"][0]["key"] == "capacity"
     assert body["messages_used"] == 1
+    assert body["open_questions"] == ["Какой объём?"]
 
     _, update_kwargs = update_mock.call_args
     assert update_kwargs["messages_used"] == 1
+    assert "context" in update_kwargs
+    assert update_kwargs["open_questions"] == ["Какой объём?"]
+
+
+def test_send_message_runs_gap_analysis_for_first_refine_reply(
+    client, fake_user
+):
+    row = _FakeSession(
+        user_id=fake_user.id,
+        mode="refine_existing",
+        status="active",
+        messages_used=0,
+        draft_hierarchy={"1": {"text": "Общие требования", "children": {}}},
+    )
+    updated = _FakeSession(
+        id=row.id,
+        user_id=fake_user.id,
+        mode="refine_existing",
+        status="active",
+        messages_used=1,
+        draft_hierarchy={"1": {"text": "Общие требования", "children": {}}},
+        fields=[],
+        open_questions=["Нужна ли гарантия?"],
+    )
+    gap_result = {
+        "assistant_message": "В ТЗ не хватает гарантийных обязательств.",
+        "hierarchy_patch": {},
+        "fields_update": [],
+        "open_questions": ["Нужна ли гарантия?"],
+        "suggested_done": False,
+    }
+    prior = [_FakeMessage("assistant", "Что улучшить в загруженном ТЗ?")]
+
+    with (
+        patch.object(
+            tz_creation_router.TZCreationSessionDAO,
+            "get_by_id_and_user",
+            new=AsyncMock(return_value=row),
+        ),
+        patch.object(
+            tz_creation_router.TZCreationMessageDAO,
+            "list_by_session",
+            new=AsyncMock(return_value=prior),
+        ),
+        patch.object(
+            tz_creation_router,
+            "run_gap_analysis_turn",
+            new=AsyncMock(return_value=gap_result),
+        ) as gap_mock,
+        patch.object(
+            tz_creation_router.TZCreationMessageDAO,
+            "create",
+            new=AsyncMock(return_value=_FakeMessage("user", "x")),
+        ),
+        patch.object(
+            tz_creation_router.TZCreationSessionDAO,
+            "update_fields",
+            new=AsyncMock(return_value=updated),
+        ),
+    ):
+        response = client.post(
+            f"/api/tz-creation/{row.id}/messages",
+            json={"message": "Добавьте гарантию и комплектность"},
+        )
+
+    assert response.status_code == 200
+    gap_mock.assert_awaited_once()
+    assert response.json()["open_questions"] == ["Нужна ли гарантия?"]
 
 
 def test_send_message_blocked_when_quota_exhausted(client, fake_user):

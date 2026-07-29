@@ -54,6 +54,7 @@ def subscription_to_response(
         price_module_2_monthly=p2,
         price_bundle_monthly=bundle,
         is_active=row.is_active,
+        starts_at=row.starts_at,
         expires_at=row.expires_at,
         searches_used_this_month=(
             usage.searches_used if usage is not None else 0

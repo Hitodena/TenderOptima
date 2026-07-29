@@ -53,17 +53,17 @@ const props = defineProps<{
 const steps = computed(() => [
 	{
 		id: 'chat',
-		label: 'Ответьте ИИ в диалоге',
+		label: 'Ответьте на наводящие вопросы ИИ',
 		done: props.state.hasMessages,
 	},
 	{
 		id: 'structure',
-		label: 'Проверьте и дополните структуру ТЗ',
+		label: 'Проверьте и дополните пункты ТЗ',
 		done: props.state.hasRequirements,
 	},
 	{
 		id: 'fields',
-		label: 'Уточните параметры ТЗ',
+		label: 'Подтвердите параметры ТЗ галочкой',
 		done: props.state.fieldsReady,
 	},
 	{

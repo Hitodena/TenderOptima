@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -49,12 +50,19 @@ class FrontendErrorLogPageResponse(BaseModel):
     total: int
 
 
-class IdeaSuggestionCreate(BaseModel):
-    """Payload sent by the frontend when a user submits an idea."""
+class IdeaAttachment(BaseModel):
+    """Metadata for a file attached to an idea / problem report."""
 
-    model_config = ConfigDict(str_strip_whitespace=True)
+    model_config = ConfigDict(from_attributes=True)
 
-    message: str = Field(min_length=1, max_length=4000)
+    filename: Annotated[str, Field(description="Original filename")]
+    content_type: Annotated[
+        str | None, Field(description="MIME type of the file")
+    ] = None
+    size: Annotated[int | None, Field(description="File size in bytes")] = None
+    path: Annotated[
+        str | None, Field(description="Server path where the file is stored")
+    ] = None
 
 
 class IdeaSuggestionResponse(BaseModel):
@@ -64,6 +72,7 @@ class IdeaSuggestionResponse(BaseModel):
     user_id: uuid.UUID
     user: UserBriefResponse | None = None
     message: str
+    attachments: list[IdeaAttachment] = Field(default_factory=list)
     created_at: datetime
 
 

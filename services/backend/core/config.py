@@ -101,6 +101,8 @@ class Config(BaseSettings):
     max_upload_files: int = 2
     max_upload_size: int = 10 * 1024 * 1024
     max_tz_upload_size: int = 100 * 1024 * 1024
+    max_idea_upload_files: int = 10
+    max_idea_upload_size: int = 5 * 1024 * 1024
 
     # TZ creation wizard (Module 3)
     tz_creation_max_messages_per_session: int = 40

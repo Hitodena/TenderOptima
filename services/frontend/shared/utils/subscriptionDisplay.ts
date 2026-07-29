@@ -213,6 +213,66 @@ export function formatUsageLimit(value: number | null | undefined): string {
 	return value.toLocaleString('ru-RU')
 }
 
+export const SUBSCRIPTION_EXPIRY_WARNING_DAYS = 14
+
+export type SubscriptionExpiryStatus =
+	| 'none'
+	| 'unlimited'
+	| 'starts_only'
+	| 'active'
+	| 'warning'
+	| 'expired'
+
+export function daysUntilExpiry(
+	subscription: SubscriptionResponse | null | undefined,
+): number | null {
+	if (!subscription?.expires_at) return null
+	const expires = new Date(subscription.expires_at)
+	if (Number.isNaN(expires.getTime())) return null
+	const now = new Date()
+	const msPerDay = 1000 * 60 * 60 * 24
+	return Math.ceil((expires.getTime() - now.getTime()) / msPerDay)
+}
+
+export function subscriptionExpiryStatus(
+	subscription: SubscriptionResponse | null | undefined,
+): SubscriptionExpiryStatus {
+	if (!subscription) return 'none'
+	if (!subscription.expires_at) {
+		if (!subscription.is_active) return 'none'
+		if (subscription.starts_at) return 'starts_only'
+		return 'unlimited'
+	}
+	const days = daysUntilExpiry(subscription)
+	if (days == null) return 'none'
+	if (days < 0 || !subscription.is_active) return 'expired'
+	if (days <= SUBSCRIPTION_EXPIRY_WARNING_DAYS) return 'warning'
+	return 'active'
+}
+
+export function formatExpiryDate(iso: string | null | undefined): string {
+	if (!iso) return ''
+	const date = new Date(iso)
+	if (Number.isNaN(date.getTime())) return ''
+	return date.toLocaleDateString('ru-RU', {
+		day: 'numeric',
+		month: 'long',
+		year: 'numeric',
+	})
+}
+
+export function formatDaysRemaining(days: number): string {
+	const abs = Math.abs(days)
+	const mod100 = abs % 100
+	const mod10 = abs % 10
+	let unit = 'дней'
+	if (mod100 < 11 || mod100 > 14) {
+		if (mod10 === 1) unit = 'день'
+		else if (mod10 >= 2 && mod10 <= 4) unit = 'дня'
+	}
+	return `${abs} ${unit}`
+}
+
 export const SUBSCRIPTION_PLAN_ORDER: SubscriptionPlan[] = [
 	'test',
 	'mini',

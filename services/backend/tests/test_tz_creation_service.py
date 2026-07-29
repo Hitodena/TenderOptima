@@ -18,6 +18,7 @@ def test_parse_turn_result_normalizes_missing_fields():
         "assistant_message": "Привет",
         "hierarchy_patch": {},
         "fields_update": [],
+        "open_questions": [],
         "suggested_done": False,
     }
 
@@ -35,12 +36,14 @@ def test_merge_fields_upserts_by_key_and_preserves_order():
             "value": "",
             "status": "pending",
             "requirement_key": "2.1",
+            "confirmed": False,
         },
         {
             "key": "power",
             "label": "Мощность",
             "value": "5 кВт",
             "status": "answered",
+            "confirmed": True,
         },
     ]
     updates = [
@@ -65,9 +68,35 @@ def test_merge_fields_upserts_by_key_and_preserves_order():
     assert merged[0]["value"] == "100 кг/ч"
     assert merged[0]["status"] == "answered"
     assert merged[0]["requirement_key"] == "2.1"
+    assert merged[0]["confirmed"] is False  # LLM changed value → reset
     assert merged[1]["value"] == "5 кВт"  # untouched by updates
+    assert merged[1]["confirmed"] is True
     assert merged[2]["label"] == "Гарантия"
     assert merged[2]["requirement_key"] == "5.1"
+    assert merged[2]["confirmed"] is False
+
+
+def test_merge_fields_preserves_confirmed_when_value_unchanged():
+    existing = [
+        {
+            "key": "capacity",
+            "label": "Производительность",
+            "value": "100 кг/ч",
+            "status": "answered",
+            "confirmed": True,
+        }
+    ]
+    updates = [
+        {
+            "key": "capacity",
+            "label": "Производительность",
+            "value": "100 кг/ч",
+            "status": "suggested",
+        }
+    ]
+    merged = _merge_fields(existing, updates)
+    assert merged[0]["confirmed"] is True
+    assert merged[0]["status"] == "suggested"
 
 
 def test_merge_fields_ignores_malformed_entries():
@@ -108,10 +137,11 @@ def test_apply_turn_result_merges_hierarchy_and_fields_together():
                 "status": "answered",
             }
         ],
+        "open_questions": ["Какой срок поставки?"],
         "suggested_done": False,
     }
 
-    hierarchy, fields = apply_turn_result(
+    hierarchy, fields, open_questions = apply_turn_result(
         draft_hierarchy={"1": {"text": "Общие требования", "children": {}}},
         fields=[],
         result=result,
@@ -120,6 +150,7 @@ def test_apply_turn_result_merges_hierarchy_and_fields_together():
     assert set(hierarchy.keys()) == {"1", "2"}
     assert fields[0]["key"] == "capacity"
     assert fields[0]["value"] == "100 кг/ч"
+    assert open_questions == ["Какой срок поставки?"]
 
 
 def test_get_cached_requirement_hint_matches_text_hash():

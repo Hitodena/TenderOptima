@@ -105,6 +105,7 @@ export interface SubscriptionResponse {
 	price_module_2_monthly: string | null;
 	price_bundle_monthly: string | null;
 	is_active: boolean;
+	starts_at: string | null;
 	expires_at: string | null;
 	searches_used_this_month?: number;
 	emails_sent_this_month?: number;
@@ -205,7 +206,13 @@ export interface SubscriptionUpdate {
 	price_module_2_monthly?: string | null;
 	price_bundle_monthly?: string | null;
 	is_active?: boolean | null;
+	starts_at?: string | null;
 	expires_at?: string | null;
+}
+
+export interface ChangePlanRequest {
+	plan: SubscriptionPlan;
+	module_tab?: 'module1' | 'module2' | 'complex';
 }
 
 export interface AdminUserListItem {
@@ -748,8 +755,11 @@ export interface FrontendErrorLogPageResponse {
 	total: number;
 }
 
-export interface IdeaSuggestionCreate {
-	message: string;
+export interface IdeaAttachment {
+	filename: string;
+	content_type: string | null;
+	size: number | null;
+	path: string | null;
 }
 
 export interface IdeaSuggestionResponse {
@@ -757,6 +767,7 @@ export interface IdeaSuggestionResponse {
 	user_id: string;
 	user: UserBrief | null;
 	message: string;
+	attachments: IdeaAttachment[];
 	created_at: string;
 }
 
@@ -767,10 +778,8 @@ export interface IdeaSuggestionPageResponse {
 	total: number;
 }
 
-export type TZCreationDomain = 'equipment' | 'food' | 'services' | 'other';
-
 export interface TZCreationContext {
-	domain: TZCreationDomain;
+	industry: string;
 	note: string;
 }
 
@@ -780,6 +789,7 @@ export interface TZCreationField {
 	value: string;
 	status: string;
 	requirement_key?: string | null;
+	confirmed?: boolean;
 }
 
 export interface TZCreationRequirementHint {
@@ -811,6 +821,7 @@ export interface TZCreationSession {
 	source_tz_filename: string | null;
 	draft_hierarchy: RequirementsHierarchy;
 	fields: TZCreationField[];
+	open_questions?: string[];
 	requirement_hints?: Record<string, TZCreationRequirementHint>;
 	status: TZCreationStatus;
 	llm_model: string;

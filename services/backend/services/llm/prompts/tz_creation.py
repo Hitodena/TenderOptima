@@ -3,12 +3,10 @@
 Two entry scenarios feed the same iterative "turn" loop:
 
 - ``refine_existing`` — an uploaded TZ is extracted with the existing
-  Module 2 pipeline, then :func:`build_tz_gap_analysis_prompt` produces
-  the wizard's opening assistant message (missing sections, risks,
-  clarifying questions).
-- ``from_scratch`` — the user describes an abstract idea and
-  :func:`build_tz_kickoff_prompt` proposes an initial outline skeleton
-  plus the clarifying parameters to collect.
+  Module 2 pipeline, then an intake turn asks what to improve; the first
+  user reply triggers :func:`build_tz_gap_analysis_prompt`.
+- ``from_scratch`` — an orienting-questions turn finds key anchor points;
+  the first user reply triggers :func:`build_tz_kickoff_prompt`.
 
 Every following turn (both scenarios) goes through
 :func:`build_tz_creation_turn_prompt`, which always returns the same
@@ -17,74 +15,47 @@ JSON contract so the backend can apply it uniformly.
 
 import json
 
-from backend.utils.requirements_struct import RequirementNode
+from backend.utils.requirements_struct import (
+    RequirementNode,
+    count_requirements,
+)
 
 TZCreationContext = dict[str, str | None]
 
-_DOMAIN_LABELS: dict[str, str] = {
-    "equipment": "оборудование",
-    "food": "пищевая продукция",
-    "services": "услуги",
-    "other": "прочее",
-}
-
-_DOMAIN_HINTS: dict[str, str] = {
-    "equipment": """\
-Тип закупки — ОБОРУДОВАНИЕ. Обязательно учитывай типовые риски и не забывай \
-уточнить/предложить:
-- гарантийные обязательства, срок гарантии, условия гарантийного обслуживания
-- комплект ЗИП (запасных частей), доступность расходных материалов
-- монтаж, пусконаладочные работы, обучение персонала заказчика
-- технические характеристики (производительность, габариты, вес, \
-энергопотребление, класс электробезопасности)
-- соответствие стандартам (ГОСТ Р, ТР ТС 010/2011 «О безопасности машин и \
-оборудования», при пищевом оборудовании — дополнительно нормы контакта с \
-пищевой продукцией)
-- условия эксплуатации (климатическое исполнение, требования к помещению, \
-электропитанию, вентиляции)
-- комплектность поставки, техническая документация (паспорт, руководство \
-по эксплуатации, сертификат/декларация соответствия)
-- условия транспортировки, разгрузки, ответственность за повреждения""",
-    "food": """\
-Тип закупки — ПИЩЕВАЯ ПРОДУКЦИЯ. Обязательно учитывай типовые риски и не \
-забывай уточнить/предложить:
-- соответствие ТР ТС 021/2011 «О безопасности пищевой продукции» и \
-профильным техническим регламентам (ТР ТС 022/2011 по маркировке и др.)
-- сроки годности на момент поставки (минимальный остаточный срок годности)
-- условия хранения и транспортировки (температурный режим, влажность)
-- упаковка, маркировка, партионность, страна происхождения сырья
-- декларация/сертификат соответствия, ветеринарные сопроводительные \
-документы (при необходимости)
-- органолептические и физико-химические показатели качества
-- порядок контроля качества и приёмки партии, право на возврат/замену \
-несоответствующей продукции""",
-    "services": """\
-Тип закупки — УСЛУГИ. Обязательно учитывай типовые риски и не забывай \
-уточнить/предложить:
-- сроки и этапы оказания услуги, SLA (уровень обслуживания)
-- зона ответственности сторон, порядок приёмки результата
-- необходимые лицензии, допуски, квалификация исполнителя
-- порядок оплаты, штрафные санкции за нарушение сроков/качества""",
-    "other": """\
-Тип закупки не уточнён отдельной категорией — ориентируйся на общие \
-требования тендерной практики: технические характеристики, комплектность, \
-сроки и условия поставки, гарантии, документация, порядок приёмки.""",
-}
+_BASE_PROCUREMENT_HINT = """\
+Ориентируйся на общие требования тендерной практики: технические \
+характеристики, комплектность, сроки и условия поставки, гарантии, \
+документация, порядок приёмки, нормативные требования (ГОСТ / ТР ТС / \
+СанПиН — по предмету закупки), сертификаты и допуски. Если отрасль \
+указана — уточни типичные для неё риски; если что-то неочевидно — \
+спроси у пользователя, а не выдумывай."""
 
 
-def _domain_hint(context: TZCreationContext | None) -> str:
-    domain = (context or {}).get("domain") or "other"
-    return _DOMAIN_HINTS.get(domain, _DOMAIN_HINTS["other"])
+def _industry_hint(context: TZCreationContext | None) -> str:
+    industry = ((context or {}).get("industry") or "").strip()
+    if not industry:
+        return (
+            "Отрасль/направление закупки не указаны.\n"
+            f"{_BASE_PROCUREMENT_HINT}"
+        )
+    return (
+        f'Направление/отрасль закупки: "{industry}". Самостоятельно определи '
+        "и учитывай характерные для неё нормативные требования "
+        "(ГОСТ/ТР ТС/СанПиН), типовые технические параметры, необходимые "
+        "сертификаты/допуски и типичные риски; если что-то неочевидно — "
+        "спроси у пользователя, а не выдумывай.\n"
+        f"{_BASE_PROCUREMENT_HINT}"
+    )
 
 
 def _context_summary(context: TZCreationContext | None) -> str:
     if not context:
         return ""
-    domain = context.get("domain")
+    industry = (context.get("industry") or "").strip()
     note = (context.get("note") or "").strip()
     parts = []
-    if domain:
-        parts.append(f"тип закупки: {_DOMAIN_LABELS.get(domain, domain)}")
+    if industry:
+        parts.append(f"отрасль/направление: {industry}")
     if note:
         parts.append(f"дополнительный контекст от пользователя: {note}")
     return "; ".join(parts)
@@ -93,13 +64,14 @@ def _context_summary(context: TZCreationContext | None) -> str:
 _UI_LAYOUT = """\
 Интерфейс конструктора ТЗ, в котором работает пользователь:
 - «Диалог с ИИ» — чат, куда ты пишешь "assistant_message"
-- «Структура ТЗ» — дерево разделов и требований (обновляется через \
+- «Пункты ТЗ» — вкладка с деревом разделов и требований (обновляется через \
 "hierarchy_patch")
-- «Параметры ТЗ» — окно/вкладка со списком ключевых полей закупки \
-(обновляется через "fields_update")
+- «Параметры ТЗ» — панель со списком ключевых полей закупки \
+(обновляется через "fields_update") и блоком открытых вопросов \
+("open_questions")
 
 Когда нужно направить пользователя заполнить или проверить поля, ссылайся \
-именно на окно «Параметры ТЗ». Не пиши «в списке ниже», «в боковой панели» \
+именно на панель «Параметры ТЗ». Не пиши «в списке ниже», «в боковой панели» \
 или «внизу сообщения» — этих элементов в чате нет."""
 
 _RESPONSE_CONTRACT = f"""\
@@ -114,6 +86,9 @@ _RESPONSE_CONTRACT = f"""\
   "fields_update": [
     {{"key": "capacity", "label": "Производительность", "value": "уточнить у пользователя", "status": "pending", "requirement_key": "2.1"}}
   ],
+  "open_questions": [
+    "Какой объём закупки планируется?"
+  ],
   "suggested_done": false
 }}
 
@@ -125,20 +100,116 @@ _RESPONSE_CONTRACT = f"""\
 "1", "1.1", "1.2.1" и т.п., родительский узел должен существовать в \
 дереве или в этом же патче. Каждый узел — {{"text": str, "children": {{}}}}
 2. "fields_update" — параметры, которые нужно показать пользователю в \
-окне/вкладке «Параметры ТЗ»: ключ (латиницей, без пробелов), понятная \
-подпись на русском, текущее значение (или пустая строка/предположение), \
+панели «Параметры ТЗ»: ключ (латиницей, без пробелов), понятная \
+подпись на русском, текущее значение или предложенный вариант, \
 статус "pending" (ещё не уточнено), "suggested" (предложено ИИ, ждёт \
-подтверждения) или "answered" (пользователь подтвердил значение). Если \
-параметр относится к конкретному пункту структуры ТЗ, обязательно \
-заполни "requirement_key" номером пункта (например "2.1")
-3. "suggested_done": true — только когда структура ТЗ достаточно полна и \
+подтверждения галочкой пользователем) или "answered" (пользователь \
+уже подтвердил). Если параметр относится к конкретному пункту структуры \
+ТЗ, обязательно заполни "requirement_key" номером пункта (например "2.1"). \
+Не пытайся управлять флагом подтверждения — его ставит только пользователь
+3. "open_questions" — ПОЛНЫЙ актуальный список всё ещё открытых \
+уточняющих вопросов (не привязанных к конкретному параметру). На каждом \
+ходу заменяй список целиком: убери решённые, добавь новые. Пустой \
+массив [], если открытых вопросов нет
+4. "suggested_done": true — только когда структура ТЗ достаточно полна и \
 не осталось критичных уточняющих вопросов
-4. Пиши по-деловому, без эмодзи и маркетинговых оборотов
-5. Не выдумывай технические характеристики от имени пользователя — \
-предлагай варианты и явно проси подтверждения
-6. В "assistant_message", если просишь уточнить параметры из \
-"fields_update", формулируй так: «уточните параметры в окне \
-«Параметры ТЗ»» (или аналогично с этим точным названием окна)"""
+5. Пиши по-деловому, без эмодзи и маркетинговых оборотов
+6. Не выдумывай технические характеристики от имени пользователя — \
+предлагай варианты и явно проси подтверждения в панели «Параметры ТЗ»
+7. В "assistant_message", если просишь уточнить параметры из \
+"fields_update", формулируй так: «уточните параметры в панели \
+«Параметры ТЗ»» (или аналогично с этим точным названием панели)"""
+
+
+def build_tz_orienting_questions_prompt(
+    context: TZCreationContext | None = None,
+) -> tuple[str, str]:
+    """First assistant message for from_scratch: key anchor questions."""
+    industry_hint = _industry_hint(context)
+    context_summary = _context_summary(context)
+
+    system = f"""\
+Ты — эксперт по составлению технических заданий (ТЗ) для тендерных закупок.
+Пользователь только что открыл конструктор ТЗ «с нуля». Твоя задача — \
+задать 3–5 наводящих вопросов, которые найдут ключевые точки опоры для \
+будущего ТЗ. Пока НЕ предлагай структуру ТЗ и НЕ заполняй параметры.
+
+{industry_hint}
+
+Наводящие вопросы должны покрывать (адаптируй формулировки):
+1. Что именно закупается (предмет / услуга / продукт)
+2. Масштаб / объём / производительность
+3. Критичные ограничения (сроки, бюджет, место поставки, совместимость)
+4. Обязательные нормативные требования или сертификация
+5. Что для заказчика особенно важно / риски, которых нельзя допустить
+
+Верни ТОЛЬКО JSON без markdown-обёрток:
+{{
+  "assistant_message": "приветствие + 3-5 нумерованных вопросов на русском"
+}}
+
+Правила:
+1. Пиши по-деловому, без эмодзи и маркетинга
+2. Не выдумывай ответы за пользователя
+3. Если отрасль уже указана в контексте — учти её в формулировках; \
+если нет — мягко предложи указать отрасль/направление в поле \
+«Отрасль/направление» (например, «пищевая отрасль»)
+4. В конце коротко скажи, что после ответа начнётся формирование структуры ТЗ"""
+
+    context_line = (
+        f"\nКонтекст закупки: {context_summary}." if context_summary else ""
+    )
+    user = (
+        "Пользователь только что создал сессию конструктора ТЗ с нуля. "
+        f"Задай наводящие вопросы.{context_line}"
+    )
+    return system, user
+
+
+def build_tz_post_upload_intake_prompt(
+    hierarchy: dict[str, RequirementNode],
+    context: TZCreationContext | None = None,
+) -> tuple[str, str]:
+    """First assistant message after refine_existing extract."""
+    industry_hint = _industry_hint(context)
+    context_summary = _context_summary(context)
+    hierarchy_json = json.dumps(hierarchy, ensure_ascii=False, indent=2)
+    req_count = count_requirements(hierarchy)
+    section_count = len(hierarchy)
+
+    system = f"""\
+Ты — эксперт по составлению и проверке технических заданий (ТЗ).
+Пользователь загрузил существующее ТЗ; оно уже извлечено в иерархию. \
+Твоя задача на ЭТОМ шаге — коротко резюмировать, что удалось извлечь, \
+и задать уточняющие вопросы. Пока НЕ делай полный gap-анализ и НЕ \
+переписывай структуру.
+
+{industry_hint}
+
+Верни ТОЛЬКО JSON без markdown-обёрток:
+{{
+  "assistant_message": "резюме + вопросы на русском"
+}}
+
+В "assistant_message" обязательно:
+1. Короткое резюме: сколько разделов верхнего уровня и пунктов требований \
+нашлось (ориентир: ~{section_count} разделов, ~{req_count} пунктов)
+2. Вопрос: что именно улучшить / на что обратить внимание (пробелы, \
+риски, неоднозначности)
+3. Если отрасль/направление ещё не указаны — предложи заполнить поле \
+«Отрасль/направление» (по желанию)
+4. Скажи, что после ответа начнётся анализ пробелов и подводных камней
+
+Правила: по-деловому, без эмодзи, без выдуманных фактов."""
+
+    context_line = (
+        f"\nКонтекст закупки: {context_summary}." if context_summary else ""
+    )
+    user = (
+        f"Извлечённая структура загруженного ТЗ:\n{hierarchy_json}"
+        f"{context_line}"
+    )
+    return system, user
 
 
 def build_tz_kickoff_prompt(
@@ -147,17 +218,17 @@ def build_tz_kickoff_prompt(
 ) -> tuple[str, str]:
     """Prompt for the "from scratch" scenario: turn an abstract idea into a
     draft outline plus clarifying parameters."""
-    domain_hint = _domain_hint(context)
+    industry_hint = _industry_hint(context)
     context_summary = _context_summary(context)
 
     system = f"""\
 Ты — эксперт по составлению технических заданий (ТЗ) для тендерных закупок.
-Пользователь описал абстрактную идею закупки. Твоя задача — предложить \
-черновую иерархическую структуру ТЗ (разделы и подпункты, пронумерованные \
-"1", "1.1", "1.2" и т.д.) и список параметров, которые нужно уточнить у \
-пользователя, чтобы наполнить разделы конкретикой.
+Пользователь ответил на наводящие вопросы / описал идею закупки. Твоя \
+задача — предложить черновую иерархическую структуру ТЗ (разделы и \
+подпункты, пронумерованные "1", "1.1", "1.2" и т.д.) и список параметров, \
+которые нужно уточнить у пользователя, чтобы наполнить разделы конкретикой.
 
-{domain_hint}
+{industry_hint}
 
 Общие требования к структуре ТЗ (адаптируй под предметную область):
 1. Общие требования / предмет закупки
@@ -174,7 +245,7 @@ def build_tz_kickoff_prompt(
     context_line = (
         f"\nКонтекст закупки: {context_summary}." if context_summary else ""
     )
-    user = f"Идея пользователя для будущего ТЗ:\n{user_idea}{context_line}"
+    user = f"Идея / ответы пользователя для будущего ТЗ:\n{user_idea}{context_line}"
     return system, user
 
 
@@ -184,23 +255,24 @@ def build_tz_gap_analysis_prompt(
 ) -> tuple[str, str]:
     """Prompt for the "refine existing" scenario: analyze an already
     extracted TZ hierarchy for gaps, risks and open questions."""
-    domain_hint = _domain_hint(context)
+    industry_hint = _industry_hint(context)
     context_summary = _context_summary(context)
     hierarchy_json = json.dumps(hierarchy, ensure_ascii=False, indent=2)
 
     system = f"""\
 Ты — эксперт по составлению и проверке технических заданий (ТЗ) для \
 тендерных закупок. Пользователь загрузил существующее ТЗ; ниже его \
-извлечённая структура. Найди пробелы, потенциальные риски и \
+извлечённая структура. Учти, что он уже указал, что именно хочет \
+улучшить (см. контекст / историю). Найди пробелы, потенциальные риски и \
 неоднозначности с учётом предметной области, и предложи, что стоит \
 добавить или уточнить.
 
-{domain_hint}
+{industry_hint}
 
 Что нужно вернуть в "assistant_message":
 1. Короткое резюме найденных пробелов и рисков (2-5 пунктов)
 2. Явные уточняющие вопросы к пользователю по самым важным пробелам
-3. Если заполняешь "fields_update" — попроси уточнить параметры в окне \
+3. Если заполняешь "fields_update" — попроси уточнить параметры в панели \
 «Параметры ТЗ»
 
 {_RESPONSE_CONTRACT}
@@ -231,7 +303,7 @@ def build_tz_creation_turn_prompt(
     full so the model's patches stay grounded, independently of how much
     prior chat history is included via ``LLMClient.complete(history=...)``.
     """
-    domain_hint = _domain_hint(context)
+    industry_hint = _industry_hint(context)
     context_summary = _context_summary(context)
     hierarchy_json = json.dumps(draft_hierarchy, ensure_ascii=False, indent=2)
     fields_json = json.dumps(fields, ensure_ascii=False, indent=2)
@@ -240,19 +312,21 @@ def build_tz_creation_turn_prompt(
 Ты — эксперт по составлению технических заданий (ТЗ) для тендерных закупок, \
 ведёшь диалог с пользователем, помогая пошагово наполнить и уточнить ТЗ.
 
-{domain_hint}
+{industry_hint}
 
 На каждом шаге:
 1. Учитывай последнее сообщение пользователя и текущее состояние черновика
 2. Если пользователь дал конкретную информацию — отрази её в \
 "hierarchy_patch" (добавь/уточни соответствующий пункт) и переведи \
-связанный параметр в "fields_update" со статусом "answered"
+связанный параметр в "fields_update" со статусом "suggested" (ждёт \
+подтверждения галочкой) или "answered", если пользователь явно подтвердил
 3. Если информации не хватает — задай ОДИН уточняющий вопрос за раз в \
-"assistant_message", не заваливай пользователя списком вопросов
+"assistant_message", не заваливай пользователя списком вопросов; \
+остальные держи в "open_questions"
 4. Обращай внимание на подводные камни предметной области (см. выше) и \
 предупреждай о них, если пользователь их не учёл
 5. Когда нужно заполнить или проверить поля — направляй пользователя в \
-окно «Параметры ТЗ», а не «в список ниже»
+панель «Параметры ТЗ», а не «в список ниже»
 
 {_RESPONSE_CONTRACT}"""
 
@@ -279,7 +353,7 @@ def build_requirement_hint_prompt(
     context: TZCreationContext | None = None,
 ) -> tuple[str, str]:
     """Prompt for an on-demand tip about one TZ outline item."""
-    domain_hint = _domain_hint(context)
+    industry_hint = _industry_hint(context)
     context_summary = _context_summary(context)
     hierarchy_json = json.dumps(draft_hierarchy, ensure_ascii=False, indent=2)
 
@@ -287,7 +361,7 @@ def build_requirement_hint_prompt(
 Ты — эксперт по составлению технических заданий (ТЗ) для тендерных закупок.
 Пользователь запросил короткую подсказку по одному пункту структуры ТЗ.
 
-{domain_hint}
+{industry_hint}
 
 Верни ТОЛЬКО JSON без markdown-обёрток:
 {{
@@ -322,16 +396,16 @@ def build_field_hint_prompt(
     context: TZCreationContext | None = None,
 ) -> tuple[str, str]:
     """Prompt for an on-demand tip about one parameter in «Параметры ТЗ»."""
-    domain_hint = _domain_hint(context)
+    industry_hint = _industry_hint(context)
     context_summary = _context_summary(context)
     hierarchy_json = json.dumps(draft_hierarchy, ensure_ascii=False, indent=2)
 
     system = f"""\
 Ты — эксперт по составлению технических заданий (ТЗ) для тендерных закупок.
-Пользователь запросил короткую подсказку по одному параметру в окне \
+Пользователь запросил короткую подсказку по одному параметру в панели \
 «Параметры ТЗ».
 
-{domain_hint}
+{industry_hint}
 
 Верни ТОЛЬКО JSON без markdown-обёрток:
 {{
