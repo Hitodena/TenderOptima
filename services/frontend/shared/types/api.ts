@@ -779,6 +779,16 @@ export interface TZCreationField {
 	label: string;
 	value: string;
 	status: string;
+	requirement_key?: string | null;
+}
+
+export interface TZCreationRequirementHint {
+	text: string;
+	requirement_text?: string;
+	text_hash?: string;
+	model?: string;
+	generated_at?: string | null;
+	cached?: boolean;
 }
 
 export interface TZCreationMessageItem {
@@ -801,6 +811,7 @@ export interface TZCreationSession {
 	source_tz_filename: string | null;
 	draft_hierarchy: RequirementsHierarchy;
 	fields: TZCreationField[];
+	requirement_hints?: Record<string, TZCreationRequirementHint>;
 	status: TZCreationStatus;
 	llm_model: string;
 	messages_used: number;

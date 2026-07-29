@@ -269,30 +269,65 @@
 						]"
 					>
 						<template #header>
-							<div class="flex items-center justify-between gap-2 flex-wrap">
-								<div class="flex items-center gap-2">
-									<p class="font-semibold text-sm">Структура ТЗ</p>
-									<UBadge color="neutral" variant="subtle" size="xs">
-										{{ requirementsCount }} {{ requirementWord(requirementsCount) }}
-									</UBadge>
+							<div class="space-y-3">
+								<div class="flex items-center justify-between gap-2 flex-wrap">
+									<div class="flex items-center gap-2">
+										<p class="font-semibold text-sm">Структура ТЗ</p>
+										<UBadge color="neutral" variant="subtle" size="xs">
+											{{ requirementsCount }} {{ requirementWord(requirementsCount) }}
+										</UBadge>
+									</div>
+									<div v-if="structureDirty" class="flex items-center gap-1.5">
+										<UButton
+											size="xs"
+											variant="ghost"
+											color="neutral"
+											@click="discardStructureEdits"
+										>
+											Отменить
+										</UButton>
+										<UButton
+											size="xs"
+											color="primary"
+											:loading="savingStructure"
+											@click="saveStructure"
+										>
+											Сохранить
+										</UButton>
+									</div>
 								</div>
-								<div v-if="structureDirty" class="flex items-center gap-1.5">
-									<UButton
-										size="xs"
-										variant="ghost"
-										color="neutral"
-										@click="discardStructureEdits"
-									>
-										Отменить
-									</UButton>
-									<UButton
-										size="xs"
-										color="primary"
-										:loading="savingStructure"
-										@click="saveStructure"
-									>
-										Сохранить
-									</UButton>
+								<div class="flex items-center gap-2">
+									<UInput
+										v-model="structureSearchQuery"
+										size="sm"
+										icon="i-lucide-search"
+										placeholder="Найти пункт, например 2.1"
+										class="flex-1 min-w-0"
+										@keydown.enter.prevent="goToStructureMatch(0)"
+									/>
+									<template v-if="structureSearchMatches.length">
+										<span class="text-xs text-muted whitespace-nowrap">
+											{{ structureSearchIndex + 1 }}/{{ structureSearchMatches.length }}
+										</span>
+										<UButton
+											size="xs"
+											color="neutral"
+											variant="ghost"
+											icon="i-lucide-chevron-up"
+											:disabled="structureSearchMatches.length < 2"
+											aria-label="Предыдущий пункт"
+											@click="goToStructureMatch(-1)"
+										/>
+										<UButton
+											size="xs"
+											color="neutral"
+											variant="ghost"
+											icon="i-lucide-chevron-down"
+											:disabled="structureSearchMatches.length < 2"
+											aria-label="Следующий пункт"
+											@click="goToStructureMatch(1)"
+										/>
+									</template>
 								</div>
 							</div>
 						</template>
@@ -302,11 +337,17 @@
 								v-if="editableRows.length"
 								:rows="editableRows"
 								scope-id="tz-creation"
+								show-hints
+								:hints="requirementHints"
+								:hint-loading-key="hintLoadingKey"
+								:highlight-key="structureHighlightKey"
+								:focus-key="structureFocusKey"
 								@remove="removeRequirement"
 								@add-child="addChildRequirement"
 								@add-heading="addHeadingRequirement"
 								@add-sibling="addSiblingRequirement"
 								@reorder="reorderRequirement"
+								@request-hint="requestRequirementHint"
 							/>
 							<div v-else class="flex flex-col items-center gap-3 py-6">
 								<p class="text-sm text-muted text-center">
@@ -358,7 +399,15 @@
 								class="space-y-1.5"
 							>
 								<div class="flex items-center justify-between gap-2">
-									<p class="text-xs font-medium text-muted">{{ field.label }}</p>
+									<div class="min-w-0">
+										<p class="text-xs font-medium text-muted">{{ field.label }}</p>
+										<p
+											v-if="field.requirement_key"
+											class="text-[11px] text-muted/90 mt-0.5"
+										>
+											Пункт ТЗ: {{ field.requirement_key }}
+										</p>
+									</div>
 									<UBadge :color="fieldStatusColor(field.status)" variant="subtle" size="xs">
 										{{ fieldStatusLabel(field.status) }}
 									</UBadge>
@@ -386,7 +435,11 @@
 </template>
 
 <script lang="ts" setup>
-import type { TZCreationField, TZCreationSession } from '#shared/types'
+import type {
+	TZCreationField,
+	TZCreationRequirementHint,
+	TZCreationSession,
+} from '#shared/types'
 import { getTzCreationStatusColor, getTzCreationStatusLabel } from '#shared/types'
 import { getApiErrorDetail } from '#shared/utils/apiError'
 import {
@@ -555,6 +608,94 @@ watch(() => session.value?.messages.length, () => scrollChatToBottom())
 const editableRows = ref<EditableRequirementRow[]>([])
 const structureDirty = ref(false)
 const savingStructure = ref(false)
+const structureSearchQuery = ref('')
+const structureSearchIndex = ref(0)
+const structureFocusKey = ref<string | null>(null)
+const structureHighlightKey = ref<string | null>(null)
+const requirementHints = ref<Record<string, TZCreationRequirementHint>>({})
+const hintLoadingKey = ref<string | null>(null)
+
+watch(
+	() => session.value?.requirement_hints,
+	(hints) => {
+		requirementHints.value = { ...(hints ?? {}) }
+	},
+	{ immediate: true, deep: true },
+)
+
+const structureSearchMatches = computed(() => {
+	const q = structureSearchQuery.value.trim().replace(/\//g, '.')
+	if (!q) return [] as string[]
+	const keys = editableRows.value
+		.map((row) => row.key.replace(/\//g, '.'))
+		.filter((key) => !key.startsWith('__row_'))
+	const exact = keys.filter((key) => key === q)
+	if (exact.length) return exact
+	return keys.filter((key) => key.startsWith(q) || key.includes(`.${q}`))
+})
+
+watch(structureSearchMatches, (matches) => {
+	if (!matches.length) {
+		structureSearchIndex.value = 0
+		structureHighlightKey.value = null
+		return
+	}
+	if (structureSearchIndex.value >= matches.length) {
+		structureSearchIndex.value = 0
+	}
+	structureHighlightKey.value = matches[structureSearchIndex.value] ?? null
+})
+
+function goToStructureMatch(delta: number) {
+	const matches = structureSearchMatches.value
+	if (!matches.length) {
+		structureFocusKey.value = null
+		structureHighlightKey.value = null
+		return
+	}
+	const next = (structureSearchIndex.value + delta + matches.length) % matches.length
+	structureSearchIndex.value = next
+	const key = matches[next] ?? null
+	structureHighlightKey.value = key
+	structureFocusKey.value = null
+	nextTick(() => {
+		structureFocusKey.value = key
+	})
+}
+
+async function requestRequirementHint(requirementKey: string) {
+	if (!session.value || hintLoadingKey.value) return
+	const existing = requirementHints.value[requirementKey]
+	const row = editableRows.value.find(
+		(item) => item.key.replace(/\//g, '.') === requirementKey,
+	)
+	if (existing?.text && existing.requirement_text === (row?.text ?? '').trim()) {
+		return
+	}
+	hintLoadingKey.value = requirementKey
+	try {
+		const hint = await post<TZCreationRequirementHint>(
+			`/tz-creation/${session.value.id}/requirements/${encodeURIComponent(requirementKey)}/hint`,
+		)
+		requirementHints.value = {
+			...requirementHints.value,
+			[requirementKey]: hint,
+		}
+		if (session.value) {
+			session.value = {
+				...session.value,
+				requirement_hints: {
+					...(session.value.requirement_hints ?? {}),
+					[requirementKey]: hint,
+				},
+			}
+		}
+	} catch {
+		toast.add({ title: 'Не удалось получить подсказку', color: 'error' })
+	} finally {
+		hintLoadingKey.value = null
+	}
+}
 
 watch(
 	() => session.value?.draft_hierarchy,
@@ -669,6 +810,7 @@ async function saveFields() {
 	try {
 		const payload = editableFields.value.map((field) => ({
 			...field,
+			requirement_key: field.requirement_key ?? null,
 			status: field.value.trim() ? 'answered' : field.status,
 		}))
 		const updated = await patch<TZCreationSession>(

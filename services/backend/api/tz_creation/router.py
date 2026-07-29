@@ -32,6 +32,7 @@ from backend.api.tz_creation.schemas import (
     TZCreationHistoryPageResponse,
     TZCreationMessageItem,
     TZCreationMessageRequest,
+    TZCreationRequirementHint,
     TZCreationSessionCreateRequest,
     TZCreationSessionDetailResponse,
     TZCreationSessionListItem,
@@ -53,9 +54,14 @@ from backend.enums import (
     TZCreationStatus,
 )
 from backend.services.analysis.tz_creation import (
+    TZCreationTurnError,
     apply_turn_result,
+    build_requirement_hint_payload,
+    get_cached_requirement_hint,
+    resolve_requirement_text,
     run_chat_turn,
     run_kickoff_turn,
+    run_requirement_hint_turn,
 )
 from backend.services.analysis.tz_creation_docx import (
     DEFAULT_TITLE,
@@ -111,6 +117,22 @@ def _ensure_message_quota(row) -> None:
         )
 
 
+def _serialize_requirement_hints(
+    raw: object,
+) -> dict[str, TZCreationRequirementHint]:
+    if not isinstance(raw, dict):
+        return {}
+    result: dict[str, TZCreationRequirementHint] = {}
+    for key, value in raw.items():
+        if not isinstance(value, dict):
+            continue
+        try:
+            result[str(key)] = TZCreationRequirementHint.model_validate(value)
+        except (TypeError, ValueError):
+            continue
+    return result
+
+
 async def _session_response(
     session: AsyncSession,
     row,
@@ -124,6 +146,9 @@ async def _session_response(
         source_tz_filename=row.source_tz_filename,
         draft_hierarchy=normalize_tz_requirements(row.draft_hierarchy),
         fields=list(row.fields or []),
+        requirement_hints=_serialize_requirement_hints(
+            getattr(row, "requirement_hints", None)
+        ),
         status=TZCreationStatus(row.status),
         llm_model=row.llm_model or "",
         messages_used=row.messages_used,
@@ -170,6 +195,7 @@ async def create_tz_creation_session(
         source_tz_filename=None,
         draft_hierarchy={},
         fields=[],
+        requirement_hints={},
         status=initial_status,
         llm_model="",
         messages_used=0,
@@ -345,6 +371,83 @@ async def send_tz_creation_message(
         messages_used=updated.messages_used,
     )
     return await _session_response(session, updated)
+
+
+@router.post(
+    "/{session_id}/requirements/{requirement_key}/hint",
+    response_model=TZCreationRequirementHint,
+    summary="Get or generate an LLM hint for one TZ outline item",
+)
+async def get_tz_creation_requirement_hint(
+    session_id: uuid.UUID,
+    requirement_key: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> TZCreationRequirementHint:
+    row = await _get_owned_session(session, session_id, current_user.id)
+    key = requirement_key.replace("/", ".").strip()
+    if not key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Requirement key is required",
+        )
+    requirement_text = resolve_requirement_text(row.draft_hierarchy, key)
+    if requirement_text is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Requirement not found in draft hierarchy",
+        )
+    if not requirement_text:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Requirement text is empty",
+        )
+
+    cached = get_cached_requirement_hint(
+        getattr(row, "requirement_hints", None),
+        key,
+        requirement_text,
+    )
+    if cached and cached.get("text"):
+        return TZCreationRequirementHint.model_validate(cached)
+
+    try:
+        hint_text = await run_requirement_hint_turn(
+            key,
+            requirement_text,
+            normalize_tz_requirements(row.draft_hierarchy),
+            row.context,
+        )
+    except TZCreationTurnError as exc:
+        logger.warning(
+            "TZ creation requirement hint failed",
+            session_id=str(row.id),
+            requirement_key=key,
+            error=str(exc),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to generate requirement hint",
+        ) from exc
+
+    model_name = config.openai_model_for_tz_create()
+    payload = build_requirement_hint_payload(
+        requirement_key=key,
+        requirement_text=requirement_text,
+        hint_text=hint_text,
+        model=model_name,
+        cached=False,
+    )
+    hints = dict(getattr(row, "requirement_hints", None) or {})
+    store_payload = {k: v for k, v in payload.items() if k != "cached"}
+    store_payload.pop("requirement_key", None)
+    hints[key] = store_payload
+    await TZCreationSessionDAO.update_fields(
+        session,
+        row.id,
+        requirement_hints=hints,
+    )
+    return TZCreationRequirementHint.model_validate(payload)
 
 
 @router.patch(

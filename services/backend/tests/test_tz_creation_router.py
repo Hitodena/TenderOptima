@@ -39,6 +39,7 @@ class _FakeSession:
         self.source_tz_filename = values.get("source_tz_filename")
         self.draft_hierarchy = values.get("draft_hierarchy", {})
         self.fields = values.get("fields", [])
+        self.requirement_hints = values.get("requirement_hints", {})
         self.status = values.get("status", TZCreationStatus.ACTIVE.value)
         self.llm_model = values.get("llm_model", "")
         self.messages_used = values.get("messages_used", 0)
@@ -332,6 +333,55 @@ def test_complete_rejects_non_active_session(client, fake_user):
         response = client.post(f"/api/tz-creation/{row.id}/complete")
 
     assert response.status_code == 400
+
+
+def test_requirement_hint_returns_cached_entry_without_llm(client, fake_user):
+    from backend.services.analysis.tz_creation import requirement_text_hash
+
+    text = "Производительность не менее 100 кг/ч"
+    row = _FakeSession(
+        user_id=fake_user.id,
+        mode="from_scratch",
+        status="active",
+        draft_hierarchy={
+            "2": {
+                "text": "Технические характеристики",
+                "children": {
+                    "2.1": {"text": text, "children": {}},
+                },
+            }
+        },
+        requirement_hints={
+            "2.1": {
+                "text": "Уточните единицы и методику измерений.",
+                "requirement_text": text,
+                "text_hash": requirement_text_hash(text),
+                "model": "cached-model",
+                "generated_at": "2026-07-29T00:00:00+00:00",
+            }
+        },
+    )
+    with (
+        patch.object(
+            tz_creation_router.TZCreationSessionDAO,
+            "get_by_id_and_user",
+            new=AsyncMock(return_value=row),
+        ),
+        patch.object(
+            tz_creation_router,
+            "run_requirement_hint_turn",
+            new=AsyncMock(),
+        ) as hint_mock,
+    ):
+        response = client.post(
+            f"/api/tz-creation/{row.id}/requirements/2.1/hint"
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["cached"] is True
+    assert "единицы" in body["text"]
+    hint_mock.assert_not_awaited()
 
 
 def test_export_preview_docx_returns_docx_bytes(client):

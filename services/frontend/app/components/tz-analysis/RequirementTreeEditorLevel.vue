@@ -13,6 +13,7 @@
 						'rounded-lg transition-colors',
 						node.isHeading && 'border border-default/60 bg-elevated/40 p-2',
 						isDropTarget(node) && 'ring-2 ring-primary/40',
+						isHighlighted(node) && 'ring-2 ring-primary/50 bg-primary/5',
 						isDragging(node) && 'opacity-50',
 					]"
 					@dragenter.prevent="onDragEnter($event, node)"
@@ -71,8 +72,26 @@
 							@add-heading="emit('add-heading', node.key)"
 							@add-sibling="onAddSibling(node)"
 						/>
+						<p
+							v-if="hintText(node)"
+							class="mt-1 text-xs text-muted leading-relaxed"
+						>
+							{{ hintText(node) }}
+						</p>
 						</div>
 						<div v-if="!readonly && node.rowIndex !== undefined" class="flex shrink-0 items-start gap-0.5 mt-1.5">
+							<UButton
+								v-if="editor.showHints?.value"
+								type="button"
+								variant="ghost"
+								color="neutral"
+								size="sm"
+								icon="i-lucide-lightbulb"
+								:loading="editor.hintLoadingKey?.value === node.key"
+								aria-label="Подсказка ИИ по пункту"
+								title="Подсказка ИИ"
+								@click="emit('request-hint', node.key)"
+							/>
 							<template v-if="editor.confirmRemoveIndex.value === node.rowIndex">
 								<UButton
 									type="button"
@@ -135,6 +154,7 @@
 						@add-sibling="(index) => emit('add-sibling', index)"
 						@reorder="(from, to) => emit('reorder', from, to)"
 						@toggle-section="(key) => emit('toggle-section', key)"
+						@request-hint="(key) => emit('request-hint', key)"
 					/>
 				</div>
 			</template>
@@ -142,8 +162,9 @@
 			<template v-else-if="node.rowIndex !== undefined">
 				<div
 					:class="[
-						'transition-colors',
-						isDropTarget(node) && 'ring-2 ring-primary/40 rounded-lg',
+						'transition-colors rounded-lg',
+						isDropTarget(node) && 'ring-2 ring-primary/40',
+						isHighlighted(node) && 'ring-2 ring-primary/50 bg-primary/5',
 						isDragging(node) && 'opacity-50',
 					]"
 					@dragenter.prevent="onDragEnter($event, node)"
@@ -177,8 +198,26 @@
 							@add-heading="emit('add-heading', node.key)"
 							@add-sibling="onAddSibling(node)"
 						/>
+						<p
+							v-if="hintText(node)"
+							class="mt-1 text-xs text-muted leading-relaxed"
+						>
+							{{ hintText(node) }}
+						</p>
 						</div>
 						<div v-if="!readonly" class="flex shrink-0 items-start gap-0.5 mt-1.5">
+							<UButton
+								v-if="editor.showHints?.value"
+								type="button"
+								variant="ghost"
+								color="neutral"
+								size="sm"
+								icon="i-lucide-lightbulb"
+								:loading="editor.hintLoadingKey?.value === node.key"
+								aria-label="Подсказка ИИ по пункту"
+								title="Подсказка ИИ"
+								@click="emit('request-hint', node.key)"
+							/>
 							<template v-if="editor.confirmRemoveIndex.value === node.rowIndex">
 								<UButton
 									type="button"
@@ -231,6 +270,7 @@
 </template>
 
 <script lang="ts" setup>
+import type { TZCreationRequirementHint } from '#shared/types'
 import type { EditableRequirementRow, RequirementTreeNode } from '#shared/utils/requirementsStruct'
 import { canReorderRequirementRows } from '#shared/utils/requirementsStruct'
 import RequirementNodeRail from '~/components/tz-analysis/RequirementNodeRail.vue'
@@ -250,6 +290,7 @@ const emit = defineEmits<{
 	'add-sibling': [index: number]
 	reorder: [fromIndex: number, toIndex: number]
 	'toggle-section': [key: string]
+	'request-hint': [requirementKey: string]
 }>()
 
 const rowsRef = inject<Ref<EditableRequirementRow[]>>('editableRequirementRows')!
@@ -259,7 +300,20 @@ const editor = inject<{
 	dragFromIndex: Ref<number | null>
 	dropTargetIndex: Ref<number | null>
 	confirmRemoveIndex: Ref<number | null>
+	showHints?: ComputedRef<boolean>
+	hints?: ComputedRef<Record<string, TZCreationRequirementHint>>
+	hintLoadingKey?: ComputedRef<string | null>
+	highlightKey?: ComputedRef<string | null>
 }>('requirementTreeEditor')!
+
+function isHighlighted(node: RequirementTreeNode) {
+	return Boolean(editor.highlightKey?.value && editor.highlightKey.value === node.key)
+}
+
+function hintText(node: RequirementTreeNode) {
+	if (!editor.showHints?.value) return ''
+	return editor.hints?.value?.[node.key]?.text?.trim() || ''
+}
 
 function confirmRemove(rowIndex: number) {
 	emit('remove', rowIndex)

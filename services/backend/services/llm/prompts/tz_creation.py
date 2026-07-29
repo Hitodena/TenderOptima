@@ -112,7 +112,7 @@ _RESPONSE_CONTRACT = f"""\
     }}}}
   }},
   "fields_update": [
-    {{"key": "capacity", "label": "Производительность", "value": "уточнить у пользователя", "status": "pending"}}
+    {{"key": "capacity", "label": "Производительность", "value": "уточнить у пользователя", "status": "pending", "requirement_key": "2.1"}}
   ],
   "suggested_done": false
 }}
@@ -128,7 +128,9 @@ _RESPONSE_CONTRACT = f"""\
 окне/вкладке «Параметры ТЗ»: ключ (латиницей, без пробелов), понятная \
 подпись на русском, текущее значение (или пустая строка/предположение), \
 статус "pending" (ещё не уточнено), "suggested" (предложено ИИ, ждёт \
-подтверждения) или "answered" (пользователь подтвердил значение)
+подтверждения) или "answered" (пользователь подтвердил значение). Если \
+параметр относится к конкретному пункту структуры ТЗ, обязательно \
+заполни "requirement_key" номером пункта (например "2.1")
 3. "suggested_done": true — только когда структура ТЗ достаточно полна и \
 не осталось критичных уточняющих вопросов
 4. Пиши по-деловому, без эмодзи и маркетинговых оборотов
@@ -219,7 +221,7 @@ def build_tz_gap_analysis_prompt(
 
 def build_tz_creation_turn_prompt(
     draft_hierarchy: dict[str, RequirementNode],
-    fields: list[dict[str, str]],
+    fields: list[dict[str, str | None]],
     user_message: str,
     context: TZCreationContext | None = None,
 ) -> tuple[str, str]:
@@ -267,4 +269,45 @@ def build_tz_creation_turn_prompt(
 
 Новое сообщение пользователя:
 {user_message}"""
+    return system, user
+
+
+def build_requirement_hint_prompt(
+    requirement_key: str,
+    requirement_text: str,
+    draft_hierarchy: dict[str, RequirementNode],
+    context: TZCreationContext | None = None,
+) -> tuple[str, str]:
+    """Prompt for an on-demand tip about one TZ outline item."""
+    domain_hint = _domain_hint(context)
+    context_summary = _context_summary(context)
+    hierarchy_json = json.dumps(draft_hierarchy, ensure_ascii=False, indent=2)
+
+    system = f"""\
+Ты — эксперт по составлению технических заданий (ТЗ) для тендерных закупок.
+Пользователь запросил короткую подсказку по одному пункту структуры ТЗ.
+
+{domain_hint}
+
+Верни ТОЛЬКО JSON без markdown-обёрток:
+{{
+  "hint": "короткая деловая подсказка на русском"
+}}
+
+Правила:
+1. Подсказка — 2-4 предложения, без эмодзи и маркетинга
+2. Объясни, что стоит уточнить/проверить в этом пункте и почему
+3. Не переписывай весь пункт — дай практический совет
+4. Не выдумывай конкретные числа от имени пользователя"""
+
+    context_line = (
+        f"\nКонтекст закупки: {context_summary}." if context_summary else ""
+    )
+    user = f"""\
+Номер пункта: {requirement_key}
+Текст пункта: {requirement_text}
+
+Текущая структура ТЗ:
+{hierarchy_json}
+{context_line}"""
     return system, user

@@ -38,6 +38,16 @@ class TZCreationFieldItem(BaseModel):
     label: str
     value: str = ""
     status: str = "pending"
+    requirement_key: str | None = None
+
+
+class TZCreationRequirementHint(BaseModel):
+    text: str
+    requirement_text: str = ""
+    text_hash: str = ""
+    model: str = ""
+    generated_at: datetime | None = None
+    cached: bool = False
 
 
 class TZCreationMessageItem(BaseModel):
@@ -65,6 +75,7 @@ class TZCreationSessionDetailResponse(BaseModel):
     source_tz_filename: str | None = None
     draft_hierarchy: dict = {}
     fields: list[TZCreationFieldItem] = []
+    requirement_hints: dict[str, TZCreationRequirementHint] = {}
     status: TZCreationStatus
     llm_model: str = ""
     messages_used: int = 0
@@ -77,6 +88,11 @@ class TZCreationSessionDetailResponse(BaseModel):
     @classmethod
     def coerce_hierarchy(cls, value: object) -> dict:
         return normalize_tz_requirements(value)
+
+    @field_validator("requirement_hints", mode="before")
+    @classmethod
+    def coerce_hints(cls, value: object) -> dict:
+        return value if isinstance(value, dict) else {}
 
 
 class TZCreationSessionListItem(BaseModel):

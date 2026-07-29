@@ -7,6 +7,8 @@ from backend.services.analysis.tz_creation import (
     _merge_hierarchy_patch,
     _parse_turn_result,
     apply_turn_result,
+    get_cached_requirement_hint,
+    requirement_text_hash,
 )
 
 
@@ -32,6 +34,7 @@ def test_merge_fields_upserts_by_key_and_preserves_order():
             "label": "Производительность",
             "value": "",
             "status": "pending",
+            "requirement_key": "2.1",
         },
         {
             "key": "power",
@@ -52,6 +55,7 @@ def test_merge_fields_upserts_by_key_and_preserves_order():
             "label": "Гарантия",
             "value": "12 месяцев",
             "status": "answered",
+            "requirement_key": "5.1",
         },
     ]
 
@@ -60,8 +64,10 @@ def test_merge_fields_upserts_by_key_and_preserves_order():
     assert [f["key"] for f in merged] == ["capacity", "power", "warranty"]
     assert merged[0]["value"] == "100 кг/ч"
     assert merged[0]["status"] == "answered"
+    assert merged[0]["requirement_key"] == "2.1"
     assert merged[1]["value"] == "5 кВт"  # untouched by updates
     assert merged[2]["label"] == "Гарантия"
+    assert merged[2]["requirement_key"] == "5.1"
 
 
 def test_merge_fields_ignores_malformed_entries():
@@ -114,3 +120,23 @@ def test_apply_turn_result_merges_hierarchy_and_fields_together():
     assert set(hierarchy.keys()) == {"1", "2"}
     assert fields[0]["key"] == "capacity"
     assert fields[0]["value"] == "100 кг/ч"
+
+
+def test_get_cached_requirement_hint_matches_text_hash():
+    text = "Производительность не менее 100 кг/ч"
+    hints = {
+        "2.1": {
+            "text": "Уточните единицы измерения и условия приёмки.",
+            "requirement_text": text,
+            "text_hash": requirement_text_hash(text),
+            "model": "test-model",
+            "generated_at": "2026-07-29T00:00:00+00:00",
+        }
+    }
+    cached = get_cached_requirement_hint(hints, "2.1", text)
+    assert cached is not None
+    assert cached["cached"] is True
+    assert "единицы" in cached["text"]
+
+    stale = get_cached_requirement_hint(hints, "2.1", text + " (изм.)")
+    assert stale is None

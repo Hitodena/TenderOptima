@@ -25,6 +25,9 @@ class TZCreationSession(IDMixinUUID, TimestampMixin, Base):
         JSON, nullable=False, default=dict
     )
     fields: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    requirement_hints: Mapped[dict] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     llm_model: Mapped[str] = mapped_column(
         String(128), nullable=False, default=""

@@ -16,11 +16,24 @@
 			:items="navItems"
 			class="w-full justify-center"
 		/>
-		<UNavigationMenu
+		<div
 			v-else-if="isLandingPage"
-			:items="landingNavItems"
 			class="hidden w-full min-w-0 justify-center lg:flex"
-		/>
+		>
+			<UDropdownMenu
+				:items="landingDropdownItems"
+				:content="{ align: 'center' }"
+				:ui="{ content: 'min-w-56' }"
+			>
+				<UButton
+					color="neutral"
+					variant="ghost"
+					size="lg"
+					trailing-icon="i-lucide-chevron-down"
+					label="Меню"
+				/>
+			</UDropdownMenu>
+		</div>
 
 		<template #body>
 			<UNavigationMenu
@@ -206,6 +219,21 @@ const landingNavItems = computed<NavigationMenuItem[]>(() => {
 		{ label: 'Контакты', icon: 'i-lucide-mail', to: '/#contacts' },
 	)
 	return items
+})
+
+const landingDropdownItems = computed<DropdownMenuItem[][]>(() => {
+	const productChildren = (landingNavItems.value[0]?.children ?? []).map((item) => ({
+		label: item.label,
+		icon: item.icon,
+		to: item.to,
+		description: item.description,
+	}))
+	const rest = landingNavItems.value.slice(1).map((item) => ({
+		label: item.label,
+		icon: item.icon,
+		to: item.to,
+	}))
+	return [productChildren, rest]
 })
 
 const navItems = computed<NavigationMenuItem[]>(() => {
