@@ -490,7 +490,7 @@ const tourHighlight = ref<WorkspaceTourPanel | null>(null)
 const mobilePanelTabs = [
 	{ label: 'Чат', icon: 'i-lucide-message-circle', value: 'chat' as const },
 	{ label: 'Структура', icon: 'i-lucide-list-tree', value: 'structure' as const },
-	{ label: 'Параметры', icon: 'i-lucide-sliders-horizontal', value: 'fields' as const },
+	{ label: 'Параметры ТЗ', icon: 'i-lucide-sliders-horizontal', value: 'fields' as const },
 ]
 
 const emptyChatHint = computed(() =>

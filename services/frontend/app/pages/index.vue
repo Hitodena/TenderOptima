@@ -5,8 +5,6 @@
 			<div class="dashboard-page">
 			<!-- Hero -->
 			<section class="landing-hero px-4 pb-16 pt-14 sm:px-6 sm:pb-20 sm:pt-18 lg:px-8 lg:pb-24 lg:pt-20">
-				<div class="landing-hero-shape landing-hero-shape-1" aria-hidden="true" />
-				<div class="landing-hero-shape landing-hero-shape-2" aria-hidden="true" />
 				<div class="relative z-10 mx-auto max-w-4xl text-center">
 					<p class="landing-hero-eyebrow mb-4 text-sm font-semibold uppercase tracking-widest">
 						TenderOptima

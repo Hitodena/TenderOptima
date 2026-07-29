@@ -493,20 +493,35 @@ v-if="!showParamsPanel" size="xs" variant="ghost" color="neutral"
 										</div>
 
 										<div
-											class="rounded-xl px-3.5 py-2.5 text-sm shadow-sm border"
+											class="min-w-0 max-w-full overflow-hidden rounded-xl px-3.5 py-2.5 text-sm shadow-sm border"
 											:class="msg.direction === 'outgoing'
 												? 'rounded-tr-md bg-primary/10 border-primary/20'
 												: 'rounded-tl-md bg-elevated border-default/60'"
 										>
 											<p
 												v-if="msg.subject"
-												class="text-[10px] text-muted mb-1.5 font-medium tracking-tight"
+												class="text-[10px] text-muted mb-1.5 font-medium tracking-tight wrap-break-word"
 											>
 												{{ msg.subject }}
 											</p>
-											<pre
-												class="whitespace-pre-wrap font-sans text-[13px] md:text-sm leading-relaxed"
-											>{{ msg.raw_body }}</pre>
+											<p
+												class="whitespace-pre-wrap wrap-break-word font-sans text-[13px] md:text-sm leading-relaxed"
+											>
+												<template
+													v-for="(segment, segIdx) in splitTextWithLinks(msg.raw_body || '')"
+													:key="`${msg.id}-seg-${segIdx}`"
+												>
+													<a
+														v-if="segment.type === 'link'"
+														:href="segment.href"
+														:title="segment.href"
+														target="_blank"
+														rel="noopener noreferrer"
+														class="inline-block max-w-full overflow-hidden text-ellipsis align-bottom text-primary underline underline-offset-2"
+													>{{ segment.label }}</a>
+													<span v-else>{{ segment.value }}</span>
+												</template>
+											</p>
 										</div>
 
 										<div
@@ -828,6 +843,7 @@ import {
 } from '#shared/utils/mismatchLetter'
 import { getApiErrorDetail } from '#shared/utils/apiError'
 import { pluralizeSuppliers } from '#shared/utils/textFormat'
+import { splitTextWithLinks } from '#shared/utils/url'
 import {
 	canSendEmail,
 	emailQuotaBlockMessage,
