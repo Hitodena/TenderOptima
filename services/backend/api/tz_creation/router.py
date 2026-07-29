@@ -60,6 +60,7 @@ from backend.services.analysis.tz_creation import (
     get_cached_requirement_hint,
     resolve_requirement_text,
     run_chat_turn,
+    run_field_hint_turn,
     run_kickoff_turn,
     run_requirement_hint_turn,
 )
@@ -442,6 +443,100 @@ async def get_tz_creation_requirement_hint(
     store_payload = {k: v for k, v in payload.items() if k != "cached"}
     store_payload.pop("requirement_key", None)
     hints[key] = store_payload
+    await TZCreationSessionDAO.update_fields(
+        session,
+        row.id,
+        requirement_hints=hints,
+    )
+    return TZCreationRequirementHint.model_validate(payload)
+
+
+@router.post(
+    "/{session_id}/fields/{field_key}/hint",
+    response_model=TZCreationRequirementHint,
+    summary="Get or generate an LLM hint for one TZ parameter field",
+)
+async def get_tz_creation_field_hint(
+    session_id: uuid.UUID,
+    field_key: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> TZCreationRequirementHint:
+    row = await _get_owned_session(session, session_id, current_user.id)
+    key = field_key.strip()
+    if not key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Field key is required",
+        )
+    field = next(
+        (
+            item
+            for item in row.fields or []
+            if isinstance(item, dict) and str(item.get("key") or "") == key
+        ),
+        None,
+    )
+    if field is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Field not found",
+        )
+    field_label = str(field.get("label") or key)
+    field_value = str(field.get("value") or "")
+    requirement_key = field.get("requirement_key")
+    requirement_text = (
+        resolve_requirement_text(row.draft_hierarchy, requirement_key)
+        if requirement_key
+        else None
+    )
+
+    # Field hints reuse the requirement-hint cache (keyed dict on the
+    # session), namespaced so they never collide with outline point keys.
+    cache_key = f"field:{key}"
+    hash_source = f"{field_label}\n{field_value}\n{requirement_text or ''}"
+
+    cached = get_cached_requirement_hint(
+        getattr(row, "requirement_hints", None),
+        cache_key,
+        hash_source,
+    )
+    if cached and cached.get("text"):
+        return TZCreationRequirementHint.model_validate(cached)
+
+    try:
+        hint_text = await run_field_hint_turn(
+            key,
+            field_label,
+            field_value,
+            requirement_text,
+            normalize_tz_requirements(row.draft_hierarchy),
+            row.context,
+        )
+    except TZCreationTurnError as exc:
+        logger.warning(
+            "TZ creation field hint failed",
+            session_id=str(row.id),
+            field_key=key,
+            error=str(exc),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to generate field hint",
+        ) from exc
+
+    model_name = config.openai_model_for_tz_create()
+    payload = build_requirement_hint_payload(
+        requirement_key=cache_key,
+        requirement_text=hash_source,
+        hint_text=hint_text,
+        model=model_name,
+        cached=False,
+    )
+    hints = dict(getattr(row, "requirement_hints", None) or {})
+    store_payload = {k: v for k, v in payload.items() if k != "cached"}
+    store_payload.pop("requirement_key", None)
+    hints[cache_key] = store_payload
     await TZCreationSessionDAO.update_fields(
         session,
         row.id,

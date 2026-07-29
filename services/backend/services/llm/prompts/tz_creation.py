@@ -311,3 +311,55 @@ def build_requirement_hint_prompt(
 {hierarchy_json}
 {context_line}"""
     return system, user
+
+
+def build_field_hint_prompt(
+    field_key: str,
+    field_label: str,
+    field_value: str,
+    requirement_text: str | None,
+    draft_hierarchy: dict[str, RequirementNode],
+    context: TZCreationContext | None = None,
+) -> tuple[str, str]:
+    """Prompt for an on-demand tip about one parameter in «Параметры ТЗ»."""
+    domain_hint = _domain_hint(context)
+    context_summary = _context_summary(context)
+    hierarchy_json = json.dumps(draft_hierarchy, ensure_ascii=False, indent=2)
+
+    system = f"""\
+Ты — эксперт по составлению технических заданий (ТЗ) для тендерных закупок.
+Пользователь запросил короткую подсказку по одному параметру в окне \
+«Параметры ТЗ».
+
+{domain_hint}
+
+Верни ТОЛЬКО JSON без markdown-обёрток:
+{{
+  "hint": "короткая деловая подсказка на русском"
+}}
+
+Правила:
+1. Подсказка — 2-4 предложения, без эмодзи и маркетинга
+2. Объясни, какое значение обычно указывают для этого параметра и на что \
+обратить внимание при его уточнении
+3. Если текущее значение уже указано — оцени, достаточно ли оно конкретно, \
+и что стоит уточнить или проверить
+4. Не выдумывай точные числа и факты от имени пользователя — предлагай \
+типичные диапазоны и ориентиры"""
+
+    context_line = (
+        f"\nКонтекст закупки: {context_summary}." if context_summary else ""
+    )
+    requirement_line = (
+        f"\nСвязанный пункт структуры ТЗ: {requirement_text}"
+        if requirement_text
+        else ""
+    )
+    user = f"""\
+Параметр: {field_label} (ключ: {field_key})
+Текущее значение: {field_value or "не указано"}{requirement_line}
+
+Текущая структура ТЗ:
+{hierarchy_json}
+{context_line}"""
+    return system, user

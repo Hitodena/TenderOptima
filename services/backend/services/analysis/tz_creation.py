@@ -12,6 +12,7 @@ from backend.core.config import get_config
 from backend.services.llm.client import llm_client
 from backend.services.llm.prompts.tz_creation import (
     TZCreationContext,
+    build_field_hint_prompt,
     build_requirement_hint_prompt,
     build_tz_creation_turn_prompt,
     build_tz_gap_analysis_prompt,
@@ -185,6 +186,34 @@ async def run_requirement_hint_turn(
     hint = str(raw.get("hint") or "").strip()
     if not hint:
         raise TZCreationTurnError("Empty LLM hint for requirement")
+    return hint
+
+
+async def run_field_hint_turn(
+    field_key: str,
+    field_label: str,
+    field_value: str,
+    requirement_text: str | None,
+    draft_hierarchy: dict[str, RequirementNode],
+    context: TZCreationContext | None,
+) -> str:
+    """Generate a short tip for one «Параметры ТЗ» parameter."""
+    system, user = build_field_hint_prompt(
+        field_key,
+        field_label,
+        field_value,
+        requirement_text,
+        draft_hierarchy,
+        context,
+    )
+    raw = await llm_client.complete(
+        system, user, model=config.openai_model_for_tz_create()
+    )
+    if not isinstance(raw, dict):
+        raise TZCreationTurnError("Malformed LLM response for field hint")
+    hint = str(raw.get("hint") or "").strip()
+    if not hint:
+        raise TZCreationTurnError("Empty LLM hint for field")
     return hint
 
 

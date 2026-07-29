@@ -406,16 +406,15 @@
 									</div>
 									<div class="flex items-center gap-1 shrink-0">
 										<UButton
-											v-if="field.requirement_key"
 											type="button"
 											variant="ghost"
 											color="neutral"
 											size="sm"
 											icon="i-lucide-lightbulb"
-											:loading="hintLoadingKey === field.requirement_key"
-											aria-label="Подсказка ИИ по пункту"
+											:loading="hintLoadingKey === fieldHintKey(field)"
+											aria-label="Подсказка ИИ по параметру"
 											title="Подсказка ИИ"
-											@click="field.requirement_key && requestRequirementHint(field.requirement_key)"
+											@click="requestFieldHint(field)"
 										/>
 										<UBadge :color="fieldStatusColor(field.status)" variant="subtle" size="xs">
 											{{ fieldStatusLabel(field.status) }}
@@ -684,30 +683,32 @@ function goToStructureMatch(delta: number) {
 	})
 }
 
-async function requestRequirementHint(requirementKey: string) {
+function fieldHintKey(field: TZCreationField): string {
+	return `field:${field.key}`
+}
+
+function fieldHintText(field: TZCreationField): string {
+	return requirementHints.value[fieldHintKey(field)]?.text?.trim() || ''
+}
+
+async function requestFieldHint(field: TZCreationField) {
 	if (!session.value || hintLoadingKey.value) return
-	const existing = requirementHints.value[requirementKey]
-	const row = editableRows.value.find(
-		(item) => item.key.replace(/\//g, '.') === requirementKey,
-	)
-	if (existing?.text && existing.requirement_text === (row?.text ?? '').trim()) {
-		return
-	}
-	hintLoadingKey.value = requirementKey
+	const cacheKey = fieldHintKey(field)
+	hintLoadingKey.value = cacheKey
 	try {
 		const hint = await post<TZCreationRequirementHint>(
-			`/tz-creation/${session.value.id}/requirements/${encodeURIComponent(requirementKey)}/hint`,
+			`/tz-creation/${session.value.id}/fields/${encodeURIComponent(field.key)}/hint`,
 		)
 		requirementHints.value = {
 			...requirementHints.value,
-			[requirementKey]: hint,
+			[cacheKey]: hint,
 		}
 		if (session.value) {
 			session.value = {
 				...session.value,
 				requirement_hints: {
 					...(session.value.requirement_hints ?? {}),
-					[requirementKey]: hint,
+					[cacheKey]: hint,
 				},
 			}
 		}
@@ -716,11 +717,6 @@ async function requestRequirementHint(requirementKey: string) {
 	} finally {
 		hintLoadingKey.value = null
 	}
-}
-
-function fieldHintText(field: TZCreationField): string {
-	if (!field.requirement_key) return ''
-	return requirementHints.value[field.requirement_key]?.text?.trim() || ''
 }
 
 watch(
