@@ -337,9 +337,6 @@
 								v-if="editableRows.length"
 								:rows="editableRows"
 								scope-id="tz-creation"
-								show-hints
-								:hints="requirementHints"
-								:hint-loading-key="hintLoadingKey"
 								:highlight-key="structureHighlightKey"
 								:focus-key="structureFocusKey"
 								@remove="removeRequirement"
@@ -347,7 +344,6 @@
 								@add-heading="addHeadingRequirement"
 								@add-sibling="addSiblingRequirement"
 								@reorder="reorderRequirement"
-								@request-hint="requestRequirementHint"
 							/>
 							<div v-else class="flex flex-col items-center gap-3 py-6">
 								<p class="text-sm text-muted text-center">
@@ -408,9 +404,23 @@
 											Пункт ТЗ: {{ field.requirement_key }}
 										</p>
 									</div>
-									<UBadge :color="fieldStatusColor(field.status)" variant="subtle" size="xs">
-										{{ fieldStatusLabel(field.status) }}
-									</UBadge>
+									<div class="flex items-center gap-1 shrink-0">
+										<UButton
+											v-if="field.requirement_key"
+											type="button"
+											variant="ghost"
+											color="neutral"
+											size="sm"
+											icon="i-lucide-lightbulb"
+											:loading="hintLoadingKey === field.requirement_key"
+											aria-label="Подсказка ИИ по пункту"
+											title="Подсказка ИИ"
+											@click="field.requirement_key && requestRequirementHint(field.requirement_key)"
+										/>
+										<UBadge :color="fieldStatusColor(field.status)" variant="subtle" size="xs">
+											{{ fieldStatusLabel(field.status) }}
+										</UBadge>
+									</div>
 								</div>
 								<UInput
 									v-model="field.value"
@@ -419,6 +429,12 @@
 									placeholder="Значение не указано"
 									@update:model-value="fieldsDirty = true"
 								/>
+								<p
+									v-if="fieldHintText(field)"
+									class="text-xs text-muted leading-relaxed"
+								>
+									{{ fieldHintText(field) }}
+								</p>
 							</div>
 						</div>
 					</UCard>
@@ -624,14 +640,19 @@ watch(
 )
 
 const structureSearchMatches = computed(() => {
-	const q = structureSearchQuery.value.trim().replace(/\//g, '.')
+	const q = structureSearchQuery.value.trim().replace(/\//g, '.').replace(/\.+$/, '')
 	if (!q) return [] as string[]
+	const qSegments = q.split('.')
 	const keys = editableRows.value
 		.map((row) => row.key.replace(/\//g, '.'))
 		.filter((key) => !key.startsWith('__row_'))
 	const exact = keys.filter((key) => key === q)
 	if (exact.length) return exact
-	return keys.filter((key) => key.startsWith(q) || key.includes(`.${q}`))
+	return keys.filter((key) => {
+		const segments = key.split('.')
+		if (segments.length < qSegments.length) return false
+		return qSegments.every((segment, i) => segments[i] === segment)
+	})
 })
 
 watch(structureSearchMatches, (matches) => {
@@ -695,6 +716,11 @@ async function requestRequirementHint(requirementKey: string) {
 	} finally {
 		hintLoadingKey.value = null
 	}
+}
+
+function fieldHintText(field: TZCreationField): string {
+	if (!field.requirement_key) return ''
+	return requirementHints.value[field.requirement_key]?.text?.trim() || ''
 }
 
 watch(
