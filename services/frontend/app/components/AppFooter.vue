@@ -10,19 +10,22 @@
 			<nav
 				class="flex min-w-0 flex-wrap items-center justify-center gap-x-1.5 gap-y-1 sm:justify-end sm:gap-x-2"
 			>
-				<NuxtLink
-					:to="legalLinks[0].to"
-					class="transition-colors hover:text-default"
+				<template
+					v-for="(link, index) in legalLinks"
+					:key="link.to"
 				>
-					{{ legalLinks[0].label }}
-				</NuxtLink>
-				<span class="shrink-0 text-border" aria-hidden="true">|</span>
-				<NuxtLink
-					:to="legalLinks[1].to"
-					class="transition-colors hover:text-default"
-				>
-					{{ legalLinks[1].label }}
-				</NuxtLink>
+					<span
+						v-if="index > 0"
+						class="shrink-0 text-border"
+						aria-hidden="true"
+					>|</span>
+					<NuxtLink
+						:to="link.to"
+						class="transition-colors hover:text-default"
+					>
+						{{ link.label }}
+					</NuxtLink>
+				</template>
 			</nav>
 		</div>
 	</footer>

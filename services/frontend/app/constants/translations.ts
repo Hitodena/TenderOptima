@@ -137,6 +137,8 @@ export const translations = {
 		termsAnd: 'и',
 		privacyLink: 'политику конфиденциальности',
 		marketingConsent: 'Согласен на получение маркетинговых уведомлений',
+		marketingConsentLink: 'согласие на маркетинг',
+		crossBorderConsentLink: 'трансграничная передача',
 		serverError: 'Внутренняя ошибка сервера',
 		registerError: 'Ошибка регистрации',
 		inviteHint: 'Регистрация доступна по приглашению.',
@@ -249,6 +251,7 @@ export const translations = {
 			'Сайт использует файлы cookie для обеспечения удобства пользователей сайта, его улучшения, предоставления персонализированных рекомендаций.',
 		noticeAccept: 'Понятно',
 		detailsLink: 'Подробнее о настройках файлов Cookie',
+		policyLink: 'Политика cookie',
 		settingsDescription:
 			'Выберите, какие cookie-файлы можно использовать. Технические cookie нужны для работы сайта и не отключаются.',
 		necessaryTitle: 'Технические/функциональные cookie-файлы',

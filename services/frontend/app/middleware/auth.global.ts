@@ -2,14 +2,16 @@ export default defineNuxtRouteMiddleware((to) => {
 	if (import.meta.server) return;
 
 	const auth = useAuthStore();
-	const publicRoutes = [
+	const publicRoutes = new Set([
 		'/',
 		'/auth',
-		'/legal/personal-data-consent',
-		'/legal/privacy-policy',
-	];
+	]);
 
-	if (!auth.isAuthenticated.value && !publicRoutes.includes(to.path)) {
+	const isPublic
+		= publicRoutes.has(to.path)
+			|| to.path.startsWith('/legal/');
+
+	if (!auth.isAuthenticated.value && !isPublic) {
 		return navigateTo('/auth');
 	}
 });

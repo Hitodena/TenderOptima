@@ -109,7 +109,7 @@ type="button"
 											<span class="text-sm">
 												{{ t('auth.termsPrefix') }}
 												<ULink
-													to="/legal/personal-data-consent"
+													to="/legal/terms-of-use"
 													class="text-primary underline underline-offset-2 hover:opacity-80">
 													{{ t('auth.termsLink') }}
 												</ULink>
@@ -141,6 +141,13 @@ type="button"
 										<template #label>
 											<span class="text-sm">
 												{{ t('auth.marketingConsent') }}
+												—
+												<ULink
+													to="/legal/marketing-consent"
+													class="text-primary underline underline-offset-2 hover:opacity-80"
+												>
+													{{ t('auth.marketingConsentLink') }}
+												</ULink>
 											</span>
 										</template>
 									</UCheckbox>
@@ -205,12 +212,18 @@ type="submit" class="w-full justify-center" size="lg" :loading="registerLoading"
 							<p class="mb-2 font-medium text-highlighted">
 								{{ t('auth.consentModalLegalLinks') }}
 							</p>
-							<div class="flex flex-col gap-2 sm:flex-row">
-								<UButton to="/legal/personal-data-consent" variant="outline" color="neutral" size="sm">
+							<div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+								<UButton to="/legal/terms-of-use" variant="outline" color="neutral" size="sm">
 									{{ t('auth.termsLink') }}
 								</UButton>
 								<UButton to="/legal/privacy-policy" variant="outline" color="neutral" size="sm">
 									{{ t('auth.privacyLink') }}
+								</UButton>
+								<UButton to="/legal/marketing-consent" variant="outline" color="neutral" size="sm">
+									{{ t('auth.marketingConsentLink') }}
+								</UButton>
+								<UButton to="/legal/cross-border-consent" variant="outline" color="neutral" size="sm">
+									{{ t('auth.crossBorderConsentLink') }}
 								</UButton>
 							</div>
 						</div>

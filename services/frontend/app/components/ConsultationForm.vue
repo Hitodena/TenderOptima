@@ -32,14 +32,14 @@
 						<span class="text-sm text-muted">
 							Я согласен на
 							<ULink
-								:to="legalLinks[0].to"
+								:to="legalDocuments.termsOfUse.page"
 								class="text-primary underline underline-offset-2 hover:opacity-80"
 							>
-								обработку персональных данных
+								пользовательское соглашение
 							</ULink>
 							и принимаю
 							<ULink
-								:to="legalLinks[1].to"
+								:to="legalDocuments.privacyPolicy.page"
 								class="text-primary underline underline-offset-2 hover:opacity-80"
 							>
 								политику обработки персональных данных
@@ -53,7 +53,13 @@
 				<UCheckbox v-model="form.agree_marketing">
 					<template #label>
 						<span class="text-sm text-muted">
-							Согласен на получение информационных сообщений
+							Согласен на получение информационных сообщений —
+							<ULink
+								:to="legalDocuments.marketingConsent.page"
+								class="text-primary underline underline-offset-2 hover:opacity-80"
+							>
+								согласие на маркетинг
+							</ULink>
 						</span>
 					</template>
 				</UCheckbox>
@@ -99,7 +105,7 @@ import {
 	consultationSchema,
 	getConsultationRequestTypeOption,
 } from '#shared/schemas/consultation'
-import { LEGAL_LINKS } from '#shared/constants/landing'
+import { LEGAL_DOCUMENTS } from '#shared/constants/landing'
 import type { ConsultationCreate } from '#shared/types'
 import type { ConsultationRequestType } from '#shared/types/enums'
 import { ConsultationRole } from '#shared/types/enums'
@@ -119,7 +125,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{ success: [] }>()
 
-const legalLinks = LEGAL_LINKS
+const legalDocuments = LEGAL_DOCUMENTS
 
 const { post } = useApi()
 const utm = useUtmParams()

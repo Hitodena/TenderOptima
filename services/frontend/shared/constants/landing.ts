@@ -260,14 +260,60 @@ export const CONTACT_SUPPORT = {
 	] satisfies ContactEmailChannel[],
 } as const
 
+/** Static legal DOCX files served from `public/legal/`. */
+export const LEGAL_DOCUMENTS = {
+	termsOfUse: {
+		title: 'Пользовательское соглашение',
+		href: '/legal/terms-of-use.docx',
+		page: '/legal/terms-of-use',
+		fileName: 'Пользовательское соглашение.docx',
+	},
+	privacyPolicy: {
+		title: 'Политика обработки персональных данных (B2B)',
+		href: '/legal/privacy-policy-b2b.docx',
+		page: '/legal/privacy-policy',
+		fileName: 'Политика обработки персональных данных.docx',
+	},
+	cookiePolicy: {
+		title: 'Политика использования cookie-файлов',
+		href: '/legal/cookie-policy.docx',
+		page: '/legal/cookie-policy',
+		fileName: 'Политика использования cookie-файлов.docx',
+	},
+	marketingConsent: {
+		title: 'Согласие на получение маркетинговых уведомлений',
+		href: '/legal/marketing-consent.docx',
+		page: '/legal/marketing-consent',
+		fileName: 'Согласие на маркетинг.docx',
+	},
+	crossBorderConsent: {
+		title: 'Согласие на трансграничную передачу персональных данных',
+		href: '/legal/cross-border-consent-kz.docx',
+		page: '/legal/cross-border-consent',
+		fileName: 'Согласие на трансграничную передачу.docx',
+	},
+} as const
+
 export const LEGAL_LINKS = [
 	{
-		label: 'Согласие на обработку персональных данных',
-		to: '/legal/personal-data-consent',
+		label: 'Пользовательское соглашение',
+		to: LEGAL_DOCUMENTS.termsOfUse.page,
 	},
 	{
 		label: 'Политика обработки персональных данных',
-		to: '/legal/privacy-policy',
+		to: LEGAL_DOCUMENTS.privacyPolicy.page,
+	},
+	{
+		label: 'Политика cookie',
+		to: LEGAL_DOCUMENTS.cookiePolicy.page,
+	},
+	{
+		label: 'Согласие на маркетинг',
+		to: LEGAL_DOCUMENTS.marketingConsent.page,
+	},
+	{
+		label: 'Трансграничная передача',
+		to: LEGAL_DOCUMENTS.crossBorderConsent.page,
 	},
 ] as const
 

@@ -19,6 +19,12 @@
 							<span>
 								{{ t('cookies.description') }}
 							</span>
+							<NuxtLink
+								to="/legal/cookie-policy"
+								class="ml-1 font-medium text-primary underline underline-offset-2 hover:opacity-80"
+							>
+								{{ t('cookies.policyLink') }}
+							</NuxtLink>
 							<button
 								type="button"
 								class="ml-1 font-medium text-primary underline underline-offset-2 hover:opacity-80"

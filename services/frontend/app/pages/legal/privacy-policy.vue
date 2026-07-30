@@ -13,18 +13,27 @@
 		</BaseSection>
 
 		<BaseSection max-width="3xl">
-			<div class="prose prose-sm max-w-none text-default">
-				<p>
-					Персональные данные обрабатываются для предоставления доступа к сервису, обратной связи,
-					технической поддержки и исполнения договорных обязательств.
-				</p>
-				<p>
-					Данные могут храниться в защищённом облаке или на серверах заказчика — по согласованию.
-					По запросам субъектов персональных данных:
-					<a href="mailto:dpo@tenderoptima.by" class="text-primary underline underline-offset-2">
-						dpo@tenderoptima.by
-					</a>
-				</p>
+			<div class="space-y-6">
+				<LegalDocumentCard
+					:title="doc.title"
+					:href="doc.href"
+					:download-name="doc.fileName"
+					description="Скачайте актуальную версию политики обработки персональных данных (B2B) в формате DOCX."
+				/>
+
+				<div class="prose prose-sm max-w-none text-default">
+					<p>
+						Персональные данные обрабатываются для предоставления доступа к сервису, обратной связи,
+						технической поддержки и исполнения договорных обязательств.
+					</p>
+					<p>
+						Данные могут храниться в защищённом облаке или на серверах заказчика — по согласованию.
+						По запросам субъектов персональных данных:
+						<a href="mailto:dpo@tenderoptima.by" class="text-primary underline underline-offset-2">
+							dpo@tenderoptima.by
+						</a>
+					</p>
+				</div>
 			</div>
 		</BaseSection>
 	</div>
@@ -32,8 +41,12 @@
 
 <script lang="ts" setup>
 import BaseSection from '~/components/landing/BaseSection.vue'
+import LegalDocumentCard from '~/components/landing/LegalDocumentCard.vue'
+import { LEGAL_DOCUMENTS } from '#shared/constants/landing'
 
 definePageMeta({ layout: 'default' })
+
+const doc = LEGAL_DOCUMENTS.privacyPolicy
 
 useSeoMeta({
 	title: 'Политика обработки персональных данных — TenderOptima',
