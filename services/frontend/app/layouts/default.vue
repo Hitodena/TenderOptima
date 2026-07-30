@@ -145,7 +145,7 @@ if (auth.isAuthenticated.value) {
 	await ensureLoaded()
 }
 
-const MARKETING_ROUTES = new Set(['/', '/product', '/security', '/contacts', '/faq', '/pricing', '/cases'])
+const MARKETING_ROUTES = new Set(['/', '/product', '/security', '/contacts', '/faq', '/cases'])
 const isLandingPage = computed(() => MARKETING_ROUTES.has(route.path))
 
 const headerUi = computed(() => {

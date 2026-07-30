@@ -50,7 +50,7 @@ const planLabel = computed(() =>
 
 		<div class="flex flex-wrap items-center gap-3 pt-1">
 			<p class="text-sm text-muted">
-				Подробное сравнение тарифов и способы оплаты — на отдельной странице.
+				Лимиты, срок действия и способы оплаты — на отдельной странице.
 			</p>
 			<UButton
 				:to="subscriptionPlansPath()"
@@ -73,7 +73,7 @@ const planLabel = computed(() =>
 			variant="soft"
 			color="primary"
 			trailing-icon="i-lucide-arrow-right"
-			label="Посмотреть тарифы"
+			label="Перейти к подписке"
 		/>
 	</div>
 </template>

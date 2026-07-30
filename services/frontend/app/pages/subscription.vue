@@ -1,28 +1,21 @@
 <script lang="ts" setup>
 import type {
-	ChangePlanRequest,
-	SubscriptionPlan,
 	SubscriptionResponse,
 	UserResponse,
 } from '#shared/types'
-import type { PricingModuleTab } from '#shared/constants/pricing'
 import {
 	PLAN_LABELS,
 	subscriptionPlanLabel,
 } from '#shared/utils/subscriptionDisplay'
-import { getApiErrorDetail } from '#shared/utils/apiError'
 import { t } from '~/constants/translations'
 
 definePageMeta({ layout: 'default' })
 
-const { get, post } = useApi()
+const { get } = useApi()
 const toast = useToast()
 
 const user = ref<UserResponse | null>(null)
 const showBillingModal = ref(false)
-const selectedPlan = ref<SubscriptionPlan | null>(null)
-const moduleTab = ref<PricingModuleTab>('module1')
-const changingPlan = ref(false)
 
 try {
 	user.value = await get<UserResponse>('/auth/me')
@@ -31,58 +24,12 @@ try {
 }
 
 const subscription = computed(() => user.value?.subscription ?? null)
-const currentPlan = computed(() => subscription.value?.plan ?? null)
-
-if (currentPlan.value) {
-	selectedPlan.value = currentPlan.value
-}
 
 const planLabel = computed(() =>
 	subscription.value
 		? PLAN_LABELS[subscription.value.plan] ?? subscriptionPlanLabel(subscription.value.plan)
 		: t('subscription.notAssigned'),
 )
-
-const planChangePending = computed(() =>
-	selectedPlan.value != null
-	&& currentPlan.value != null
-	&& selectedPlan.value !== currentPlan.value,
-)
-
-async function confirmPlanChange() {
-	if (!selectedPlan.value || !planChangePending.value) return
-	changingPlan.value = true
-	try {
-		const body: ChangePlanRequest = {
-			plan: selectedPlan.value,
-			module_tab: moduleTab.value,
-		}
-		const updated = await post<SubscriptionResponse>(
-			'/subscriptions/me/change-plan',
-			body,
-		)
-		if (user.value) {
-			user.value = { ...user.value, subscription: updated }
-		} else {
-			user.value = await get<UserResponse>('/auth/me')
-		}
-		selectedPlan.value = updated.plan
-		toast.add({
-			title: t('subscription.changePlanSuccess'),
-			color: 'success',
-			icon: 'i-lucide-check',
-		})
-		showBillingModal.value = true
-	} catch (e: unknown) {
-		toast.add({
-			title: getApiErrorDetail(e) ?? 'Не удалось сменить тариф',
-			color: 'error',
-			icon: 'i-lucide-circle-alert',
-		})
-	} finally {
-		changingPlan.value = false
-	}
-}
 
 function showCardPaymentStub() {
 	toast.add({
@@ -95,7 +42,6 @@ function showCardPaymentStub() {
 
 const { target: heroReveal } = useScrollReveal()
 const { target: limitsReveal } = useScrollReveal()
-const { target: plansReveal } = useScrollReveal()
 const { target: paymentReveal } = useScrollReveal()
 </script>
 
@@ -107,10 +53,10 @@ const { target: paymentReveal } = useScrollReveal()
 		>
 			<div class="mb-6 space-y-2">
 				<h1 class="text-2xl sm:text-3xl font-bold text-highlighted">
-					Тарифы и подписка
+					Подписка
 				</h1>
 				<p class="text-sm sm:text-base text-muted max-w-3xl">
-					Текущие лимиты, срок действия и сравнение тарифов.
+					Текущие лимиты, срок действия и способы оплаты.
 					После оплаты доступ активируется администратором.
 				</p>
 			</div>
@@ -179,47 +125,6 @@ const { target: paymentReveal } = useScrollReveal()
 			<UCard :ui="{ body: 'p-5 sm:p-6' }">
 				<SubscriptionUsageBars :subscription="subscription" />
 			</UCard>
-		</section>
-
-		<section
-			ref="plansReveal"
-			class="reveal mb-10 sm:mb-12"
-		>
-			<h2 class="text-lg font-semibold text-highlighted mb-1">
-				Тарифы TenderOptima
-			</h2>
-			<p class="text-sm text-muted mb-5">
-				Подробное описание лимитов и модулей по каждому плану
-			</p>
-			<SubscriptionPlansOverview
-				v-model:selected-plan="selectedPlan"
-				v-model:module-tab="moduleTab"
-				:subscription="subscription"
-				selectable
-			/>
-
-			<div
-				v-if="planChangePending"
-				class="mt-5 space-y-3"
-			>
-				<UAlert
-					color="warning"
-					variant="soft"
-					icon="i-lucide-info"
-					:description="t('subscription.changePlanDisclaimer')"
-				/>
-				<p class="text-sm text-muted">
-					{{ t('subscription.invoiceAfterSwitch') }}
-				</p>
-				<UButton
-					color="primary"
-					leading-icon="i-lucide-arrow-right-left"
-					:loading="changingPlan"
-					@click="confirmPlanChange"
-				>
-					{{ t('subscription.confirmChangePlan') }}
-				</UButton>
-			</div>
 		</section>
 
 		<section

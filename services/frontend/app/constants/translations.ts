@@ -302,7 +302,7 @@ export const translations = {
 		expired: 'Подписка истекла',
 		notAssigned: 'Подписка не назначена',
 		renew: 'Продлить',
-		moreAboutPlans: 'Подробнее о тарифах',
+		moreAboutPlans: 'Подробнее о подписке',
 		active: 'Активна',
 		inactive: 'Неактивна',
 		module1: 'Модуль 1',

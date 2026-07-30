@@ -28,7 +28,7 @@
 
 				<UFormField
 					:label="`Вложения (${files.length}/${maxFiles})`"
-					:hint="`До ${maxFiles} файлов, до ${maxSizeMb} МБ каждый`"
+					:hint="`До ${maxFiles} файлов, до ${maxSizeMb} МБ каждый. Можно вставить из буфера (Ctrl+V)`"
 				>
 					<UFileUpload
 						:model-value="files"
@@ -102,6 +102,30 @@ const maxFiles = Number(publicConfig.maxIdeaUploadFiles) || 10
 const maxSize = Number(publicConfig.maxIdeaUploadSize) || 5 * 1024 * 1024
 const maxSizeMb = Math.round(maxSize / (1024 * 1024))
 const fileAccept = '.pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp'
+const acceptedExtensions = new Set(
+	fileAccept.split(',').map((ext) => ext.trim().replace(/^\./, '').toLowerCase()),
+)
+const acceptedMimeByExt: Record<string, string> = {
+	pdf: 'application/pdf',
+	docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+	xls: 'application/vnd.ms-excel',
+	xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+	txt: 'text/plain',
+	jpg: 'image/jpeg',
+	jpeg: 'image/jpeg',
+	png: 'image/png',
+	webp: 'image/webp',
+}
+const mimeToExtension: Record<string, string> = {
+	'application/pdf': 'pdf',
+	'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+	'application/vnd.ms-excel': 'xls',
+	'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+	'text/plain': 'txt',
+	'image/jpeg': 'jpg',
+	'image/png': 'png',
+	'image/webp': 'webp',
+}
 
 const message = ref('')
 const files = ref<File[]>([])
@@ -111,6 +135,59 @@ const success = ref(false)
 
 function close() {
 	isOpen.value = false
+}
+
+function fileExtension(file: File): string | null {
+	const fromName = file.name.split('.').pop()?.toLowerCase()
+	if (fromName && fromName !== file.name.toLowerCase()) return fromName
+	return mimeToExtension[file.type] ?? null
+}
+
+function isAcceptedFile(file: File): boolean {
+	const ext = fileExtension(file)
+	if (ext && acceptedExtensions.has(ext)) return true
+	return Boolean(file.type && mimeToExtension[file.type])
+}
+
+function normalizeClipboardFile(file: File, index: number): File {
+	const ext = fileExtension(file)
+	if (!ext) return file
+	const hasKnownExt = acceptedExtensions.has(
+		file.name.split('.').pop()?.toLowerCase() ?? '',
+	)
+	if (hasKnownExt && file.name.trim()) return file
+	const mime = acceptedMimeByExt[ext] || file.type || 'application/octet-stream'
+	return new File([file], `paste-${Date.now()}-${index + 1}.${ext}`, { type: mime })
+}
+
+function filesFromClipboard(data: DataTransfer | null): File[] {
+	if (!data) return []
+	const collected: File[] = []
+	const seen = new Set<string>()
+
+	const pushUnique = (file: File | null, index: number) => {
+		if (!file || !isAcceptedFile(file)) return
+		const normalized = normalizeClipboardFile(file, index)
+		const key = `${normalized.name}:${normalized.size}:${normalized.type}:${normalized.lastModified}`
+		if (seen.has(key)) return
+		seen.add(key)
+		collected.push(normalized)
+	}
+
+	if (data.items?.length) {
+		Array.from(data.items).forEach((item, index) => {
+			if (item.kind !== 'file') return
+			pushUnique(item.getAsFile(), index)
+		})
+	}
+
+	if (collected.length === 0 && data.files?.length) {
+		Array.from(data.files).forEach((file, index) => {
+			pushUnique(file, index)
+		})
+	}
+
+	return collected
 }
 
 function onFilesChange(value: File | File[] | null | undefined) {
@@ -136,12 +213,40 @@ function onFilesChange(value: File | File[] | null | undefined) {
 	files.value = next
 }
 
+function onPaste(event: ClipboardEvent) {
+	if (!isOpen.value || submitting.value) return
+	const pasted = filesFromClipboard(event.clipboardData)
+	if (pasted.length === 0) return
+	event.preventDefault()
+	onFilesChange([...files.value, ...pasted])
+	toast.add({
+		title: pasted.length === 1
+			? 'Файл добавлен из буфера'
+			: `Добавлено файлов из буфера: ${pasted.length}`,
+		color: 'success',
+		icon: 'i-lucide-clipboard-paste',
+	})
+}
+
 watch(isOpen, (val) => {
+	if (import.meta.client) {
+		if (val) {
+			window.addEventListener('paste', onPaste)
+		} else {
+			window.removeEventListener('paste', onPaste)
+		}
+	}
 	if (!val) {
 		message.value = ''
 		files.value = []
 		error.value = null
 		success.value = false
+	}
+})
+
+onBeforeUnmount(() => {
+	if (import.meta.client) {
+		window.removeEventListener('paste', onPaste)
 	}
 })
 
