@@ -13,6 +13,7 @@ from backend.db.models import Subscription, User
 from backend.enums import SubscriptionPlan
 from backend.utils.subscription_catalog import catalog_for_plan
 from backend.utils.subscription_usage import (
+    SubscriptionUsage,
     SubscriptionUsageDAO,
     pages_analysis_remaining_for_user,
 )
@@ -195,7 +196,7 @@ class UserAdminDAO:
     async def usage_snapshot(
         session: AsyncSession,
         user_id: uuid.UUID,
-    ) -> tuple[int, int, int | None]:
+    ) -> tuple[SubscriptionUsage, int | None]:
         usage = await SubscriptionUsageDAO.get_for_user(session, user_id)
         remaining = await pages_analysis_remaining_for_user(session, user_id)
-        return usage.emails_sent, usage.pages_analyzed, remaining
+        return usage, remaining

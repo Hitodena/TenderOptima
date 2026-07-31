@@ -76,6 +76,7 @@ export const translations = {
 			registeredAt: 'Регистрация',
 			lastLogin: 'Последний вход',
 			noLastLogin: 'ещё не входил',
+			searches: 'Поисков',
 			emailsSent: 'Писем отправлено',
 			pagesAnalyzed: 'Страниц проанализировано',
 			pagesRemaining: 'Страниц осталось',

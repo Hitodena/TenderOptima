@@ -388,12 +388,17 @@
 					>
 						<template #header>
 							<div class="space-y-3">
-								<div class="flex items-center justify-between gap-2 flex-wrap">
-									<div class="flex items-center gap-2">
+								<div class="flex items-center justify-between gap-3 flex-wrap">
+									<div class="flex items-center gap-3 min-w-0">
 										<p class="font-semibold text-sm">Пункты ТЗ</p>
-										<UBadge color="neutral" variant="subtle" size="xs">
-											{{ requirementsCount }} {{ requirementWord(requirementsCount) }}
-										</UBadge>
+										<div class="text-right shrink-0 leading-none">
+											<p class="text-3xl font-bold text-primary tabular-nums">
+												{{ requirementsCount }}
+											</p>
+											<p class="text-sm text-muted mt-1">
+												{{ requirementWord(requirementsCount) }}
+											</p>
+										</div>
 									</div>
 									<div v-if="structureDirty" class="flex items-center gap-1.5">
 										<UButton

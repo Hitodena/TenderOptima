@@ -44,7 +44,8 @@
 							{{ t('admin.users.refBy') }}: {{ item.ref_by }}
 						</p>
 						<p class="text-[11px] text-muted">
-							{{ t('admin.users.emailsSent') }}: {{ item.emails_sent_this_month }}
+							{{ t('admin.users.searches') }}: {{ item.searches_used_this_month }}
+							· {{ t('admin.users.emailsSent') }}: {{ item.emails_sent_this_month }}
 							· {{ t('admin.users.pagesAnalyzed') }}: {{ item.pages_analyzed_this_month }}
 							<template v-if="item.pages_analysis_remaining != null">
 								· {{ t('admin.users.pagesRemaining') }}: {{ item.pages_analysis_remaining }}
@@ -72,6 +73,7 @@
 								{{ t('admin.users.refBy') }}: {{ selectedUser.ref_by }}
 							</p>
 							<div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted mt-2">
+								<span>{{ t('admin.users.searches') }}: {{ selectedUser.searches_used_this_month }}</span>
 								<span>{{ t('admin.users.emailsSent') }}: {{ selectedUser.emails_sent_this_month }}</span>
 								<span>{{ t('admin.users.pagesAnalyzed') }}: {{ selectedUser.pages_analyzed_this_month }}</span>
 								<span v-if="selectedUser.pages_analysis_remaining != null">

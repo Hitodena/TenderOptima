@@ -185,12 +185,16 @@ v-if="isTzReviewPhase && !isAnalysisClosed"
 
 						<UCard class="shadow-sm">
 							<template #header>
-								<div class="flex items-center justify-between gap-2">
+								<div class="flex items-center justify-between gap-3">
 									<p class="font-semibold text-sm">Требования из ТЗ</p>
-									<UBadge color="neutral" variant="subtle" size="xs">
-										{{ displayedTzCount }}
-										{{ requirementWord(displayedTzCount) }}
-									</UBadge>
+									<div class="text-right shrink-0 leading-none">
+										<p class="text-3xl font-bold text-primary tabular-nums">
+											{{ displayedTzCount }}
+										</p>
+										<p class="text-sm text-muted mt-1">
+											{{ requirementWord(displayedTzCount) }}
+										</p>
+									</div>
 								</div>
 							</template>
 

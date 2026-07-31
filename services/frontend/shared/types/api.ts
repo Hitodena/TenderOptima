@@ -226,6 +226,7 @@ export interface AdminUserListItem {
 	last_login_at: string | null;
 	smtp_password_configured: boolean;
 	imap_password_configured: boolean;
+	searches_used_this_month: number;
 	emails_sent_this_month: number;
 	pages_analyzed_this_month: number;
 	pages_analysis_remaining: number | null;
@@ -242,6 +243,7 @@ export interface AdminUserDetail {
 	created_at: string;
 	last_login_at: string | null;
 	email_settings: UserEmailSettingsResponse;
+	searches_used_this_month: number;
 	emails_sent_this_month: number;
 	pages_analyzed_this_month: number;
 	pages_analysis_remaining: number | null;

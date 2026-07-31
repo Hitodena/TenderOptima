@@ -21,6 +21,7 @@ class AdminUserListItem(BaseModel):
     last_login_at: datetime | None = None
     smtp_password_configured: bool
     imap_password_configured: bool
+    searches_used_this_month: int = 0
     emails_sent_this_month: int = 0
     pages_analyzed_this_month: int = 0
     pages_analysis_remaining: int | None = None
@@ -39,6 +40,7 @@ class AdminUserDetail(BaseModel):
     created_at: datetime
     last_login_at: datetime | None = None
     email_settings: UserEmailSettingsResponse
+    searches_used_this_month: int = 0
     emails_sent_this_month: int = 0
     pages_analyzed_this_month: int = 0
     pages_analysis_remaining: int | None = None

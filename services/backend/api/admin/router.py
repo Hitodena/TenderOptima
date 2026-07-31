@@ -24,6 +24,7 @@ from backend.db.dao import (
 from backend.db.models import ReferralInvitation, User
 from backend.enums import EmailMessageDirection
 from backend.schemas.user_email_settings import UserEmailSettingsUpdate
+from backend.utils.subscription_usage import SubscriptionUsage
 from backend.utils.user_email_settings import email_settings_response
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,8 +35,7 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 def _admin_list_item(
     user: User,
     *,
-    emails_sent: int = 0,
-    pages_analyzed: int = 0,
+    usage: SubscriptionUsage,
     pages_remaining: int | None = None,
 ) -> AdminUserListItem:
     return AdminUserListItem(
@@ -49,18 +49,21 @@ def _admin_list_item(
         last_login_at=user.last_login_at,
         smtp_password_configured=bool(user.smtp_password),
         imap_password_configured=bool(user.imap_password),
-        emails_sent_this_month=emails_sent,
-        pages_analyzed_this_month=pages_analyzed,
+        searches_used_this_month=usage.searches_used,
+        emails_sent_this_month=usage.emails_sent,
+        pages_analyzed_this_month=usage.pages_analyzed,
         pages_analysis_remaining=pages_remaining,
-        subscription=subscription_to_response(user.subscription),
+        subscription=subscription_to_response(
+            user.subscription,
+            usage=usage,
+        ),
     )
 
 
 def _admin_detail(
     user: User,
     *,
-    emails_sent: int = 0,
-    pages_analyzed: int = 0,
+    usage: SubscriptionUsage,
     pages_remaining: int | None = None,
 ) -> AdminUserDetail:
     return AdminUserDetail(
@@ -73,10 +76,14 @@ def _admin_detail(
         created_at=user.created_at,
         last_login_at=user.last_login_at,
         email_settings=email_settings_response(user),
-        emails_sent_this_month=emails_sent,
-        pages_analyzed_this_month=pages_analyzed,
+        searches_used_this_month=usage.searches_used,
+        emails_sent_this_month=usage.emails_sent,
+        pages_analyzed_this_month=usage.pages_analyzed,
         pages_analysis_remaining=pages_remaining,
-        subscription=subscription_to_response(user.subscription),
+        subscription=subscription_to_response(
+            user.subscription,
+            usage=usage,
+        ),
     )
 
 
@@ -168,16 +175,14 @@ async def list_users(
     users = await UserAdminDAO.list_users(session)
     items: list[AdminUserListItem] = []
     for user in users:
-        (
-            emails_sent,
-            pages_analyzed,
-            pages_remaining,
-        ) = await UserAdminDAO.usage_snapshot(session, user.id)
+        usage, pages_remaining = await UserAdminDAO.usage_snapshot(
+            session,
+            user.id,
+        )
         items.append(
             _admin_list_item(
                 user,
-                emails_sent=emails_sent,
-                pages_analyzed=pages_analyzed,
+                usage=usage,
                 pages_remaining=pages_remaining,
             )
         )
@@ -232,15 +237,13 @@ async def get_user_detail(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
-    (
-        emails_sent,
-        pages_analyzed,
-        pages_remaining,
-    ) = await UserAdminDAO.usage_snapshot(session, user_id)
+    usage, pages_remaining = await UserAdminDAO.usage_snapshot(
+        session,
+        user_id,
+    )
     return _admin_detail(
         user,
-        emails_sent=emails_sent,
-        pages_analyzed=pages_analyzed,
+        usage=usage,
         pages_remaining=pages_remaining,
     )
 
@@ -282,15 +285,13 @@ async def update_user_email_settings(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
-    (
-        emails_sent,
-        pages_analyzed,
-        pages_remaining,
-    ) = await UserAdminDAO.usage_snapshot(session, user_id)
+    usage, pages_remaining = await UserAdminDAO.usage_snapshot(
+        session,
+        user_id,
+    )
     return _admin_detail(
         refreshed,
-        emails_sent=emails_sent,
-        pages_analyzed=pages_analyzed,
+        usage=usage,
         pages_remaining=pages_remaining,
     )
 
@@ -330,15 +331,13 @@ async def update_user_subscription(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
-    (
-        emails_sent,
-        pages_analyzed,
-        pages_remaining,
-    ) = await UserAdminDAO.usage_snapshot(session, user_id)
+    usage, pages_remaining = await UserAdminDAO.usage_snapshot(
+        session,
+        user_id,
+    )
     return _admin_detail(
         refreshed,
-        emails_sent=emails_sent,
-        pages_analyzed=pages_analyzed,
+        usage=usage,
         pages_remaining=pages_remaining,
     )
 
