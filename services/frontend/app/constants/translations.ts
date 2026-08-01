@@ -134,7 +134,7 @@ export const translations = {
 		phoneLabel: 'Телефон',
 		passwordHint: 'Минимум 8 символов',
 		termsPrefix: 'Я принимаю',
-		termsLink: 'условия использования',
+		termsLink: 'пользовательское соглашение',
 		termsAnd: 'и',
 		privacyLink: 'политику конфиденциальности',
 		marketingConsent: 'Согласен на получение маркетинговых уведомлений',

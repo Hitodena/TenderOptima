@@ -110,14 +110,9 @@ type="button"
 												{{ t('auth.termsPrefix') }}
 												<ULink
 													to="/legal/terms-of-use"
-													class="text-primary underline underline-offset-2 hover:opacity-80">
+													class="text-primary underline underline-offset-2 hover:opacity-80"
+												>
 													{{ t('auth.termsLink') }}
-												</ULink>
-												{{ t('auth.termsAnd') }}
-												<ULink
-													to="/legal/privacy-policy"
-													class="text-primary underline underline-offset-2 hover:opacity-80">
-													{{ t('auth.privacyLink') }}
 												</ULink>
 											</span>
 										</template>
