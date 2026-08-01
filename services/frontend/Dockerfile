@@ -2,10 +2,14 @@ FROM node:26-alpine AS builder
 WORKDIR /app
 
 # Harden against flaky registry connectivity on remote builders.
-ENV NPM_CONFIG_FETCH_RETRIES=5 \
+# Prefer IPv4: Docker DNS often returns AAAA first while IPv6 is broken/slow,
+# which surfaces as ETIMEDOUT during npm ci.
+ENV NODE_OPTIONS=--dns-result-order=ipv4first \
+	NPM_CONFIG_FETCH_RETRIES=5 \
 	NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000 \
 	NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000 \
-	NPM_CONFIG_FETCH_TIMEOUT=300000
+	NPM_CONFIG_FETCH_TIMEOUT=300000 \
+	NPM_CONFIG_MAXSOCKETS=10
 
 COPY package.json package-lock.json ./
 RUN npm ci

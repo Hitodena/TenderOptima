@@ -169,6 +169,9 @@ services:
     build:
       context: ./services/frontend
       dockerfile: Dockerfile
+      # Use host network during build so npm registry reaches via the VPS uplink
+      # (bridge+AAAA DNS has caused ETIMEDOUT on this host).
+      network: host
     image: tenderoptima/frontend:latest
     container_name: tenderoptima_frontend
     restart: unless-stopped
