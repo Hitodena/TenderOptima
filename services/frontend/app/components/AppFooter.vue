@@ -12,19 +12,21 @@
 			>
 				<template
 					v-for="(link, index) in legalLinks"
-					:key="link.to"
+					:key="link.href"
 				>
 					<span
 						v-if="index > 0"
 						class="shrink-0 text-border"
 						aria-hidden="true"
 					>|</span>
-					<NuxtLink
-						:to="link.to"
+					<a
+						:href="link.href"
 						class="transition-colors hover:text-default"
+						target="_blank"
+						rel="noopener noreferrer"
 					>
 						{{ link.label }}
-					</NuxtLink>
+					</a>
 				</template>
 			</nav>
 		</div>

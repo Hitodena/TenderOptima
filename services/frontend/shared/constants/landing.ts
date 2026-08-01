@@ -292,23 +292,23 @@ export const LEGAL_DOCUMENTS = {
 export const LEGAL_LINKS = [
 	{
 		label: 'Пользовательское соглашение',
-		to: LEGAL_DOCUMENTS.termsOfUse.page,
+		href: LEGAL_DOCUMENTS.termsOfUse.href,
 	},
 	{
 		label: 'Политика обработки персональных данных',
-		to: LEGAL_DOCUMENTS.privacyPolicy.page,
+		href: LEGAL_DOCUMENTS.privacyPolicy.href,
 	},
 	{
 		label: 'Политика cookie',
-		to: LEGAL_DOCUMENTS.cookiePolicy.page,
+		href: LEGAL_DOCUMENTS.cookiePolicy.href,
 	},
 	{
 		label: 'Согласие на маркетинг',
-		to: LEGAL_DOCUMENTS.marketingConsent.page,
+		href: LEGAL_DOCUMENTS.marketingConsent.href,
 	},
 	{
 		label: 'Трансграничная передача',
-		to: LEGAL_DOCUMENTS.crossBorderConsent.page,
+		href: LEGAL_DOCUMENTS.crossBorderConsent.href,
 	},
 ] as const
 
