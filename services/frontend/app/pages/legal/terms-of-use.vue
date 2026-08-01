@@ -1,18 +1,12 @@
 <template>
 	<div>
-		<BaseSection tone="elevated" max-width="5xl">
+		<BaseSection tone="elevated" max-width="3xl">
 			<div class="text-center">
-				<h1 class="landing-section-title">
-					{{ doc.title }}
-				</h1>
+				<LegalDocumentCard
+					:title="doc.title"
+					:href="doc.href"
+				/>
 			</div>
-		</BaseSection>
-
-		<BaseSection max-width="5xl">
-			<LegalDocumentCard
-				:title="doc.title"
-				:href="doc.href"
-			/>
 		</BaseSection>
 	</div>
 </template>

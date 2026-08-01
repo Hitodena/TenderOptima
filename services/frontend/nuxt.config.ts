@@ -93,4 +93,14 @@ export default defineNuxtConfig({
 			],
 		},
 	},
+
+	nitro: {
+		routeRules: {
+			'/legal/**.pdf': {
+				headers: {
+					'Content-Disposition': 'inline',
+				},
+			},
+		},
+	},
 });
