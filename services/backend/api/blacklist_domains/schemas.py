@@ -20,12 +20,12 @@ class BlacklistCreate(BaseModel):
         ),
     ]
     reason: Annotated[
-        str | None,
+        str,
         Field(
-            default=None,
-            description="Optional reason for blacklisting the domain",
+            description="Reason for blacklisting the domain",
+            min_length=1,
             max_length=500,
-            examples=["Spam source"],
+            examples=["Спам/Низкое качество"],
         ),
     ]
     is_global: Annotated[

@@ -483,11 +483,25 @@
 										class="w-full"
 									/>
 								</UFormField>
-								<UFormField label="Причина" name="reason">
-									<UInput
-										v-model="blacklistForm.reason"
-										icon="i-lucide-info"
-										placeholder="Спам, недостоверные данные и т.д."
+								<UFormField label="Причина" name="reasonKind" required>
+									<USelect
+										v-model="blacklistForm.reasonKind"
+										:items="blacklistReasonOptions"
+										placeholder="Выберите причину"
+										class="w-full"
+									/>
+								</UFormField>
+								<UFormField
+									v-if="blacklistForm.reasonKind === BLACKLIST_REASON_OTHER"
+									label="Укажите причину"
+									name="customReason"
+									required
+								>
+									<UTextarea
+										v-model="blacklistForm.customReason"
+										:rows="3"
+										autoresize
+										placeholder="Опишите причину блокировки"
 										class="w-full"
 									/>
 								</UFormField>
@@ -854,12 +868,51 @@ const deletingBlacklistId = ref<string | null>(null)
 const addBlacklistOpen = ref(false)
 const savingBlacklist = ref(false)
 
-const blacklistForm = reactive({ domain: '', reason: '' })
+const BLACKLIST_REASON_OTHER = '__other__'
 
-const blacklistSchema = z.object({
-	domain: z.string().min(3, 'Минимум 3 символа').max(255),
-	reason: z.string().max(500).optional(),
+const blacklistReasonOptions = [
+	{ label: 'Маркетплейс/Агрегатор', value: 'Маркетплейс/Агрегатор' },
+	{ label: 'Магазин-агрегатор', value: 'Магазин-агрегатор' },
+	{ label: 'Бизнес-справочник', value: 'Бизнес-справочник' },
+	{ label: 'Информационный сайт/Блог', value: 'Информационный сайт/Блог' },
+	{ label: 'Форум/Социальная сеть', value: 'Форум/Социальная сеть' },
+	{ label: 'Спам/Низкое качество', value: 'Спам/Низкое качество' },
+	{ label: 'Государственный сайт', value: 'Государственный сайт' },
+	{ label: 'Другое...', value: BLACKLIST_REASON_OTHER },
+] as const
+
+const blacklistForm = reactive({
+	domain: '',
+	reasonKind: undefined as string | undefined,
+	customReason: '',
 })
+
+const blacklistSchema = z
+	.object({
+		domain: z.string().min(3, 'Минимум 3 символа').max(255),
+		reasonKind: z.string().min(1, 'Выберите причину'),
+		customReason: z.string().max(500).optional(),
+	})
+	.superRefine((value, ctx) => {
+		if (value.reasonKind !== BLACKLIST_REASON_OTHER) return
+		if ((value.customReason ?? '').trim().length === 0) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: 'Укажите причину',
+				path: ['customReason'],
+			})
+		}
+	})
+
+function resolveBlacklistReason(): string | null {
+	const kind = blacklistForm.reasonKind
+	if (!kind) return null
+	if (kind === BLACKLIST_REASON_OTHER) {
+		const custom = blacklistForm.customReason.trim()
+		return custom || null
+	}
+	return kind
+}
 
 const blacklistColumns: TableColumn<BlacklistResponse>[] = [
 	{ accessorKey: 'domain', header: 'Домен' },
@@ -882,17 +935,23 @@ async function fetchBlacklist() {
 
 function openAddBlacklist() {
 	blacklistForm.domain = ''
-	blacklistForm.reason = ''
+	blacklistForm.reasonKind = undefined
+	blacklistForm.customReason = ''
 	addBlacklistOpen.value = true
 }
 
 async function submitAddBlacklist() {
 	if (savingBlacklist.value) return
+	const reason = resolveBlacklistReason()
+	if (!reason) {
+		toast.add({ title: 'Укажите причину блокировки', color: 'error' })
+		return
+	}
 	savingBlacklist.value = true
 	try {
 		const created = await post<BlacklistResponse>('/blacklist', {
 			domain: blacklistForm.domain.trim().toLowerCase(),
-			reason: blacklistForm.reason.trim() || null,
+			reason,
 			is_global: true,
 		})
 		blacklist.value = [created, ...blacklist.value]

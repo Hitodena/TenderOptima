@@ -431,7 +431,7 @@ export interface SupplierResponseResponse {
 
 export interface BlacklistCreate {
 	domain: string;
-	reason?: string | null;
+	reason: string;
 	is_global?: boolean;
 }
 
