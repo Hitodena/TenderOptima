@@ -260,37 +260,37 @@ export const CONTACT_SUPPORT = {
 	] satisfies ContactEmailChannel[],
 } as const
 
-/** Static legal DOCX files served from `public/legal/`. */
+/** Static legal PDF files served from `public/legal/`. */
 export const LEGAL_DOCUMENTS = {
 	termsOfUse: {
 		title: 'Пользовательское соглашение',
-		href: '/legal/terms-of-use.docx',
+		href: '/legal/terms-of-use.pdf',
 		page: '/legal/terms-of-use',
-		fileName: 'Пользовательское соглашение.docx',
+		fileName: 'Пользовательское соглашение.pdf',
 	},
 	privacyPolicy: {
 		title: 'Политика обработки персональных данных (B2B)',
-		href: '/legal/privacy-policy-b2b.docx',
+		href: '/legal/privacy-policy-b2b.pdf',
 		page: '/legal/privacy-policy',
-		fileName: 'Политика обработки персональных данных.docx',
+		fileName: 'Политика обработки персональных данных.pdf',
 	},
 	cookiePolicy: {
 		title: 'Политика использования cookie-файлов',
-		href: '/legal/cookie-policy.docx',
+		href: '/legal/cookie-policy.pdf',
 		page: '/legal/cookie-policy',
-		fileName: 'Политика использования cookie-файлов.docx',
+		fileName: 'Политика использования cookie-файлов.pdf',
 	},
 	marketingConsent: {
 		title: 'Согласие на получение маркетинговых уведомлений',
-		href: '/legal/marketing-consent.docx',
+		href: '/legal/marketing-consent.pdf',
 		page: '/legal/marketing-consent',
-		fileName: 'Согласие на маркетинг.docx',
+		fileName: 'Согласие на маркетинг.pdf',
 	},
 	crossBorderConsent: {
 		title: 'Согласие на трансграничную передачу персональных данных',
-		href: '/legal/cross-border-consent-kz.docx',
+		href: '/legal/cross-border-consent-kz.pdf',
 		page: '/legal/cross-border-consent',
-		fileName: 'Согласие на трансграничную передачу.docx',
+		fileName: 'Согласие на трансграничную передачу.pdf',
 	},
 } as const
 

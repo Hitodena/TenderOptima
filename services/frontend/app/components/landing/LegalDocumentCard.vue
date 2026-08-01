@@ -37,7 +37,7 @@ withDefaults(
 	}>(),
 	{
 		description: undefined,
-		linkLabel: 'Скачать документ (DOCX)',
+		linkLabel: 'Скачать документ (PDF)',
 		downloadName: undefined,
 	},
 )

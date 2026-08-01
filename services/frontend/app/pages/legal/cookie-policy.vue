@@ -17,7 +17,7 @@
 					:title="doc.title"
 					:href="doc.href"
 					:download-name="doc.fileName"
-					description="Скачайте актуальную версию политики cookie-файлов в формате DOCX."
+					description="Скачайте актуальную версию политики cookie-файлов в формате PDF."
 				/>
 				<LegalDocumentCard
 					title="Реестр cookie-файлов"

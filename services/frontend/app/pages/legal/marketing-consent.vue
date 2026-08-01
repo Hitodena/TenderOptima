@@ -16,7 +16,7 @@
 				:title="doc.title"
 				:href="doc.href"
 				:download-name="doc.fileName"
-				description="Скачайте актуальную версию согласия на маркетинг в формате DOCX."
+				description="Скачайте актуальную версию согласия на маркетинг в формате PDF."
 			/>
 		</BaseSection>
 	</div>

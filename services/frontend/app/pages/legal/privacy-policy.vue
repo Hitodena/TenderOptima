@@ -18,7 +18,7 @@
 					:title="doc.title"
 					:href="doc.href"
 					:download-name="doc.fileName"
-					description="Скачайте актуальную версию политики обработки персональных данных (B2B) в формате DOCX."
+					description="Скачайте актуальную версию политики обработки персональных данных (B2B) в формате PDF."
 				/>
 
 				<div class="prose prose-sm max-w-none text-default">
