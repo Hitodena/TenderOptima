@@ -1,6 +1,12 @@
 FROM node:26-alpine AS builder
 WORKDIR /app
 
+# Harden against flaky registry connectivity on remote builders.
+ENV NPM_CONFIG_FETCH_RETRIES=5 \
+	NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000 \
+	NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000 \
+	NPM_CONFIG_FETCH_TIMEOUT=300000
+
 COPY package.json package-lock.json ./
 RUN npm ci
 
