@@ -86,7 +86,7 @@
 							<span>12/12</span>
 						</div>
 						<div class="case-visual-extract__bar">
-							<span></span>
+							<span/>
 						</div>
 						<ul class="case-visual-extract__list">
 							<li><span>Мощность, кВт</span><strong>✓</strong></li>

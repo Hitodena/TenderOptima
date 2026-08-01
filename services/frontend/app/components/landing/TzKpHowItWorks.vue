@@ -138,16 +138,16 @@
 											<span class="mock-extract__count">проверено <b>12</b>/12 параметров</span>
 										</div>
 										<div class="mock-extract__preview">
-											<span class="mock-extract__scan" aria-hidden="true"></span>
-											<span class="mock-docline" style="--i:0"></span>
-											<span class="mock-docline mock-docline--w70" style="--i:1"></span>
-											<span class="mock-docline mock-docline--w90" style="--i:2"></span>
-											<span class="mock-docline mock-docline--w60" style="--i:3"></span>
-											<span class="mock-docline mock-docline--w80" style="--i:4"></span>
-											<span class="mock-docline mock-docline--w50" style="--i:5"></span>
-											<span class="mock-docline mock-docline--w85" style="--i:6"></span>
+											<span class="mock-extract__scan" aria-hidden="true"/>
+											<span class="mock-docline" style="--i:0"/>
+											<span class="mock-docline mock-docline--w70" style="--i:1"/>
+											<span class="mock-docline mock-docline--w90" style="--i:2"/>
+											<span class="mock-docline mock-docline--w60" style="--i:3"/>
+											<span class="mock-docline mock-docline--w80" style="--i:4"/>
+											<span class="mock-docline mock-docline--w50" style="--i:5"/>
+											<span class="mock-docline mock-docline--w85" style="--i:6"/>
 										</div>
-										<div class="mock-extract__progress"><span class="mock-extract__bar"></span></div>
+										<div class="mock-extract__progress"><span class="mock-extract__bar"/></div>
 										<ul class="mock-extract__items">
 											<li class="mock-extract-item" style="--i:0"><span class="mock-extract-item__tag">Технические</span><span class="mock-extract-item__text">Мощность, кВт</span><span class="mock-status mock-status--ok">✓</span></li>
 											<li class="mock-extract-item" style="--i:1"><span class="mock-extract-item__tag">Технические</span><span class="mock-extract-item__text">Класс защиты IP</span><span class="mock-status mock-status--ok">✓</span></li>

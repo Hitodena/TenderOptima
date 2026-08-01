@@ -96,7 +96,7 @@
 												<span class="mock-field__label">Запрос на закупку</span>
 												<span class="mock-field__input">
 													<span class="mock-typewriter">Кабель ВВГнг(А)-LSLTx 3×2,5</span>
-													<span class="mock-caret" aria-hidden="true"></span>
+													<span class="mock-caret" aria-hidden="true"/>
 												</span>
 											</div>
 											<div class="mock-field mock-field--sm">
@@ -190,7 +190,7 @@
 												<li class="mock-param" style="--i:2"><span>Условия оплаты</span><b>30 дней</b></li>
 												<li class="mock-param" style="--i:3"><span>Наличие</span><b>на складе</b></li>
 											</ul>
-											<span class="mock-mail__scan" aria-hidden="true"></span>
+											<span class="mock-mail__scan" aria-hidden="true"/>
 										</div>
 									</div>
 

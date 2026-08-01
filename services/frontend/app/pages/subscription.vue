@@ -1,8 +1,5 @@
 <script lang="ts" setup>
-import type {
-	SubscriptionResponse,
-	UserResponse,
-} from '#shared/types'
+import type { UserResponse } from '#shared/types'
 import {
 	PLAN_LABELS,
 	subscriptionPlanLabel,

@@ -119,6 +119,7 @@ const props = withDefaults(
 	}>(),
 	{
 		initialRequestType: 'demo',
+		submitLabel: undefined,
 		submitSize: 'lg',
 	},
 )
