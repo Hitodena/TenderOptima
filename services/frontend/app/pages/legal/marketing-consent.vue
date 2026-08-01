@@ -1,22 +1,17 @@
 <template>
 	<div>
-		<BaseSection tone="elevated" max-width="3xl">
+		<BaseSection tone="elevated" max-width="5xl">
 			<div class="text-center">
-				<h1 class="landing-section-title mb-4">
+				<h1 class="landing-section-title">
 					{{ doc.title }}
 				</h1>
-				<p class="landing-section-description mx-auto">
-					Условия согласия на получение информационных и маркетинговых сообщений от TenderOptima.
-				</p>
 			</div>
 		</BaseSection>
 
-		<BaseSection max-width="3xl">
+		<BaseSection max-width="5xl">
 			<LegalDocumentCard
 				:title="doc.title"
 				:href="doc.href"
-				:download-name="doc.fileName"
-				description="Скачайте актуальную версию согласия на маркетинг в формате PDF."
 			/>
 		</BaseSection>
 	</div>

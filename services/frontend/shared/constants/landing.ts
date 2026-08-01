@@ -266,31 +266,26 @@ export const LEGAL_DOCUMENTS = {
 		title: 'Пользовательское соглашение',
 		href: '/legal/terms-of-use.pdf',
 		page: '/legal/terms-of-use',
-		fileName: 'Пользовательское соглашение.pdf',
 	},
 	privacyPolicy: {
 		title: 'Политика обработки персональных данных (B2B)',
 		href: '/legal/privacy-policy-b2b.pdf',
 		page: '/legal/privacy-policy',
-		fileName: 'Политика обработки персональных данных.pdf',
 	},
 	cookiePolicy: {
 		title: 'Политика использования cookie-файлов',
 		href: '/legal/cookie-policy.pdf',
 		page: '/legal/cookie-policy',
-		fileName: 'Политика использования cookie-файлов.pdf',
 	},
 	marketingConsent: {
 		title: 'Согласие на получение маркетинговых уведомлений',
 		href: '/legal/marketing-consent.pdf',
 		page: '/legal/marketing-consent',
-		fileName: 'Согласие на маркетинг.pdf',
 	},
 	crossBorderConsent: {
 		title: 'Согласие на трансграничную передачу персональных данных',
 		href: '/legal/cross-border-consent-kz.pdf',
 		page: '/legal/cross-border-consent',
-		fileName: 'Согласие на трансграничную передачу.pdf',
 	},
 } as const
 

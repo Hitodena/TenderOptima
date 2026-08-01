@@ -1,40 +1,18 @@
 <template>
 	<div>
-		<BaseSection tone="elevated" max-width="3xl">
+		<BaseSection tone="elevated" max-width="5xl">
 			<div class="text-center">
-				<h1 class="landing-section-title mb-4">
-					Политика обработки персональных данных
+				<h1 class="landing-section-title">
+					{{ doc.title }}
 				</h1>
-				<p class="landing-section-description mx-auto">
-					Политика описывает цели, состав и порядок обработки персональных данных пользователей
-					сервиса TenderOptima.
-				</p>
 			</div>
 		</BaseSection>
 
-		<BaseSection max-width="3xl">
-			<div class="space-y-6">
-				<LegalDocumentCard
-					:title="doc.title"
-					:href="doc.href"
-					:download-name="doc.fileName"
-					description="Скачайте актуальную версию политики обработки персональных данных (B2B) в формате PDF."
-				/>
-
-				<div class="prose prose-sm max-w-none text-default">
-					<p>
-						Персональные данные обрабатываются для предоставления доступа к сервису, обратной связи,
-						технической поддержки и исполнения договорных обязательств.
-					</p>
-					<p>
-						Данные могут храниться в защищённом облаке или на серверах заказчика — по согласованию.
-						По запросам субъектов персональных данных:
-						<a href="mailto:dpo@tenderoptima.by" class="text-primary underline underline-offset-2">
-							dpo@tenderoptima.by
-						</a>
-					</p>
-				</div>
-			</div>
+		<BaseSection max-width="5xl">
+			<LegalDocumentCard
+				:title="doc.title"
+				:href="doc.href"
+			/>
 		</BaseSection>
 	</div>
 </template>
@@ -49,7 +27,7 @@ definePageMeta({ layout: 'default' })
 const doc = LEGAL_DOCUMENTS.privacyPolicy
 
 useSeoMeta({
-	title: 'Политика обработки персональных данных — TenderOptima',
+	title: `${doc.title} — TenderOptima`,
 	description: 'Политика обработки персональных данных сервиса TenderOptima.',
 })
 </script>
