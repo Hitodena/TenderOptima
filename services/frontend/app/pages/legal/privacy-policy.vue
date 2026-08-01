@@ -1,19 +1,15 @@
 <template>
-	<div>
-		<BaseSection tone="elevated" max-width="3xl">
-			<div class="text-center">
-				<LegalDocumentCard
-					:title="doc.title"
-					:href="doc.href"
-				/>
-			</div>
-		</BaseSection>
-	</div>
+	<LegalPageShell>
+		<LegalDocumentCard
+			:title="doc.title"
+			:href="doc.href"
+		/>
+	</LegalPageShell>
 </template>
 
 <script lang="ts" setup>
-import BaseSection from '~/components/landing/BaseSection.vue'
 import LegalDocumentCard from '~/components/landing/LegalDocumentCard.vue'
+import LegalPageShell from '~/components/landing/LegalPageShell.vue'
 import { LEGAL_DOCUMENTS } from '#shared/constants/landing'
 
 definePageMeta({ layout: 'default' })
