@@ -70,6 +70,10 @@ async def create_supplier(
         extra_emails = extra_emails or None
 
     existing = await SupplierDAO.get_by_domain(session, normalized_domain)
+    if existing is None:
+        existing = await SupplierDAO.get_by_main_email(
+            session, normalized_email
+        )
     is_new = False
     if existing:
         supplier = existing
@@ -93,26 +97,37 @@ async def create_supplier(
         if not request or request.user_id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Request not found or does not belong to you",
+                detail="Запрос не найден или не принадлежит вам",
             )
 
         existing_rs = await RequestSupplierDAO.get_by_request_and_supplier(
             session, request_id=body.request_id, supplier_id=supplier.id
         )
-        if not existing_rs:
-            await RequestSupplierDAO.create(
+        if existing_rs is None:
+            existing_rs = await RequestSupplierDAO.get_by_request_and_email(
                 session,
                 request_id=body.request_id,
-                supplier_id=supplier.id,
-                sent_to_email=normalized_email,
-                sent_status=RequestSupplierStatus.PENDING,
-                is_enabled=body.is_enabled,
+                email=normalized_email,
             )
+        if existing_rs is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Поставщик уже добавлен в этот запрос",
+            )
+
+        await RequestSupplierDAO.create(
+            session,
+            request_id=body.request_id,
+            supplier_id=supplier.id,
+            sent_to_email=normalized_email,
+            sent_status=RequestSupplierStatus.PENDING,
+            is_enabled=body.is_enabled,
+        )
 
     if not is_new and body.request_id is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Supplier with this domain already exists",
+            detail="Поставщик с таким доменом уже существует",
         )
 
     return SupplierResponse.model_validate(supplier)

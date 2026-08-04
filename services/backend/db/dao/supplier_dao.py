@@ -2,7 +2,7 @@ import uuid
 from datetime import UTC, datetime
 
 from loguru import logger
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -190,6 +190,31 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
                 supplier_id=supplier_id,
             )
             raise
+
+    @classmethod
+    async def get_by_request_and_email(
+        cls,
+        session: AsyncSession,
+        request_id: uuid.UUID,
+        email: str,
+    ) -> RequestSupplier | None:
+        """Find a request supplier matched by main or sent-to email."""
+        normalized = email.lower().strip()
+        stmt = (
+            select(cls.model)
+            .join(Supplier, cls.model.supplier_id == Supplier.id)
+            .where(
+                cls.model.request_id == request_id,
+                or_(
+                    func.lower(Supplier.main_email) == normalized,
+                    func.lower(cls.model.sent_to_email) == normalized,
+                ),
+            )
+            .options(selectinload(cls.model.supplier))
+            .limit(1)
+        )
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
 
     @classmethod
     async def count_pending(
@@ -556,3 +581,19 @@ class SupplierDAO(BaseDAO[Supplier]):
                 domain=domain,
             )
             raise
+
+    @classmethod
+    async def get_by_main_email(
+        cls, session: AsyncSession, email: str
+    ) -> Supplier | None:
+        """Load supplier by case-insensitive main email."""
+        normalized = email.lower().strip()
+        if not normalized:
+            return None
+        stmt = (
+            select(cls.model)
+            .where(func.lower(cls.model.main_email) == normalized)
+            .limit(1)
+        )
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()

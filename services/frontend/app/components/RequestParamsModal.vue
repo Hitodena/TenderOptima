@@ -21,18 +21,27 @@
                 <div class="flex-1 min-h-0 overflow-y-auto space-y-6 pr-1 pb-4">
                     <UFormField label="Тема письма" :required="false">
                         <UInput
-v-model="form.emailSubject" placeholder="Запрос коммерческого предложения — ..."
-                            class="w-full" size="lg" :class="errors.emailSubject ? 'ring-2 ring-error rounded-lg' : ''"
-                            maxlength="255" />
+                            v-model="form.emailSubject"
+                            placeholder="Запрос коммерческого предложения — ..."
+                            class="w-full"
+                            size="lg"
+                            :color="errors.emailSubject ? 'error' : undefined"
+                            :highlight="Boolean(errors.emailSubject)"
+                            maxlength="255"
+                        />
                         <p v-if="errors.emailSubject" class="text-xs text-error mt-1">{{ errors.emailSubject }}</p>
                     </UFormField>
 
                     <UFormField label="Описание товара/услуги" required>
                         <UTextarea
-v-model="form.description"
+                            v-model="form.description"
                             placeholder="Опишите детально товар или услугу, технические характеристики, объёмы..."
-                            :rows="6" class="w-full" size="lg"
-                            :class="errors.description ? 'ring-2 ring-error rounded-lg' : ''" />
+                            :rows="6"
+                            class="w-full"
+                            size="lg"
+                            :color="errors.description ? 'error' : undefined"
+                            :highlight="Boolean(errors.description)"
+                        />
                         <p v-if="errors.description" class="text-xs text-error mt-1">
                             {{ errors.description }}
                         </p>
@@ -115,7 +124,8 @@ v-model="form.description"
                             :placeholder="t('profile.businessCardPlaceholder')"
                             :rows="showBusinessCardWarning ? 8 : 4"
                             class="w-full"
-                            :class="showBusinessCardWarning ? 'ring-2 ring-warning rounded-lg' : ''"
+                            :color="showBusinessCardWarning ? 'warning' : undefined"
+                            :highlight="showBusinessCardWarning"
                         />
                         <div
                             v-if="showBusinessCardWarning"

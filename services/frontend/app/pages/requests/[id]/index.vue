@@ -373,6 +373,7 @@ v-else size="sm" color="error" variant="ghost" icon="i-lucide-trash-2"
 				:request-id="id"
 				:subscription="subscription"
 				:manual-supplier-count="manualSupplierCount"
+				:existing-emails="requestSupplierEmails"
 				@added="fetchSuppliersAndEnforceQuota"
 			/>
 			<EditSupplierEmailModal v-model:open="showEditEmail" :supplier="emailSupplier" @saved="onEmailSaved" />
@@ -550,6 +551,11 @@ const canLaunchMailing = computed(() =>
 )
 const manualSupplierCount = computed(() =>
 	suppliers.value.filter((s) => isManualSupplierSource(s.supplier?.from_source)).length,
+)
+const requestSupplierEmails = computed(() =>
+	suppliers.value
+		.map((s) => s.supplier?.main_email || s.sent_to_email || '')
+		.filter(Boolean),
 )
 
 const testPlanSelectableLimit = computed(() =>

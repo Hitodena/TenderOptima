@@ -108,12 +108,14 @@ type="button"
 										<template #label>
 											<span class="text-sm">
 												{{ t('auth.termsPrefix') }}
-												<ULink
-													to="/legal/terms-of-use"
+												<a
+													:href="LEGAL_DOCUMENTS.termsOfUse.href"
 													class="text-primary underline underline-offset-2 hover:opacity-80"
+													target="_blank"
+													rel="noopener noreferrer"
 												>
 													{{ t('auth.termsLink') }}
-												</ULink>
+												</a>
 											</span>
 										</template>
 									</UCheckbox>
@@ -137,12 +139,14 @@ type="button"
 											<span class="text-sm">
 												{{ t('auth.marketingConsent') }}
 												—
-												<ULink
-													to="/legal/marketing-consent"
+												<a
+													:href="LEGAL_DOCUMENTS.marketingConsent.href"
 													class="text-primary underline underline-offset-2 hover:opacity-80"
+													target="_blank"
+													rel="noopener noreferrer"
 												>
 													{{ t('auth.marketingConsentLink') }}
-												</ULink>
+												</a>
 											</span>
 										</template>
 									</UCheckbox>
@@ -208,16 +212,40 @@ type="submit" class="w-full justify-center" size="lg" :loading="registerLoading"
 								{{ t('auth.consentModalLegalLinks') }}
 							</p>
 							<div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-								<UButton to="/legal/terms-of-use" variant="outline" color="neutral" size="sm">
+								<UButton
+									:to="LEGAL_DOCUMENTS.termsOfUse.href"
+									target="_blank"
+									variant="outline"
+									color="neutral"
+									size="sm"
+								>
 									{{ t('auth.termsLink') }}
 								</UButton>
-								<UButton to="/legal/privacy-policy" variant="outline" color="neutral" size="sm">
+								<UButton
+									:to="LEGAL_DOCUMENTS.privacyPolicy.href"
+									target="_blank"
+									variant="outline"
+									color="neutral"
+									size="sm"
+								>
 									{{ t('auth.privacyLink') }}
 								</UButton>
-								<UButton to="/legal/marketing-consent" variant="outline" color="neutral" size="sm">
+								<UButton
+									:to="LEGAL_DOCUMENTS.marketingConsent.href"
+									target="_blank"
+									variant="outline"
+									color="neutral"
+									size="sm"
+								>
 									{{ t('auth.marketingConsentLink') }}
 								</UButton>
-								<UButton to="/legal/cross-border-consent" variant="outline" color="neutral" size="sm">
+								<UButton
+									:to="LEGAL_DOCUMENTS.crossBorderConsent.href"
+									target="_blank"
+									variant="outline"
+									color="neutral"
+									size="sm"
+								>
 									{{ t('auth.crossBorderConsentLink') }}
 								</UButton>
 							</div>
@@ -241,6 +269,7 @@ type="submit" class="w-full justify-center" size="lg" :loading="registerLoading"
 
 <script lang="ts" setup>
 import type { RegisterCreate, TokenResponse } from '#shared/types'
+import { LEGAL_DOCUMENTS } from '#shared/constants/landing'
 import { getApiErrorDetail } from '#shared/utils/apiError'
 import { isValidPhoneNumber } from 'libphonenumber-js'
 import { z } from 'zod'

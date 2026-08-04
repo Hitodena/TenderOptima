@@ -198,6 +198,7 @@ const props = defineProps<{
 	requestId?: string | null
 	subscription?: SubscriptionResponse | null
 	manualSupplierCount?: number
+	existingEmails?: string[]
 	supplier?: Supplier | null
 	sourceSupplier?: Supplier | null
 	bookmarkListId?: string | null
@@ -465,6 +466,14 @@ async function handleSubmit() {
 		} else {
 			if (testPlanManualLimitReached.value) return
 			const email = form.email.trim()
+			const normalizedEmail = email.toLowerCase()
+			const alreadyOnRequest = (props.existingEmails ?? []).some(
+				(item) => item.trim().toLowerCase() === normalizedEmail,
+			)
+			if (alreadyOnRequest) {
+				error.value = 'Поставщик с таким email уже есть в этом запросе'
+				return
+			}
 			const payload: SupplierCreate = {
 				domain: form.domain.trim() || null,
 				company_name: form.company_name.trim(),
