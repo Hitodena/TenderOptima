@@ -68,6 +68,11 @@ export default defineNuxtConfig({
 			},
 		},
 	},
+
+	colorMode: {
+		preference: 'light',
+		fallback: 'light',
+	},
 	fonts: {
 		families: [
 			{ name: 'Plus Jakarta Sans', provider: 'google', global: true },

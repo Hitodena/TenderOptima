@@ -339,6 +339,12 @@ export const translations = {
 		businessCardHintItem3: 'Визитка подставляется в письма одним кликом',
 		businessCardHintCta: 'Заполнить визитку',
 		businessCardHintLater: 'Позже',
+		businessCardModalHint:
+			'Заполните реквизиты прямо в этом поле — они добавятся в письма поставщикам.',
+		businessCardModalWarnTitle: 'Заполните реквизиты организации полностью',
+		businessCardModalWarnBody:
+			'Без полных реквизитов поставщики чаще игнорируют запрос и оформляют КП некорректно. Укажите ФИО, должность, название компании, УНП/ИНН, адрес и телефон — как в примере ниже.',
+		businessCardModalExampleLabel: 'Пример заполнения',
 	},
 	tzAnalysis: {
 		comparisonTitle: 'Соответствия и несоответствия',

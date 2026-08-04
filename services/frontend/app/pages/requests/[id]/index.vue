@@ -95,7 +95,7 @@ v-if="request.status == RequestStatus.DRAFT" size="lg" variant="outline" color="
 								leading-icon="i-lucide-send"
 								:disabled="!canLaunchMailing"
 								@click="showParamsModal = true">
-								Отправить запрос поставщикам
+								Сформировать запрос поставщикам
 							</UButton>
 						</span>
 					</UTooltip>
@@ -247,29 +247,52 @@ color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 
 							<template #domain-cell="{ row }">
 								<div :class="lockedRowContentClass(row.original)">
-									<a
-v-if="row.original.supplier?.domain"
-										:href="toExternalUrl(row.original.supplier.domain)" target="_blank"
-										class="text-primary hover:underline text-sm" @click.stop>
-										{{ formatDomainLabel(row.original.supplier.domain) }}
-									</a>
+									<template v-if="row.original.supplier?.domain">
+										<span
+											v-if="isSupplierRowLocked(row.original)"
+											class="text-sm text-muted"
+										>
+											{{ formatDomainLabel(row.original.supplier.domain) }}
+										</span>
+										<a
+											v-else
+											:href="toExternalUrl(row.original.supplier.domain)"
+											target="_blank"
+											class="text-primary hover:underline text-sm"
+											@click.stop
+										>
+											{{ formatDomainLabel(row.original.supplier.domain) }}
+										</a>
+									</template>
 									<span v-else class="text-sm text-muted">—</span>
 								</div>
 							</template>
 
 							<template #email-cell="{ row }">
 								<div class="flex items-center gap-2 min-w-0" :class="lockedRowContentClass(row.original)">
-									<a
-v-if="row.original.supplier.main_email" target="blank"
-										:href="`mailto:${row.original.supplier.main_email}`"
-										class="text-sm text-muted hover:text-primary hover:underline truncate max-w-48 block"
-										:title="row.original.supplier.main_email" @click.stop>
-										{{ row.original.supplier.main_email }}
-									</a>
+									<template v-if="row.original.supplier.main_email">
+										<span
+											v-if="isSupplierRowLocked(row.original)"
+											class="text-sm text-muted truncate max-w-48 block"
+											:title="row.original.supplier.main_email"
+										>
+											{{ row.original.supplier.main_email }}
+										</span>
+										<a
+											v-else
+											target="blank"
+											:href="`mailto:${row.original.supplier.main_email}`"
+											class="text-sm text-muted hover:text-primary hover:underline truncate max-w-48 block"
+											:title="row.original.supplier.main_email"
+											@click.stop
+										>
+											{{ row.original.supplier.main_email }}
+										</a>
+									</template>
 									<span v-else class="text-sm text-muted">—</span>
 
 									<UButton
-										v-if="canManageSuppliers && row.original.supplier.extra_emails?.length > 1"
+										v-if="canManageSuppliers && !isSupplierRowLocked(row.original) && row.original.supplier.extra_emails?.length > 1"
 										size="xs" color="neutral" variant="ghost" icon="i-lucide-pencil"
 										@click.stop="openEditEmailModal(row.original.supplier)" />
 								</div>
@@ -286,7 +309,7 @@ v-if="row.original.supplier.main_email" target="blank"
 							<template #actions-cell="{ row }">
 								<div class="flex items-center justify-end gap-1 shrink-0 whitespace-nowrap">
 									<UButton
-										v-if="row.original.supplier"
+										v-if="row.original.supplier && !isSupplierRowLocked(row.original)"
 										size="sm"
 										color="neutral"
 										variant="ghost"
@@ -342,6 +365,7 @@ v-else size="sm" color="error" variant="ghost" icon="i-lucide-trash-2"
 				:request="request"
 				:supplier-count="pendingEnabledCount"
 				:subscription="subscription"
+				:is-first-request="Boolean(request.is_first_request)"
 				@launched="onLaunched"
 			/>
 			<AddSupplierModal
@@ -844,7 +868,9 @@ function getRowClass(row: TableRow<RequestSupplierResponse>) {
 }
 
 function lockedRowContentClass(rs: RequestSupplierResponse): string {
-	return isSupplierRowLocked(rs) ? 'blur-[2px] opacity-60 select-none' : ''
+	return isSupplierRowLocked(rs)
+		? 'blur-[2px] opacity-60 select-none pointer-events-none'
+		: ''
 }
 
 function onRowSelect(e: Event, row: TableRow<RequestSupplierResponse>) {

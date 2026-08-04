@@ -172,10 +172,48 @@ async def test_register_consumes_referral_and_sets_user_ref_by():
     user = next(obj for obj in session.added if isinstance(obj, User))
     assert user.ref_by == invitation.inviter_name
     assert user.referral_invitation_id == invitation.id
+    assert user.last_login_at is not None
     assert session.committed is True
     mark_used.assert_awaited_once_with(session, invitation, user_id=user.id)
     upsert_subscription.assert_awaited_once()
     assert token.token_type == "bearer"
+
+
+@pytest.mark.asyncio
+async def test_login_sets_last_login_at():
+    session = FakeSession()
+    user = User(
+        email="active@example.com",
+        hashed_password="hash",
+        full_name="Active User",
+    )
+    user.id = uuid.uuid4()
+
+    with (
+        patch(
+            "backend.api.auth.router.UserDAO.get_by_email",
+            AsyncMock(return_value=user),
+        ),
+        patch(
+            "backend.api.auth.router.verify_password",
+            return_value=True,
+        ),
+        patch(
+            "backend.api.auth.router.create_access_token",
+            return_value="token",
+        ),
+    ):
+        token = await login(
+            SimpleNamespace(
+                username="active@example.com",
+                password="SecurePass123!",
+            ),
+            session,  # type: ignore[arg-type]
+        )
+
+    assert token.access_token == "token"
+    assert user.last_login_at is not None
+    assert session.committed is True
 
 
 @pytest.mark.asyncio

@@ -99,6 +99,7 @@ async def register(
         agree_marketing=request.agree_marketing,
         ref_by=invitation.inviter_name,
         referral_invitation_id=invitation.id,
+        last_login_at=datetime.now(UTC),
     )
     user.business_info = build_business_info(user)
     try:

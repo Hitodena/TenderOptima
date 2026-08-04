@@ -97,20 +97,35 @@ v-model="form.description"
                         <p class="text-xs text-muted mb-2">
                             Добавляется в конце письма.
                         </p>
-                        <p class="mb-3 text-xs leading-relaxed text-primary">
-                            <UIcon name="i-lucide-info" class="mr-1 inline size-3.5 align-[-2px]" />
-                            Постоянный шаблон можно отредактировать в
-                            <ULink
-                                to="/profile?tab=business_card"
-                                class="font-semibold underline underline-offset-2 hover:opacity-80"
-                            >
-                                личном кабинете
-                            </ULink>.
+                        <p class="mb-3 text-xs leading-relaxed text-muted">
+                            <UIcon name="i-lucide-info" class="mr-1 inline size-3.5 align-[-2px] text-primary" />
+                            {{ t('requests.businessCardModalHint') }}
                         </p>
+                        <UAlert
+                            v-if="showBusinessCardWarning"
+                            color="warning"
+                            variant="soft"
+                            icon="i-lucide-triangle-alert"
+                            class="mb-3"
+                            :title="t('requests.businessCardModalWarnTitle')"
+                            :description="t('requests.businessCardModalWarnBody')"
+                        />
                         <UTextarea
-v-model="form.businessInfo"
-                            placeholder="С Уважением, специалист отдела закупок, Иван Иванов" :rows="4"
-                            class="w-full" />
+                            v-model="form.businessInfo"
+                            :placeholder="t('profile.businessCardPlaceholder')"
+                            :rows="showBusinessCardWarning ? 8 : 4"
+                            class="w-full"
+                            :class="showBusinessCardWarning ? 'ring-2 ring-warning rounded-lg' : ''"
+                        />
+                        <div
+                            v-if="showBusinessCardWarning"
+                            class="mt-3 rounded-lg border border-warning/40 bg-warning/5 px-3 py-2.5"
+                        >
+                            <p class="text-xs font-semibold text-warning mb-1.5">
+                                {{ t('requests.businessCardModalExampleLabel') }}
+                            </p>
+                            <pre class="text-xs text-muted whitespace-pre-wrap font-sans leading-relaxed">{{ t('profile.businessCardPlaceholder') }}</pre>
+                        </div>
                     </div>
 
                     <div>
@@ -235,11 +250,13 @@ import {
 import { getApiErrorDetail } from "#shared/utils/apiError"
 import { pluralizeSuppliers } from "#shared/utils/textFormat"
 import { emailQuotaBlockMessage, emailQuotaRemaining, effectiveEmailLimit } from "#shared/utils/subscriptionAccess"
+import { t } from "~/constants/translations"
 
 const props = defineProps<{
     request?: RequestResponse | null
     supplierCount?: number
     subscription?: SubscriptionResponse | null
+    isFirstRequest?: boolean
 }>()
 const isOpen = defineModel<boolean>("open", { default: false })
 const emit = defineEmits<{ launched: [] }>()
@@ -272,6 +289,20 @@ const form = reactive({
 })
 
 const originalBusinessInfo = ref("")
+
+function hasCompleteBusinessRequisites(text: string): boolean {
+    const value = text.trim()
+    if (!value) return false
+    const hasLegalId = /УНП|ИНН|БИН/i.test(value)
+    const hasContact = /Адрес|Тел\.?|Телефон|\+\d/i.test(value)
+    return hasLegalId && hasContact
+}
+
+const showBusinessCardWarning = computed(() => {
+    if (hasCompleteBusinessRequisites(form.businessInfo)) return false
+    if (!form.businessInfo.trim()) return true
+    return Boolean(props.isFirstRequest ?? props.request?.is_first_request)
+})
 
 const filesToUpload = ref<File[]>([])
 const uploadedAttachments = ref<AttachmentInfo[]>([])

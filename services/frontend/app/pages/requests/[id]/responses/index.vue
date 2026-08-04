@@ -163,7 +163,7 @@ v-else-if="sortedThreads.length === 0"
 			</div>
 
 			<div
-class="flex-1 flex flex-col min-w-0 min-h-0"
+				class="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden"
 				:class="isMobile && !selectedRsId && mainTab !== 'comparison' ? 'hidden' : 'flex'">
 
 				<template v-if="mainTab === 'comparison'">
@@ -567,14 +567,16 @@ v-if="!showParamsPanel" size="xs" variant="ghost" color="neutral"
 							</div>
 						</div>
 
-						<div class="border-t border-default px-3 md:px-5 py-4 shrink-0">
-							<div class="flex flex-wrap items-center justify-end gap-2 mb-2">
-								<p class="text-xs text-muted font-medium mr-auto">Ответить на письмо</p>
-								<ReceiptAcknowledgementButton
-									v-model="replyBody"
-									:company-name="selectedThread?.supplier.company_name"
-								/>
-								<InsertBusinessInfoButton v-model="replyBody" />
+						<div class="border-t border-default px-3 md:px-5 py-4 shrink-0 min-w-0">
+							<div class="flex flex-col gap-2 mb-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+								<p class="text-xs text-muted font-medium sm:mr-auto">Ответить на письмо</p>
+								<div class="flex flex-wrap items-center gap-2 min-w-0">
+									<ReceiptAcknowledgementButton
+										v-model="replyBody"
+										:company-name="selectedThread?.supplier.company_name"
+									/>
+									<InsertBusinessInfoButton v-model="replyBody" />
+								</div>
 							</div>
 							<UTextarea
 								v-model="replyBody"
@@ -582,12 +584,12 @@ v-if="!showParamsPanel" size="xs" variant="ghost" color="neutral"
 								:rows="2"
 								autoresize
 								:maxrows="16"
-								class="w-full mb-3"
+								class="w-full mb-3 min-w-0"
 								:ui="{ base: 'min-h-[3.25rem] resize-none' }"
 							/>
 							<div
 								v-if="replyFiles.length"
-								class="flex flex-wrap gap-2 mb-3"
+								class="flex flex-wrap gap-2 mb-3 min-w-0"
 							>
 								<div
 									v-for="(file, idx) in replyFiles"
@@ -609,9 +611,9 @@ v-if="!showParamsPanel" size="xs" variant="ghost" color="neutral"
 									/>
 								</div>
 							</div>
-							<div class="flex flex-wrap items-center justify-between gap-2">
+							<div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between min-w-0">
 								<p class="text-xs text-muted hidden md:block">Ответ придёт поставщику на его email</p>
-								<div class="flex items-center gap-1.5 w-full md:w-auto justify-end">
+								<div class="flex items-center gap-1.5 w-full sm:w-auto justify-end min-w-0">
 									<input
 										ref="replyFileInput"
 										type="file"
@@ -634,7 +636,7 @@ v-if="!showParamsPanel" size="xs" variant="ghost" color="neutral"
 										leading-icon="i-lucide-send"
 										:loading="sendingReply"
 										:disabled="!replyBody.trim() || !canSendReplyEmail"
-										class="flex-1 md:flex-none"
+										class="flex-1 sm:flex-none"
 										@click="sendReply"
 									>
 										Отправить ответ

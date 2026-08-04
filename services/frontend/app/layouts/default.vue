@@ -115,7 +115,7 @@
 		<div class="flex-1">
 			<slot />
 		</div>
-		<AppFooter />
+		<AppFooter v-if="showAppFooter" />
 		<IdeaSuggestionModal v-model:open="ideaModalOpen" />
 	</div>
 </template>
@@ -147,6 +147,9 @@ if (auth.isAuthenticated.value) {
 
 const MARKETING_ROUTES = new Set(['/', '/product', '/security', '/contacts', '/faq', '/cases'])
 const isLandingPage = computed(() => MARKETING_ROUTES.has(route.path))
+const showAppFooter = computed(
+	() => !/^\/requests\/[^/]+\/responses(?:\/|$)/.test(route.path),
+)
 
 const headerUi = computed(() => {
 	const isLandingGuest = isLandingPage.value && !auth.isAuthenticated.value
