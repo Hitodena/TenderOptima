@@ -1,24 +1,36 @@
 import uuid
+from pathlib import Path
 from typing import Annotated
 
 from backend.api.admin.schemas import (
+    AdminCooperationSendRequest,
+    AdminCooperationSendResponse,
+    AdminCooperationSupplierItem,
+    AdminCooperationSupplierPage,
     AdminEmailMessageItem,
     AdminEmailMessageLinkUpdate,
     AdminEmailMessagePage,
     AdminRequestSupplierRecipientUpdate,
+    AdminSmtpDefaultsResponse,
     AdminUserDetail,
     AdminUserListItem,
     ReferralInvitationCreate,
     ReferralInvitationResponse,
 )
-from backend.api.deps import get_admin, get_session
+from backend.api.deps import get_admin, get_config_instance, get_session
 from backend.api.subscriptions.helpers import subscription_to_response
 from backend.api.subscriptions.schemas import SubscriptionUpdate
+from backend.api.user_requests.schemas import Attachment
+from backend.celery_app.tasks.admin_cooperation_tasks import (
+    send_cooperation_proposals,
+)
+from backend.core.config import ALLOWED_CONTENT_TYPES, Config
 from backend.db.dao import (
     EmailMessageDAO,
     ReferralInvitationDAO,
     RequestSupplierDAO,
     SubscriptionDAO,
+    SupplierDAO,
     UserAdminDAO,
 )
 from backend.db.models import ReferralInvitation, User
@@ -26,7 +38,14 @@ from backend.enums import EmailMessageDirection
 from backend.schemas.user_email_settings import UserEmailSettingsUpdate
 from backend.utils.subscription_usage import SubscriptionUsage
 from backend.utils.user_email_settings import email_settings_response
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -431,3 +450,157 @@ async def update_request_supplier_recipient(
         sent_to_email=str(body.sent_to_email),
     )
     return {"status": "updated", "rs_id": str(rs_id)}
+
+
+@router.get(
+    "/smtp-defaults",
+    response_model=AdminSmtpDefaultsResponse,
+    summary="Global SMTP defaults from environment",
+)
+async def get_smtp_defaults(
+    config: Annotated[Config, Depends(get_config_instance)],
+    _admin: Annotated[User, Depends(get_admin)],
+) -> AdminSmtpDefaultsResponse:
+    return AdminSmtpDefaultsResponse(
+        smtp_host=config.smtp_host,
+        smtp_port=config.smtp_port,
+        smtp_user=config.smtp_user,
+        smtp_password_configured=bool(config.smtp_password),
+    )
+
+
+@router.get(
+    "/cooperation/suppliers",
+    response_model=AdminCooperationSupplierPage,
+    summary="List suppliers who replied at least once",
+)
+async def list_cooperation_suppliers(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _admin: Annotated[User, Depends(get_admin)],
+    q: Annotated[str | None, Query(max_length=200)] = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> AdminCooperationSupplierPage:
+    rows, total = await SupplierDAO.list_replied_for_cooperation(
+        session,
+        q=q,
+        page=page,
+        size=size,
+    )
+    return AdminCooperationSupplierPage(
+        items=[
+            AdminCooperationSupplierItem(
+                id=supplier.id,
+                company_name=supplier.company_name,
+                domain=supplier.domain,
+                main_email=supplier.main_email,
+                queries=queries,
+            )
+            for supplier, queries in rows
+        ],
+        total=total,
+        page=page,
+        size=size,
+    )
+
+
+@router.post(
+    "/cooperation/attachments",
+    response_model=list[Attachment],
+    summary="Upload attachments for cooperation outreach",
+)
+async def upload_cooperation_attachments(
+    files: list[UploadFile],
+    config: Annotated[Config, Depends(get_config_instance)],
+    _admin: Annotated[User, Depends(get_admin)],
+) -> list[Attachment]:
+    if len(files) > config.max_upload_files:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Maximum {config.max_upload_files} files allowed per upload"
+            ),
+        )
+
+    batch_dir = (
+        Path(config.upload_dir) / "admin_cooperation" / uuid.uuid4().hex
+    )
+    try:
+        batch_dir.mkdir(parents=True, exist_ok=True)
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Cannot create upload directory",
+        ) from exc
+
+    results: list[Attachment] = []
+    for file in files:
+        if file.size and file.size > config.max_upload_size:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"File {file.filename} exceeds max upload size",
+            )
+        if (
+            file.content_type
+            and file.content_type not in ALLOWED_CONTENT_TYPES
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                detail=f"File type {file.content_type} not supported",
+            )
+        if not file.filename:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Filename is required",
+            )
+
+        safe_filename = Path(file.filename).name.replace("..", "_")
+        unique_filename = f"{uuid.uuid4().hex}_{safe_filename}"
+        file_path = batch_dir / unique_filename
+        content = await file.read()
+        if len(content) > config.max_upload_size:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"File {file.filename} exceeds max upload size",
+            )
+        file_path.write_bytes(content)
+        results.append(
+            Attachment(
+                filename=safe_filename,
+                content_type=file.content_type,
+                size=len(content),
+                path=str(file_path),
+            )
+        )
+    return results
+
+
+@router.post(
+    "/cooperation/send",
+    response_model=AdminCooperationSendResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Queue cooperation proposal emails",
+)
+async def send_cooperation_emails(
+    body: AdminCooperationSendRequest,
+    _admin: Annotated[User, Depends(get_admin)],
+) -> AdminCooperationSendResponse:
+    if not body.subject.strip() or not body.body.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Subject and body cannot be empty",
+        )
+
+    send_cooperation_proposals.delay(  # type: ignore[attr-defined]
+        [str(sid) for sid in body.supplier_ids],
+        body.subject.strip(),
+        body.body.strip(),
+        body.attachment_paths,
+        body.smtp_host,
+        body.smtp_user,
+        body.smtp_password,
+    )
+    return AdminCooperationSendResponse(
+        status="queued",
+        queued=len(body.supplier_ids),
+    )

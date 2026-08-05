@@ -597,3 +597,90 @@ class SupplierDAO(BaseDAO[Supplier]):
         )
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
+
+    @classmethod
+    async def list_replied_for_cooperation(
+        cls,
+        session: AsyncSession,
+        *,
+        q: str | None = None,
+        page: int = 1,
+        size: int = 20,
+    ) -> tuple[list[tuple[Supplier, list[str]]], int]:
+        """Suppliers with at least one replied request-supplier link.
+
+        Returns ``(items, total)`` where each item is
+        ``(supplier, distinct request queries)``.
+        """
+        replied = RequestSupplierStatus.REPLIED.value
+        offset = max(page - 1, 0) * size
+        search = (q or "").strip()
+
+        replied_exists = (
+            select(RequestSupplier.id)
+            .where(
+                RequestSupplier.supplier_id == cls.model.id,
+                RequestSupplier.sent_status == replied,
+            )
+            .exists()
+        )
+        filters = [replied_exists]
+        if search:
+            pattern = f"%{search}%"
+            filters.append(
+                or_(
+                    cls.model.company_name.ilike(pattern),
+                    cls.model.domain.ilike(pattern),
+                    cls.model.main_email.ilike(pattern),
+                )
+            )
+
+        count_stmt = (
+            select(func.count()).select_from(cls.model).where(*filters)
+        )
+        total = int((await session.execute(count_stmt)).scalar_one())
+
+        id_stmt = (
+            select(cls.model.id)
+            .where(*filters)
+            .order_by(cls.model.company_name.asc())
+            .offset(offset)
+            .limit(size)
+        )
+        supplier_ids = list((await session.execute(id_stmt)).scalars().all())
+        if not supplier_ids:
+            return [], total
+
+        suppliers_stmt = select(cls.model).where(
+            cls.model.id.in_(supplier_ids)
+        )
+        suppliers = list(
+            (await session.execute(suppliers_stmt)).scalars().all()
+        )
+        by_id = {s.id: s for s in suppliers}
+
+        queries_stmt = (
+            select(RequestSupplier.supplier_id, Request.query)
+            .join(Request, Request.id == RequestSupplier.request_id)
+            .where(
+                RequestSupplier.supplier_id.in_(supplier_ids),
+                RequestSupplier.sent_status == replied,
+            )
+            .distinct()
+        )
+        query_rows = (await session.execute(queries_stmt)).all()
+        queries_by_supplier: dict[uuid.UUID, list[str]] = {
+            sid: [] for sid in supplier_ids
+        }
+        for supplier_id, query_text in query_rows:
+            bucket = queries_by_supplier.setdefault(supplier_id, [])
+            if query_text and query_text not in bucket:
+                bucket.append(query_text)
+
+        items: list[tuple[Supplier, list[str]]] = []
+        for sid in supplier_ids:
+            supplier = by_id.get(sid)
+            if supplier is None:
+                continue
+            items.append((supplier, queries_by_supplier.get(sid, [])))
+        return items, total

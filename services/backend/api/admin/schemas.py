@@ -103,3 +103,46 @@ class AdminEmailMessageLinkUpdate(BaseModel):
 
 class AdminRequestSupplierRecipientUpdate(BaseModel):
     sent_to_email: EmailStr
+
+
+class AdminSmtpDefaultsResponse(BaseModel):
+    """Global SMTP settings from environment (passwords not exposed)."""
+
+    smtp_host: str
+    smtp_port: int
+    smtp_user: str
+    smtp_password_configured: bool
+
+
+class AdminCooperationSupplierItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    company_name: str
+    domain: str | None = None
+    main_email: EmailStr
+    queries: list[str] = Field(default_factory=list)
+
+
+class AdminCooperationSupplierPage(BaseModel):
+    items: list[AdminCooperationSupplierItem]
+    total: int
+    page: int
+    size: int
+
+
+class AdminCooperationSendRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    supplier_ids: list[uuid.UUID] = Field(min_length=1)
+    subject: str = Field(min_length=1, max_length=500)
+    body: str = Field(min_length=1, max_length=20000)
+    attachment_paths: list[str] | None = None
+    smtp_host: str | None = Field(default=None, max_length=255)
+    smtp_user: str | None = Field(default=None, max_length=255)
+    smtp_password: str | None = Field(default=None, max_length=512)
+
+
+class AdminCooperationSendResponse(BaseModel):
+    status: str
+    queued: int

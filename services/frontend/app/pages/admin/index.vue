@@ -23,6 +23,10 @@
 					<AdminEmailRoutingPanel />
 				</template>
 
+				<template #cooperation>
+					<AdminCooperationPanel />
+				</template>
+
 				<template #referrals>
 					<div class="space-y-4">
 						<UCard>
@@ -562,6 +566,12 @@ const activeTab = ref('users')
 const tabs = [
 	{ label: 'Пользователи', slot: 'users', value: 'users', icon: 'i-lucide-users' },
 	{ label: t('admin.emailRouting.tabLabel'), slot: 'email', value: 'email', icon: 'i-lucide-mail' },
+	{
+		label: 'Отправка предложений сотрудничества',
+		slot: 'cooperation',
+		value: 'cooperation',
+		icon: 'i-lucide-handshake',
+	},
 	{ label: t('admin.referrals.tabLabel'), slot: 'referrals', value: 'referrals', icon: 'i-lucide-ticket' },
 	{ label: 'Ошибки', slot: 'errors', value: 'errors', icon: 'i-lucide-bug' },
 	{ label: 'Идеи и проблемы', slot: 'ideas', value: 'ideas', icon: 'i-lucide-lightbulb' },

@@ -8,6 +8,7 @@ from backend.celery_app.utils import async_task, get_db_manager
 from backend.core import get_config
 from backend.db.dao import (
     BlacklistedDomainDAO,
+    FrontendErrorLogDAO,
     RequestDAO,
     RequestSupplierDAO,
     SearchHistoryDAO,
@@ -19,6 +20,7 @@ from backend.schemas import ParserResult
 config = get_config()
 
 PARSER_QUERY_SUFFIX = "от производителя оптом"
+_ERROR_DETAIL_MAX = 8000
 
 
 def _append_to_query_parts(query: str, suffix: str) -> str:
@@ -26,6 +28,46 @@ def _append_to_query_parts(query: str, suffix: str) -> str:
     if not parts:
         return query
     return ", ".join(f"{q} {suffix}" for q in parts)
+
+
+def _parser_error_detail(exc: BaseException) -> tuple[str, int | None]:
+    """Extract API detail and optional HTTP status from a parser call error."""
+    status_code: int | None = None
+    if isinstance(exc, httpx.HTTPStatusError):
+        status_code = exc.response.status_code
+        try:
+            payload = exc.response.json()
+            detail = payload.get("detail", exc.response.text)
+        except Exception:
+            detail = exc.response.text or str(exc)
+        if isinstance(detail, list):
+            detail = str(detail)
+        return str(detail)[:_ERROR_DETAIL_MAX], status_code
+    if isinstance(exc, httpx.HTTPError):
+        return str(exc)[:_ERROR_DETAIL_MAX], status_code
+    return str(exc)[:_ERROR_DETAIL_MAX], status_code
+
+
+async def _log_parser_failure(
+    *,
+    request_id: str,
+    user_id: uuid.UUID | None,
+    detail: str,
+    status_code: int | None,
+) -> None:
+    """Persist parser failure into admin-visible frontend_error_logs."""
+    db_manager = get_db_manager()
+    async with db_manager.session() as session:
+        await FrontendErrorLogDAO.create(
+            session,
+            user_id=user_id,
+            message=f"Parser search failed (request_id={request_id})",
+            backend_response=detail,
+            page_url=f"request:{request_id}",
+            request_method="POST",
+            request_url=config.parser_url,
+            status_code=status_code,
+        )
 
 
 @app.task(
@@ -184,25 +226,40 @@ async def run_parser_search(self, request_id: str) -> dict:
         }
 
     except httpx.HTTPError as exc:
+        detail, status_code = _parser_error_detail(exc)
         logger.exception(
             "Parser service error in task",
             parser_url=config.parser_url,
-            error=str(exc),
+            error=detail,
+            status_code=status_code,
         )
         async with db_manager.session() as session:
             await RequestDAO.update_fields(
                 session, req_uuid, status=RequestStatus.DRAFT.value
             )
-        return {"error": "parser_failed"}
+        await _log_parser_failure(
+            request_id=request_id,
+            user_id=user_uuid,
+            detail=detail,
+            status_code=status_code,
+        )
+        return {"error": "parser_failed", "detail": detail}
 
     except Exception as exc:
+        detail, status_code = _parser_error_detail(exc)
         logger.exception(
             "Parser search task unexpected failure",
             request_id=request_id,
-            error=str(exc),
+            error=detail,
         )
         async with db_manager.session() as session:
             await RequestDAO.update_fields(
                 session, req_uuid, status=RequestStatus.DRAFT.value
             )
-        return {"error": "failed"}
+        await _log_parser_failure(
+            request_id=request_id,
+            user_id=user_uuid,
+            detail=detail,
+            status_code=status_code,
+        )
+        return {"error": "failed", "detail": detail}

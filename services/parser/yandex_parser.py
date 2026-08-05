@@ -21,6 +21,10 @@ REQUEST_TIMEOUT = 30  # seconds per HTTP call
 POLL_TIMEOUT = 15  # seconds per poll call
 
 
+class YandexSearchError(Exception):
+    """Raised when Yandex Search API fails after retries on the first page."""
+
+
 def _auth_headers(api_key: str) -> dict[str, str]:
     return {
         "Authorization": f"Api-Key {api_key}",
@@ -292,6 +296,13 @@ async def yandex_fetch_all(
                 search_type,
             )
             if not op_id:
+                msg = (
+                    "Yandex search failed: POST gave up after "
+                    f"{MAX_RETRIES} retries (page={page})"
+                )
+                if page == 0:
+                    logger.error(msg)
+                    raise YandexSearchError(msg)
                 logger.warning(
                     "No operation ID, aborting pagination",
                     page=page,
@@ -300,6 +311,13 @@ async def yandex_fetch_all(
 
             op_data = await poll_search(session, api_key, op_id)
             if not op_data:
+                msg = (
+                    "Yandex search failed: poll gave up after "
+                    f"{MAX_RETRIES} retries (op_id={op_id}, page={page})"
+                )
+                if page == 0:
+                    logger.error(msg)
+                    raise YandexSearchError(msg)
                 logger.warning(
                     "No poll result, aborting pagination",
                     op_id=op_id,
@@ -310,6 +328,13 @@ async def yandex_fetch_all(
                 raw_b64: str = op_data["response"]["rawData"]
                 xml_text = base64.b64decode(raw_b64).decode("utf-8")
             except (KeyError, ValueError) as exc:
+                msg = (
+                    "Yandex search failed: could not decode rawData "
+                    f"(page={page}, error={exc})"
+                )
+                if page == 0:
+                    logger.error(msg)
+                    raise YandexSearchError(msg) from exc
                 logger.error(
                     "Failed to decode rawData",
                     page=page,

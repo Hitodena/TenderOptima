@@ -302,6 +302,43 @@ export interface AdminRequestSupplierRecipientUpdate {
 	sent_to_email: string;
 }
 
+export interface AdminSmtpDefaultsResponse {
+	smtp_host: string;
+	smtp_port: number;
+	smtp_user: string;
+	smtp_password_configured: boolean;
+}
+
+export interface AdminCooperationSupplierItem {
+	id: string;
+	company_name: string;
+	domain: string | null;
+	main_email: string;
+	queries: string[];
+}
+
+export interface AdminCooperationSupplierPage {
+	items: AdminCooperationSupplierItem[];
+	total: number;
+	page: number;
+	size: number;
+}
+
+export interface AdminCooperationSendRequest {
+	supplier_ids: string[];
+	subject: string;
+	body: string;
+	attachment_paths?: string[] | null;
+	smtp_host?: string | null;
+	smtp_user?: string | null;
+	smtp_password?: string | null;
+}
+
+export interface AdminCooperationSendResponse {
+	status: string;
+	queued: number;
+}
+
 export interface RegisterCreate {
 	email: string;
 	password: string;

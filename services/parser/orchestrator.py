@@ -178,19 +178,16 @@ async def main_search(
     )
 
     # ── 1. Search ─────────────────────────────────────────────────────────
-    try:
-        search_results = await fetch_all(
-            query=query,
-            user_id=user_id,
-            elements=elements,
-            region_name=region_name,
-            yandex_api_key=yandex_api_key,
-            yandex_folder_id=yandex_folder_id,
-            excluded_domains=excluded_domains,
-        )
-    except Exception:
-        logger.exception("Search stage failed")
-        return []
+    # Propagate Yandex / search failures to the API layer (HTTPException).
+    search_results = await fetch_all(
+        query=query,
+        user_id=user_id,
+        elements=elements,
+        region_name=region_name,
+        yandex_api_key=yandex_api_key,
+        yandex_folder_id=yandex_folder_id,
+        excluded_domains=excluded_domains,
+    )
 
     if not search_results:
         logger.warning("No search results, aborting")
