@@ -567,7 +567,7 @@ const tabs = [
 	{ label: 'Пользователи', slot: 'users', value: 'users', icon: 'i-lucide-users' },
 	{ label: t('admin.emailRouting.tabLabel'), slot: 'email', value: 'email', icon: 'i-lucide-mail' },
 	{
-		label: 'Отправка предложений сотрудничества',
+		label: 'Сотрудничество',
 		slot: 'cooperation',
 		value: 'cooperation',
 		icon: 'i-lucide-handshake',

@@ -1,15 +1,34 @@
 <template>
 	<div class="space-y-6">
-		<div class="space-y-1">
+		<div class="flex items-center gap-2">
 			<p class="font-semibold text-highlighted">
-				Отправка предложений сотрудничества
+				Предложения о сотрудничестве
 			</p>
-			<p class="text-sm text-muted">
-				Поставщики, которые хотя бы раз ответили. Можно выбрать несколько и отправить
-				персонализированное письмо. Плейсхолдеры:
-				<code class="text-xs">{company_name}</code>,
-				<code class="text-xs">{query}</code>.
-			</p>
+			<UPopover
+				mode="click"
+				:content="{ side: 'bottom', align: 'start', sideOffset: 8 }"
+				class="inline-flex items-center justify-center"
+			>
+				<button
+					type="button"
+					class="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-elevated text-muted transition-colors hover:bg-accented hover:text-default"
+					aria-label="Справка по предложениям о сотрудничестве"
+					@click.stop
+				>
+					<UIcon name="i-lucide-info" class="size-4" />
+				</button>
+				<template #content>
+					<div class="max-w-sm p-4 space-y-3 text-sm">
+						<p class="font-semibold text-highlighted">
+							Предложения о сотрудничестве
+						</p>
+						<p class="text-muted">
+							Список поставщиков, которые хотя бы раз ответили. Можно выбрать
+							нескольких и отправить одно письмо всем выбранным.
+						</p>
+					</div>
+				</template>
+			</UPopover>
 		</div>
 
 		<div class="flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -207,11 +226,9 @@ const loadError = ref<string | null>(null)
 const selectedIds = ref<Set<string>>(new Set())
 
 const subject = ref('Предложение о сотрудничестве')
-const body = ref(`Добрый день, {company_name}!
+const body = ref(`Добрый день!
 
 Мы хотели бы предложить вам долгосрочное сотрудничество.
-
-Ранее вы отвечали по запросу: {query}.
 
 Будем рады обсудить детали.`)
 const filesToUpload = ref<File[]>([])
