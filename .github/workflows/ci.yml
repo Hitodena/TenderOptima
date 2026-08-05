@@ -87,7 +87,7 @@ jobs:
     name: Deploy
     runs-on: ubuntu-latest
     needs: [backend, parser, frontend]
-    timeout-minutes: 20
+    timeout-minutes: 60
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
       - name: Deploy on server
@@ -96,7 +96,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          command_timeout: 20m
+          command_timeout: 60m
           script: |
             set -e
             cd ${{ secrets.DEPLOY_PATH }}
