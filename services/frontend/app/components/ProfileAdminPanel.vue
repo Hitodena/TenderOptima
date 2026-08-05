@@ -210,6 +210,7 @@
 									v-model="subscriptionForm.expires_at"
 									type="datetime-local"
 									class="w-full"
+									@update:model-value="onExpiresAtEdit"
 								/>
 							</UFormField>
 						</div>
@@ -219,7 +220,7 @@
 							color="warning"
 							variant="soft"
 							icon="i-lucide-info"
-							description="Смена тарифа начнёт подписку заново с текущей даты; предыдущий тариф перестанет действовать"
+							description="Смена тарифа начнёт подписку заново с текущей даты на месяц вперёд; предыдущий тариф перестанет действовать"
 						/>
 
 						<div class="grid gap-3 sm:grid-cols-3">
@@ -369,6 +370,7 @@ const subscriptionActive = ref<'active' | 'inactive'>('active')
 const useCustomLimits = ref(false)
 const loadedPlan = ref<SubscriptionPlan | null>(null)
 const startsAtTouched = ref(false)
+const expiresAtTouched = ref(false)
 const planChangeDisclaimer = ref(false)
 
 function toDatetimeLocal(iso: string | null | undefined): string {
@@ -387,8 +389,24 @@ function fromDatetimeLocal(value: string): string | null {
 	return date.toISOString()
 }
 
+function addOneMonthIso(iso: string): string {
+	const date = new Date(iso)
+	date.setMonth(date.getMonth() + 1)
+	return date.toISOString()
+}
+
 function onStartsAtEdit() {
 	startsAtTouched.value = true
+	if (!expiresAtTouched.value) {
+		const startIso = fromDatetimeLocal(subscriptionForm.starts_at)
+		if (startIso) {
+			subscriptionForm.expires_at = toDatetimeLocal(addOneMonthIso(startIso))
+		}
+	}
+}
+
+function onExpiresAtEdit() {
+	expiresAtTouched.value = true
 }
 
 function applyCatalogToForm(plan: SubscriptionPlan) {
@@ -430,6 +448,17 @@ function onPlanChange(plan: SubscriptionPlan) {
 	useCustomLimits.value = false
 	applyCatalogToForm(plan)
 	planChangeDisclaimer.value = loadedPlan.value != null && plan !== loadedPlan.value
+	const assigningOrChanging = loadedPlan.value == null || plan !== loadedPlan.value
+	if (!assigningOrChanging) return
+
+	if (!startsAtTouched.value) {
+		subscriptionForm.starts_at = toDatetimeLocal(new Date().toISOString())
+	}
+	if (!expiresAtTouched.value) {
+		const startIso = fromDatetimeLocal(subscriptionForm.starts_at)
+			?? new Date().toISOString()
+		subscriptionForm.expires_at = toDatetimeLocal(addOneMonthIso(startIso))
+	}
 }
 
 function onCustomLimitsToggle(enabled: boolean | 'indeterminate') {
@@ -507,6 +536,7 @@ function fillForms(detail: AdminUserDetail) {
 	useCustomLimits.value = sub ? limitsDifferFromCatalog(sub) : false
 	loadedPlan.value = sub?.plan ?? null
 	startsAtTouched.value = false
+	expiresAtTouched.value = false
 	planChangeDisclaimer.value = false
 }
 
@@ -574,11 +604,21 @@ async function saveSubscription() {
 	subscriptionError.value = null
 	subscriptionSuccess.value = false
 	try {
-		const planChanged = loadedPlan.value != null
-			&& subscriptionForm.plan !== loadedPlan.value
+		const assigningOrChanging = loadedPlan.value == null
+			|| subscriptionForm.plan !== loadedPlan.value
 		let startsAt = fromDatetimeLocal(subscriptionForm.starts_at)
-		if (planChanged && !startsAtTouched.value) {
+		if (assigningOrChanging && !startsAtTouched.value) {
 			startsAt = new Date().toISOString()
+		}
+		if (!startsAt) {
+			startsAt = new Date().toISOString()
+		}
+		let expiresAt = fromDatetimeLocal(subscriptionForm.expires_at)
+		if (assigningOrChanging && !expiresAtTouched.value) {
+			expiresAt = addOneMonthIso(startsAt)
+		}
+		else if (!expiresAt) {
+			expiresAt = addOneMonthIso(startsAt)
 		}
 		const payload: SubscriptionUpdate = {
 			plan: subscriptionForm.plan,
@@ -588,7 +628,7 @@ async function saveSubscription() {
 			currency_code: subscriptionForm.currency_code || 'BYN',
 			is_active: subscriptionActive.value === 'active',
 			starts_at: startsAt,
-			expires_at: fromDatetimeLocal(subscriptionForm.expires_at),
+			expires_at: expiresAt,
 			// Always persist values from the form. Catalog defaults are applied
 			// into the form when the plan changes or custom mode is turned off.
 			max_searches_per_month: parseOptionalNumber(

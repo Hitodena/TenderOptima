@@ -1,5 +1,6 @@
 <script lang="ts" setup>
-import type { PaymentStatusResponse } from '#shared/types'
+import type { PaymentStatusResponse, UserResponse } from '#shared/types'
+import { formatExpiryDate } from '#shared/utils/subscriptionDisplay'
 
 definePageMeta({ layout: 'default' })
 
@@ -13,8 +14,13 @@ const paymentId = computed(() => {
 })
 
 const payment = ref<PaymentStatusResponse | null>(null)
+const user = ref<UserResponse | null>(null)
 const loading = ref(true)
 const error = ref<string | null>(null)
+
+const paidUntilLabel = computed(() =>
+	formatExpiryDate(user.value?.subscription?.expires_at),
+)
 
 async function loadStatus() {
 	if (!paymentId.value) {
@@ -28,10 +34,18 @@ async function loadStatus() {
 		payment.value = await get<PaymentStatusResponse>(
 			`/billing/payments/${paymentId.value}`,
 		)
+		try {
+			user.value = await get<UserResponse>('/auth/me')
+		} catch {
+			user.value = null
+		}
 		if (payment.value.status === 'successful') {
+			const until = paidUntilLabel.value
 			toast.add({
 				title: 'Оплата прошла успешно',
-				description: 'Подписка продлена. Лимиты обновятся при следующем запросе профиля.',
+				description: until
+					? `Подписка оплачена до ${until}. Можно вернуться на страницу подписки.`
+					: 'Подписка продлена. Можно вернуться на страницу подписки.',
 				color: 'success',
 				icon: 'i-lucide-check',
 			})
@@ -103,6 +117,12 @@ const statusLabel = computed(() => {
 				<p class="text-sm text-muted">
 					{{ payment.amount }} {{ payment.currency_code }}
 					· {{ payment.method.toUpperCase() }}
+				</p>
+				<p
+					v-if="payment.status === 'successful' && paidUntilLabel"
+					class="text-sm text-success"
+				>
+					Подписка оплачена до {{ paidUntilLabel }}
 				</p>
 			</div>
 

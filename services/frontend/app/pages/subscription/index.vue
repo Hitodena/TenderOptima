@@ -2,11 +2,13 @@
 import type { RadioGroupItem } from '@nuxt/ui'
 import type {
 	PaymentCheckoutResponse,
+	PaymentStatusResponse,
 	SubscriptionPaymentMethod,
 	UserResponse,
 } from '#shared/types'
 import {
 	PLAN_LABELS,
+	formatExpiryDate,
 	subscriptionPlanLabel,
 } from '#shared/utils/subscriptionDisplay'
 import { t } from '~/constants/translations'
@@ -15,17 +17,22 @@ definePageMeta({ layout: 'default' })
 
 const { get, post } = useApi()
 const toast = useToast()
+const { formatDate } = useFormatDate()
 
 const user = ref<UserResponse | null>(null)
+const latestPayment = ref<PaymentStatusResponse | null>(null)
 const showBillingModal = ref(false)
 const selectedMethod = ref<SubscriptionPaymentMethod>('card')
 const paying = ref(false)
 
-try {
-	user.value = await get<UserResponse>('/auth/me')
-} catch {
-	user.value = null
-}
+const [userResult, paymentResult] = await Promise.allSettled([
+	get<UserResponse>('/auth/me'),
+	get<PaymentStatusResponse | null>('/billing/payments/latest'),
+])
+user.value = userResult.status === 'fulfilled' ? userResult.value : null
+latestPayment.value = paymentResult.status === 'fulfilled'
+	? paymentResult.value
+	: null
 
 const subscription = computed(() => user.value?.subscription ?? null)
 
@@ -33,6 +40,18 @@ const planLabel = computed(() =>
 	subscription.value
 		? PLAN_LABELS[subscription.value.plan] ?? subscriptionPlanLabel(subscription.value.plan)
 		: t('subscription.notAssigned'),
+)
+
+const isPaidPeriod = computed(() => {
+	const sub = subscription.value
+	if (!sub?.is_active || !sub.expires_at) return false
+	const expires = new Date(sub.expires_at)
+	if (Number.isNaN(expires.getTime())) return false
+	return expires.getTime() > Date.now()
+})
+
+const paidUntilLabel = computed(() =>
+	formatExpiryDate(subscription.value?.expires_at),
 )
 
 const payableAmount = computed(() => {
@@ -61,6 +80,21 @@ const amountLabel = computed(() => {
 	if (payableAmount.value == null || !subscription.value) return null
 	const currency = subscription.value.currency_code || 'BYN'
 	return `${payableAmount.value.toFixed(2)} ${currency}`
+})
+
+const methodLabels: Record<SubscriptionPaymentMethod, string> = {
+	card: 'карта',
+	sbp: 'СБП',
+	epos: 'E-POS',
+	erip: 'ЕРИП',
+}
+
+const latestPaymentLabel = computed(() => {
+	const payment = latestPayment.value
+	if (!payment) return null
+	const method = methodLabels[payment.method] ?? payment.method
+	const amount = `${Number(payment.amount).toFixed(2)} ${payment.currency_code}`
+	return `${amount} · ${method} · ${formatDate(payment.created_at)}`
 })
 
 const paymentMethods = computed<RadioGroupItem[]>(() => [
@@ -161,6 +195,12 @@ const { target: paymentReveal } = useScrollReveal()
 								:color="subscription.is_active ? 'success' : 'neutral'"
 								variant="subtle"
 								:label="subscription.is_active ? t('subscription.active') : t('subscription.inactive')"
+							/>
+							<UBadge
+								v-if="isPaidPeriod && paidUntilLabel"
+								color="success"
+								variant="outline"
+								:label="`Оплачена до ${paidUntilLabel}`"
 							/>
 							<UBadge
 								v-if="subscription.module_1_enabled"
@@ -267,11 +307,27 @@ const { target: paymentReveal } = useScrollReveal()
 						</div>
 					</div>
 
+					<UAlert
+						v-if="isPaidPeriod"
+						color="success"
+						variant="soft"
+						icon="i-lucide-circle-check"
+						:title="paidUntilLabel ? `Подписка оплачена до ${paidUntilLabel}` : 'Подписка оплачена'"
+						description="Можно оплатить снова, чтобы продлить срок и обновить период лимитов."
+					/>
+
+					<p
+						v-if="latestPaymentLabel"
+						class="text-sm text-muted"
+					>
+						Последняя оплата: {{ latestPaymentLabel }}
+					</p>
+
 					<p
 						v-if="amountLabel"
 						class="text-sm text-highlighted"
 					>
-						К оплате:
+						{{ isPaidPeriod ? 'Стоимость продления:' : 'К оплате:' }}
 						<span class="font-semibold">{{ amountLabel }}</span>
 					</p>
 					<p
@@ -292,13 +348,13 @@ const { target: paymentReveal } = useScrollReveal()
 
 					<UButton
 						color="primary"
-						leading-icon="i-lucide-wallet"
+						:leading-icon="isPaidPeriod ? 'i-lucide-refresh-cw' : 'i-lucide-wallet'"
 						class="cursor-pointer"
 						:loading="paying"
 						:disabled="payableAmount == null"
 						@click="startOnlinePayment"
 					>
-						Перейти к оплате
+						{{ isPaidPeriod ? 'Оплатить снова' : 'Перейти к оплате' }}
 					</UButton>
 				</UCard>
 			</div>

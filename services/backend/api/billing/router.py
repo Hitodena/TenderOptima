@@ -535,6 +535,23 @@ async def create_payment_checkout(
 
 
 @router.get(
+    "/payments/latest",
+    response_model=PaymentStatusResponse | None,
+    summary="Latest successful online payment for current user",
+)
+async def get_latest_successful_payment(
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> PaymentStatusResponse | None:
+    row = await SubscriptionPaymentDAO.get_latest_successful_for_user(
+        session, current_user.id
+    )
+    if row is None:
+        return None
+    return _payment_to_status(row)
+
+
+@router.get(
     "/payments/{payment_id}",
     response_model=PaymentStatusResponse,
     summary="Get online payment status for current user",
