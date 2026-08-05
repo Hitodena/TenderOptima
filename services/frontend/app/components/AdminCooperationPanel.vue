@@ -75,7 +75,11 @@
 				:data="suppliers"
 				:columns="columns"
 				:loading="loading"
-				class="min-w-[860px]"
+				class="min-w-[860px] w-full table-fixed"
+				:ui="{
+					td: 'align-middle py-3 overflow-hidden',
+					th: 'whitespace-nowrap',
+				}"
 			>
 				<template #empty>
 					<div class="flex flex-col items-center justify-center gap-3 py-12">
@@ -92,31 +96,91 @@
 				</template>
 
 				<template #company_name-cell="{ row }">
-					<div class="min-w-[10rem] max-w-[16rem]">
-						<p class="text-sm font-medium break-words">
-							{{ row.original.company_name }}
-						</p>
-						<p class="text-xs text-muted break-all mt-0.5">
-							{{ row.original.domain || '—' }}
-						</p>
+					<div class="flex items-center gap-2 min-w-0">
+						<div class="min-w-0 flex-1">
+							<p
+								class="text-sm font-medium truncate"
+								:title="row.original.company_name"
+							>
+								{{ row.original.company_name }}
+							</p>
+							<p
+								v-if="row.original.domain"
+								class="text-xs text-muted truncate mt-0.5"
+								:title="row.original.domain"
+							>
+								{{ row.original.domain }}
+							</p>
+						</div>
+						<UPopover
+							mode="hover"
+							:open-delay="200"
+							:content="{ side: 'bottom', align: 'start', sideOffset: 8 }"
+							class="inline-flex shrink-0"
+						>
+							<button
+								type="button"
+								class="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-elevated text-muted transition-colors hover:bg-accented hover:text-default"
+								aria-label="Информация о поставщике"
+								@click.stop
+							>
+								<UIcon name="i-lucide-info" class="size-3.5" />
+							</button>
+							<template #content>
+								<div class="max-w-sm p-4 space-y-3 text-sm">
+									<p class="font-semibold text-highlighted break-words">
+										{{ row.original.company_name }}
+									</p>
+									<div v-if="row.original.domain" class="space-y-0.5">
+										<p class="text-xs font-medium text-muted uppercase tracking-wide">
+											Домен
+										</p>
+										<p class="text-default break-all">{{ row.original.domain }}</p>
+									</div>
+									<div class="space-y-0.5">
+										<p class="text-xs font-medium text-muted uppercase tracking-wide">
+											Email
+										</p>
+										<p class="text-default break-all">{{ row.original.main_email }}</p>
+									</div>
+									<div
+										v-if="row.original.queries.length"
+										class="space-y-0.5"
+									>
+										<p class="text-xs font-medium text-muted uppercase tracking-wide">
+											Query
+										</p>
+										<p
+											v-for="(query, idx) in row.original.queries"
+											:key="`${row.original.id}-q-${idx}`"
+											class="text-muted break-words"
+										>
+											{{ query }}
+										</p>
+									</div>
+								</div>
+							</template>
+						</UPopover>
 					</div>
 				</template>
 
 				<template #main_email-cell="{ row }">
-					<span class="text-xs break-all">{{ row.original.main_email }}</span>
+					<span
+						class="text-xs text-muted truncate block"
+						:title="row.original.main_email"
+					>
+						{{ row.original.main_email }}
+					</span>
 				</template>
 
 				<template #queries-cell="{ row }">
-					<div class="min-w-[12rem] max-w-[22rem] space-y-1">
-						<p
-							v-for="(query, idx) in row.original.queries"
-							:key="`${row.original.id}-${idx}`"
-							class="text-xs text-muted break-words"
-						>
-							{{ query }}
-						</p>
-						<span v-if="!row.original.queries.length" class="text-xs text-muted">—</span>
-					</div>
+					<p
+						v-if="row.original.queries.length"
+						class="text-xs text-muted truncate"
+						:title="row.original.queries.join('; ')"
+					>
+						{{ row.original.queries.join('; ') }}
+					</p>
 				</template>
 			</UTable>
 		</div>
@@ -243,10 +307,10 @@ const smtpForm = reactive({
 const smtpPasswordConfigured = ref(false)
 
 const columns: TableColumn<AdminCooperationSupplierItem>[] = [
-	{ id: 'select', header: '' },
-	{ accessorKey: 'company_name', header: 'Компания' },
-	{ accessorKey: 'main_email', header: 'Email' },
-	{ accessorKey: 'queries', header: 'Query' },
+	{ id: 'select', header: '', meta: { class: { th: 'w-12', td: 'w-12' } } },
+	{ accessorKey: 'company_name', header: 'Компания', meta: { class: { th: 'w-[32%]', td: 'w-[32%]' } } },
+	{ accessorKey: 'main_email', header: 'Email', meta: { class: { th: 'w-[28%]', td: 'w-[28%]' } } },
+	{ accessorKey: 'queries', header: 'Query', meta: { class: { th: 'w-[32%]', td: 'w-[32%]' } } },
 ]
 
 const canSend = computed(
