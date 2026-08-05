@@ -282,7 +282,7 @@ const auth = useAuthStore()
 
 onMounted(() => {
 	if (auth.isAuthenticated.value) {
-		void navigateTo('/requests')
+		void navigateTo('/')
 	}
 })
 
@@ -341,7 +341,7 @@ async function handleLogin() {
 			headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
 		})
 		auth.setToken(data.access_token)
-		await navigateTo('/requests')
+		await navigateTo('/')
 	} catch (e: unknown) {
 		loginError.value = getApiErrorDetail(e) ?? t('auth.serverError')
 	} finally {
@@ -380,7 +380,7 @@ async function handleRegister() {
 		}
 		const data = await post<TokenResponse>('/auth/register', payload)
 		auth.setToken(data.access_token)
-		await navigateTo('/requests')
+		await navigateTo('/')
 	} catch (e: unknown) {
 		registerError.value = getApiErrorDetail(e) ?? t('auth.registerError')
 	} finally {
