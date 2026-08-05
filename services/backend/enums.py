@@ -99,6 +99,24 @@ class SubscriptionGeo(StrEnum):
     US = "US"
 
 
+class SubscriptionPaymentMethod(StrEnum):
+    """Online payment method selected by the user for bePaid checkout."""
+
+    CARD = "card"
+    SBP = "sbp"
+    EPOS = "epos"
+    ERIP = "erip"
+
+
+class SubscriptionPaymentStatus(StrEnum):
+    """Lifecycle of a subscription online payment attempt."""
+
+    PENDING = "pending"
+    SUCCESSFUL = "successful"
+    FAILED = "failed"
+    EXPIRED = "expired"
+
+
 class ConsultationRole(StrEnum):
     """Role of the person requesting a consultation from the landing form."""
 

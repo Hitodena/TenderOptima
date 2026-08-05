@@ -14,6 +14,7 @@ from .subscription_billing_dao import (
     SubscriptionBillingProfileDAO,
 )
 from .subscription_dao import SubscriptionDAO, UserAdminDAO
+from .subscription_payment_dao import SubscriptionPaymentDAO
 from .supplier_bookmark_dao import (
     SupplierBookmarkItemDAO,
     SupplierBookmarkListDAO,
@@ -49,5 +50,6 @@ __all__ = [
     "SubscriptionDAO",
     "SubscriptionBillingDocumentDAO",
     "SubscriptionBillingProfileDAO",
+    "SubscriptionPaymentDAO",
     "UserAdminDAO",
 ]

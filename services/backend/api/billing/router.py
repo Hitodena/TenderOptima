@@ -1,5 +1,7 @@
 """Subscription billing profile, document generation, and email delivery."""
 
+import json
+import secrets
 import uuid
 from pathlib import Path
 from typing import Annotated, Literal
@@ -9,12 +11,15 @@ from fastapi import (
     Depends,
     File,
     Form,
+    Header,
     HTTPException,
     Query,
+    Request,
     UploadFile,
     status,
 )
 from fastapi.responses import FileResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +30,9 @@ from backend.api.billing.schemas import (
     BillingGenerateResponse,
     BillingProfileResponse,
     BillingProfileUpdate,
+    PaymentCheckoutRequest,
+    PaymentCheckoutResponse,
+    PaymentStatusResponse,
 )
 from backend.api.deps import get_current_user, get_session
 from backend.celery_app.tasks.billing_tasks import send_billing_document_email
@@ -33,15 +41,32 @@ from backend.db.dao import (
     SubscriptionBillingDocumentDAO,
     SubscriptionBillingProfileDAO,
     SubscriptionDAO,
+    SubscriptionPaymentDAO,
 )
 from backend.db.models import User
 from backend.db.models.subscription_billing import SubscriptionBillingProfile
+from backend.enums import (
+    SubscriptionPaymentMethod,
+    SubscriptionPaymentStatus,
+)
+from backend.services.billing.bepaid import (
+    BePaidError,
+    amount_to_minor,
+    create_checkout,
+    extract_webhook_fields,
+    map_webhook_status,
+    verify_webhook_basic_auth,
+    verify_webhook_signature,
+)
 from backend.services.billing.doc_generator import (
     issuer_from_config,
     write_billing_documents,
 )
 from backend.services.billing.extract_profile import (
     extract_billing_profile_fields,
+)
+from backend.services.billing.payment_activation import (
+    activate_subscription_after_payment,
 )
 from backend.services.billing.subscription_lines import (
     build_subscription_quote,
@@ -50,6 +75,7 @@ from backend.services.billing.subscription_lines import (
 router = APIRouter(prefix="/billing", tags=["Billing"])
 
 config = get_config()
+_webhook_basic = HTTPBasic(auto_error=False)
 
 REQUIRED_PROFILE_FIELDS = (
     "organization_form",
@@ -384,3 +410,306 @@ async def download_billing_document(
         media_type="application/pdf",
         filename=path.with_suffix(".pdf").name,
     )
+
+
+def _payment_to_status(row) -> PaymentStatusResponse:
+    return PaymentStatusResponse(
+        id=row.id,
+        tracking_id=row.tracking_id,
+        method=SubscriptionPaymentMethod(row.method),
+        amount=row.amount,
+        currency_code=row.currency_code,
+        status=SubscriptionPaymentStatus(row.status),
+        receipt_id=row.receipt_id,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+@router.post(
+    "/payments/checkout",
+    response_model=PaymentCheckoutResponse,
+    summary="Create bePaid checkout for current subscription",
+)
+async def create_payment_checkout(
+    body: PaymentCheckoutRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> PaymentCheckoutResponse:
+    if not config.bepaid_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Online payments are not configured",
+        )
+
+    subscription = await SubscriptionDAO.get_by_user_id(
+        session, current_user.id
+    )
+    if subscription is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Subscription is required",
+        )
+
+    try:
+        quote = build_subscription_quote(subscription)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    amount_minor = amount_to_minor(quote.total_amount)
+    tracking_id = secrets.token_hex(12)
+    payment = await SubscriptionPaymentDAO.create(
+        session,
+        user_id=current_user.id,
+        subscription_id=subscription.id,
+        tracking_id=tracking_id,
+        method=body.method.value,
+        amount=quote.total_amount,
+        amount_minor=amount_minor,
+        currency_code=quote.currency_code,
+        status=SubscriptionPaymentStatus.PENDING.value,
+        receipt_id=quote.receipt_id,
+    )
+
+    description = (
+        f"Подписка TenderOptima {quote.plan_title} ({quote.receipt_id})"
+    )
+    customer_email = current_user.contact_email or current_user.email
+
+    try:
+        checkout = await create_checkout(
+            config=config,
+            method=body.method,
+            amount_minor=amount_minor,
+            currency_code=quote.currency_code,
+            description=description,
+            tracking_id=tracking_id,
+            customer_email=customer_email,
+            payment_id=str(payment.id),
+        )
+    except BePaidError as exc:
+        await SubscriptionPaymentDAO.update_fields(
+            session,
+            payment.id,
+            status=SubscriptionPaymentStatus.FAILED.value,
+        )
+        logger.warning(
+            "bePaid checkout creation failed",
+            payment_id=str(payment.id),
+            error=str(exc),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to create payment session",
+        ) from exc
+
+    payment = await SubscriptionPaymentDAO.update_fields(
+        session,
+        payment.id,
+        bepaid_token=checkout.token,
+        redirect_url=checkout.redirect_url,
+    )
+    if payment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Payment not found",
+        )
+
+    logger.info(
+        "bePaid checkout created",
+        payment_id=str(payment.id),
+        method=body.method.value,
+        amount_minor=amount_minor,
+    )
+    return PaymentCheckoutResponse(
+        payment_id=payment.id,
+        redirect_url=checkout.redirect_url,
+        tracking_id=tracking_id,
+        amount=quote.total_amount,
+        currency_code=quote.currency_code,
+        method=body.method,
+    )
+
+
+@router.get(
+    "/payments/{payment_id}",
+    response_model=PaymentStatusResponse,
+    summary="Get online payment status for current user",
+)
+async def get_payment_status(
+    payment_id: uuid.UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> PaymentStatusResponse:
+    row = await SubscriptionPaymentDAO.get_for_user(
+        session, current_user.id, payment_id
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Payment not found",
+        )
+    return _payment_to_status(row)
+
+
+@router.post(
+    "/payments/webhook",
+    status_code=status.HTTP_200_OK,
+    summary="bePaid payment notification webhook",
+    include_in_schema=False,
+)
+async def bepaid_payment_webhook(
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    credentials: Annotated[
+        HTTPBasicCredentials | None, Depends(_webhook_basic)
+    ] = None,
+    content_signature: Annotated[
+        str | None, Header(alias="Content-Signature")
+    ] = None,
+) -> dict[str, str]:
+    raw_body = await request.body()
+    signature_ok = verify_webhook_signature(
+        public_key=config.bepaid_shop_public_rsa_key,
+        signature_header=content_signature,
+        raw_body=raw_body,
+    )
+    basic_ok = verify_webhook_basic_auth(
+        config=config,
+        username=credentials.username if credentials else None,
+        password=credentials.password if credentials else None,
+    )
+    if not signature_ok and not basic_ok:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid webhook credentials",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    try:
+        payload = json.loads(raw_body.decode("utf-8") or "{}")
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid JSON body",
+        ) from exc
+
+    if not isinstance(payload, dict):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid webhook payload",
+        )
+
+    fields = extract_webhook_fields(payload)
+    tracking_id = fields.get("tracking_id")
+    if not tracking_id or not isinstance(tracking_id, str):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="tracking_id is required",
+        )
+
+    payment = await SubscriptionPaymentDAO.get_by_tracking_id(
+        session, tracking_id
+    )
+    if payment is None:
+        logger.warning(
+            "bePaid webhook for unknown tracking_id",
+            tracking_id=tracking_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Payment not found",
+        )
+
+    # Idempotent success — already applied.
+    if payment.status == SubscriptionPaymentStatus.SUCCESSFUL.value:
+        return {"status": "ok"}
+
+    amount = fields.get("amount")
+    currency = fields.get("currency")
+    if amount is not None and int(amount) != payment.amount_minor:
+        logger.warning(
+            "bePaid webhook amount mismatch",
+            tracking_id=tracking_id,
+            expected=payment.amount_minor,
+            got=amount,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Amount mismatch",
+        )
+    if (
+        currency is not None
+        and str(currency).upper() != payment.currency_code.upper()
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Currency mismatch",
+        )
+
+    webhook_test = fields.get("test")
+    if webhook_test is not None and bool(webhook_test) != config.bepaid_test:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Test flag mismatch",
+        )
+
+    mapped = map_webhook_status(
+        status=str(fields.get("status") or ""),
+        expired=bool(fields.get("expired")),
+    )
+    if mapped is None:
+        logger.info(
+            "bePaid webhook ignored status",
+            tracking_id=tracking_id,
+            status=fields.get("status"),
+        )
+        await SubscriptionPaymentDAO.update_fields(
+            session,
+            payment.id,
+            raw_notification=payload,
+            bepaid_uid=fields.get("uid") or payment.bepaid_uid,
+        )
+        return {"status": "ok"}
+
+    update_kwargs: dict = {
+        "status": mapped,
+        "raw_notification": payload,
+    }
+    if fields.get("uid"):
+        update_kwargs["bepaid_uid"] = str(fields["uid"])
+
+    updated = await SubscriptionPaymentDAO.update_fields(
+        session, payment.id, **update_kwargs
+    )
+    if updated is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Payment not found",
+        )
+
+    if mapped == SubscriptionPaymentStatus.SUCCESSFUL.value:
+        subscription = await SubscriptionDAO.get_by_user_id(
+            session, payment.user_id
+        )
+        if subscription is None:
+            logger.error(
+                "Payment successful but subscription missing",
+                payment_id=str(payment.id),
+            )
+        else:
+            await activate_subscription_after_payment(
+                session,
+                user_id=payment.user_id,
+                subscription=subscription,
+            )
+
+    logger.info(
+        "bePaid webhook processed",
+        tracking_id=tracking_id,
+        status=mapped,
+    )
+    return {"status": "ok"}

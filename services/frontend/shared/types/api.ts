@@ -192,6 +192,39 @@ export interface BillingGenerateResponse {
 	email_queued: boolean;
 }
 
+export type SubscriptionPaymentMethod = 'card' | 'sbp' | 'epos' | 'erip';
+
+export type SubscriptionPaymentStatus =
+	| 'pending'
+	| 'successful'
+	| 'failed'
+	| 'expired';
+
+export interface PaymentCheckoutRequest {
+	method: SubscriptionPaymentMethod;
+}
+
+export interface PaymentCheckoutResponse {
+	payment_id: string;
+	redirect_url: string;
+	tracking_id: string;
+	amount: string;
+	currency_code: string;
+	method: SubscriptionPaymentMethod;
+}
+
+export interface PaymentStatusResponse {
+	id: string;
+	tracking_id: string;
+	method: SubscriptionPaymentMethod;
+	amount: string;
+	currency_code: string;
+	status: SubscriptionPaymentStatus;
+	receipt_id: string;
+	created_at: string;
+	updated_at: string;
+}
+
 export interface SubscriptionUpdate {
 	plan?: SubscriptionPlan | null;
 	module_1_enabled?: boolean | null;

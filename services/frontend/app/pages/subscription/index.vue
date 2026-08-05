@@ -1,5 +1,10 @@
 <script lang="ts" setup>
-import type { UserResponse } from '#shared/types'
+import type { RadioGroupItem } from '@nuxt/ui'
+import type {
+	PaymentCheckoutResponse,
+	SubscriptionPaymentMethod,
+	UserResponse,
+} from '#shared/types'
 import {
 	PLAN_LABELS,
 	subscriptionPlanLabel,
@@ -8,11 +13,13 @@ import { t } from '~/constants/translations'
 
 definePageMeta({ layout: 'default' })
 
-const { get } = useApi()
+const { get, post } = useApi()
 const toast = useToast()
 
 const user = ref<UserResponse | null>(null)
 const showBillingModal = ref(false)
+const selectedMethod = ref<SubscriptionPaymentMethod>('card')
+const paying = ref(false)
 
 try {
 	user.value = await get<UserResponse>('/auth/me')
@@ -28,13 +35,92 @@ const planLabel = computed(() =>
 		: t('subscription.notAssigned'),
 )
 
-function showCardPaymentStub() {
-	toast.add({
-		title: 'Оплата картой',
-		description: 'Скоро будет доступно.',
-		color: 'neutral',
+const payableAmount = computed(() => {
+	const sub = subscription.value
+	if (!sub) return null
+	const p1 = sub.price_module_1_monthly ? Number(sub.price_module_1_monthly) : null
+	const p2 = sub.price_module_2_monthly ? Number(sub.price_module_2_monthly) : null
+	const bundle = sub.price_bundle_monthly ? Number(sub.price_bundle_monthly) : null
+	if (sub.module_1_enabled && sub.module_2_enabled && bundle != null) {
+		return bundle
+	}
+	let total = 0
+	let hasPrice = false
+	if (sub.module_1_enabled && p1 != null) {
+		total += p1
+		hasPrice = true
+	}
+	if (sub.module_2_enabled && p2 != null) {
+		total += p2
+		hasPrice = true
+	}
+	return hasPrice ? total : null
+})
+
+const amountLabel = computed(() => {
+	if (payableAmount.value == null || !subscription.value) return null
+	const currency = subscription.value.currency_code || 'BYN'
+	return `${payableAmount.value.toFixed(2)} ${currency}`
+})
+
+const paymentMethods = computed<RadioGroupItem[]>(() => [
+	{
+		label: 'Банковская карта',
+		description: 'Visa, Mastercard, Белкарт и другие',
+		value: 'card',
 		icon: 'i-lucide-credit-card',
-	})
+	},
+	{
+		label: 'СБП',
+		description: 'Система быстрых платежей по QR',
+		value: 'sbp',
+		icon: 'i-lucide-smartphone',
+	},
+	{
+		label: 'E-POS',
+		description: 'Оплата через E-POS в мобильном банке',
+		value: 'epos',
+		icon: 'i-lucide-qr-code',
+	},
+	{
+		label: 'ЕРИП',
+		description: 'Оплата через систему «Расчёт» (ЕРИП)',
+		value: 'erip',
+		icon: 'i-lucide-landmark',
+	},
+])
+
+async function startOnlinePayment() {
+	if (!subscription.value || payableAmount.value == null) {
+		toast.add({
+			title: 'Нельзя начать оплату',
+			description: 'Для текущего тарифа не задана сумма.',
+			color: 'warning',
+			icon: 'i-lucide-alert-circle',
+		})
+		return
+	}
+	paying.value = true
+	try {
+		const result = await post<PaymentCheckoutResponse>(
+			'/billing/payments/checkout',
+			{ method: selectedMethod.value },
+		)
+		await navigateTo(result.redirect_url, { external: true })
+	} catch (e: unknown) {
+		const detail = (e as { response?: { data?: { detail?: string } } })
+			?.response?.data?.detail
+		toast.add({
+			title: 'Ошибка оплаты',
+			description: typeof detail === 'string'
+				? detail
+				: 'Не удалось создать сессию оплаты',
+			color: 'error',
+			icon: 'i-lucide-circle-x',
+		})
+	} finally {
+		paying.value = false
+	}
 }
 
 const { target: heroReveal } = useScrollReveal()
@@ -54,7 +140,7 @@ const { target: paymentReveal } = useScrollReveal()
 				</h1>
 				<p class="text-sm sm:text-base text-muted max-w-3xl">
 					Текущие лимиты, срок действия и способы оплаты.
-					После оплаты доступ активируется администратором.
+					Онлайн-оплата продлевает доступ автоматически; безнал активирует администратор.
 				</p>
 			</div>
 
@@ -157,6 +243,7 @@ const { target: paymentReveal } = useScrollReveal()
 					<UButton
 						color="primary"
 						leading-icon="i-lucide-receipt"
+						class="cursor-pointer"
 						@click="showBillingModal = true"
 					>
 						Выставить счёт
@@ -172,24 +259,46 @@ const { target: paymentReveal } = useScrollReveal()
 						</div>
 						<div class="space-y-1 min-w-0">
 							<h3 class="text-base font-semibold text-highlighted">
-								Оплатить картой на сайте
+								Онлайн-оплата
 							</h3>
 							<p class="text-sm text-muted">
-								Быстрая оплата банковской картой без выставления счёта
+								Карты, СБП, E-POS и ЕРИП через bePaid. Доступ продлевается сразу после успешной оплаты.
 							</p>
 						</div>
 					</div>
-					<p class="text-sm text-muted">
-						Онлайн-оплата картой будет доступна в ближайшее время.
-						Пока воспользуйтесь оплатой по безналичному расчёту.
-					</p>
-					<UButton
-						variant="outline"
-						color="neutral"
-						leading-icon="i-lucide-credit-card"
-						@click="showCardPaymentStub"
+
+					<p
+						v-if="amountLabel"
+						class="text-sm text-highlighted"
 					>
-						Оплатить картой
+						К оплате:
+						<span class="font-semibold">{{ amountLabel }}</span>
+					</p>
+					<p
+						v-else
+						class="text-sm text-muted"
+					>
+						Для текущего тарифа сумма онлайн-оплаты не задана. Воспользуйтесь счётом или обратитесь к администратору.
+					</p>
+
+					<URadioGroup
+						v-model="selectedMethod"
+						:items="paymentMethods"
+						variant="card"
+						indicator="start"
+						:disabled="paying || payableAmount == null"
+						class="w-full"
+					/>
+
+					<UButton
+						color="primary"
+						leading-icon="i-lucide-wallet"
+						class="cursor-pointer"
+						:loading="paying"
+						:disabled="payableAmount == null"
+						@click="startOnlinePayment"
+					>
+						Перейти к оплате
 					</UButton>
 				</UCard>
 			</div>

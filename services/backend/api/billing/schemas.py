@@ -7,6 +7,8 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from backend.enums import SubscriptionPaymentMethod, SubscriptionPaymentStatus
+
 
 class BillingProfileResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -83,3 +85,30 @@ class BillingGenerateRequest(BaseModel):
 class BillingGenerateResponse(BaseModel):
     document: BillingDocumentResponse
     email_queued: bool = False
+
+
+class PaymentCheckoutRequest(BaseModel):
+    method: SubscriptionPaymentMethod
+
+
+class PaymentCheckoutResponse(BaseModel):
+    payment_id: uuid.UUID
+    redirect_url: str
+    tracking_id: str
+    amount: Decimal
+    currency_code: str
+    method: SubscriptionPaymentMethod
+
+
+class PaymentStatusResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    tracking_id: str
+    method: SubscriptionPaymentMethod
+    amount: Decimal
+    currency_code: str
+    status: SubscriptionPaymentStatus
+    receipt_id: str
+    created_at: datetime
+    updated_at: datetime

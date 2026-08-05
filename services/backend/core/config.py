@@ -121,11 +121,33 @@ class Config(BaseSettings):
     billing_issuer_bik: str = "AKBBBY2X"
     billing_issuer_correspondent_account: str = ""
 
+    # bePaid (online subscription payments)
+    bepaid_shop_id: str = ""
+    bepaid_secret_key: str = ""
+    bepaid_shop_public_rsa_key: str = ""
+    bepaid_checkout_url: str = "https://checkout.bepaid.by"
+    bepaid_api_url: str = "https://api.bepaid.by"
+    bepaid_test: bool = True
+    bepaid_erip_service_no: str = ""
+    bepaid_epos_service_no: str = ""
+    bepaid_method_card: str = "credit_card"
+    bepaid_method_sbp: str = "sbp"
+    bepaid_method_epos: str = "epos"
+    bepaid_method_erip: str = "erip"
+    frontend_base_url: str = "http://localhost:3000"
+    api_public_base_url: str = "http://localhost:8000"
+
     # CORS
     cors_origins: list[str] = ["http://localhost:3000"]
     cors_allow_credentials: bool = True
     cors_allow_methods: str = "*"
     cors_allow_headers: str = "*"
+
+    def bepaid_configured(self) -> bool:
+        """True when shop credentials required for checkout are set."""
+        return bool(
+            self.bepaid_shop_id.strip() and self.bepaid_secret_key.strip()
+        )
 
     def build_db_url(self) -> str:
         """Build SQLAlchemy URL scheme

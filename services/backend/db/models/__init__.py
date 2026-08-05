@@ -13,6 +13,7 @@ from .subscription_billing import (
     SubscriptionBillingDocument,
     SubscriptionBillingProfile,
 )
+from .subscription_payment import SubscriptionPayment
 from .supplier import RequestSupplier, Supplier
 from .supplier_bookmark import SupplierBookmarkItem, SupplierBookmarkList
 from .tz_analysis import TZAnalysis
@@ -39,6 +40,7 @@ __all__ = [
     "Subscription",
     "SubscriptionBillingDocument",
     "SubscriptionBillingProfile",
+    "SubscriptionPayment",
     "Supplier",
     "RequestSupplier",
     "User",
