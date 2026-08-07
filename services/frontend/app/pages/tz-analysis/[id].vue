@@ -569,9 +569,7 @@ v-if="visibleKpItemGroups.length === 0"
 				</div>
 			</template>
 			<template #body>
-				<div class="flex flex-col min-h-[min(80vh,42rem)]">
-					<div class="flex-1 min-h-0 overflow-y-auto pr-1 pb-4">
-						<div class="grid grid-cols-1 md:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)] gap-4 min-h-0">
+				<div class="grid grid-cols-1 md:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)] gap-4 min-h-0">
 					<aside class="flex flex-col gap-3 shrink-0 min-h-0 md:max-h-[72vh]">
 						<p v-if="selectedSupplier" class="text-xs text-muted">
 							Поставщик:
@@ -695,27 +693,26 @@ v-for="tab in letterPreviewTabs" :key="tab.value" type="button" block
 							Нет несоответствий для формирования письма
 						</p>
 					</div>
-						</div>
-					</div>
-
-					<div :class="EMAIL_LETTER_MODAL_FOOTER_CLASS">
-						<UButton
-							color="neutral"
-							variant="ghost"
-							leading-icon="i-lucide-arrow-left"
-							@click="showLetterModal = false"
-						>
-							Назад
-						</UButton>
-						<UButton
-							leading-icon="i-lucide-download"
-							:loading="docxGenerating"
-							:disabled="tzSelectedIndices.length === 0 || !letterEditorText.trim()"
-							@click="generateDocx"
-						>
-							Скачать DOCX
-						</UButton>
-					</div>
+				</div>
+			</template>
+			<template #footer>
+				<div :class="EMAIL_LETTER_MODAL_FOOTER_CLASS">
+					<UButton
+						color="neutral"
+						variant="ghost"
+						leading-icon="i-lucide-arrow-left"
+						@click="showLetterModal = false"
+					>
+						Назад
+					</UButton>
+					<UButton
+						leading-icon="i-lucide-download"
+						:loading="docxGenerating"
+						:disabled="tzSelectedIndices.length === 0 || !letterEditorText.trim()"
+						@click="generateDocx"
+					>
+						Скачать DOCX
+					</UButton>
 				</div>
 			</template>
 		</UModal>

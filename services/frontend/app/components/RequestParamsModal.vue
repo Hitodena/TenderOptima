@@ -17,178 +17,173 @@
             </div>
         </template>
         <template #body>
-            <div v-if="step === 'params'" class="flex flex-col min-h-[min(80vh,42rem)]">
-                <div class="flex-1 min-h-0 overflow-y-auto space-y-6 pr-1 pb-4">
-                    <UFormField label="Тема письма" :required="false">
-                        <UInput
-                            v-model="form.emailSubject"
-                            placeholder="Запрос коммерческого предложения — ..."
-                            class="w-full"
-                            size="lg"
-                            :color="errors.emailSubject ? 'error' : undefined"
-                            :highlight="Boolean(errors.emailSubject)"
-                            maxlength="255"
-                        />
-                        <p v-if="errors.emailSubject" class="text-xs text-error mt-1">{{ errors.emailSubject }}</p>
-                    </UFormField>
+            <div v-if="step === 'params'" class="space-y-6">
+                <UFormField label="Тема письма" :required="false">
+                    <UInput
+                        v-model="form.emailSubject"
+                        placeholder="Запрос коммерческого предложения — ..."
+                        class="w-full"
+                        size="lg"
+                        :color="errors.emailSubject ? 'error' : undefined"
+                        :highlight="Boolean(errors.emailSubject)"
+                        maxlength="255"
+                    />
+                    <p v-if="errors.emailSubject" class="text-xs text-error mt-1">{{ errors.emailSubject }}</p>
+                </UFormField>
 
-                    <UFormField label="Описание товара/услуги" required>
-                        <UTextarea
-                            v-model="form.description"
-                            placeholder="Опишите детально товар или услугу, технические характеристики, объёмы..."
-                            :rows="6"
-                            class="w-full"
-                            size="lg"
-                            :color="errors.description ? 'error' : undefined"
-                            :highlight="Boolean(errors.description)"
-                        />
-                        <p v-if="errors.description" class="text-xs text-error mt-1">
-                            {{ errors.description }}
-                        </p>
-                    </UFormField>
+                <UFormField label="Описание товара/услуги" required>
+                    <UTextarea
+                        v-model="form.description"
+                        placeholder="Опишите детально товар или услугу, технические характеристики, объёмы..."
+                        :rows="6"
+                        class="w-full"
+                        size="lg"
+                        :color="errors.description ? 'error' : undefined"
+                        :highlight="Boolean(errors.description)"
+                    />
+                    <p v-if="errors.description" class="text-xs text-error mt-1">
+                        {{ errors.description }}
+                    </p>
+                </UFormField>
 
+                <div>
+                    <p class="text-sm font-semibold mb-1">Дополнительные параметры</p>
+                    <p class="text-xs text-muted mb-2">
+                        Укажите, что должен указать поставщик в ответе
+                    </p>
 
                     <div>
-                        <p class="text-sm font-semibold mb-1">Дополнительные параметры</p>
-                        <p class="text-xs text-muted mb-2">
-                            Укажите, что должен указать поставщик в ответе
-                        </p>
-
-                        <div>
-                            <div class="flex flex-wrap gap-1.5 mb-3 min-h-8">
-                                <UBadge
-                                    v-for="(label, idx) in form.labels"
-                                    :key="idx"
-                                    size="md"
-                                    variant="soft"
-                                    color="primary"
-                                    class="gap-1.5 pr-1 cursor-default"
+                        <div class="flex flex-wrap gap-1.5 mb-3 min-h-8">
+                            <UBadge
+                                v-for="(label, idx) in form.labels"
+                                :key="idx"
+                                size="md"
+                                variant="soft"
+                                color="primary"
+                                class="gap-1.5 pr-1 cursor-default"
+                            >
+                                {{ label }}
+                                <button
+                                    type="button"
+                                    class="ml-0.5 text-primary/60 hover:text-error transition-colors"
+                                    @click="removeLabel(idx)"
                                 >
-                                    {{ label }}
-                                    <button
-                                        type="button"
-                                        class="ml-0.5 text-primary/60 hover:text-error transition-colors"
-                                        @click="removeLabel(idx)"
-                                    >
-                                        <UIcon name="i-lucide-x" class="w-3 h-3" />
-                                    </button>
-                                </UBadge>
-                                <span
-                                    v-if="!form.labels.length"
-                                    class="text-xs text-muted italic self-center"
-                                >
-                                    Нет параметров
-                                </span>
-                            </div>
+                                    <UIcon name="i-lucide-x" class="w-3 h-3" />
+                                </button>
+                            </UBadge>
+                            <span
+                                v-if="!form.labels.length"
+                                class="text-xs text-muted italic self-center"
+                            >
+                                Нет параметров
+                            </span>
+                        </div>
 
-                            <div class="flex gap-2">
-                                <UInput
-                                    v-model="form.newLabel"
-                                    placeholder="Требование (цена, сроки, условия...)"
-                                    class="flex-1"
-                                    size="lg"
-                                    @keyup.enter="addLabel"
-                                />
-                                <UButton
-                                    icon="i-lucide-plus"
-                                    variant="outline"
-                                    color="neutral"
-                                    size="lg"
-                                    :disabled="!form.newLabel.trim()"
-                                    @click="addLabel"
-                                />
-                            </div>
+                        <div class="flex gap-2">
+                            <UInput
+                                v-model="form.newLabel"
+                                placeholder="Требование (цена, сроки, условия...)"
+                                class="flex-1"
+                                size="lg"
+                                @keyup.enter="addLabel"
+                            />
+                            <UButton
+                                icon="i-lucide-plus"
+                                variant="outline"
+                                color="neutral"
+                                size="lg"
+                                :disabled="!form.newLabel.trim()"
+                                @click="addLabel"
+                            />
                         </div>
                     </div>
+                </div>
 
-                    <div>
-                        <p class="text-sm font-semibold mb-1">Визитная карточка</p>
-                        <p class="text-xs text-muted mb-2">
-                            Добавляется в конце письма.
+                <div>
+                    <p class="text-sm font-semibold mb-1">Визитная карточка</p>
+                    <p class="text-xs text-muted mb-2">
+                        Добавляется в конце письма.
+                    </p>
+                    <p class="mb-3 text-xs leading-relaxed text-muted">
+                        <UIcon name="i-lucide-info" class="mr-1 inline size-3.5 align-[-2px] text-primary" />
+                        {{ t('requests.businessCardModalHint') }}
+                    </p>
+                    <UAlert
+                        v-if="showBusinessCardWarning"
+                        color="warning"
+                        variant="soft"
+                        icon="i-lucide-triangle-alert"
+                        class="mb-3"
+                        :title="t('requests.businessCardModalWarnTitle')"
+                        :description="t('requests.businessCardModalWarnBody')"
+                    />
+                    <UTextarea
+                        v-model="form.businessInfo"
+                        :placeholder="t('profile.businessCardPlaceholder')"
+                        :rows="showBusinessCardWarning ? 8 : 4"
+                        class="w-full"
+                        :color="showBusinessCardWarning ? 'warning' : undefined"
+                        :highlight="showBusinessCardWarning"
+                    />
+                    <div
+                        v-if="showBusinessCardWarning"
+                        class="mt-3 rounded-lg border border-warning/40 bg-warning/5 px-3 py-2.5"
+                    >
+                        <p class="text-xs font-semibold text-warning mb-1.5">
+                            {{ t('requests.businessCardModalExampleLabel') }}
                         </p>
-                        <p class="mb-3 text-xs leading-relaxed text-muted">
-                            <UIcon name="i-lucide-info" class="mr-1 inline size-3.5 align-[-2px] text-primary" />
-                            {{ t('requests.businessCardModalHint') }}
-                        </p>
-                        <UAlert
-                            v-if="showBusinessCardWarning"
-                            color="warning"
-                            variant="soft"
-                            icon="i-lucide-triangle-alert"
-                            class="mb-3"
-                            :title="t('requests.businessCardModalWarnTitle')"
-                            :description="t('requests.businessCardModalWarnBody')"
-                        />
-                        <UTextarea
-                            v-model="form.businessInfo"
-                            :placeholder="t('profile.businessCardPlaceholder')"
-                            :rows="showBusinessCardWarning ? 8 : 4"
-                            class="w-full"
-                            :color="showBusinessCardWarning ? 'warning' : undefined"
-                            :highlight="showBusinessCardWarning"
-                        />
-                        <div
-                            v-if="showBusinessCardWarning"
-                            class="mt-3 rounded-lg border border-warning/40 bg-warning/5 px-3 py-2.5"
-                        >
-                            <p class="text-xs font-semibold text-warning mb-1.5">
-                                {{ t('requests.businessCardModalExampleLabel') }}
-                            </p>
-                            <pre class="text-xs text-muted whitespace-pre-wrap font-sans leading-relaxed">{{ t('profile.businessCardPlaceholder') }}</pre>
-                        </div>
+                        <pre class="text-xs text-muted whitespace-pre-wrap font-sans leading-relaxed">{{ t('profile.businessCardPlaceholder') }}</pre>
                     </div>
+                </div>
 
-                    <div>
-                        <p class="text-sm font-semibold mb-1">Вложения</p>
-                        <p class="text-xs text-muted mb-2">{{ uploadDescription }}</p>
-                        <UFileUpload
-:model-value="filesToUpload" multiple
-                            accept=".pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp" :interactive="false"
-                            layout="list" class="w-full" @update:model-value="handleFilesUpdate">
-                            <template #actions="{ open }">
-                                <UButton type="button" variant="outline" size="sm" @click="open()">
-                                    <UIcon name="i-lucide-paperclip" class="w-4 h-4" />
-                                    Выбрать файлы
-                                </UButton>
-                            </template>
-                        </UFileUpload>
-                    </div>
+                <div>
+                    <p class="text-sm font-semibold mb-1">Вложения</p>
+                    <p class="text-xs text-muted mb-2">{{ uploadDescription }}</p>
+                    <UFileUpload
+                        :model-value="filesToUpload"
+                        multiple
+                        accept=".pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp"
+                        :interactive="false"
+                        layout="list"
+                        class="w-full"
+                        @update:model-value="handleFilesUpdate"
+                    >
+                        <template #actions="{ open }">
+                            <UButton type="button" variant="outline" size="sm" @click="open()">
+                                <UIcon name="i-lucide-paperclip" class="w-4 h-4" />
+                                Выбрать файлы
+                            </UButton>
+                        </template>
+                    </UFileUpload>
                 </div>
 
                 <UAlert
-v-if="error" color="error" variant="soft" icon="i-lucide-circle-alert" :description="error"
-                    class="shrink-0" />
-
-                <div :class="EMAIL_LETTER_MODAL_FOOTER_CLASS">
-                    <UButton color="neutral" variant="ghost" @click="close">
-                        Отмена
-                    </UButton>
-                    <UButton
-                        leading-icon="i-lucide-arrow-right"
-                        :loading="loadingMessage"
-                        @click="goToConfirm"
-                    >
-                        Далее
-                    </UButton>
-                </div>
+                    v-if="error"
+                    color="error"
+                    variant="soft"
+                    icon="i-lucide-circle-alert"
+                    :description="error"
+                />
             </div>
 
-            <div v-else-if="step === 'confirm'" class="flex flex-col min-h-[min(80vh,42rem)]">
-                <div class="flex-1 min-h-0 overflow-y-auto space-y-4 pr-1 pb-4">
+            <div v-else-if="step === 'confirm'" class="space-y-4">
                 <UAlert
-v-if="props.supplierCount" color="info" variant="soft" icon="i-lucide-info" class="mb-4"
-                    :description="`Запрос будет отправлен на ${props.supplierCount} ${pluralizeSuppliers(props.supplierCount ?? 0)}`" />
+                    v-if="props.supplierCount"
+                    color="info"
+                    variant="soft"
+                    icon="i-lucide-info"
+                    :description="`Запрос будет отправлен на ${props.supplierCount} ${pluralizeSuppliers(props.supplierCount ?? 0)}`"
+                />
 
                 <UAlert
                     v-if="emailQuotaConfirmHint"
                     color="warning"
                     variant="soft"
                     icon="i-lucide-mail"
-                    class="mb-4"
                     :description="emailQuotaConfirmHint"
                 />
 
-                <div class="flex items-center gap-2 text-sm text-muted mb-4">
+                <div class="flex items-center gap-2 text-sm text-muted">
                     Письмо сформировано на основе ваших параметров. Вы можете
                     отредактировать текст перед отправкой.
                 </div>
@@ -202,18 +197,23 @@ v-if="props.supplierCount" color="info" variant="soft" icon="i-lucide-info" clas
                 <div>
                     <p class="text-sm font-semibold mb-1">Тело письма</p>
                     <UTextarea
-v-model="form.emailMessage" :rows="20" class="w-full font-mono text-sm"
-                        placeholder="Текст письма загружается..." />
+                        v-model="form.emailMessage"
+                        :rows="20"
+                        class="w-full font-mono text-sm"
+                        placeholder="Текст письма загружается..."
+                    />
                 </div>
 
-                <div v-if="uploadedAttachments.length > 0" class="mb-4">
+                <div v-if="uploadedAttachments.length > 0">
                     <p class="text-sm font-semibold mb-2">
                         Вложения ({{ uploadedAttachments.length }}/2)
                     </p>
                     <div class="space-y-2">
                         <div
-v-for="(att, idx) in uploadedAttachments" :key="idx"
-                            class="flex items-center gap-2 text-sm p-2 bg-elevated/50 rounded-lg">
+                            v-for="(att, idx) in uploadedAttachments"
+                            :key="idx"
+                            class="flex items-center gap-2 text-sm p-2 bg-elevated/50 rounded-lg"
+                        >
                             <UIcon name="i-lucide-paperclip" class="w-4 h-4 text-primary shrink-0" />
                             <span class="flex-1 truncate">{{ att.filename }}</span>
                             <span class="text-xs text-muted">{{
@@ -223,22 +223,40 @@ v-for="(att, idx) in uploadedAttachments" :key="idx"
                     </div>
                 </div>
 
-                <UAlert v-if="error" color="error" variant="soft" icon="i-lucide-circle-alert" :description="error" />
-                </div>
-
-                <div :class="EMAIL_LETTER_MODAL_FOOTER_CLASS">
-                    <UButton
-                        color="neutral"
-                        variant="ghost"
-                        leading-icon="i-lucide-arrow-left"
-                        @click="step = 'params'"
-                    >
-                        Назад
-                    </UButton>
-                    <UButton leading-icon="i-lucide-send" :loading="loading" @click="handleLaunch">
-                        Запустить рассылку
-                    </UButton>
-                </div>
+                <UAlert
+                    v-if="error"
+                    color="error"
+                    variant="soft"
+                    icon="i-lucide-circle-alert"
+                    :description="error"
+                />
+            </div>
+        </template>
+        <template #footer>
+            <div v-if="step === 'params'" :class="EMAIL_LETTER_MODAL_FOOTER_CLASS">
+                <UButton color="neutral" variant="ghost" @click="close">
+                    Отмена
+                </UButton>
+                <UButton
+                    leading-icon="i-lucide-arrow-right"
+                    :loading="loadingMessage"
+                    @click="goToConfirm"
+                >
+                    Далее
+                </UButton>
+            </div>
+            <div v-else-if="step === 'confirm'" :class="EMAIL_LETTER_MODAL_FOOTER_CLASS">
+                <UButton
+                    color="neutral"
+                    variant="ghost"
+                    leading-icon="i-lucide-arrow-left"
+                    @click="step = 'params'"
+                >
+                    Назад
+                </UButton>
+                <UButton leading-icon="i-lucide-send" :loading="loading" @click="handleLaunch">
+                    Запустить рассылку
+                </UButton>
             </div>
         </template>
     </UModal>

@@ -168,7 +168,7 @@ v-else-if="sortedThreads.length === 0"
 
 				<template v-if="mainTab === 'comparison'">
 					<div class="flex-1 flex flex-col min-h-0 min-w-0">
-						<div class="flex-1 overflow-y-auto px-3 md:px-5 py-4 min-h-0 min-w-0">
+						<div class="flex-1 flex flex-col min-h-0 min-w-0 px-3 md:px-5 py-4">
 							<div v-if="loadingComparison" class="space-y-3">
 								<USkeleton v-for="i in 6" :key="i" class="h-10 w-full rounded-lg" />
 							</div>
@@ -184,10 +184,13 @@ v-else-if="comparison.suppliers.length === 0"
 								<UIcon name="i-lucide-users" class="w-10 h-10 opacity-20" />
 								<p class="text-sm">Нет проанализированных ответов</p>
 							</div>
-							<div v-else class="min-w-0 rounded-xl border border-default overflow-hidden">
+							<div
+								v-else
+								class="min-w-0 flex-1 min-h-0 flex flex-col rounded-xl border border-default overflow-hidden"
+							>
 								<div
 									v-if="priceRequirements.length"
-									class="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-default bg-elevated/30"
+									class="shrink-0 flex flex-wrap items-center gap-2 px-3 py-2 border-b border-default bg-elevated/30"
 								>
 									<span class="text-xs text-muted">Сортировка по цене:</span>
 									<UButton
@@ -209,7 +212,7 @@ v-else-if="comparison.suppliers.length === 0"
 									</UButton>
 								</div>
 								<div
-									class="inbox-comparison-scroll w-full max-w-full overflow-x-scroll overscroll-x-contain"
+									class="inbox-comparison-scroll flex-1 min-h-0 min-w-0 w-full max-w-full overflow-auto overscroll-contain"
 									role="region"
 									aria-label="Таблица сравнения поставщиков"
 									tabindex="0"

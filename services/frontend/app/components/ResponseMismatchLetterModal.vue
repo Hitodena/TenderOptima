@@ -11,44 +11,42 @@
 			</div>
 		</template>
 		<template #body>
-			<div class="flex flex-col min-h-[min(70vh,40rem)]">
-				<div class="flex-1 min-h-0 overflow-y-auto pr-1 pb-4">
-					<div class="flex flex-col md:flex-row gap-4">
-						<div class="flex-1 min-w-0 flex flex-col gap-4">
-							<SupplierLetterReadonlyEmail :email="supplier.main_email" />
-							<UFormField label="Тема">
-								<UInput v-model="subject" class="w-full" />
-							</UFormField>
-							<UFormField label="Сообщение" class="flex-1 min-h-0">
-								<div class="flex flex-col gap-2">
-									<div class="flex flex-wrap items-center gap-2">
-										<InsertBusinessInfoButton v-model="body" />
-										<LetterAttachButton
-											:count="filesToUpload.length"
-											@click="attachmentsField?.open()"
-										/>
-									</div>
-									<UTextarea
-										v-model="body"
-										:rows="20"
-										class="w-full"
-										:ui="{ base: 'min-h-[min(40vh,24rem)] resize-y' }"
-										autoresize
+			<div class="space-y-4">
+				<div class="flex flex-col md:flex-row gap-4">
+					<div class="flex-1 min-w-0 flex flex-col gap-4">
+						<SupplierLetterReadonlyEmail :email="supplier.main_email" />
+						<UFormField label="Тема">
+							<UInput v-model="subject" class="w-full" />
+						</UFormField>
+						<UFormField label="Сообщение" class="flex-1 min-h-0">
+							<div class="flex flex-col gap-2">
+								<div class="flex flex-wrap items-center gap-2">
+									<InsertBusinessInfoButton v-model="body" />
+									<LetterAttachButton
+										:count="filesToUpload.length"
+										@click="attachmentsField?.open()"
 									/>
 								</div>
-							</UFormField>
-							<LetterAttachmentsField
-								ref="attachmentsField"
-								v-model="filesToUpload"
-							/>
-						</div>
-						<div class="w-full md:w-72 shrink-0 min-h-64 md:min-h-0">
-							<EmailTemplateSidebar
-								:category="EmailTemplateCategory.LETTER"
-								mode="manage"
-								@select="applyTemplate"
-							/>
-						</div>
+								<UTextarea
+									v-model="body"
+									:rows="20"
+									class="w-full"
+									:ui="{ base: 'min-h-[min(40vh,24rem)] resize-y' }"
+									autoresize
+								/>
+							</div>
+						</UFormField>
+						<LetterAttachmentsField
+							ref="attachmentsField"
+							v-model="filesToUpload"
+						/>
+					</div>
+					<div class="w-full md:w-72 shrink-0 min-h-64 md:min-h-0">
+						<EmailTemplateSidebar
+							:category="EmailTemplateCategory.LETTER"
+							mode="manage"
+							@select="applyTemplate"
+						/>
 					</div>
 				</div>
 
@@ -58,7 +56,6 @@
 					variant="soft"
 					icon="i-lucide-mail"
 					:description="quotaMessage"
-					class="shrink-0"
 				/>
 
 				<UAlert
@@ -66,22 +63,22 @@
 					color="error"
 					variant="soft"
 					:description="error"
-					class="shrink-0"
 				/>
-
-				<div :class="EMAIL_LETTER_MODAL_FOOTER_CLASS">
-					<UButton color="neutral" variant="ghost" @click="close">
-						Отмена
-					</UButton>
-					<UButton
-						leading-icon="i-lucide-send"
-						:loading="sending"
-						:disabled="!subject.trim() || !body.trim() || !canSend"
-						@click="send"
-					>
-						Отправить
-					</UButton>
-				</div>
+			</div>
+		</template>
+		<template #footer>
+			<div :class="EMAIL_LETTER_MODAL_FOOTER_CLASS">
+				<UButton color="neutral" variant="ghost" @click="close">
+					Отмена
+				</UButton>
+				<UButton
+					leading-icon="i-lucide-send"
+					:loading="sending"
+					:disabled="!subject.trim() || !body.trim() || !canSend"
+					@click="send"
+				>
+					Отправить
+				</UButton>
 			</div>
 		</template>
 	</UModal>

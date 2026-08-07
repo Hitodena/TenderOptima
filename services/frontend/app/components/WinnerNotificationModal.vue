@@ -11,37 +11,35 @@
 			</div>
 		</template>
 		<template #body>
-			<div class="flex flex-col min-h-[min(70vh,40rem)]">
-				<div class="flex-1 min-h-0 overflow-y-auto pr-1 pb-4 space-y-4">
-					<div class="rounded-lg border border-primary/30 bg-primary/5 p-4">
-						<p class="text-xs font-medium text-primary mb-1">
-							Выбранный победитель:
-						</p>
-						<p class="text-sm font-semibold">{{ supplier.company_name }}</p>
-						<p class="text-xs text-primary mt-1">
-							Email: {{ supplier.main_email }}
-						</p>
-					</div>
-					<UFormField label="Тема письма">
-						<UInput v-model="subject" class="w-full" />
-					</UFormField>
-					<UFormField label="Текст письма">
-						<div class="flex flex-col gap-2">
-							<div class="flex flex-wrap items-center gap-2">
-								<InsertBusinessInfoButton v-model="body" />
-								<LetterAttachButton
-									:count="filesToUpload.length"
-									@click="attachmentsField?.open()"
-								/>
-							</div>
-							<UTextarea v-model="body" :rows="18" class="w-full" autoresize />
-						</div>
-					</UFormField>
-					<LetterAttachmentsField
-						ref="attachmentsField"
-						v-model="filesToUpload"
-					/>
+			<div class="space-y-4">
+				<div class="rounded-lg border border-primary/30 bg-primary/5 p-4">
+					<p class="text-xs font-medium text-primary mb-1">
+						Выбранный победитель:
+					</p>
+					<p class="text-sm font-semibold">{{ supplier.company_name }}</p>
+					<p class="text-xs text-primary mt-1">
+						Email: {{ supplier.main_email }}
+					</p>
 				</div>
+				<UFormField label="Тема письма">
+					<UInput v-model="subject" class="w-full" />
+				</UFormField>
+				<UFormField label="Текст письма">
+					<div class="flex flex-col gap-2">
+						<div class="flex flex-wrap items-center gap-2">
+							<InsertBusinessInfoButton v-model="body" />
+							<LetterAttachButton
+								:count="filesToUpload.length"
+								@click="attachmentsField?.open()"
+							/>
+						</div>
+						<UTextarea v-model="body" :rows="18" class="w-full" autoresize />
+					</div>
+				</UFormField>
+				<LetterAttachmentsField
+					ref="attachmentsField"
+					v-model="filesToUpload"
+				/>
 
 				<UAlert
 					v-if="quotaMessage && !canSend"
@@ -49,7 +47,6 @@
 					variant="soft"
 					icon="i-lucide-mail"
 					:description="quotaMessage"
-					class="shrink-0"
 				/>
 
 				<UAlert
@@ -57,23 +54,23 @@
 					color="error"
 					variant="soft"
 					:description="error"
-					class="shrink-0"
 				/>
-
-				<div :class="EMAIL_LETTER_MODAL_FOOTER_CLASS">
-					<UButton color="neutral" variant="ghost" @click="close">
-						Отменить
-					</UButton>
-					<UButton
-						color="primary"
-						leading-icon="i-lucide-send"
-						:loading="sending"
-						:disabled="!subject.trim() || !body.trim() || !canSend"
-						@click="send"
-					>
-						Отправить уведомление
-					</UButton>
-				</div>
+			</div>
+		</template>
+		<template #footer>
+			<div :class="EMAIL_LETTER_MODAL_FOOTER_CLASS">
+				<UButton color="neutral" variant="ghost" @click="close">
+					Отменить
+				</UButton>
+				<UButton
+					color="primary"
+					leading-icon="i-lucide-send"
+					:loading="sending"
+					:disabled="!subject.trim() || !body.trim() || !canSend"
+					@click="send"
+				>
+					Отправить уведомление
+				</UButton>
 			</div>
 		</template>
 	</UModal>
