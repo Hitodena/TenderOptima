@@ -1,6 +1,7 @@
 from .base import Base, IDMixinUUID, TimestampMixin
 from .blacklisted_domain import BlacklistedDomain
 from .consultation import Consultation
+from .cooperation import CooperationLead, VerifiedSupplier
 from .email_template import EmailTemplate
 from .frontend_error_log import FrontendErrorLog
 from .idea_suggestion import IdeaSuggestion
@@ -27,6 +28,7 @@ __all__ = [
     "TimestampMixin",
     "BlacklistedDomain",
     "Consultation",
+    "CooperationLead",
     "EmailTemplate",
     "FrontendErrorLog",
     "IdeaSuggestion",
@@ -44,6 +46,7 @@ __all__ = [
     "Supplier",
     "RequestSupplier",
     "User",
+    "VerifiedSupplier",
     "TZAnalysis",
     "TZAnalysisSupplier",
     "TZCreationSession",

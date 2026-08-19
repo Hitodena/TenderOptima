@@ -2,6 +2,7 @@ import type {
 	ConsultationRequestType,
 	ConsultationRole,
 	ConsultationStatus,
+	CooperationLeadStatus,
 	EmailTemplateCategory,
 	RequestStatus,
 	RequestSupplierStatus,
@@ -53,6 +54,71 @@ export interface ConsultationResponse {
 	utm_content: string | null;
 	page_url: string | null;
 	created_at: string;
+}
+
+export interface CooperationLeadCreate {
+	name: string;
+	email: string;
+	phone: string;
+	company?: string;
+	industry: string;
+	comment?: string | null;
+	consent: boolean;
+	agree_marketing?: boolean;
+	utm_source?: string | null;
+	utm_medium?: string | null;
+	utm_campaign?: string | null;
+	utm_content?: string | null;
+	page_url?: string | null;
+	honeypot?: string;
+}
+
+export interface CooperationLeadResponse {
+	id: string;
+	name: string;
+	email: string;
+	phone: string;
+	company: string;
+	industry: string;
+	comment: string | null;
+	agree_marketing: boolean;
+	status: CooperationLeadStatus;
+	utm_source: string | null;
+	utm_medium: string | null;
+	utm_campaign: string | null;
+	utm_content: string | null;
+	page_url: string | null;
+	approved_at: string | null;
+	cancelled_at: string | null;
+	deleted_at: string | null;
+	created_at: string;
+}
+
+export interface CooperationLeadPageResponse {
+	items: CooperationLeadResponse[];
+	page: number;
+	size: number;
+	total: number;
+}
+
+export interface VerifiedSupplierResponse {
+	id: string;
+	company_name: string;
+	email: string;
+	phone: string | null;
+	industry: string;
+	contact_name: string | null;
+	comments: string | null;
+	source: string;
+	source_lead_id: string | null;
+	created_at: string;
+}
+
+export interface VerifiedSupplierPageResponse {
+	items: VerifiedSupplierResponse[];
+	page: number;
+	size: number;
+	total: number;
 }
 
 export interface UserResponse {

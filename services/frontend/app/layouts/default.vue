@@ -145,7 +145,7 @@ if (auth.isAuthenticated.value) {
 	await ensureLoaded()
 }
 
-const MARKETING_ROUTES = new Set(['/', '/product', '/security', '/contacts', '/faq', '/cases'])
+const MARKETING_ROUTES = new Set(['/', '/product', '/security', '/contacts', '/faq', '/cases', '/cooperation'])
 const isLandingPage = computed(() => MARKETING_ROUTES.has(route.path))
 const showAppFooter = computed(
 	() => !/^\/requests\/[^/]+\/responses(?:\/|$)/.test(route.path),
@@ -217,6 +217,7 @@ const landingNavItems = computed<NavigationMenuItem[]>(() => {
 	}
 	items.push(
 		{ label: 'Кейсы', icon: 'i-lucide-briefcase', to: '/#cases' },
+		{ label: 'Поставщикам', icon: 'i-lucide-handshake', to: '/cooperation' },
 		{ label: 'Контакты', icon: 'i-lucide-mail', to: '/#contacts' },
 	)
 	return items

@@ -22,6 +22,9 @@
 					<ContactSupportPanel class="mt-4 sm:mt-5" />
 
 					<div class="mt-4 flex flex-wrap gap-3 text-sm">
+						<NuxtLink to="/cooperation" class="font-semibold text-primary underline underline-offset-2">
+							Поставщикам
+						</NuxtLink>
 						<NuxtLink to="/faq" class="font-semibold text-primary underline underline-offset-2">
 							Частые вопросы
 						</NuxtLink>

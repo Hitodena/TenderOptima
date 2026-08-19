@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -17,6 +18,12 @@ from backend.api.admin.schemas import (
     ReferralInvitationCreate,
     ReferralInvitationResponse,
 )
+from backend.api.cooperation.schemas import (
+    CooperationLeadPageResponse,
+    CooperationLeadResponse,
+    VerifiedSupplierPageResponse,
+    VerifiedSupplierResponse,
+)
 from backend.api.deps import get_admin, get_config_instance, get_session
 from backend.api.subscriptions.helpers import subscription_to_response
 from backend.api.subscriptions.schemas import SubscriptionUpdate
@@ -26,15 +33,17 @@ from backend.celery_app.tasks.admin_cooperation_tasks import (
 )
 from backend.core.config import ALLOWED_CONTENT_TYPES, Config
 from backend.db.dao import (
+    CooperationLeadDAO,
     EmailMessageDAO,
     ReferralInvitationDAO,
     RequestSupplierDAO,
     SubscriptionDAO,
     SupplierDAO,
     UserAdminDAO,
+    VerifiedSupplierDAO,
 )
-from backend.db.models import ReferralInvitation, User
-from backend.enums import EmailMessageDirection
+from backend.db.models import CooperationLead, ReferralInvitation, User
+from backend.enums import CooperationLeadStatus, EmailMessageDirection
 from backend.schemas.user_email_settings import UserEmailSettingsUpdate
 from backend.utils.subscription_usage import SubscriptionUsage
 from backend.utils.user_email_settings import email_settings_response
@@ -603,4 +612,190 @@ async def send_cooperation_emails(
     return AdminCooperationSendResponse(
         status="queued",
         queued=len(body.supplier_ids),
+    )
+
+
+def _cooperation_lead_response(
+    row: CooperationLead,
+) -> CooperationLeadResponse:
+    return CooperationLeadResponse(
+        id=row.id,
+        name=row.name,
+        email=row.email,
+        phone=row.phone,
+        company=row.company,
+        industry=row.industry,
+        comment=row.comment,
+        agree_marketing=row.agree_marketing,
+        status=CooperationLeadStatus(row.status),
+        utm_source=row.utm_source,
+        utm_medium=row.utm_medium,
+        utm_campaign=row.utm_campaign,
+        utm_content=row.utm_content,
+        page_url=row.page_url,
+        approved_at=row.approved_at,
+        cancelled_at=row.cancelled_at,
+        deleted_at=row.deleted_at,
+        created_at=row.created_at,
+    )
+
+
+@router.get(
+    "/cooperation/leads",
+    response_model=CooperationLeadPageResponse,
+    summary="List supplier cooperation invitation leads",
+)
+async def list_cooperation_leads(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _admin: Annotated[User, Depends(get_admin)],
+    page: Annotated[int, Query(ge=1)] = 1,
+    size: Annotated[int, Query(ge=1, le=100)] = 20,
+    status_filter: Annotated[
+        CooperationLeadStatus | None, Query(alias="status")
+    ] = None,
+) -> CooperationLeadPageResponse:
+    rows, total = await CooperationLeadDAO.list_page(
+        session,
+        page=page,
+        size=size,
+        status=status_filter,
+    )
+    return CooperationLeadPageResponse(
+        items=[_cooperation_lead_response(row) for row in rows],
+        page=page,
+        size=size,
+        total=total,
+    )
+
+
+@router.post(
+    "/cooperation/leads/{lead_id}/approve",
+    response_model=CooperationLeadResponse,
+    summary="Approve cooperation lead and write verified supplier",
+)
+async def approve_cooperation_lead(
+    lead_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    admin: Annotated[User, Depends(get_admin)],
+) -> CooperationLeadResponse:
+    lead = await CooperationLeadDAO.get_by_id(session, lead_id)
+    if lead is None or lead.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Заявка не найдена",
+        )
+    if lead.status == CooperationLeadStatus.APPROVED.value:
+        return _cooperation_lead_response(lead)
+    if lead.status == CooperationLeadStatus.CANCELLED.value:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Отклонённую заявку нельзя одобрить",
+        )
+
+    now = datetime.now(UTC)
+    try:
+        approved = await CooperationLeadDAO.approve(
+            session,
+            lead_id,
+            admin_id=admin.id,
+            approved_at=now,
+        )
+        if approved is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Заявка не найдена",
+            )
+        await VerifiedSupplierDAO.create_from_lead(
+            session,
+            company_name=approved.company,
+            email=approved.email,
+            phone=approved.phone,
+            industry=approved.industry,
+            contact_name=approved.name,
+            comments=approved.comment,
+            source_lead_id=approved.id,
+            approved_by_admin_id=admin.id,
+        )
+        await session.commit()
+        await session.refresh(approved)
+    except HTTPException:
+        raise
+    except Exception:
+        await session.rollback()
+        raise
+
+    return _cooperation_lead_response(approved)
+
+
+@router.post(
+    "/cooperation/leads/{lead_id}/cancel",
+    response_model=CooperationLeadResponse,
+    summary="Cancel a cooperation invitation lead",
+)
+async def cancel_cooperation_lead(
+    lead_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    admin: Annotated[User, Depends(get_admin)],
+) -> CooperationLeadResponse:
+    lead = await CooperationLeadDAO.get_by_id(session, lead_id)
+    if lead is None or lead.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Заявка не найдена",
+        )
+    if lead.status == CooperationLeadStatus.APPROVED.value:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Одобренную заявку нельзя отклонить",
+        )
+    if lead.status == CooperationLeadStatus.CANCELLED.value:
+        return _cooperation_lead_response(lead)
+
+    cancelled = await CooperationLeadDAO.cancel(
+        session,
+        lead_id,
+        admin_id=admin.id,
+        cancelled_at=datetime.now(UTC),
+    )
+    if cancelled is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Заявка не найдена",
+        )
+    return _cooperation_lead_response(cancelled)
+
+
+@router.get(
+    "/cooperation/verified-suppliers",
+    response_model=VerifiedSupplierPageResponse,
+    summary="List verified suppliers approved via cooperation",
+)
+async def list_verified_suppliers(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _admin: Annotated[User, Depends(get_admin)],
+    page: Annotated[int, Query(ge=1)] = 1,
+    size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> VerifiedSupplierPageResponse:
+    rows, total = await VerifiedSupplierDAO.list_page(
+        session, page=page, size=size
+    )
+    return VerifiedSupplierPageResponse(
+        items=[
+            VerifiedSupplierResponse(
+                id=row.id,
+                company_name=row.company_name,
+                email=row.email,
+                phone=row.phone,
+                industry=row.industry,
+                contact_name=row.contact_name,
+                comments=row.comments,
+                source=row.source,
+                source_lead_id=row.source_lead_id,
+                created_at=row.created_at,
+            )
+            for row in rows
+        ],
+        page=page,
+        size=size,
+        total=total,
     )

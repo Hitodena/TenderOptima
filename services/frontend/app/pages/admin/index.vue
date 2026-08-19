@@ -9,7 +9,7 @@
 						</div>
 						<div>
 							<h1 class="text-lg font-bold text-highlighted leading-tight">Админка</h1>
-							<p class="text-xs text-muted">Ошибки фронтенда, идеи и проблемы пользователей</p>
+							<p class="text-xs text-muted">Ошибки фронтенда, идеи, сотрудничество и реестр ПДн</p>
 						</div>
 					</div>
 				</template>
@@ -25,6 +25,10 @@
 
 				<template #cooperation>
 					<AdminCooperationPanel />
+				</template>
+
+				<template #personal-data>
+					<AdminPersonalDataPanel />
 				</template>
 
 				<template #referrals>
@@ -571,6 +575,12 @@ const tabs = [
 		slot: 'cooperation',
 		value: 'cooperation',
 		icon: 'i-lucide-handshake',
+	},
+	{
+		label: 'ПДн',
+		slot: 'personal-data',
+		value: 'personal-data',
+		icon: 'i-lucide-shield-check',
 	},
 	{ label: t('admin.referrals.tabLabel'), slot: 'referrals', value: 'referrals', icon: 'i-lucide-ticket' },
 	{ label: 'Ошибки', slot: 'errors', value: 'errors', icon: 'i-lucide-bug' },

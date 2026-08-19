@@ -143,6 +143,14 @@ class ConsultationStatus(StrEnum):
     REJECTED = "rejected"
 
 
+class CooperationLeadStatus(StrEnum):
+    """Lifecycle of a supplier cooperation invitation lead."""
+
+    NEW = "new"
+    APPROVED = "approved"
+    CANCELLED = "cancelled"
+
+
 class TZCreationMode(StrEnum):
     """How a TZ creation wizard session was started (Module 3)."""
 

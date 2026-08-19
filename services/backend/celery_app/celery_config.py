@@ -186,6 +186,10 @@ class CeleryConfig:
             "queue": "mail_send",
             "routing_key": "mail.send",
         },
+        "retention.cleanup_cooperation_leads": {
+            "queue": "analysis",
+            "routing_key": "analysis",
+        },
     }
 
     include = [
@@ -197,6 +201,7 @@ class CeleryConfig:
         "backend.celery_app.tasks.consultation_tasks",
         "backend.celery_app.tasks.admin_cooperation_tasks",
         "backend.celery_app.tasks.tz_creation_tasks",
+        "backend.celery_app.tasks.retention_tasks",
     ]
 
     # Logging
@@ -219,5 +224,11 @@ class CeleryConfig:
             "schedule": crontab(minute="*/1"),
             "args": (),
             "options": {"queue": "mail_poll", "expires": 600},
+        },
+        "cleanup-cooperation-leads": {
+            "task": "retention.cleanup_cooperation_leads",
+            "schedule": crontab(hour=3, minute=15),
+            "args": (),
+            "options": {"queue": "analysis", "expires": 3600},
         },
     }

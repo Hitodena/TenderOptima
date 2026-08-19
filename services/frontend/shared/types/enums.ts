@@ -85,6 +85,15 @@ export const ConsultationStatus = {
 
 export type ConsultationStatus = (typeof ConsultationStatus)[keyof typeof ConsultationStatus];
 
+export const CooperationLeadStatus = {
+	NEW: 'new',
+	APPROVED: 'approved',
+	CANCELLED: 'cancelled',
+} as const;
+
+export type CooperationLeadStatus =
+	(typeof CooperationLeadStatus)[keyof typeof CooperationLeadStatus];
+
 export const TZCreationMode = {
 	FROM_SCRATCH: 'from_scratch',
 	REFINE_EXISTING: 'refine_existing',

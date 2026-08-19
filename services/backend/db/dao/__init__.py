@@ -1,6 +1,7 @@
 from .base_dao import BaseDAO
 from .blacklisted_domain_dao import BlacklistedDomainDAO
 from .consultation_dao import ConsultationDAO
+from .cooperation_lead_dao import CooperationLeadDAO
 from .email_message_dao import EmailMessageDAO
 from .email_template_dao import EmailTemplateDAO
 from .frontend_error_log_dao import FrontendErrorLogDAO
@@ -24,10 +25,12 @@ from .tz_analysis_dao import TZAnalysisDAO
 from .tz_analysis_supplier_dao import TZAnalysisSupplierDAO
 from .tz_creation_dao import TZCreationMessageDAO, TZCreationSessionDAO
 from .user_dao import UserDAO
+from .verified_supplier_dao import VerifiedSupplierDAO
 
 __all__ = [
     "BaseDAO",
     "ConsultationDAO",
+    "CooperationLeadDAO",
     "FrontendErrorLogDAO",
     "IdeaSuggestionDAO",
     "RequestDAO",
@@ -52,4 +55,5 @@ __all__ = [
     "SubscriptionBillingProfileDAO",
     "SubscriptionPaymentDAO",
     "UserAdminDAO",
+    "VerifiedSupplierDAO",
 ]
