@@ -78,7 +78,6 @@ class CooperationLeadResponse(BaseModel):
     page_url: str | None
     approved_at: datetime | None
     cancelled_at: datetime | None
-    deleted_at: datetime | None
     created_at: datetime
 
 

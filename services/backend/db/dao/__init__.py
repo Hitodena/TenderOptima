@@ -6,6 +6,7 @@ from .email_message_dao import EmailMessageDAO
 from .email_template_dao import EmailTemplateDAO
 from .frontend_error_log_dao import FrontendErrorLogDAO
 from .idea_suggestion_dao import IdeaSuggestionDAO
+from .personal_data_cleanup_run_dao import PersonalDataCleanupRunDAO
 from .referral_invitation_dao import ReferralInvitationDAO
 from .request_dao import RequestDAO
 from .response_analysis_dao import ResponseAnalysisDAO
@@ -33,6 +34,7 @@ __all__ = [
     "CooperationLeadDAO",
     "FrontendErrorLogDAO",
     "IdeaSuggestionDAO",
+    "PersonalDataCleanupRunDAO",
     "RequestDAO",
     "ReferralInvitationDAO",
     "RequestSupplier",

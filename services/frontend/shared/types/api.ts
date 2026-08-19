@@ -90,7 +90,6 @@ export interface CooperationLeadResponse {
 	page_url: string | null;
 	approved_at: string | null;
 	cancelled_at: string | null;
-	deleted_at: string | null;
 	created_at: string;
 }
 
@@ -436,6 +435,51 @@ export interface AdminCooperationSendRequest {
 export interface AdminCooperationSendResponse {
 	status: string;
 	queued: number;
+}
+
+export interface DeletedUserPurposeCountdown {
+	purpose_number: number;
+	retention_days: number;
+	days_until_cleanup: number;
+	ready: boolean;
+}
+
+export interface DeletedUserRetentionItem {
+	id: string;
+	email: string;
+	full_name: string | null;
+	deleted_at: string;
+	deleted_reason: string | null;
+	days_since_deleted: number;
+	nearest_cleanup_days: number | null;
+	purposes: DeletedUserPurposeCountdown[];
+}
+
+export interface DeletedUserRetentionPage {
+	items: DeletedUserRetentionItem[];
+	total: number;
+}
+
+export interface PersonalDataCleanupRunResponse {
+	id: string;
+	purpose_number: number;
+	status: string;
+	requested_by_admin_id: string | null;
+	celery_task_id: string | null;
+	started_at: string | null;
+	finished_at: string | null;
+	eligible_users: number;
+	affected_records: number;
+	error: string | null;
+	created_at: string;
+}
+
+export interface PersonalDataCleanupEnqueueResponse {
+	run_id: string;
+	purpose_number: number;
+	status: string;
+	celery_task_id: string | null;
+	message: string;
 }
 
 export interface RegisterCreate {

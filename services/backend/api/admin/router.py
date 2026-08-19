@@ -15,6 +15,12 @@ from backend.api.admin.schemas import (
     AdminSmtpDefaultsResponse,
     AdminUserDetail,
     AdminUserListItem,
+    DeletedUserPurposeCountdown,
+    DeletedUserRetentionItem,
+    DeletedUserRetentionPage,
+    PersonalDataCleanupEnqueueResponse,
+    PersonalDataCleanupRunResponse,
+    PersonalDataPurposeResponse,
     ReferralInvitationCreate,
     ReferralInvitationResponse,
 )
@@ -31,10 +37,12 @@ from backend.api.user_requests.schemas import Attachment
 from backend.celery_app.tasks.admin_cooperation_tasks import (
     send_cooperation_proposals,
 )
+from backend.celery_app.tasks.retention_tasks import PURPOSE_TASKS
 from backend.core.config import ALLOWED_CONTENT_TYPES, Config
 from backend.db.dao import (
     CooperationLeadDAO,
     EmailMessageDAO,
+    PersonalDataCleanupRunDAO,
     ReferralInvitationDAO,
     RequestSupplierDAO,
     SubscriptionDAO,
@@ -45,6 +53,17 @@ from backend.db.dao import (
 from backend.db.models import CooperationLead, ReferralInvitation, User
 from backend.enums import CooperationLeadStatus, EmailMessageDirection
 from backend.schemas.user_email_settings import UserEmailSettingsUpdate
+from backend.services.personal_data_cleanup import (
+    days_since,
+    days_until_cleanup,
+    list_deleted_users,
+    nearest_cleanup_days,
+    purpose_ready,
+)
+from backend.utils.personal_data_retention import (
+    PERSONAL_DATA_PURPOSES,
+    get_purpose,
+)
 from backend.utils.subscription_usage import SubscriptionUsage
 from backend.utils.user_email_settings import email_settings_response
 from fastapi import (
@@ -635,7 +654,6 @@ def _cooperation_lead_response(
         page_url=row.page_url,
         approved_at=row.approved_at,
         cancelled_at=row.cancelled_at,
-        deleted_at=row.deleted_at,
         created_at=row.created_at,
     )
 
@@ -679,7 +697,7 @@ async def approve_cooperation_lead(
     admin: Annotated[User, Depends(get_admin)],
 ) -> CooperationLeadResponse:
     lead = await CooperationLeadDAO.get_by_id(session, lead_id)
-    if lead is None or lead.deleted_at is not None:
+    if lead is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Заявка не найдена",
@@ -738,7 +756,7 @@ async def cancel_cooperation_lead(
     admin: Annotated[User, Depends(get_admin)],
 ) -> CooperationLeadResponse:
     lead = await CooperationLeadDAO.get_by_id(session, lead_id)
-    if lead is None or lead.deleted_at is not None:
+    if lead is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Заявка не найдена",
@@ -798,4 +816,165 @@ async def list_verified_suppliers(
         page=page,
         size=size,
         total=total,
+    )
+
+
+@router.get(
+    "/personal-data/purposes",
+    response_model=list[PersonalDataPurposeResponse],
+    summary="List personal-data processing purposes",
+)
+async def list_personal_data_purposes(
+    _admin: Annotated[User, Depends(get_admin)],
+) -> list[PersonalDataPurposeResponse]:
+    return [
+        PersonalDataPurposeResponse(
+            purpose_number=row.purpose_number,
+            purpose=row.purpose,
+            subjects=row.subjects,
+            data_list=row.data_list,
+            legal_basis=row.legal_basis,
+            retention_text=row.retention_text,
+            retention_days_after_user_deletion=(
+                row.retention_days_after_user_deletion
+            ),
+            cleanup_supported=row.cleanup_supported,
+            cleanup_task_name=row.cleanup_task_name,
+            cleanup_description=row.cleanup_description,
+        )
+        for row in PERSONAL_DATA_PURPOSES
+    ]
+
+
+@router.get(
+    "/personal-data/deleted-users",
+    response_model=DeletedUserRetentionPage,
+    summary="List deleted users with retention countdowns",
+)
+async def list_deleted_users_for_retention(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _admin: Annotated[User, Depends(get_admin)],
+) -> DeletedUserRetentionPage:
+    now = datetime.now(UTC)
+    users = await list_deleted_users(session)
+    items: list[DeletedUserRetentionItem] = []
+    for user in users:
+        if user.deleted_at is None:
+            continue
+        purpose_rows: list[DeletedUserPurposeCountdown] = []
+        for purpose in PERSONAL_DATA_PURPOSES:
+            if (
+                not purpose.cleanup_supported
+                or purpose.retention_days_after_user_deletion is None
+            ):
+                continue
+            days_left = days_until_cleanup(
+                user.deleted_at,
+                purpose.retention_days_after_user_deletion,
+                now=now,
+            )
+            purpose_rows.append(
+                DeletedUserPurposeCountdown(
+                    purpose_number=purpose.purpose_number,
+                    retention_days=purpose.retention_days_after_user_deletion,
+                    days_until_cleanup=days_left,
+                    ready=purpose_ready(
+                        user.deleted_at,
+                        purpose.retention_days_after_user_deletion,
+                        now=now,
+                    ),
+                )
+            )
+        items.append(
+            DeletedUserRetentionItem(
+                id=user.id,
+                email=user.email,
+                full_name=user.full_name,
+                deleted_at=user.deleted_at,
+                deleted_reason=user.deleted_reason,
+                days_since_deleted=days_since(user.deleted_at, now=now),
+                nearest_cleanup_days=nearest_cleanup_days(
+                    user.deleted_at, now=now
+                ),
+                purposes=purpose_rows,
+            )
+        )
+    return DeletedUserRetentionPage(items=items, total=len(items))
+
+
+@router.get(
+    "/personal-data/cleanup-runs",
+    response_model=list[PersonalDataCleanupRunResponse],
+    summary="List recent personal-data cleanup runs",
+)
+async def list_personal_data_cleanup_runs(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _admin: Annotated[User, Depends(get_admin)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> list[PersonalDataCleanupRunResponse]:
+    rows = await PersonalDataCleanupRunDAO.list_recent(session, limit=limit)
+    return [
+        PersonalDataCleanupRunResponse(
+            id=row.id,
+            purpose_number=row.purpose_number,
+            status=row.status,
+            requested_by_admin_id=row.requested_by_admin_id,
+            celery_task_id=row.celery_task_id,
+            started_at=row.started_at,
+            finished_at=row.finished_at,
+            eligible_users=row.eligible_users,
+            affected_records=row.affected_records,
+            error=row.error,
+            created_at=row.created_at,
+        )
+        for row in rows
+    ]
+
+
+@router.post(
+    "/personal-data/cleanup/{purpose_number}",
+    response_model=PersonalDataCleanupEnqueueResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Enqueue personal-data cleanup for a purpose",
+)
+async def enqueue_personal_data_cleanup(
+    purpose_number: int,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    admin: Annotated[User, Depends(get_admin)],
+) -> PersonalDataCleanupEnqueueResponse:
+    purpose = get_purpose(purpose_number)
+    if purpose is None or not purpose.cleanup_supported:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Очистка для этого пункта реестра не поддерживается",
+        )
+    task = PURPOSE_TASKS.get(purpose_number)
+    if task is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Задача очистки не найдена",
+        )
+
+    run = await PersonalDataCleanupRunDAO.create(
+        session,
+        purpose_number=purpose_number,
+        status="queued",
+        requested_by_admin_id=admin.id,
+        eligible_users=0,
+        affected_records=0,
+    )
+    async_result = task.delay(str(run.id))  # type: ignore[attr-defined]
+    updated = await PersonalDataCleanupRunDAO.update_fields(
+        session,
+        run.id,
+        celery_task_id=async_result.id,
+    )
+    return PersonalDataCleanupEnqueueResponse(
+        run_id=run.id,
+        purpose_number=purpose_number,
+        status=(updated.status if updated else "queued"),
+        celery_task_id=async_result.id,
+        message=(
+            f"Задача очистки пункта {purpose_number} поставлена в очередь"
+        ),
     )

@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import and_, delete, func, or_, select, update
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.dao.base_dao import BaseDAO
@@ -20,13 +20,14 @@ class CooperationLeadDAO(BaseDAO[CooperationLead]):
         session: AsyncSession,
         email: str,
     ) -> CooperationLead | None:
-        """Load a non-deleted lead by email."""
-        stmt = select(cls.model).where(
-            cls.model.email == email,
-            cls.model.deleted_at.is_(None),
+        """Load a lead by email (latest open moderation candidate)."""
+        stmt = (
+            select(cls.model)
+            .where(cls.model.email == email)
+            .order_by(cls.model.created_at.desc())
         )
         result = await session.execute(stmt)
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
     @classmethod
     async def count_recent_by_ip(
@@ -39,7 +40,6 @@ class CooperationLeadDAO(BaseDAO[CooperationLead]):
         stmt = select(func.count()).where(
             cls.model.ip_address == ip_address,
             cls.model.created_at >= since,
-            cls.model.deleted_at.is_(None),
         )
         result = await session.execute(stmt)
         return result.scalar_one()
@@ -52,12 +52,9 @@ class CooperationLeadDAO(BaseDAO[CooperationLead]):
         page: int = 1,
         size: int = 20,
         status: CooperationLeadStatus | None = None,
-        include_deleted: bool = False,
     ) -> tuple[list[CooperationLead], int]:
         """Return a page of leads newest-first, with total row count."""
         filters = []
-        if not include_deleted:
-            filters.append(cls.model.deleted_at.is_(None))
         if status is not None:
             filters.append(cls.model.status == status.value)
 
@@ -79,57 +76,6 @@ class CooperationLeadDAO(BaseDAO[CooperationLead]):
         return result, total
 
     @classmethod
-    async def soft_delete_due(
-        cls,
-        session: AsyncSession,
-        *,
-        now: datetime,
-        approved_before: datetime,
-        cancelled_before: datetime,
-    ) -> int:
-        """Mark moderated leads as soft-deleted once retention expires."""
-        stmt = (
-            update(cls.model)
-            .where(
-                cls.model.deleted_at.is_(None),
-                or_(
-                    and_(
-                        cls.model.status
-                        == CooperationLeadStatus.APPROVED.value,
-                        cls.model.approved_at.is_not(None),
-                        cls.model.approved_at <= approved_before,
-                    ),
-                    and_(
-                        cls.model.status
-                        == CooperationLeadStatus.CANCELLED.value,
-                        cls.model.cancelled_at.is_not(None),
-                        cls.model.cancelled_at <= cancelled_before,
-                    ),
-                ),
-            )
-            .values(deleted_at=now)
-        )
-        result = await session.execute(stmt)
-        await session.commit()
-        return result.rowcount or 0
-
-    @classmethod
-    async def hard_delete_soft_deleted(
-        cls,
-        session: AsyncSession,
-        *,
-        deleted_before: datetime,
-    ) -> int:
-        """Permanently remove soft-deleted leads past the purge threshold."""
-        stmt = delete(cls.model).where(
-            cls.model.deleted_at.is_not(None),
-            cls.model.deleted_at <= deleted_before,
-        )
-        result = await session.execute(stmt)
-        await session.commit()
-        return result.rowcount or 0
-
-    @classmethod
     async def approve(
         cls,
         session: AsyncSession,
@@ -140,7 +86,7 @@ class CooperationLeadDAO(BaseDAO[CooperationLead]):
     ) -> CooperationLead | None:
         """Mark a lead as approved without committing (caller owns txn)."""
         lead = await cls.get_by_id(session, lead_id)
-        if lead is None or lead.deleted_at is not None:
+        if lead is None:
             return None
         lead.status = CooperationLeadStatus.APPROVED.value
         lead.approved_at = approved_at
@@ -162,7 +108,7 @@ class CooperationLeadDAO(BaseDAO[CooperationLead]):
     ) -> CooperationLead | None:
         """Mark a lead as cancelled."""
         lead = await cls.get_by_id(session, lead_id)
-        if lead is None or lead.deleted_at is not None:
+        if lead is None:
             return None
         lead.status = CooperationLeadStatus.CANCELLED.value
         lead.cancelled_at = cancelled_at

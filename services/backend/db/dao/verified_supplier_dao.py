@@ -18,11 +18,8 @@ class VerifiedSupplierDAO(BaseDAO[VerifiedSupplier]):
         session: AsyncSession,
         email: str,
     ) -> VerifiedSupplier | None:
-        """Load a non-deleted verified supplier by unique email."""
-        stmt = select(cls.model).where(
-            cls.model.email == email,
-            cls.model.deleted_at.is_(None),
-        )
+        """Load a verified supplier by unique email."""
+        stmt = select(cls.model).where(cls.model.email == email)
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -64,7 +61,6 @@ class VerifiedSupplierDAO(BaseDAO[VerifiedSupplier]):
             existing.source = "cooperation_approval"
             existing.source_lead_id = source_lead_id
             existing.approved_by_admin_id = approved_by_admin_id
-            existing.deleted_at = None
             session.add(existing)
             await session.flush()
             await session.refresh(existing)
@@ -94,18 +90,13 @@ class VerifiedSupplierDAO(BaseDAO[VerifiedSupplier]):
         page: int = 1,
         size: int = 20,
     ) -> tuple[list[VerifiedSupplier], int]:
-        """Return active verified suppliers newest-first."""
-        count_stmt = (
-            select(func.count())
-            .select_from(cls.model)
-            .where(cls.model.deleted_at.is_(None))
-        )
+        """Return verified suppliers newest-first."""
+        count_stmt = select(func.count()).select_from(cls.model)
         total = (await session.execute(count_stmt)).scalar_one()
 
         offset = max(page - 1, 0) * size
         stmt = (
             select(cls.model)
-            .where(cls.model.deleted_at.is_(None))
             .order_by(cls.model.created_at.desc())
             .offset(offset)
             .limit(size)

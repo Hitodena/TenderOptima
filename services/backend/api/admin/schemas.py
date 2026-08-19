@@ -146,3 +146,63 @@ class AdminCooperationSendRequest(BaseModel):
 class AdminCooperationSendResponse(BaseModel):
     status: str
     queued: int
+
+
+class PersonalDataPurposeResponse(BaseModel):
+    purpose_number: int
+    purpose: str
+    subjects: str
+    data_list: str
+    legal_basis: str
+    retention_text: str
+    retention_days_after_user_deletion: int | None
+    cleanup_supported: bool
+    cleanup_task_name: str | None
+    cleanup_description: str | None
+
+
+class DeletedUserPurposeCountdown(BaseModel):
+    purpose_number: int
+    retention_days: int
+    days_until_cleanup: int
+    ready: bool
+
+
+class DeletedUserRetentionItem(BaseModel):
+    id: uuid.UUID
+    email: EmailStr
+    full_name: str | None = None
+    deleted_at: datetime
+    deleted_reason: str | None = None
+    days_since_deleted: int
+    nearest_cleanup_days: int | None = None
+    purposes: list[DeletedUserPurposeCountdown]
+
+
+class DeletedUserRetentionPage(BaseModel):
+    items: list[DeletedUserRetentionItem]
+    total: int
+
+
+class PersonalDataCleanupRunResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    purpose_number: int
+    status: str
+    requested_by_admin_id: uuid.UUID | None = None
+    celery_task_id: str | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    eligible_users: int
+    affected_records: int
+    error: str | None = None
+    created_at: datetime
+
+
+class PersonalDataCleanupEnqueueResponse(BaseModel):
+    run_id: uuid.UUID
+    purpose_number: int
+    status: str
+    celery_task_id: str | None = None
+    message: str

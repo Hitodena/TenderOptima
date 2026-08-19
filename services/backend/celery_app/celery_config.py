@@ -186,7 +186,23 @@ class CeleryConfig:
             "queue": "mail_send",
             "routing_key": "mail.send",
         },
-        "retention.cleanup_cooperation_leads": {
+        "retention.cleanup_purpose_1": {
+            "queue": "analysis",
+            "routing_key": "analysis",
+        },
+        "retention.cleanup_purpose_2": {
+            "queue": "analysis",
+            "routing_key": "analysis",
+        },
+        "retention.cleanup_purpose_4": {
+            "queue": "analysis",
+            "routing_key": "analysis",
+        },
+        "retention.cleanup_purpose_5": {
+            "queue": "analysis",
+            "routing_key": "analysis",
+        },
+        "retention.cleanup_purpose_7": {
             "queue": "analysis",
             "routing_key": "analysis",
         },
@@ -224,11 +240,5 @@ class CeleryConfig:
             "schedule": crontab(minute="*/1"),
             "args": (),
             "options": {"queue": "mail_poll", "expires": 600},
-        },
-        "cleanup-cooperation-leads": {
-            "task": "retention.cleanup_cooperation_leads",
-            "schedule": crontab(hour=3, minute=15),
-            "args": (),
-            "options": {"queue": "analysis", "expires": 3600},
         },
     }

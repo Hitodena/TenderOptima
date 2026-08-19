@@ -47,7 +47,6 @@ def _lead_response(row: CooperationLead) -> CooperationLeadResponse:
         page_url=row.page_url,
         approved_at=row.approved_at,
         cancelled_at=row.cancelled_at,
-        deleted_at=row.deleted_at,
         created_at=row.created_at,
     )
 

@@ -7,6 +7,8 @@ export interface PersonalDataPurposeRow {
 	dataList: string
 	legalBasis: string
 	retention: string
+	retentionDays: number | null
+	cleanupSupported: boolean
 }
 
 export const PERSONAL_DATA_PURPOSES: PersonalDataPurposeRow[] = [
@@ -20,6 +22,8 @@ export const PERSONAL_DATA_PURPOSES: PersonalDataPurposeRow[] = [
 		legalBasis: 'Обработка необходима для исполнения обязательств по договору',
 		retention:
 			'В течение срока существования учетной записи. В случае удаления учетной записи — 1 год с момента получения запроса на удаление, если иное не предусмотрено законодательством',
+		retentionDays: 365,
+		cleanupSupported: true,
 	},
 	{
 		number: 2,
@@ -30,6 +34,8 @@ export const PERSONAL_DATA_PURPOSES: PersonalDataPurposeRow[] = [
 		legalBasis: 'Обработка необходима для исполнения обязательств по договору',
 		retention:
 			'В течение срока существования учетной записи. В случае удаления учетной записи — 30 дней с момента получения запроса на удаление, если иное не предусмотрено законодательством',
+		retentionDays: 30,
+		cleanupSupported: true,
 	},
 	{
 		number: 3,
@@ -41,6 +47,8 @@ export const PERSONAL_DATA_PURPOSES: PersonalDataPurposeRow[] = [
 		legalBasis: 'Обработка необходима для исполнения обязательств по договору',
 		retention:
 			'В течение срока существования учетной записи. В случае удаления учетной записи — 30 дней с момента получения запроса на удаление',
+		retentionDays: 30,
+		cleanupSupported: false,
 	},
 	{
 		number: 4,
@@ -53,6 +61,8 @@ export const PERSONAL_DATA_PURPOSES: PersonalDataPurposeRow[] = [
 		legalBasis: 'Обработка необходима для исполнения обязательств по договору',
 		retention:
 			'3 года с момента удаления учетной записи, если иное не предусмотрено законодательством',
+		retentionDays: 1095,
+		cleanupSupported: true,
 	},
 	{
 		number: 5,
@@ -64,6 +74,8 @@ export const PERSONAL_DATA_PURPOSES: PersonalDataPurposeRow[] = [
 		legalBasis: 'Обработка необходима для исполнения обязательств по договору',
 		retention:
 			'3 года с момента окончания рассмотрения обращения, если иное не предусмотрено законодательством',
+		retentionDays: 1095,
+		cleanupSupported: true,
 	},
 	{
 		number: 6,
@@ -75,6 +87,8 @@ export const PERSONAL_DATA_PURPOSES: PersonalDataPurposeRow[] = [
 			'Все персональные данные, обрабатываемые Оператором в отношении конкретного Пользователя',
 		legalBasis: 'Выполнение обязанностей, предусмотренных законодательными актами',
 		retention: '5 лет после окончания ведения и передачи в архив организации',
+		retentionDays: 1825,
+		cleanupSupported: false,
 	},
 	{
 		number: 7,
@@ -85,5 +99,7 @@ export const PERSONAL_DATA_PURPOSES: PersonalDataPurposeRow[] = [
 		dataList: 'Адрес электронной почты, имя (ФИО при наличии в профиле)',
 		legalBasis: 'Согласие Пользователя',
 		retention: '3 года',
+		retentionDays: 1095,
+		cleanupSupported: true,
 	},
 ]
