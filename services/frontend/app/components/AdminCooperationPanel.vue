@@ -164,35 +164,47 @@
 		</section>
 
 		<section class="space-y-6 border-t border-default pt-6">
-			<div class="flex items-center gap-2">
-				<p class="font-semibold text-highlighted">
-					Рассылка ответившим поставщикам
-				</p>
-				<UPopover
-					mode="click"
-					:content="{ side: 'bottom', align: 'start', sideOffset: 8 }"
-					class="inline-flex items-center justify-center"
-				>
-					<button
-						type="button"
-						class="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-elevated text-muted transition-colors hover:bg-accented hover:text-default"
-						aria-label="Справка по предложениям о сотрудничестве"
-						@click.stop
+			<div class="space-y-1.5">
+				<div class="flex items-center gap-2">
+					<p class="font-semibold text-highlighted">
+						Рассылка ответившим поставщикам
+					</p>
+					<UPopover
+						mode="click"
+						:content="{ side: 'bottom', align: 'start', sideOffset: 8 }"
+						class="inline-flex items-center justify-center"
 					>
-						<UIcon name="i-lucide-info" class="size-4" />
-					</button>
-					<template #content>
-						<div class="max-w-sm p-4 space-y-3 text-sm">
-							<p class="font-semibold text-highlighted">
-								Предложения о сотрудничестве
-							</p>
-							<p class="text-muted">
-								Список поставщиков, которые хотя бы раз ответили. Можно выбрать
-								нескольких и отправить одно письмо всем выбранным.
-							</p>
-						</div>
-					</template>
-				</UPopover>
+						<button
+							type="button"
+							class="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-elevated text-muted transition-colors hover:bg-accented hover:text-default"
+							aria-label="Справка по предложениям о сотрудничестве"
+							@click.stop
+						>
+							<UIcon name="i-lucide-info" class="size-4" />
+						</button>
+						<template #content>
+							<div class="max-w-sm p-4 space-y-3 text-sm">
+								<p class="font-semibold text-highlighted">
+									Предложения о сотрудничестве
+								</p>
+								<p class="text-muted">
+									Список поставщиков, которые хотя бы раз ответили. Можно выбрать
+									нескольких и отправить одно письмо всем выбранным.
+								</p>
+							</div>
+						</template>
+					</UPopover>
+				</div>
+				<p class="text-sm text-muted">
+					Форма сотрудничества:
+					<ULink
+						:to="cooperationFormUrl"
+						target="_blank"
+						class="text-primary underline underline-offset-2 break-all"
+					>
+						{{ cooperationFormUrl }}
+					</ULink>
+				</p>
 			</div>
 
 			<div class="flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -402,6 +414,8 @@ const PAGE_SIZE = 20
 const { get, post } = useApi()
 const toast = useToast()
 const { formatDate } = useFormatDate()
+const requestUrl = useRequestURL()
+const cooperationFormUrl = `${requestUrl.origin}/cooperation`
 
 const leads = ref<CooperationLeadResponse[]>([])
 const leadsTotal = ref(0)
@@ -585,6 +599,8 @@ const subject = ref('Предложение о сотрудничестве')
 const body = ref(`Добрый день!
 
 Мы хотели бы предложить вам долгосрочное сотрудничество.
+
+Заполните форму сотрудничества: ${cooperationFormUrl}
 
 Будем рады обсудить детали.`)
 const filesToUpload = ref<File[]>([])
