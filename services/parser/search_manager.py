@@ -9,6 +9,8 @@ from loguru import logger
 
 from yandex_parser import yandex_fetch_all
 
+_EMPTY_RESULT_MAX_ATTEMPTS = 3
+
 _REGION_MAP: dict[str, int] = {
     "ru": 225,
     "by": 149,
@@ -165,17 +167,29 @@ async def fetch_all(
         excluded_domains=len(excluded_domains),
     )
 
-    raw_results = await yandex_fetch_all(
-        api_key=yandex_api_key,
-        folder_id=yandex_folder_id,
-        user_id=user_id,
-        query=modified_query,
-        total_results=elements,
-    )
-
-    if not raw_results:
-        logger.warning("Yandex returned no results")
-        return []
+    raw_results: list[dict] = []
+    for attempt in range(1, _EMPTY_RESULT_MAX_ATTEMPTS + 1):
+        raw_results = await yandex_fetch_all(
+            api_key=yandex_api_key,
+            folder_id=yandex_folder_id,
+            user_id=user_id,
+            query=modified_query,
+            total_results=elements,
+        )
+        if raw_results:
+            break
+        if attempt < _EMPTY_RESULT_MAX_ATTEMPTS:
+            logger.warning(
+                "Yandex returned no results, retrying",
+                attempt=attempt,
+                max_attempts=_EMPTY_RESULT_MAX_ATTEMPTS,
+            )
+        else:
+            logger.warning(
+                "Yandex returned no results after all attempts",
+                max_attempts=_EMPTY_RESULT_MAX_ATTEMPTS,
+            )
+            return []
 
     # Deduplicate by normalised URL
     seen: set[str] = set()

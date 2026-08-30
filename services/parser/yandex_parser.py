@@ -17,8 +17,8 @@ API_URL_GET = "https://operation.api.cloud.yandex.net/operations/{}"
 POLL_INTERVAL = 5  # seconds between polls
 MAX_RETRIES = 5
 RETRY_DELAY = 10  # seconds between retry attempts
-REQUEST_TIMEOUT = 30  # seconds per HTTP call
-POLL_TIMEOUT = 15  # seconds per poll call
+REQUEST_TIMEOUT = 60  # seconds per HTTP call
+POLL_TIMEOUT = 30  # seconds per poll call
 
 
 class YandexSearchError(Exception):
