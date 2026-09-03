@@ -115,8 +115,9 @@ async def create_request(
     request = await RequestDAO.create(
         session,
         user_id=current_user.id,
-        query=body.query,
+        query=body.resolved_query,
         delivery_region=body.delivery_region,
+        is_multi_position=body.is_multi_position,
         status=RequestStatus.DRAFT,
     )
     return RequestResponse.model_validate(request)

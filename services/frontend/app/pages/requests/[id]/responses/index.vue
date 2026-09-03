@@ -1252,6 +1252,18 @@ const editingMatchIdx = ref<number | null>(null)
 const editingMatchValue = ref('')
 
 const UNIT_PRICE_REQUIREMENT = 'Цена за единицу без НДС'
+const TOTAL_WITHOUT_VAT_REQUIREMENT = 'Общая стоимость без НДС'
+const DELIVERY_TOTAL_REQUIREMENT = 'Общая цена поставки'
+const PRICE_REQUIREMENT_FALLBACKS = [
+	UNIT_PRICE_REQUIREMENT,
+	TOTAL_WITHOUT_VAT_REQUIREMENT,
+	DELIVERY_TOTAL_REQUIREMENT,
+] as const
+const PREFERRED_PRICE_ORDER = [
+	UNIT_PRICE_REQUIREMENT,
+	TOTAL_WITHOUT_VAT_REQUIREMENT,
+	DELIVERY_TOTAL_REQUIREMENT,
+] as const
 
 const comparison = ref<ComparisonResponse | null>(null)
 const loadingComparison = ref(false)
@@ -1259,19 +1271,22 @@ const exportingComparison = ref(false)
 const comparisonSortBy = ref<string | null>(UNIT_PRICE_REQUIREMENT)
 const comparisonSortAsc = ref(true)
 
+function prioritizePriceRequirements(list: string[]): string[] {
+	for (const preferred of PREFERRED_PRICE_ORDER) {
+		if (list.includes(preferred)) {
+			return [preferred, ...list.filter((req) => req !== preferred)]
+		}
+	}
+	return list
+}
+
 const priceRequirements = computed(() => {
 	const fromApi = comparison.value?.price_requirements ?? []
 	const fromRequirements = (comparison.value?.requirements ?? []).filter((req) =>
-		[UNIT_PRICE_REQUIREMENT, 'Общая стоимость без НДС'].includes(req),
+		(PRICE_REQUIREMENT_FALLBACKS as readonly string[]).includes(req),
 	)
 	const list = fromApi.length ? [...fromApi] : [...fromRequirements]
-	if (list.includes(UNIT_PRICE_REQUIREMENT)) {
-		return [
-			UNIT_PRICE_REQUIREMENT,
-			...list.filter((req) => req !== UNIT_PRICE_REQUIREMENT),
-		]
-	}
-	return list
+	return prioritizePriceRequirements(list)
 })
 
 const sortedComparisonSuppliers = computed((): ComparisonSupplier[] => {
@@ -1608,8 +1623,9 @@ async function fetchComparison() {
 			`/requests/${id}/analysis/comparison`,
 		)
 		const available = priceRequirements.value
-		if (available.includes(UNIT_PRICE_REQUIREMENT)) {
-			comparisonSortBy.value = UNIT_PRICE_REQUIREMENT
+		const preferred = PREFERRED_PRICE_ORDER.find((req) => available.includes(req))
+		if (preferred) {
+			comparisonSortBy.value = preferred
 		} else if (
 			!comparisonSortBy.value
 			|| !available.includes(comparisonSortBy.value)

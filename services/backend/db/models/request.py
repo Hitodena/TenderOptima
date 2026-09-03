@@ -16,6 +16,9 @@ class Request(IDMixinUUID, TimestampMixin, Base):
 
     query: Mapped[str] = mapped_column(nullable=False)
     delivery_region: Mapped[str] = mapped_column(nullable=False)
+    is_multi_position: Mapped[bool] = mapped_column(
+        nullable=False, default=False, server_default="false"
+    )
 
     description: Mapped[str | None] = mapped_column(Text)
     additional_params: Mapped[list | None] = mapped_column(JSON)

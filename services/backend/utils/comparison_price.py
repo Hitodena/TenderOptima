@@ -6,6 +6,7 @@ PRICE_REQUIREMENT_LABELS: frozenset[str] = frozenset(
     {
         "Цена за единицу без НДС",
         "Общая стоимость без НДС",
+        "Общая цена поставки",
     }
 )
 

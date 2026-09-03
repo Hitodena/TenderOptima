@@ -31,10 +31,10 @@
                     <p v-if="errors.emailSubject" class="text-xs text-error mt-1">{{ errors.emailSubject }}</p>
                 </UFormField>
 
-                <UFormField label="Описание товара/услуги" required>
+                <UFormField :label="descriptionFieldLabel" required>
                     <UTextarea
                         v-model="form.description"
-                        placeholder="Опишите детально товар или услугу, технические характеристики, объёмы..."
+                        :placeholder="descriptionFieldPlaceholder"
                         :rows="6"
                         class="w-full"
                         size="lg"
@@ -295,21 +295,54 @@ const toast = useToast()
 type Step = "params" | "confirm"
 const step = ref<Step>("params")
 
+const DEFAULT_LABELS_SINGLE = [
+    "Описание товара",
+    "Общая стоимость без НДС",
+    "Общая стоимость с НДС",
+    "Цена за единицу без НДС",
+    "Условия оплаты",
+    "Сроки поставки",
+    "Условия поставки",
+    "Гарантия",
+    "Наименование поставщика",
+    "Резидентство поставщика (страна)",
+    "ИНН / УНП",
+] as const
+
+const DEFAULT_LABELS_MULTI = [
+    "Описание товара",
+    "Общая цена поставки",
+    "Общая стоимость с НДС",
+    "Условия оплаты",
+    "Сроки поставки",
+    "Условия поставки",
+    "Гарантия",
+    "Наименование поставщика",
+    "Резидентство поставщика (страна)",
+    "ИНН / УНП",
+] as const
+
+const isMultiPosition = computed(() => Boolean(props.request?.is_multi_position))
+
+const descriptionFieldLabel = computed(() =>
+    isMultiPosition.value ? "Описание позиций закупки" : "Описание товара/услуги",
+)
+
+const descriptionFieldPlaceholder = computed(() =>
+    isMultiPosition.value
+        ? "Опишите позиции закупки, технические характеристики, объёмы..."
+        : "Опишите детально товар или услугу, технические характеристики, объёмы...",
+)
+
+function defaultLabels(): string[] {
+    return [
+        ...(isMultiPosition.value ? DEFAULT_LABELS_MULTI : DEFAULT_LABELS_SINGLE),
+    ]
+}
+
 const form = reactive({
     description: "",
-    labels: [
-        "Описание товара",
-        "Общая стоимость без НДС",
-        "Общая стоимость с НДС",
-        "Цена за единицу без НДС",
-        "Условия оплаты",
-        "Сроки поставки",
-        "Условия поставки",
-        "Гарантия",
-        "Наименование поставщика",
-        "Резидентство поставщика (страна)",
-        "ИНН / УНП",
-    ] as string[],
+    labels: defaultLabels(),
     newLabel: "",
     emailMessage: "",
     businessInfo: "",
@@ -369,6 +402,8 @@ function loadFromRequest() {
     const ap = r.additional_params
     if (ap && Array.isArray(ap) && ap.length > 0) {
         form.labels = [...ap]
+    } else {
+        form.labels = defaultLabels()
     }
     const defaultSubject = r.query ? `Запрос коммерческого предложения — ${r.query}` : ""
     form.emailSubject = r.email_subject || defaultSubject

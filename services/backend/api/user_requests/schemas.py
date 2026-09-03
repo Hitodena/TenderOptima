@@ -1,10 +1,15 @@
 import uuid
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from backend.enums import RequestStatus
+
+QUERY_MAX_LENGTH = 2000
+ITEM_MAX_LENGTH = 500
+ITEMS_MIN_COUNT = 2
+ITEMS_MAX_COUNT = 8
 
 
 class RequestCreate(BaseModel):
@@ -13,14 +18,27 @@ class RequestCreate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, from_attributes=True)
 
     query: Annotated[
-        str,
+        str | None,
         Field(
+            default=None,
             description="Main search query describing the product needed",
             min_length=3,
-            max_length=500,
+            max_length=QUERY_MAX_LENGTH,
             examples=["промышленные насосы"],
         ),
-    ]
+    ] = None
+    items: Annotated[
+        list[str] | None,
+        Field(
+            default=None,
+            description=(
+                "Multiple procurement positions; joined into query with commas"
+            ),
+            min_length=ITEMS_MIN_COUNT,
+            max_length=ITEMS_MAX_COUNT,
+            examples=[["картонные коробки", "флаконы"]],
+        ),
+    ] = None
     delivery_region: Annotated[
         str,
         Field(
@@ -30,6 +48,63 @@ class RequestCreate(BaseModel):
             examples=["Минск"],
         ),
     ]
+
+    @model_validator(mode="after")
+    def validate_query_or_items(self) -> Self:
+        """Require exactly one of query or items; normalize items."""
+        has_query = bool(self.query and self.query.strip())
+        raw_items = self.items
+        cleaned_items: list[str] = []
+        if raw_items is not None:
+            cleaned_items = [
+                item.strip() for item in raw_items if item and item.strip()
+            ]
+            for item in cleaned_items:
+                if len(item) < 3:
+                    raise ValueError(
+                        "Each position must be at least 3 characters"
+                    )
+                if len(item) > ITEM_MAX_LENGTH:
+                    raise ValueError(
+                        f"Each position must be at most {ITEM_MAX_LENGTH} "
+                        "characters"
+                    )
+            self.items = cleaned_items
+
+        has_items = bool(cleaned_items)
+        if has_query == has_items:
+            raise ValueError(
+                "Provide either query or items (at least "
+                f"{ITEMS_MIN_COUNT} positions), not both"
+            )
+        if has_items:
+            if len(cleaned_items) < ITEMS_MIN_COUNT:
+                raise ValueError(
+                    f"At least {ITEMS_MIN_COUNT} positions are required"
+                )
+            if len(cleaned_items) > ITEMS_MAX_COUNT:
+                raise ValueError(
+                    f"At most {ITEMS_MAX_COUNT} positions are allowed"
+                )
+            joined = ", ".join(cleaned_items)
+            if len(joined) > QUERY_MAX_LENGTH:
+                raise ValueError(
+                    f"Joined query must be at most {QUERY_MAX_LENGTH} "
+                    "characters"
+                )
+        return self
+
+    @property
+    def resolved_query(self) -> str:
+        """Return the stored query string (joined when multi-position)."""
+        if self.items:
+            return ", ".join(self.items)
+        assert self.query is not None
+        return self.query.strip()
+
+    @property
+    def is_multi_position(self) -> bool:
+        return bool(self.items)
 
 
 class RequestResponse(BaseModel):
@@ -57,6 +132,16 @@ class RequestResponse(BaseModel):
             description="Original search query", examples=["industrial pumps"]
         ),
     ]
+    is_multi_position: Annotated[
+        bool,
+        Field(
+            default=False,
+            description=(
+                "True when the request was created with multiple "
+                "procurement positions"
+            ),
+        ),
+    ] = False
     status: Annotated[
         RequestStatus,
         Field(

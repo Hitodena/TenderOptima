@@ -501,7 +501,8 @@ export interface UserUpdate {
 }
 
 export interface RequestCreate {
-	query: string;
+	query?: string;
+	items?: string[];
 	delivery_region: string;
 }
 
@@ -522,6 +523,7 @@ export interface RequestResponse {
 	id: string;
 	user_id: string;
 	query: string;
+	is_multi_position?: boolean;
 	status: RequestStatus;
 	delivery_region: string;
 	description: string;
