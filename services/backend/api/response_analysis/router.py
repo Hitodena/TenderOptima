@@ -24,6 +24,7 @@ from backend.services.analysis.email_queue import (
     request_has_requirements,
 )
 from backend.utils.comparison_price import (
+    apply_delivery_total_to_matches,
     is_price_requirement,
     parse_offer_numeric,
 )
@@ -115,7 +116,11 @@ def _analysis_to_response(
             matches=[],
             previous_parameters=previous_parameters,
         )
-    result = EmailAnalysisResult(**row.raw_llm_response)
+    data = dict(row.raw_llm_response)
+    matches = data.get("matches")
+    if isinstance(matches, list):
+        data["matches"] = apply_delivery_total_to_matches(matches)
+    result = EmailAnalysisResult(**data)
     return EmailAnalysisResponse(
         message_id=str(message_id),
         status=TZAnalysisRunStatus(row.status),
@@ -237,7 +242,9 @@ async def patch_response_analysis(
             if new_value is not None and str(new_value).strip():
                 entry["status"] = TZAnalysisStatus.MET.value
                 entry["explanation"] = None
-        data["matches"] = list(by_req.values())
+        data["matches"] = apply_delivery_total_to_matches(
+            list(by_req.values())
+        )
     await ResponseAnalysisDAO.update_fields(
         session, row.id, raw_llm_response=data
     )

@@ -1254,6 +1254,7 @@ const editingMatchValue = ref('')
 const UNIT_PRICE_REQUIREMENT = 'Цена за единицу без НДС'
 const TOTAL_WITHOUT_VAT_REQUIREMENT = 'Общая стоимость без НДС'
 const DELIVERY_TOTAL_REQUIREMENT = 'Общая цена поставки'
+const POSITION_PRICE_PREFIX = 'Цена без НДС:'
 const PRICE_REQUIREMENT_FALLBACKS = [
 	UNIT_PRICE_REQUIREMENT,
 	TOTAL_WITHOUT_VAT_REQUIREMENT,
@@ -1271,6 +1272,14 @@ const exportingComparison = ref(false)
 const comparisonSortBy = ref<string | null>(UNIT_PRICE_REQUIREMENT)
 const comparisonSortAsc = ref(true)
 
+function isPriceRequirementLabel(req: string): boolean {
+	const text = req.trim()
+	return (
+		(PRICE_REQUIREMENT_FALLBACKS as readonly string[]).includes(text)
+		|| text.startsWith(POSITION_PRICE_PREFIX)
+	)
+}
+
 function prioritizePriceRequirements(list: string[]): string[] {
 	for (const preferred of PREFERRED_PRICE_ORDER) {
 		if (list.includes(preferred)) {
@@ -1282,8 +1291,8 @@ function prioritizePriceRequirements(list: string[]): string[] {
 
 const priceRequirements = computed(() => {
 	const fromApi = comparison.value?.price_requirements ?? []
-	const fromRequirements = (comparison.value?.requirements ?? []).filter((req) =>
-		(PRICE_REQUIREMENT_FALLBACKS as readonly string[]).includes(req),
+	const fromRequirements = (comparison.value?.requirements ?? []).filter(
+		(req) => isPriceRequirementLabel(req),
 	)
 	const list = fromApi.length ? [...fromApi] : [...fromRequirements]
 	return prioritizePriceRequirements(list)

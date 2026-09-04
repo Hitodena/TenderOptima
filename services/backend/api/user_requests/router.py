@@ -43,6 +43,7 @@ from backend.core.config import ALLOWED_CONTENT_TYPES, Config
 from backend.db.dao import EmailMessageDAO, RequestDAO, RequestSupplierDAO
 from backend.db.models import User
 from backend.enums import RequestStatus
+from backend.utils.comparison_price import merge_multi_position_price_params
 from backend.utils.email_utils import build_request_email_body
 
 router = APIRouter(prefix="/requests", tags=["Requests"])
@@ -260,9 +261,20 @@ async def update_request_additional_params(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> RequestResponse:
     """Update description and additional_params before mailing."""
-    await get_request_or_404(request_id, session, current_user)
+    existing = await get_request_or_404(request_id, session, current_user)
+    is_multi = (
+        body.is_multi_position
+        if body.is_multi_position is not None
+        else bool(existing.is_multi_position)
+    )
+    additional_params = body.additional_params
+    if is_multi:
+        additional_params = merge_multi_position_price_params(
+            additional_params,
+            body.description,
+        )
     update_values: dict = {
-        "additional_params": body.additional_params,
+        "additional_params": additional_params,
         "description": body.description,
     }
     if body.is_multi_position is not None:

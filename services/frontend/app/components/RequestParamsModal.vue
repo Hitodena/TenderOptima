@@ -417,11 +417,55 @@ const DEFAULT_LABELS_MULTI = [
     "ИНН / УНП",
 ] as const
 
+const POSITION_PRICE_PREFIX = "Цена без НДС:"
+const DELIVERY_TOTAL_LABEL = "Общая цена поставки"
+const POSITION_TITLE_MAX = 60
+
 const multiPosition = ref(false)
 const labelsFromServer = ref(false)
 
 function defaultLabels(multi: boolean): string[] {
     return [...(multi ? DEFAULT_LABELS_MULTI : DEFAULT_LABELS_SINGLE)]
+}
+
+function isPositionPriceLabel(label: string): boolean {
+    return label.trim().startsWith(POSITION_PRICE_PREFIX)
+}
+
+function positionPriceLabelsFromParts(parts: string[]): string[] {
+    return parts
+        .map((text) => text.trim().split(/\r?\n/)[0]?.trim() ?? "")
+        .filter(Boolean)
+        .map((title) => {
+            const short = title.slice(0, POSITION_TITLE_MAX).replace(/[ .,;:]+$/u, "")
+            return `${POSITION_PRICE_PREFIX} ${short}`
+        })
+}
+
+/** Inject per-item VAT-free price rows; keep delivery total. */
+function mergeMultiPositionPriceLabels(
+    labels: string[],
+    positionParts: string[],
+): string[] {
+    const perItem = positionPriceLabelsFromParts(positionParts)
+    if (!perItem.length) return [...labels]
+
+    const withoutStale = labels.filter(
+        (item) => !isPositionPriceLabel(item) && item !== DELIVERY_TOTAL_LABEL,
+    )
+    let insertAt = 0
+    for (let i = 0; i < withoutStale.length; i++) {
+        if (withoutStale[i] === "Описание товара") {
+            insertAt = i + 1
+            break
+        }
+    }
+    return [
+        ...withoutStale.slice(0, insertAt),
+        ...perItem,
+        DELIVERY_TOTAL_LABEL,
+        ...withoutStale.slice(insertAt),
+    ]
 }
 
 const form = reactive({
@@ -708,9 +752,18 @@ async function goToConfirm() {
 
     loadingMessage.value = true
     try {
+        const description = resolvedDescription()
+        let labels = [...form.labels]
+        if (multiPosition.value) {
+            const parts = form.positionDescriptions
+                .map((item) => item.trim())
+                .filter(Boolean)
+            labels = mergeMultiPositionPriceLabels(labels, parts)
+            form.labels = labels
+        }
         const body: RequestUpdate = {
-            description: resolvedDescription(),
-            additional_params: form.labels.length > 0 ? form.labels : null,
+            description,
+            additional_params: labels.length > 0 ? labels : null,
             is_multi_position: multiPosition.value,
         }
         await patch(`/requests/${props.request.id}`, body)

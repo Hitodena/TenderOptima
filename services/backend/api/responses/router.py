@@ -28,6 +28,7 @@ from backend.enums import TZAnalysisRunStatus
 from backend.schemas.analysis import EmailAnalysisResult
 from backend.services.analysis.email_queue import queue_email_analysis
 from backend.utils.comparison_price import (
+    apply_delivery_total,
     compute_percent_vs_min,
     compute_row_minima,
     is_price_requirement,
@@ -168,6 +169,7 @@ async def _build_comparison(
                     numeric_values[req] = match_numeric[req]
                 if req in prev_map and prev_map[req] is not None:
                     previous_values[req] = str(prev_map[req])
+        apply_delivery_total(requirements, numeric_values, values)
         has_extracted = any(
             value is not None and str(value).strip()
             for value in values.values()
