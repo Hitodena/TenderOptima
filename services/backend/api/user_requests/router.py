@@ -115,9 +115,9 @@ async def create_request(
     request = await RequestDAO.create(
         session,
         user_id=current_user.id,
-        query=body.resolved_query,
+        query=body.query,
         delivery_region=body.delivery_region,
-        is_multi_position=body.is_multi_position,
+        is_multi_position=False,
         status=RequestStatus.DRAFT,
     )
     return RequestResponse.model_validate(request)
@@ -261,12 +261,13 @@ async def update_request_additional_params(
 ) -> RequestResponse:
     """Update description and additional_params before mailing."""
     await get_request_or_404(request_id, session, current_user)
-    await RequestDAO.update_fields(
-        session,
-        request_id,
-        additional_params=body.additional_params,
-        description=body.description,
-    )
+    update_values: dict = {
+        "additional_params": body.additional_params,
+        "description": body.description,
+    }
+    if body.is_multi_position is not None:
+        update_values["is_multi_position"] = body.is_multi_position
+    await RequestDAO.update_fields(session, request_id, **update_values)
     updated = await RequestDAO.get_by_id(session, request_id)
     return RequestResponse.model_validate(updated)
 

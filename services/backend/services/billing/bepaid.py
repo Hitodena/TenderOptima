@@ -31,6 +31,15 @@ class BePaidCheckoutResult:
     redirect_url: str
 
 
+@dataclass(frozen=True)
+class BePaidSubscriptionResult:
+    """Result of creating a bePaid recurring subscription."""
+
+    subscription_id: str
+    token: str
+    redirect_url: str
+
+
 def amount_to_minor(amount: Decimal) -> int:
     """Convert a major-unit Decimal amount to minor currency units (kopecks)."""
     return int((amount * 100).quantize(Decimal("1")))
@@ -180,6 +189,194 @@ async def create_checkout(
             "bePaid checkout response missing token/redirect_url"
         )
     return BePaidCheckoutResult(token=token, redirect_url=redirect_url)
+
+
+def build_subscription_payload(
+    *,
+    config: Config,
+    amount_minor: int,
+    currency_code: str,
+    plan_title: str,
+    tracking_id: str,
+    customer_email: str | None,
+    payment_id: str,
+) -> dict[str, Any]:
+    """Build JSON body for ``POST /subscriptions`` (monthly infinite plan)."""
+    frontend = config.frontend_base_url.rstrip("/")
+    api_base = config.api_public_base_url.rstrip("/")
+    return_url = (
+        f"{frontend}/subscription/payment/success?payment_id={payment_id}"
+    )
+    payload: dict[str, Any] = {
+        "notification_url": f"{api_base}/billing/payments/webhook",
+        "return_url": return_url,
+        "tracking_id": tracking_id,
+        "settings": {"language": "ru"},
+        "plan": {
+            "currency": currency_code,
+            "title": plan_title,
+            "language": "ru",
+            "test": config.bepaid_test,
+            "infinite": True,
+            "number_payment_attempts": 3,
+            "plan": {
+                "amount": amount_minor,
+                "interval": 1,
+                "interval_unit": "month",
+            },
+        },
+    }
+    if customer_email:
+        payload["customer"] = {"email": customer_email}
+    return payload
+
+
+def _bepaid_auth(config: Config) -> tuple[str, str]:
+    return (config.bepaid_shop_id.strip(), config.bepaid_secret_key.strip())
+
+
+def _bepaid_headers() -> dict[str, str]:
+    return {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "X-API-Version": "2",
+    }
+
+
+async def create_subscription(
+    *,
+    config: Config,
+    amount_minor: int,
+    currency_code: str,
+    plan_title: str,
+    tracking_id: str,
+    customer_email: str | None,
+    payment_id: str,
+) -> BePaidSubscriptionResult:
+    """Create a bePaid monthly subscription and return hosted payment URL."""
+    if not config.bepaid_configured():
+        raise BePaidError("bePaid credentials are not configured")
+
+    payload = build_subscription_payload(
+        config=config,
+        amount_minor=amount_minor,
+        currency_code=currency_code,
+        plan_title=plan_title,
+        tracking_id=tracking_id,
+        customer_email=customer_email,
+        payment_id=payment_id,
+    )
+    url = f"{config.bepaid_api_url.rstrip('/')}/subscriptions"
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(
+            url,
+            json=payload,
+            auth=_bepaid_auth(config),
+            headers=_bepaid_headers(),
+        )
+
+    if response.status_code >= 400:
+        logger.warning(
+            "bePaid subscription create failed",
+            status=response.status_code,
+            body=response.text[:500],
+        )
+        raise BePaidError(
+            f"bePaid subscription error: {response.status_code}",
+            status_code=response.status_code,
+        )
+
+    data = response.json()
+    subscription_id = data.get("id")
+    token = data.get("token")
+    redirect_url = data.get("redirect_url")
+    if not subscription_id or not token or not redirect_url:
+        raise BePaidError(
+            "bePaid subscription response missing id/token/redirect_url"
+        )
+    return BePaidSubscriptionResult(
+        subscription_id=str(subscription_id),
+        token=str(token),
+        redirect_url=str(redirect_url),
+    )
+
+
+async def cancel_subscription(
+    *,
+    config: Config,
+    subscription_id: str,
+    reason: str = "Customer's request",
+) -> None:
+    """Cancel a bePaid subscription so further charges stop."""
+    if not config.bepaid_configured():
+        raise BePaidError("bePaid credentials are not configured")
+    if not subscription_id.strip():
+        raise BePaidError("bePaid subscription id is required")
+
+    url = (
+        f"{config.bepaid_api_url.rstrip('/')}"
+        f"/subscriptions/{subscription_id.strip()}/cancel"
+    )
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(
+            url,
+            json={"cancel_reason": reason},
+            auth=_bepaid_auth(config),
+            headers=_bepaid_headers(),
+        )
+
+    if response.status_code >= 400:
+        logger.warning(
+            "bePaid subscription cancel failed",
+            subscription_id=subscription_id,
+            status=response.status_code,
+            body=response.text[:500],
+        )
+        raise BePaidError(
+            f"bePaid cancel error: {response.status_code}",
+            status_code=response.status_code,
+        )
+
+
+def is_subscription_webhook(payload: dict[str, Any]) -> bool:
+    """True when payload is a bePaid subscription notification."""
+    if payload.get("event") and str(payload["event"]).endswith(
+        ".subscription"
+    ):
+        return True
+    sub_id = payload.get("id")
+    return isinstance(sub_id, str) and sub_id.startswith("sbs_")
+
+
+def extract_subscription_webhook_fields(
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Normalize subscription webhook into common fields for activation."""
+    last_tx = payload.get("last_transaction")
+    last_tx = last_tx if isinstance(last_tx, dict) else {}
+    plan = payload.get("plan") if isinstance(payload.get("plan"), dict) else {}
+    plan_inner = plan.get("plan") if isinstance(plan.get("plan"), dict) else {}
+    event = payload.get("event")
+    state = str(payload.get("state") or "")
+    tx_status = last_tx.get("status")
+    return {
+        "kind": "subscription",
+        "subscription_id": payload.get("id"),
+        "tracking_id": payload.get("tracking_id"),
+        "state": state,
+        "event": event,
+        "uid": last_tx.get("uid"),
+        "tx_status": tx_status,
+        "amount": plan_inner.get("amount") or plan.get("amount"),
+        "currency": plan.get("currency"),
+        "renew_at": payload.get("renew_at"),
+        "test": plan.get("test") if "test" in plan else payload.get("test"),
+        "is_terminal_stop": state
+        in ("canceled", "failed", "error", "expired"),
+        "is_successful_charge": tx_status in ("successful", "success")
+        and state not in ("canceled", "failed", "error", "expired"),
+    }
 
 
 def _normalize_public_key(raw: str) -> bytes:

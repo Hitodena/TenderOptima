@@ -24,6 +24,7 @@ const latestPayment = ref<PaymentStatusResponse | null>(null)
 const showBillingModal = ref(false)
 const selectedMethod = ref<SubscriptionPaymentMethod>('card')
 const paying = ref(false)
+const cancellingRenew = ref(false)
 
 const [userResult, paymentResult] = await Promise.allSettled([
 	get<UserResponse>('/auth/me'),
@@ -53,6 +54,14 @@ const isPaidPeriod = computed(() => {
 const paidUntilLabel = computed(() =>
 	formatExpiryDate(subscription.value?.expires_at),
 )
+
+const autoRenew = computed(() => Boolean(subscription.value?.auto_renew))
+
+const nextChargeLabel = computed(() => {
+	const raw = subscription.value?.bepaid_renew_at
+	if (!raw) return null
+	return formatDate(raw)
+})
 
 const payableAmount = computed(() => {
 	const sub = subscription.value
@@ -100,29 +109,36 @@ const latestPaymentLabel = computed(() => {
 const paymentMethods = computed<RadioGroupItem[]>(() => [
 	{
 		label: 'Банковская карта',
-		description: 'Visa, Mastercard, Белкарт и другие',
+		description: 'Ежемесячное автопродление: Visa, Mastercard, Белкарт',
 		value: 'card',
 		icon: 'i-lucide-credit-card',
 	},
 	{
 		label: 'СБП',
-		description: 'Система быстрых платежей по QR',
+		description: 'Разовая оплата за 1 месяц по QR',
 		value: 'sbp',
 		icon: 'i-lucide-smartphone',
 	},
 	{
 		label: 'E-POS',
-		description: 'Оплата через E-POS в мобильном банке',
+		description: 'Разовая оплата за 1 месяц через E-POS',
 		value: 'epos',
 		icon: 'i-lucide-qr-code',
 	},
 	{
 		label: 'ЕРИП',
-		description: 'Оплата через систему «Расчёт» (ЕРИП)',
+		description: 'Разовая оплата за 1 месяц через систему «Расчёт»',
 		value: 'erip',
 		icon: 'i-lucide-landmark',
 	},
 ])
+
+const onlinePayHint = computed(() => {
+	if (selectedMethod.value === 'card') {
+		return 'Карта: после оплаты bePaid будет списывать сумму каждый месяц, пока не отключите автопродление.'
+	}
+	return 'СБП, E-POS и ЕРИП — разовая оплата за один месяц без повторного списания.'
+})
 
 async function startOnlinePayment() {
 	if (!subscription.value || payableAmount.value == null) {
@@ -157,6 +173,35 @@ async function startOnlinePayment() {
 	}
 }
 
+async function cancelAutoRenew() {
+	cancellingRenew.value = true
+	try {
+		await post('/billing/payments/subscription/cancel', {})
+		user.value = await get<UserResponse>('/auth/me')
+		toast.add({
+			title: 'Автопродление отключено',
+			description: paidUntilLabel.value
+				? `Доступ сохранится до ${paidUntilLabel.value}.`
+				: 'Повторные списания остановлены.',
+			color: 'success',
+			icon: 'i-lucide-check',
+		})
+	} catch (e: unknown) {
+		const detail = (e as { response?: { data?: { detail?: string } } })
+			?.response?.data?.detail
+		toast.add({
+			title: 'Не удалось отменить',
+			description: typeof detail === 'string'
+				? detail
+				: 'Попробуйте позже или обратитесь в поддержку.',
+			color: 'error',
+			icon: 'i-lucide-circle-x',
+		})
+	} finally {
+		cancellingRenew.value = false
+	}
+}
+
 const { target: heroReveal } = useScrollReveal()
 const { target: limitsReveal } = useScrollReveal()
 const { target: paymentReveal } = useScrollReveal()
@@ -174,7 +219,8 @@ const { target: paymentReveal } = useScrollReveal()
 				</h1>
 				<p class="text-sm sm:text-base text-muted max-w-3xl">
 					Текущие лимиты, срок действия и способы оплаты.
-					Онлайн-оплата продлевает доступ автоматически; безнал активирует администратор.
+					Оплата картой включает ежемесячное автопродление; СБП, E-POS и ЕРИП — разовая оплата за месяц.
+					Безнал активирует администратор.
 				</p>
 			</div>
 
@@ -201,6 +247,12 @@ const { target: paymentReveal } = useScrollReveal()
 								color="success"
 								variant="outline"
 								:label="`Оплачена до ${paidUntilLabel}`"
+							/>
+							<UBadge
+								v-if="autoRenew"
+								color="primary"
+								variant="subtle"
+								label="Автопродление"
 							/>
 							<UBadge
 								v-if="subscription.module_1_enabled"
@@ -302,7 +354,8 @@ const { target: paymentReveal } = useScrollReveal()
 								Онлайн-оплата
 							</h3>
 							<p class="text-sm text-muted">
-								Карты, СБП, E-POS и ЕРИП через bePaid. Доступ продлевается сразу после успешной оплаты.
+								Карта — ежемесячное автопродление через bePaid.
+								СБП, E-POS и ЕРИП — разовая оплата за месяц; доступ продлевается сразу после успешной оплаты.
 							</p>
 						</div>
 					</div>
@@ -313,8 +366,28 @@ const { target: paymentReveal } = useScrollReveal()
 						variant="soft"
 						icon="i-lucide-circle-check"
 						:title="paidUntilLabel ? `Подписка оплачена до ${paidUntilLabel}` : 'Подписка оплачена'"
-						description="Можно оплатить снова, чтобы продлить срок и обновить период лимитов."
+						:description="autoRenew
+							? (nextChargeLabel
+								? `Автопродление включено. Следующее списание: ${nextChargeLabel}.`
+								: 'Автопродление включено. Можно оплатить снова картой, чтобы обновить сумму или карту.')
+							: 'Можно оплатить снова, чтобы продлить срок.'"
 					/>
+
+					<div
+						v-if="autoRenew"
+						class="flex flex-wrap items-center gap-3"
+					>
+						<UButton
+							color="neutral"
+							variant="outline"
+							leading-icon="i-lucide-ban"
+							class="cursor-pointer"
+							:loading="cancellingRenew"
+							@click="cancelAutoRenew"
+						>
+							Отменить автопродление
+						</UButton>
+					</div>
 
 					<p
 						v-if="latestPaymentLabel"
@@ -327,7 +400,10 @@ const { target: paymentReveal } = useScrollReveal()
 						v-if="amountLabel"
 						class="text-sm text-highlighted"
 					>
-						{{ isPaidPeriod ? 'Стоимость продления:' : 'К оплате:' }}
+						{{ selectedMethod === 'card'
+							? (isPaidPeriod ? 'Сумма ежемесячного списания:' : 'К оплате ежемесячно:')
+							: (isPaidPeriod ? 'Стоимость продления на 1 месяц:' : 'К оплате за 1 месяц:')
+						}}
 						<span class="font-semibold">{{ amountLabel }}</span>
 					</p>
 					<p
@@ -335,6 +411,10 @@ const { target: paymentReveal } = useScrollReveal()
 						class="text-sm text-muted"
 					>
 						Для текущего тарифа сумма онлайн-оплаты не задана. Воспользуйтесь счётом или обратитесь к администратору.
+					</p>
+
+					<p class="text-xs text-muted">
+						{{ onlinePayHint }}
 					</p>
 
 					<URadioGroup
@@ -354,7 +434,10 @@ const { target: paymentReveal } = useScrollReveal()
 						:disabled="payableAmount == null"
 						@click="startOnlinePayment"
 					>
-						{{ isPaidPeriod ? 'Оплатить снова' : 'Перейти к оплате' }}
+						{{ selectedMethod === 'card'
+							? (isPaidPeriod ? 'Подключить карту снова' : 'Оплатить картой')
+							: (isPaidPeriod ? 'Оплатить снова' : 'Перейти к оплате')
+						}}
 					</UButton>
 				</UCard>
 			</div>

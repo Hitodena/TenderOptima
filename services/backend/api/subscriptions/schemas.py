@@ -29,6 +29,8 @@ class SubscriptionResponse(BaseModel):
     is_active: bool
     starts_at: datetime | None = None
     expires_at: datetime | None = None
+    auto_renew: bool = False
+    bepaid_renew_at: datetime | None = None
     searches_used_this_month: int = 0
     emails_sent_this_month: int = 0
     kp_processed_this_month: int = 0

@@ -56,6 +56,8 @@ def subscription_to_response(
         is_active=row.is_active,
         starts_at=row.starts_at,
         expires_at=row.expires_at,
+        auto_renew=bool(row.auto_renew),
+        bepaid_renew_at=row.bepaid_renew_at,
         searches_used_this_month=(
             usage.searches_used if usage is not None else 0
         ),

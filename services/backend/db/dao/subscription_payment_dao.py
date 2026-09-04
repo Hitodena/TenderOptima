@@ -24,6 +24,16 @@ class SubscriptionPaymentDAO(BaseDAO[SubscriptionPayment]):
         return result.scalar_one_or_none()
 
     @classmethod
+    async def get_by_bepaid_uid(
+        cls,
+        session: AsyncSession,
+        bepaid_uid: str,
+    ) -> SubscriptionPayment | None:
+        stmt = select(cls.model).where(cls.model.bepaid_uid == bepaid_uid)
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @classmethod
     async def get_for_user(
         cls,
         session: AsyncSession,

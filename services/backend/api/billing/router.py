@@ -3,6 +3,7 @@
 import json
 import secrets
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -52,8 +53,12 @@ from backend.enums import (
 from backend.services.billing.bepaid import (
     BePaidError,
     amount_to_minor,
+    cancel_subscription,
     create_checkout,
+    create_subscription,
+    extract_subscription_webhook_fields,
     extract_webhook_fields,
+    is_subscription_webhook,
     map_webhook_status,
     verify_webhook_basic_auth,
     verify_webhook_signature,
@@ -478,18 +483,79 @@ async def create_payment_checkout(
         f"Подписка TenderOptima {quote.plan_title} ({quote.receipt_id})"
     )
     customer_email = current_user.contact_email or current_user.email
+    use_recurring = body.method == SubscriptionPaymentMethod.CARD
+
+    if use_recurring and subscription.bepaid_subscription_id:
+        try:
+            await cancel_subscription(
+                config=config,
+                subscription_id=subscription.bepaid_subscription_id,
+                reason="Replaced by new subscription checkout",
+            )
+        except BePaidError as exc:
+            logger.warning(
+                "Failed to cancel previous bePaid subscription",
+                subscription_id=subscription.bepaid_subscription_id,
+                error=str(exc),
+            )
+        await SubscriptionDAO.upsert_for_user(
+            session,
+            current_user.id,
+            auto_renew=False,
+            bepaid_subscription_id=None,
+            bepaid_renew_at=None,
+        )
 
     try:
-        checkout = await create_checkout(
-            config=config,
-            method=body.method,
-            amount_minor=amount_minor,
-            currency_code=quote.currency_code,
-            description=description,
-            tracking_id=tracking_id,
-            customer_email=customer_email,
-            payment_id=str(payment.id),
-        )
+        if use_recurring:
+            plan_title = f"TenderOptima {quote.plan_title} — 1 месяц"
+            result = await create_subscription(
+                config=config,
+                amount_minor=amount_minor,
+                currency_code=quote.currency_code,
+                plan_title=plan_title,
+                tracking_id=tracking_id,
+                customer_email=customer_email,
+                payment_id=str(payment.id),
+            )
+            payment = await SubscriptionPaymentDAO.update_fields(
+                session,
+                payment.id,
+                bepaid_token=result.token,
+                redirect_url=result.redirect_url,
+                bepaid_subscription_id=result.subscription_id,
+            )
+            redirect_url = result.redirect_url
+            logger.info(
+                "bePaid subscription checkout created",
+                payment_id=str(payment.id if payment else None),
+                bepaid_subscription_id=result.subscription_id,
+                amount_minor=amount_minor,
+            )
+        else:
+            checkout = await create_checkout(
+                config=config,
+                method=body.method,
+                amount_minor=amount_minor,
+                currency_code=quote.currency_code,
+                description=description,
+                tracking_id=tracking_id,
+                customer_email=customer_email,
+                payment_id=str(payment.id),
+            )
+            payment = await SubscriptionPaymentDAO.update_fields(
+                session,
+                payment.id,
+                bepaid_token=checkout.token,
+                redirect_url=checkout.redirect_url,
+            )
+            redirect_url = checkout.redirect_url
+            logger.info(
+                "bePaid checkout created",
+                payment_id=str(payment.id if payment else None),
+                method=body.method.value,
+                amount_minor=amount_minor,
+            )
     except BePaidError as exc:
         await SubscriptionPaymentDAO.update_fields(
             session,
@@ -506,32 +572,72 @@ async def create_payment_checkout(
             detail="Failed to create payment session",
         ) from exc
 
-    payment = await SubscriptionPaymentDAO.update_fields(
-        session,
-        payment.id,
-        bepaid_token=checkout.token,
-        redirect_url=checkout.redirect_url,
-    )
     if payment is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Payment not found",
         )
 
-    logger.info(
-        "bePaid checkout created",
-        payment_id=str(payment.id),
-        method=body.method.value,
-        amount_minor=amount_minor,
-    )
     return PaymentCheckoutResponse(
         payment_id=payment.id,
-        redirect_url=checkout.redirect_url,
+        redirect_url=redirect_url,
         tracking_id=tracking_id,
         amount=quote.total_amount,
         currency_code=quote.currency_code,
         method=body.method,
     )
+
+
+@router.post(
+    "/payments/subscription/cancel",
+    status_code=status.HTTP_200_OK,
+    summary="Cancel bePaid auto-renew for current user",
+)
+async def cancel_auto_renew(
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, str]:
+    subscription = await SubscriptionDAO.get_by_user_id(
+        session, current_user.id
+    )
+    if subscription is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Subscription not found",
+        )
+    if not subscription.bepaid_subscription_id and not subscription.auto_renew:
+        return {"status": "ok"}
+
+    if subscription.bepaid_subscription_id:
+        try:
+            await cancel_subscription(
+                config=config,
+                subscription_id=subscription.bepaid_subscription_id,
+                reason="Customer's request",
+            )
+        except BePaidError as exc:
+            logger.warning(
+                "bePaid cancel auto-renew failed",
+                user_id=str(current_user.id),
+                error=str(exc),
+            )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Failed to cancel auto-renew",
+            ) from exc
+
+    await SubscriptionDAO.upsert_for_user(
+        session,
+        current_user.id,
+        auto_renew=False,
+        bepaid_subscription_id=None,
+        bepaid_renew_at=None,
+    )
+    logger.info(
+        "bePaid auto-renew cancelled",
+        user_id=str(current_user.id),
+    )
+    return {"status": "ok"}
 
 
 @router.get(
@@ -570,6 +676,228 @@ async def get_payment_status(
             detail="Payment not found",
         )
     return _payment_to_status(row)
+
+
+def _parse_bepaid_datetime(value: object) -> datetime | None:
+    if not value or not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed
+
+
+async def _handle_subscription_webhook(
+    session: AsyncSession,
+    payload: dict,
+) -> dict[str, str]:
+    fields = extract_subscription_webhook_fields(payload)
+    subscription_id = fields.get("subscription_id")
+    tracking_id = fields.get("tracking_id")
+    tx_uid = fields.get("uid")
+    renew_at = _parse_bepaid_datetime(fields.get("renew_at"))
+
+    subscription = None
+    if isinstance(subscription_id, str) and subscription_id:
+        subscription = await SubscriptionDAO.get_by_bepaid_subscription_id(
+            session, subscription_id
+        )
+
+    payment = None
+    if isinstance(tracking_id, str) and tracking_id:
+        payment = await SubscriptionPaymentDAO.get_by_tracking_id(
+            session, tracking_id
+        )
+
+    if subscription is None and payment is not None:
+        subscription = await SubscriptionDAO.get_by_user_id(
+            session, payment.user_id
+        )
+
+    if subscription is None and payment is None:
+        logger.warning(
+            "bePaid subscription webhook unmatched",
+            subscription_id=subscription_id,
+            tracking_id=tracking_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Subscription payment not found",
+        )
+
+    if fields.get("is_terminal_stop"):
+        if subscription is not None:
+            await SubscriptionDAO.upsert_for_user(
+                session,
+                subscription.user_id,
+                auto_renew=False,
+                bepaid_subscription_id=None,
+                bepaid_renew_at=None,
+            )
+        if payment is not None and payment.status == (
+            SubscriptionPaymentStatus.PENDING.value
+        ):
+            await SubscriptionPaymentDAO.update_fields(
+                session,
+                payment.id,
+                status=SubscriptionPaymentStatus.FAILED.value,
+                raw_notification=payload,
+                bepaid_subscription_id=(
+                    str(subscription_id)
+                    if subscription_id
+                    else payment.bepaid_subscription_id
+                ),
+            )
+        logger.info(
+            "bePaid subscription stopped",
+            subscription_id=subscription_id,
+            state=fields.get("state"),
+        )
+        return {"status": "ok"}
+
+    if not fields.get("is_successful_charge"):
+        logger.info(
+            "bePaid subscription webhook ignored",
+            subscription_id=subscription_id,
+            state=fields.get("state"),
+            tx_status=fields.get("tx_status"),
+            event=fields.get("event"),
+        )
+        return {"status": "ok"}
+
+    if not isinstance(tx_uid, str) or not tx_uid:
+        logger.warning(
+            "bePaid subscription webhook missing transaction uid",
+            subscription_id=subscription_id,
+        )
+        return {"status": "ok"}
+
+    if subscription is not None and (
+        subscription.last_bepaid_transaction_uid == tx_uid
+    ):
+        return {"status": "ok"}
+
+    existing_by_uid = await SubscriptionPaymentDAO.get_by_bepaid_uid(
+        session, tx_uid
+    )
+    if existing_by_uid is not None:
+        if subscription is not None:
+            await SubscriptionDAO.upsert_for_user(
+                session,
+                subscription.user_id,
+                last_bepaid_transaction_uid=tx_uid,
+                bepaid_subscription_id=(
+                    str(subscription_id)
+                    if subscription_id
+                    else subscription.bepaid_subscription_id
+                ),
+                auto_renew=True,
+                bepaid_renew_at=renew_at,
+            )
+        return {"status": "ok"}
+
+    if subscription is None:
+        logger.error(
+            "bePaid successful charge without local subscription",
+            subscription_id=subscription_id,
+        )
+        return {"status": "ok"}
+
+    amount_minor = payment.amount_minor if payment is not None else None
+    currency_code = (
+        payment.currency_code
+        if payment is not None
+        else subscription.currency_code
+    )
+    amount = payment.amount if payment is not None else None
+    receipt_id = (
+        payment.receipt_id if payment is not None else f"renew-{tx_uid[:12]}"
+    )
+
+    if payment is not None and payment.status != (
+        SubscriptionPaymentStatus.SUCCESSFUL.value
+    ):
+        await SubscriptionPaymentDAO.update_fields(
+            session,
+            payment.id,
+            status=SubscriptionPaymentStatus.SUCCESSFUL.value,
+            raw_notification=payload,
+            bepaid_uid=tx_uid,
+            bepaid_subscription_id=(
+                str(subscription_id)
+                if subscription_id
+                else payment.bepaid_subscription_id
+            ),
+        )
+    elif payment is None or payment.status == (
+        SubscriptionPaymentStatus.SUCCESSFUL.value
+    ):
+        # Renewal charge: create a new payment row (first payment already applied).
+        if amount is None or amount_minor is None:
+            try:
+                quote = build_subscription_quote(subscription)
+            except ValueError:
+                logger.error(
+                    "Cannot quote renewal amount",
+                    user_id=str(subscription.user_id),
+                )
+                return {"status": "ok"}
+            amount = quote.total_amount
+            amount_minor = amount_to_minor(quote.total_amount)
+            currency_code = quote.currency_code
+            receipt_id = quote.receipt_id
+
+        if payment is None or (
+            payment.status == SubscriptionPaymentStatus.SUCCESSFUL.value
+            and payment.bepaid_uid != tx_uid
+        ):
+            await SubscriptionPaymentDAO.create(
+                session,
+                user_id=subscription.user_id,
+                subscription_id=subscription.id,
+                tracking_id=f"renew-{tx_uid[:24]}",
+                method=SubscriptionPaymentMethod.CARD.value,
+                amount=amount,
+                amount_minor=amount_minor,
+                currency_code=currency_code,
+                status=SubscriptionPaymentStatus.SUCCESSFUL.value,
+                receipt_id=receipt_id,
+                bepaid_uid=tx_uid,
+                bepaid_subscription_id=(
+                    str(subscription_id) if subscription_id else None
+                ),
+                raw_notification=payload,
+            )
+
+    await activate_subscription_after_payment(
+        session,
+        user_id=subscription.user_id,
+        subscription=subscription,
+    )
+    await SubscriptionDAO.upsert_for_user(
+        session,
+        subscription.user_id,
+        auto_renew=True,
+        bepaid_subscription_id=(
+            str(subscription_id)
+            if subscription_id
+            else subscription.bepaid_subscription_id
+        ),
+        bepaid_renew_at=renew_at,
+        last_bepaid_transaction_uid=tx_uid,
+    )
+    logger.info(
+        "bePaid subscription charge applied",
+        subscription_id=subscription_id,
+        tx_uid=tx_uid,
+    )
+    return {"status": "ok"}
 
 
 @router.post(
@@ -620,6 +948,9 @@ async def bepaid_payment_webhook(
             detail="Invalid webhook payload",
         )
 
+    if is_subscription_webhook(payload):
+        return await _handle_subscription_webhook(session, payload)
+
     fields = extract_webhook_fields(payload)
     tracking_id = fields.get("tracking_id")
     if not tracking_id or not isinstance(tracking_id, str):
@@ -641,7 +972,7 @@ async def bepaid_payment_webhook(
             detail="Payment not found",
         )
 
-    # Idempotent success — already applied.
+    # Idempotent success — already applied (one-time checkout only).
     if payment.status == SubscriptionPaymentStatus.SUCCESSFUL.value:
         return {"status": "ok"}
 

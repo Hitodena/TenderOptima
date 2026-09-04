@@ -60,4 +60,15 @@ class Subscription(IDMixinUUID, TimestampMixin, Base):
         DateTime(timezone=True)
     )
 
+    auto_renew: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    bepaid_subscription_id: Mapped[str | None] = mapped_column(
+        String(64), index=True
+    )
+    bepaid_renew_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    last_bepaid_transaction_uid: Mapped[str | None] = mapped_column(String(64))
+
     user: Mapped["User"] = relationship(back_populates="subscription")  # type: ignore # noqa: F821

@@ -18,6 +18,26 @@
         </template>
         <template #body>
             <div v-if="step === 'params'" class="space-y-6">
+                <div class="flex items-center gap-2">
+                    <USwitch
+                        v-model="multiPosition"
+                        label="Несколько позиций"
+                    />
+                    <UTooltip
+                        :text="multiPositionHint"
+                        :content="{ side: 'bottom', align: 'start', sideOffset: 8 }"
+                    >
+                        <button
+                            type="button"
+                            class="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-elevated text-muted transition-colors hover:bg-accented hover:text-default cursor-pointer"
+                            aria-label="О нескольких позициях"
+                            @click.stop
+                        >
+                            <UIcon name="i-lucide-info" class="size-4" />
+                        </button>
+                    </UTooltip>
+                </div>
+
                 <UFormField label="Тема письма" :required="false">
                     <UInput
                         v-model="form.emailSubject"
@@ -31,20 +51,87 @@
                     <p v-if="errors.emailSubject" class="text-xs text-error mt-1">{{ errors.emailSubject }}</p>
                 </UFormField>
 
-                <UFormField :label="descriptionFieldLabel" required>
-                    <UTextarea
-                        v-model="form.description"
-                        :placeholder="descriptionFieldPlaceholder"
-                        :rows="6"
-                        class="w-full"
-                        size="lg"
-                        :color="errors.description ? 'error' : undefined"
-                        :highlight="Boolean(errors.description)"
-                    />
-                    <p v-if="errors.description" class="text-xs text-error mt-1">
-                        {{ errors.description }}
-                    </p>
-                </UFormField>
+                <template v-if="!multiPosition">
+                    <UFormField label="Описание товара/услуги" required>
+                        <UTextarea
+                            v-model="form.description"
+                            placeholder="Опишите детально товар или услугу, технические характеристики, объёмы..."
+                            :rows="6"
+                            class="w-full"
+                            size="lg"
+                            :color="errors.description ? 'error' : undefined"
+                            :highlight="Boolean(errors.description)"
+                        />
+                        <p v-if="errors.description" class="text-xs text-error mt-1">
+                            {{ errors.description }}
+                        </p>
+                    </UFormField>
+                </template>
+
+                <template v-else>
+                    <div class="space-y-3">
+                        <div>
+                            <p class="text-sm font-semibold text-default">
+                                Описания позиций закупки
+                            </p>
+                            <p class="text-xs text-muted mt-0.5">
+                                Укажите не менее двух позиций. Каждая позиция описывается отдельно.
+                            </p>
+                        </div>
+                        <div
+                            v-for="(_, idx) in form.positionDescriptions"
+                            :key="idx"
+                            class="flex items-start gap-2"
+                        >
+                            <UFormField
+                                :label="`Описание позиции ${idx + 1}`"
+                                required
+                                class="flex-1 min-w-0"
+                            >
+                                <UTextarea
+                                    v-model="form.positionDescriptions[idx]"
+                                    :placeholder="positionPlaceholder(idx)"
+                                    :rows="4"
+                                    class="w-full"
+                                    size="lg"
+                                    :color="errors.positions[idx] ? 'error' : undefined"
+                                    :highlight="Boolean(errors.positions[idx])"
+                                />
+                                <p
+                                    v-if="errors.positions[idx]"
+                                    class="text-xs text-error mt-1"
+                                >
+                                    {{ errors.positions[idx] }}
+                                </p>
+                            </UFormField>
+                            <UButton
+                                type="button"
+                                variant="ghost"
+                                color="neutral"
+                                icon="i-lucide-trash-2"
+                                size="lg"
+                                class="mt-6 shrink-0"
+                                :disabled="form.positionDescriptions.length <= MIN_POSITIONS"
+                                :aria-label="`Удалить позицию ${idx + 1}`"
+                                @click="removePosition(idx)"
+                            />
+                        </div>
+                        <UButton
+                            type="button"
+                            variant="outline"
+                            color="neutral"
+                            leading-icon="i-lucide-plus"
+                            size="sm"
+                            :disabled="form.positionDescriptions.length >= MAX_POSITIONS"
+                            @click="addPosition"
+                        >
+                            Добавить позицию
+                        </UButton>
+                        <p v-if="errors.description" class="text-xs text-error">
+                            {{ errors.description }}
+                        </p>
+                    </div>
+                </template>
 
                 <div>
                     <p class="text-sm font-semibold mb-1">Дополнительные параметры</p>
@@ -295,6 +382,14 @@ const toast = useToast()
 type Step = "params" | "confirm"
 const step = ref<Step>("params")
 
+const MIN_POSITIONS = 2
+const MAX_POSITIONS = 8
+const POSITION_MIN_LEN = 3
+const DESCRIPTION_MAX_LEN = 8000
+
+const multiPositionHint
+    = "Если в письме нужно описать несколько позиций закупки, а не одну — включите режим. Каждая позиция описывается отдельно."
+
 const DEFAULT_LABELS_SINGLE = [
     "Описание товара",
     "Общая стоимость без НДС",
@@ -322,27 +417,17 @@ const DEFAULT_LABELS_MULTI = [
     "ИНН / УНП",
 ] as const
 
-const isMultiPosition = computed(() => Boolean(props.request?.is_multi_position))
+const multiPosition = ref(false)
+const labelsFromServer = ref(false)
 
-const descriptionFieldLabel = computed(() =>
-    isMultiPosition.value ? "Описание позиций закупки" : "Описание товара/услуги",
-)
-
-const descriptionFieldPlaceholder = computed(() =>
-    isMultiPosition.value
-        ? "Опишите позиции закупки, технические характеристики, объёмы..."
-        : "Опишите детально товар или услугу, технические характеристики, объёмы...",
-)
-
-function defaultLabels(): string[] {
-    return [
-        ...(isMultiPosition.value ? DEFAULT_LABELS_MULTI : DEFAULT_LABELS_SINGLE),
-    ]
+function defaultLabels(multi: boolean): string[] {
+    return [...(multi ? DEFAULT_LABELS_MULTI : DEFAULT_LABELS_SINGLE)]
 }
 
 const form = reactive({
     description: "",
-    labels: defaultLabels(),
+    positionDescriptions: ["", ""] as string[],
+    labels: defaultLabels(false),
     newLabel: "",
     emailMessage: "",
     businessInfo: "",
@@ -368,7 +453,11 @@ const showBusinessCardWarning = computed(() => {
 const filesToUpload = ref<File[]>([])
 const uploadedAttachments = ref<AttachmentInfo[]>([])
 
-const errors = reactive({ description: "", emailSubject: "" })
+const errors = reactive({
+    description: "",
+    emailSubject: "",
+    positions: [] as string[],
+})
 const loading = ref(false)
 const loadingMessage = ref(false)
 const error = ref<string | null>(null)
@@ -391,19 +480,100 @@ const emailQuotaConfirmHint = computed(() => {
     return `Остаток лимита писем в этом месяце: ${remaining.toLocaleString("ru-RU")} из ${limit.toLocaleString("ru-RU")}`
 })
 
+function positionPlaceholder(idx: number): string {
+    const samples = [
+        "Картонные коробки, объём, характеристики...",
+        "Гофрокоробки, размеры, характеристики...",
+    ]
+    return samples[idx] ?? `Опишите позицию ${idx + 1}...`
+}
+
+function addPosition() {
+    if (form.positionDescriptions.length >= MAX_POSITIONS) return
+    form.positionDescriptions.push("")
+    errors.positions.push("")
+}
+
+function removePosition(idx: number) {
+    if (form.positionDescriptions.length <= MIN_POSITIONS) return
+    form.positionDescriptions.splice(idx, 1)
+    errors.positions.splice(idx, 1)
+}
+
+function joinPositionDescriptions(parts: string[]): string {
+    return parts
+        .map((text, idx) => `Позиция ${idx + 1}:\n${text.trim()}`)
+        .join("\n\n")
+}
+
+function parsePositionDescriptions(raw: string): string[] | null {
+    const text = raw.trim()
+    if (!text) return null
+    const matches = [...text.matchAll(/(?:^|\n)Позиция\s+(\d+):\s*\n?/gi)]
+    if (matches.length < MIN_POSITIONS) return null
+    const parts: string[] = []
+    for (let i = 0; i < matches.length; i++) {
+        const start = (matches[i].index ?? 0) + matches[i][0].length
+        const end = i + 1 < matches.length
+            ? (matches[i + 1].index ?? text.length)
+            : text.length
+        const chunk = text.slice(start, end).trim()
+        if (chunk) parts.push(chunk)
+    }
+    return parts.length >= MIN_POSITIONS ? parts : null
+}
+
+function resolvedDescription(): string {
+    if (!multiPosition.value) return form.description.trim()
+    const parts = form.positionDescriptions
+        .map((item) => item.trim())
+        .filter(Boolean)
+    return joinPositionDescriptions(parts)
+}
+
+watch(multiPosition, (enabled, wasEnabled) => {
+    if (enabled === wasEnabled) return
+    if (enabled && form.positionDescriptions.length < MIN_POSITIONS) {
+        form.positionDescriptions = ["", ""]
+        errors.positions = ["", ""]
+    }
+    if (!labelsFromServer.value) {
+        form.labels = defaultLabels(enabled)
+    }
+})
+
 function loadFromRequest() {
     const r = props.request
     if (!r) return
-    form.description = r.description || ""
+    const ap = r.additional_params
+    labelsFromServer.value = Boolean(ap && Array.isArray(ap) && ap.length > 0)
+    multiPosition.value = Boolean(r.is_multi_position)
+    const parsed = r.is_multi_position && r.description
+        ? parsePositionDescriptions(r.description)
+        : null
+    if (parsed) {
+        form.positionDescriptions = parsed
+        form.description = ""
+        errors.positions = parsed.map(() => "")
+    } else if (r.is_multi_position) {
+        form.positionDescriptions = r.description
+            ? [r.description, ""]
+            : ["", ""]
+        form.description = ""
+        errors.positions = form.positionDescriptions.map(() => "")
+    } else {
+        form.description = r.description || ""
+        form.positionDescriptions = ["", ""]
+        errors.positions = ["", ""]
+    }
     if (r.email_message) {
         const msg = r.email_message
         form.emailMessage = Array.isArray(msg) ? msg.join("\n") : String(msg)
     }
-    const ap = r.additional_params
-    if (ap && Array.isArray(ap) && ap.length > 0) {
-        form.labels = [...ap]
+    if (labelsFromServer.value) {
+        form.labels = [...(ap as string[])]
     } else {
-        form.labels = defaultLabels()
+        form.labels = defaultLabels(multiPosition.value)
     }
     const defaultSubject = r.query ? `Запрос коммерческого предложения — ${r.query}` : ""
     form.emailSubject = r.email_subject || defaultSubject
@@ -431,6 +601,7 @@ watch(
             error.value = null
             errors.description = ""
             errors.emailSubject = ""
+            errors.positions = []
         }
     },
     { immediate: true },
@@ -496,7 +667,35 @@ function close() {
 function validate() {
     errors.description = ""
     errors.emailSubject = ""
-    if (!form.description || form.description.trim().length < 3) {
+    errors.positions = form.positionDescriptions.map(() => "")
+
+    if (multiPosition.value) {
+        let ok = true
+        const filledIdx: number[] = []
+        form.positionDescriptions.forEach((item, idx) => {
+            const value = item.trim()
+            if (!value) return
+            filledIdx.push(idx)
+            if (value.length < POSITION_MIN_LEN) {
+                errors.positions[idx] = `Минимум ${POSITION_MIN_LEN} символа`
+                ok = false
+            }
+        })
+        if (filledIdx.length < MIN_POSITIONS) {
+            errors.description = `Укажите не менее ${MIN_POSITIONS} позиций`
+            return false
+        }
+        if (!ok) return false
+        const filled = filledIdx.map((idx) => form.positionDescriptions[idx].trim())
+        const joined = joinPositionDescriptions(filled)
+        if (joined.length > DESCRIPTION_MAX_LEN) {
+            errors.description = `Суммарное описание не длиннее ${DESCRIPTION_MAX_LEN} символов`
+            return false
+        }
+        return true
+    }
+
+    if (!form.description || form.description.trim().length < POSITION_MIN_LEN) {
         errors.description = "Обязательное поле, минимум 3 символа"
         return false
     }
@@ -510,8 +709,9 @@ async function goToConfirm() {
     loadingMessage.value = true
     try {
         const body: RequestUpdate = {
-            description: form.description,
+            description: resolvedDescription(),
             additional_params: form.labels.length > 0 ? form.labels : null,
+            is_multi_position: multiPosition.value,
         }
         await patch(`/requests/${props.request.id}`, body)
 

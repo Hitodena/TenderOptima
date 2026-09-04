@@ -32,6 +32,18 @@ class SubscriptionDAO(BaseDAO[Subscription]):
         return result.scalar_one_or_none()
 
     @classmethod
+    async def get_by_bepaid_subscription_id(
+        cls,
+        session: AsyncSession,
+        bepaid_subscription_id: str,
+    ) -> Subscription | None:
+        stmt = select(cls.model).where(
+            cls.model.bepaid_subscription_id == bepaid_subscription_id
+        )
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @classmethod
     async def upsert_for_user(
         cls,
         session: AsyncSession,

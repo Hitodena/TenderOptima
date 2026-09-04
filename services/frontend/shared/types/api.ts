@@ -172,6 +172,8 @@ export interface SubscriptionResponse {
 	is_active: boolean;
 	starts_at: string | null;
 	expires_at: string | null;
+	auto_renew?: boolean;
+	bepaid_renew_at?: string | null;
 	searches_used_this_month?: number;
 	emails_sent_this_month?: number;
 	kp_processed_this_month?: number;
@@ -501,8 +503,7 @@ export interface UserUpdate {
 }
 
 export interface RequestCreate {
-	query?: string;
-	items?: string[];
+	query: string;
 	delivery_region: string;
 }
 
@@ -510,6 +511,7 @@ export interface RequestUpdate {
 	description: string;
 	additional_params?: string[] | null;
 	attachments?: AttachmentInfo[] | null;
+	is_multi_position?: boolean;
 }
 
 export interface AttachmentInfo {

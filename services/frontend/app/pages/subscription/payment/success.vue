@@ -22,6 +22,18 @@ const paidUntilLabel = computed(() =>
 	formatExpiryDate(user.value?.subscription?.expires_at),
 )
 
+const renewAtLabel = computed(() => {
+	const raw = user.value?.subscription?.bepaid_renew_at
+	if (!raw) return null
+	return formatExpiryDate(raw)
+})
+
+const isCardAutoRenew = computed(
+	() =>
+		payment.value?.method === 'card'
+		&& Boolean(user.value?.subscription?.auto_renew),
+)
+
 async function loadStatus() {
 	if (!paymentId.value) {
 		error.value = 'Не указан идентификатор платежа'
@@ -41,11 +53,22 @@ async function loadStatus() {
 		}
 		if (payment.value.status === 'successful') {
 			const until = paidUntilLabel.value
+			const renew = renewAtLabel.value
+			let description = until
+				? `Подписка оплачена до ${until}. Можно вернуться на страницу подписки.`
+				: 'Подписка продлена. Можно вернуться на страницу подписки.'
+			if (isCardAutoRenew.value && renew) {
+				description = until
+					? `Подписка оплачена до ${until}. Следующее списание: ${renew}.`
+					: `Подписка продлена. Следующее списание: ${renew}.`
+			} else if (isCardAutoRenew.value) {
+				description = until
+					? `Подписка оплачена до ${until}. Включено ежемесячное автопродление.`
+					: 'Подписка продлена. Включено ежемесячное автопродление.'
+			}
 			toast.add({
 				title: 'Оплата прошла успешно',
-				description: until
-					? `Подписка оплачена до ${until}. Можно вернуться на страницу подписки.`
-					: 'Подписка продлена. Можно вернуться на страницу подписки.',
+				description,
 				color: 'success',
 				icon: 'i-lucide-check',
 			})
@@ -123,6 +146,17 @@ const statusLabel = computed(() => {
 					class="text-sm text-success"
 				>
 					Подписка оплачена до {{ paidUntilLabel }}
+				</p>
+				<p
+					v-if="payment.status === 'successful' && isCardAutoRenew"
+					class="text-sm text-muted"
+				>
+					<template v-if="renewAtLabel">
+						Следующее списание: {{ renewAtLabel }}
+					</template>
+					<template v-else>
+						Включено ежемесячное автопродление
+					</template>
 				</p>
 			</div>
 

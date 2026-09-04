@@ -37,6 +37,7 @@ class SubscriptionPayment(IDMixinUUID, TimestampMixin, Base):
     receipt_id: Mapped[str] = mapped_column(String(64), nullable=False)
     bepaid_token: Mapped[str | None] = mapped_column(String(128))
     bepaid_uid: Mapped[str | None] = mapped_column(String(64))
+    bepaid_subscription_id: Mapped[str | None] = mapped_column(String(64))
     redirect_url: Mapped[str | None] = mapped_column(String(1024))
     raw_notification: Mapped[dict | None] = mapped_column(JSON)
 
