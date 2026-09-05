@@ -64,18 +64,20 @@ def _match_maps_from_analysis(
     dict[str, str | None],
     dict[str, str | None],
     dict[str, float | None],
+    dict[str, str | None],
 ]:
     if not raw:
-        return {}, {}, {}, {}, {}
+        return {}, {}, {}, {}, {}, {}
     try:
         result = EmailAnalysisResult(**raw)
     except Exception:
-        return {}, {}, {}, {}, {}
+        return {}, {}, {}, {}, {}, {}
     values: dict[str, str | None] = {}
     statuses: dict[str, str | None] = {}
     explanations: dict[str, str | None] = {}
     corrected_from: dict[str, str | None] = {}
     numeric_values: dict[str, float | None] = {}
+    currencies: dict[str, str | None] = {}
     for match in result.matches:
         req = match.requirement.strip()
         values[req] = match.offer_value
@@ -87,7 +89,19 @@ def _match_maps_from_analysis(
             match.offer_value,
             match.numeric_value,
         )
-    return values, statuses, explanations, corrected_from, numeric_values
+        currencies[req] = (
+            match.currency.strip()
+            if match.currency and match.currency.strip()
+            else None
+        )
+    return (
+        values,
+        statuses,
+        explanations,
+        corrected_from,
+        numeric_values,
+        currencies,
+    )
 
 
 async def _latest_analyzed_incoming(session, rs_id: uuid.UUID):
@@ -115,6 +129,7 @@ async def _build_comparison(
     preferred_price_order = (
         "Цена за единицу без НДС",
         "Общая стоимость без НДС",
+        "Общая цена поставки без НДС",
         "Общая цена поставки",
     )
     for preferred in preferred_price_order:
@@ -145,6 +160,7 @@ async def _build_comparison(
         numeric_values: dict[str, float | None] = {
             req: None for req in requirements
         }
+        currencies: dict[str, str | None] = {req: None for req in requirements}
         if analyzed and analyzed.analysis:
             analysis = analyzed.analysis
             (
@@ -153,6 +169,7 @@ async def _build_comparison(
                 match_explanations,
                 match_corrected,
                 match_numeric,
+                match_currencies,
             ) = _match_maps_from_analysis(analysis.raw_llm_response)
             prev = analysis.previous_parameters
             prev_map = prev if isinstance(prev, dict) else {}
@@ -167,9 +184,16 @@ async def _build_comparison(
                     corrected_from[req] = match_corrected[req]
                 if req in match_numeric:
                     numeric_values[req] = match_numeric[req]
+                if req in match_currencies:
+                    currencies[req] = match_currencies[req]
                 if req in prev_map and prev_map[req] is not None:
                     previous_values[req] = str(prev_map[req])
-        apply_delivery_total(requirements, numeric_values, values)
+        apply_delivery_total(
+            requirements,
+            numeric_values,
+            values,
+            currencies,
+        )
         has_extracted = any(
             value is not None and str(value).strip()
             for value in values.values()

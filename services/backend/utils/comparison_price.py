@@ -5,25 +5,42 @@ from __future__ import annotations
 import re
 from decimal import Decimal
 
+DELIVERY_TOTAL_LABEL = "Общая цена поставки без НДС"
+DELIVERY_TOTAL_LEGACY_LABEL = "Общая цена поставки"
+DELIVERY_TOTAL_ALIASES: frozenset[str] = frozenset(
+    {
+        DELIVERY_TOTAL_LABEL,
+        DELIVERY_TOTAL_LEGACY_LABEL,
+    }
+)
+
 PRICE_REQUIREMENT_LABELS: frozenset[str] = frozenset(
     {
         "Цена за единицу без НДС",
         "Общая стоимость без НДС",
-        "Общая цена поставки",
+        *DELIVERY_TOTAL_ALIASES,
     }
 )
 
 POSITION_PRICE_PREFIX = "Цена без НДС:"
-DELIVERY_TOTAL_LABEL = "Общая цена поставки"
 _POSITION_BLOCK_RE = re.compile(
     r"(?:^|\n)Позиция\s+(\d+):\s*\n?",
     re.IGNORECASE,
 )
 _POSITION_TITLE_MAX = 60
+_CURRENCY_CODE_RE = re.compile(r"\b([A-Z]{3})\b")
+_CURRENCY_SYMBOL_RE = re.compile(
+    r"(₽|\$|€|£|¥|руб\.?|коп\.?)",
+    re.IGNORECASE,
+)
 
 
 def is_position_price_requirement(requirement: str) -> bool:
     return requirement.strip().startswith(POSITION_PRICE_PREFIX)
+
+
+def is_delivery_total_requirement(requirement: str) -> bool:
+    return requirement.strip() in DELIVERY_TOTAL_ALIASES
 
 
 def is_price_requirement(requirement: str) -> bool:
@@ -31,6 +48,16 @@ def is_price_requirement(requirement: str) -> bool:
     return text in PRICE_REQUIREMENT_LABELS or is_position_price_requirement(
         text
     )
+
+
+def find_delivery_total_key(keys: list[str] | set[str]) -> str | None:
+    """Return the delivery-total key present in ``keys`` (prefer new label)."""
+    key_set = {str(k).strip() for k in keys}
+    if DELIVERY_TOTAL_LABEL in key_set:
+        return DELIVERY_TOTAL_LABEL
+    if DELIVERY_TOTAL_LEGACY_LABEL in key_set:
+        return DELIVERY_TOTAL_LEGACY_LABEL
+    return None
 
 
 def parse_position_titles(description: str | None) -> list[str]:
@@ -70,72 +97,125 @@ def merge_multi_position_price_params(
     """
     Inject per-position VAT-free price rows into additional_params.
 
-    Removes stale ``Цена без НДС:`` labels, keeps other params, inserts new
-    position prices after ``Описание товара`` (or at the start), and ensures
-    ``Общая цена поставки`` is present.
+    Removes stale ``Цена без НДС:`` labels and legacy delivery-total aliases,
+    inserts new position prices after ``Описание товара`` (or at the start),
+    and ensures ``Общая цена поставки без НДС`` is present.
     """
     existing = [
         str(item).strip()
         for item in (labels or [])
-        if str(item).strip() and not is_position_price_requirement(str(item))
+        if str(item).strip()
+        and not is_position_price_requirement(str(item))
+        and not is_delivery_total_requirement(str(item))
     ]
     per_item = position_price_labels(description)
     if not per_item:
         return existing
 
-    without_total = [item for item in existing if item != DELIVERY_TOTAL_LABEL]
     insert_at = 0
-    for idx, item in enumerate(without_total):
+    for idx, item in enumerate(existing):
         if item == "Описание товара":
             insert_at = idx + 1
             break
 
-    merged = without_total[:insert_at] + per_item + without_total[insert_at:]
-    if DELIVERY_TOTAL_LABEL not in merged:
-        # Prefer placing total right after per-item prices.
-        total_at = insert_at + len(per_item)
-        merged = merged[:total_at] + [DELIVERY_TOTAL_LABEL] + merged[total_at:]
-    return merged
+    merged = existing[:insert_at] + per_item + existing[insert_at:]
+    total_at = insert_at + len(per_item)
+    return merged[:total_at] + [DELIVERY_TOTAL_LABEL] + merged[total_at:]
 
 
-def format_price_amount(value: float) -> str:
-    """Human-readable amount without trailing zeros."""
+def format_price_amount(value: float, currency: str | None = None) -> str:
+    """Human-readable amount without trailing zeros, optional currency suffix."""
     if value == int(value):
-        return str(int(value))
-    return f"{value:.4f}".rstrip("0").rstrip(".")
+        amount = str(int(value))
+    else:
+        amount = f"{value:.4f}".rstrip("0").rstrip(".")
+    code = (currency or "").strip()
+    if code:
+        return f"{amount} {code}"
+    return amount
+
+
+def resolve_offer_currency(
+    currency: str | None,
+    offer_value: str | None,
+) -> str | None:
+    """Prefer stored currency; else extract from free-text offer value."""
+    if currency is not None and str(currency).strip():
+        return str(currency).strip()
+    if not offer_value or not str(offer_value).strip():
+        return None
+    text = str(offer_value).replace("\u00a0", " ").replace("\u202f", " ")
+    code_match = _CURRENCY_CODE_RE.search(text)
+    if code_match:
+        return code_match.group(1).upper()
+    symbol_match = _CURRENCY_SYMBOL_RE.search(text)
+    if symbol_match:
+        return symbol_match.group(1)
+    return None
+
+
+def shared_item_currency(
+    item_reqs: list[str],
+    currencies: dict[str, str | None],
+    values: dict[str, str | None],
+) -> str | None:
+    """Return common currency across items, or None if missing/mixed."""
+    resolved: list[str] = []
+    for req in item_reqs:
+        code = resolve_offer_currency(
+            currencies.get(req),
+            values.get(req),
+        )
+        if not code:
+            return None
+        resolved.append(code)
+    if not resolved:
+        return None
+    first = resolved[0]
+    if any(code != first for code in resolved[1:]):
+        return None
+    return first
 
 
 def apply_delivery_total(
     requirements: list[str],
     numeric_values: dict[str, float | None],
     values: dict[str, str | None],
-) -> None:
+    currencies: dict[str, str | None] | None = None,
+) -> str | None:
     """
     Set delivery total only when every per-item VAT-free price is numeric.
 
-    Mutates ``numeric_values`` and ``values`` in place when the delivery total
-    requirement is present among ``requirements``.
+    Mutates ``numeric_values`` and ``values`` in place. Returns the shared
+    currency used for formatting (or None).
     """
-    if DELIVERY_TOTAL_LABEL not in requirements:
-        return
+    total_key = find_delivery_total_key(requirements)
+    if not total_key:
+        return None
     item_reqs = [
         req for req in requirements if is_position_price_requirement(req)
     ]
     if not item_reqs:
-        return
+        return None
 
     amounts: list[float] = []
     for req in item_reqs:
         amount = numeric_values.get(req)
         if amount is None:
-            numeric_values[DELIVERY_TOTAL_LABEL] = None
-            values[DELIVERY_TOTAL_LABEL] = None
-            return
+            numeric_values[total_key] = None
+            values[total_key] = None
+            return None
         amounts.append(float(amount))
 
+    currency = shared_item_currency(
+        item_reqs,
+        currencies or {},
+        values,
+    )
     total = round(sum(amounts), 4)
-    numeric_values[DELIVERY_TOTAL_LABEL] = total
-    values[DELIVERY_TOTAL_LABEL] = format_price_amount(total)
+    numeric_values[total_key] = total
+    values[total_key] = format_price_amount(total, currency)
+    return currency
 
 
 def apply_delivery_total_to_matches(matches: list) -> list:
@@ -156,6 +236,7 @@ def apply_delivery_total_to_matches(matches: list) -> list:
     requirements: list[str] = []
     numeric_values: dict[str, float | None] = {}
     values: dict[str, str | None] = {}
+    currencies: dict[str, str | None] = {}
     by_req: dict[str, dict] = {}
 
     for entry in normalized:
@@ -166,19 +247,32 @@ def apply_delivery_total_to_matches(matches: list) -> list:
         by_req[req] = entry
         offer = entry.get("offer_value")
         values[req] = str(offer) if offer is not None else None
+        currencies[req] = (
+            str(entry["currency"]).strip()
+            if entry.get("currency") is not None
+            and str(entry.get("currency")).strip()
+            else None
+        )
         numeric_values[req] = resolve_numeric_value(
             req,
             values[req],
             entry.get("numeric_value"),
         )
 
-    if DELIVERY_TOTAL_LABEL not in by_req:
+    total_key = find_delivery_total_key(by_req.keys())
+    if not total_key:
         return normalized
 
-    apply_delivery_total(requirements, numeric_values, values)
-    target = by_req[DELIVERY_TOTAL_LABEL]
-    target["numeric_value"] = numeric_values.get(DELIVERY_TOTAL_LABEL)
-    target["offer_value"] = values.get(DELIVERY_TOTAL_LABEL)
+    currency = apply_delivery_total(
+        requirements,
+        numeric_values,
+        values,
+        currencies,
+    )
+    target = by_req[total_key]
+    target["numeric_value"] = numeric_values.get(total_key)
+    target["offer_value"] = values.get(total_key)
+    target["currency"] = currency
     return normalized
 
 

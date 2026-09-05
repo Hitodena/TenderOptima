@@ -243,9 +243,13 @@ export function subscriptionExpiryStatus(
 		if (subscription.starts_at) return 'starts_only'
 		return 'unlimited'
 	}
+	const expires = new Date(subscription.expires_at)
+	if (Number.isNaN(expires.getTime())) return 'none'
+	if (expires.getTime() <= Date.now() || !subscription.is_active) {
+		return 'expired'
+	}
 	const days = daysUntilExpiry(subscription)
 	if (days == null) return 'none'
-	if (days < 0 || !subscription.is_active) return 'expired'
 	if (days <= SUBSCRIPTION_EXPIRY_WARNING_DAYS) return 'warning'
 	return 'active'
 }

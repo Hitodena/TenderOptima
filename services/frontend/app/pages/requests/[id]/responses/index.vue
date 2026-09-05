@@ -1253,17 +1253,20 @@ const editingMatchValue = ref('')
 
 const UNIT_PRICE_REQUIREMENT = 'Цена за единицу без НДС'
 const TOTAL_WITHOUT_VAT_REQUIREMENT = 'Общая стоимость без НДС'
-const DELIVERY_TOTAL_REQUIREMENT = 'Общая цена поставки'
+const DELIVERY_TOTAL_REQUIREMENT = 'Общая цена поставки без НДС'
+const DELIVERY_TOTAL_LEGACY = 'Общая цена поставки'
 const POSITION_PRICE_PREFIX = 'Цена без НДС:'
 const PRICE_REQUIREMENT_FALLBACKS = [
 	UNIT_PRICE_REQUIREMENT,
 	TOTAL_WITHOUT_VAT_REQUIREMENT,
 	DELIVERY_TOTAL_REQUIREMENT,
+	DELIVERY_TOTAL_LEGACY,
 ] as const
 const PREFERRED_PRICE_ORDER = [
 	UNIT_PRICE_REQUIREMENT,
 	TOTAL_WITHOUT_VAT_REQUIREMENT,
 	DELIVERY_TOTAL_REQUIREMENT,
+	DELIVERY_TOTAL_LEGACY,
 ] as const
 
 const comparison = ref<ComparisonResponse | null>(null)

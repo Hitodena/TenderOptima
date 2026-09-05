@@ -406,7 +406,7 @@ const DEFAULT_LABELS_SINGLE = [
 
 const DEFAULT_LABELS_MULTI = [
     "Описание товара",
-    "Общая цена поставки",
+    "Общая цена поставки без НДС",
     "Общая стоимость с НДС",
     "Условия оплаты",
     "Сроки поставки",
@@ -418,7 +418,11 @@ const DEFAULT_LABELS_MULTI = [
 ] as const
 
 const POSITION_PRICE_PREFIX = "Цена без НДС:"
-const DELIVERY_TOTAL_LABEL = "Общая цена поставки"
+const DELIVERY_TOTAL_LABEL = "Общая цена поставки без НДС"
+const DELIVERY_TOTAL_ALIASES = new Set([
+    DELIVERY_TOTAL_LABEL,
+    "Общая цена поставки",
+])
 const POSITION_TITLE_MAX = 60
 
 const multiPosition = ref(false)
@@ -432,6 +436,10 @@ function isPositionPriceLabel(label: string): boolean {
     return label.trim().startsWith(POSITION_PRICE_PREFIX)
 }
 
+function isDeliveryTotalLabel(label: string): boolean {
+    return DELIVERY_TOTAL_ALIASES.has(label.trim())
+}
+
 function positionPriceLabelsFromParts(parts: string[]): string[] {
     return parts
         .map((text) => text.trim().split(/\r?\n/)[0]?.trim() ?? "")
@@ -442,7 +450,7 @@ function positionPriceLabelsFromParts(parts: string[]): string[] {
         })
 }
 
-/** Inject per-item VAT-free price rows; keep delivery total. */
+/** Inject per-item VAT-free price rows; keep delivery total without VAT. */
 function mergeMultiPositionPriceLabels(
     labels: string[],
     positionParts: string[],
@@ -451,7 +459,7 @@ function mergeMultiPositionPriceLabels(
     if (!perItem.length) return [...labels]
 
     const withoutStale = labels.filter(
-        (item) => !isPositionPriceLabel(item) && item !== DELIVERY_TOTAL_LABEL,
+        (item) => !isPositionPriceLabel(item) && !isDeliveryTotalLabel(item),
     )
     let insertAt = 0
     for (let i = 0; i < withoutStale.length; i++) {
