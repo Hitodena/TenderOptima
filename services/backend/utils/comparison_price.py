@@ -27,7 +27,7 @@ _POSITION_BLOCK_RE = re.compile(
     r"(?:^|\n)Позиция\s+(\d+):\s*\n?",
     re.IGNORECASE,
 )
-_POSITION_TITLE_MAX = 60
+_POSITION_TITLE_MAX_WORDS = 5
 _CURRENCY_CODE_RE = re.compile(r"\b([A-Z]{3})\b")
 _CURRENCY_SYMBOL_RE = re.compile(
     r"(₽|\$|€|£|¥|руб\.?|коп\.?)",
@@ -78,7 +78,10 @@ def parse_position_titles(description: str | None) -> list[str]:
         first_line = chunk.splitlines()[0].strip()
         if not first_line:
             continue
-        titles.append(first_line[:_POSITION_TITLE_MAX].rstrip(" .,;:"))
+        words = first_line.split()
+        short = " ".join(words[:_POSITION_TITLE_MAX_WORDS]).rstrip(" .,;:")
+        if short:
+            titles.append(short)
     return titles
 
 
@@ -186,6 +189,9 @@ def apply_delivery_total(
     """
     Set delivery total only when every per-item VAT-free price is numeric.
 
+    When any item price is missing, leaves the existing total untouched
+    (keeps an LLM-extracted value instead of clearing it).
+
     Mutates ``numeric_values`` and ``values`` in place. Returns the shared
     currency used for formatting (or None).
     """
@@ -202,8 +208,7 @@ def apply_delivery_total(
     for req in item_reqs:
         amount = numeric_values.get(req)
         if amount is None:
-            numeric_values[total_key] = None
-            values[total_key] = None
+            # Keep LLM-extracted total when any per-item price is missing.
             return None
         amounts.append(float(amount))
 

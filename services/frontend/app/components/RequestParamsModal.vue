@@ -423,7 +423,7 @@ const DELIVERY_TOTAL_ALIASES = new Set([
     DELIVERY_TOTAL_LABEL,
     "Общая цена поставки",
 ])
-const POSITION_TITLE_MAX = 60
+const POSITION_TITLE_MAX_WORDS = 5
 
 const multiPosition = ref(false)
 const labelsFromServer = ref(false)
@@ -445,7 +445,11 @@ function positionPriceLabelsFromParts(parts: string[]): string[] {
         .map((text) => text.trim().split(/\r?\n/)[0]?.trim() ?? "")
         .filter(Boolean)
         .map((title) => {
-            const short = title.slice(0, POSITION_TITLE_MAX).replace(/[ .,;:]+$/u, "")
+            const short = title
+                .split(/\s+/)
+                .slice(0, POSITION_TITLE_MAX_WORDS)
+                .join(" ")
+                .replace(/[ .,;:]+$/u, "")
             return `${POSITION_PRICE_PREFIX} ${short}`
         })
 }

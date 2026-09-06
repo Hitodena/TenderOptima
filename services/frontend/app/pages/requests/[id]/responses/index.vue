@@ -199,15 +199,26 @@ v-else-if="comparison.suppliers.length === 0"
 										size="xs"
 										:variant="comparisonSortBy === req ? 'soft' : 'ghost'"
 										:color="comparisonSortBy === req ? 'primary' : 'neutral'"
+										class="max-w-56"
 										@click="toggleComparisonSort(req)"
 									>
-										{{ req }}
+										<span class="text-left leading-tight">
+											<template v-if="positionPriceTitle(req)">
+												<span class="block">{{ UNIT_PRICE_REQUIREMENT }}</span>
+												<span class="block text-[10px] font-normal opacity-80">
+													{{ positionPriceTitle(req) }}
+												</span>
+											</template>
+											<template v-else>
+												{{ req }}
+											</template>
+										</span>
 										<UIcon
 											v-if="comparisonSortBy === req"
 											:name="comparisonSortAsc
 												? 'i-lucide-arrow-up-narrow-wide'
 												: 'i-lucide-arrow-down-wide-narrow'"
-											class="w-3.5 h-3.5 ml-1"
+											class="w-3.5 h-3.5 ml-1 shrink-0"
 										/>
 									</UButton>
 								</div>
@@ -253,8 +264,22 @@ v-for="req in comparison.requirements" :key="req"
 													class="text-left hover:text-primary transition-colors"
 													@click="toggleComparisonSort(req)"
 												>
-													{{ req }}
+													<template v-if="positionPriceTitle(req)">
+														<span class="block">{{ UNIT_PRICE_REQUIREMENT }}</span>
+														<span class="block text-[10px] font-normal text-muted mt-0.5">
+															{{ positionPriceTitle(req) }}
+														</span>
+													</template>
+													<template v-else>
+														{{ req }}
+													</template>
 												</button>
+												<template v-else-if="positionPriceTitle(req)">
+													<span class="block">{{ UNIT_PRICE_REQUIREMENT }}</span>
+													<span class="block text-[10px] font-normal text-muted mt-0.5">
+														{{ positionPriceTitle(req) }}
+													</span>
+												</template>
 												<span v-else>{{ req }}</span>
 											</td>
 											<td
@@ -1256,6 +1281,7 @@ const TOTAL_WITHOUT_VAT_REQUIREMENT = 'Общая стоимость без НД
 const DELIVERY_TOTAL_REQUIREMENT = 'Общая цена поставки без НДС'
 const DELIVERY_TOTAL_LEGACY = 'Общая цена поставки'
 const POSITION_PRICE_PREFIX = 'Цена без НДС:'
+const POSITION_TITLE_MAX_WORDS = 5
 const PRICE_REQUIREMENT_FALLBACKS = [
 	UNIT_PRICE_REQUIREMENT,
 	TOTAL_WITHOUT_VAT_REQUIREMENT,
@@ -1274,6 +1300,15 @@ const loadingComparison = ref(false)
 const exportingComparison = ref(false)
 const comparisonSortBy = ref<string | null>(UNIT_PRICE_REQUIREMENT)
 const comparisonSortAsc = ref(true)
+
+/** Short position name under "Цена за единицу без НДС" (max 5 words). */
+function positionPriceTitle(req: string): string | null {
+	const text = req.trim()
+	if (!text.startsWith(POSITION_PRICE_PREFIX)) return null
+	const raw = text.slice(POSITION_PRICE_PREFIX.length).trim()
+	if (!raw) return null
+	return raw.split(/\s+/).slice(0, POSITION_TITLE_MAX_WORDS).join(' ')
+}
 
 function isPriceRequirementLabel(req: string): boolean {
 	const text = req.trim()
@@ -1693,7 +1728,12 @@ function comparisonShowStatusBadge(
 	req: string,
 ): boolean {
 	const status = supplier.statuses[req]
-	return Boolean(status && status !== 'not_found')
+	if (!status || status === 'not_found') return false
+	// Empty value shows as "—"; do not show "Выполнено" on a dash.
+	if (status === 'met' && comparisonDisplayValue(supplier, req) === '—') {
+		return false
+	}
+	return true
 }
 
 function comparisonStatusLabel(status: string) {

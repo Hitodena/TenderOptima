@@ -307,11 +307,15 @@ def build_comparison_workbook(
                 ):
                     sign = "+" if pct > 0 else ""
                     current = f"{current} ({sign}{pct:g}%)"
-                status_label = (
-                    status_labels.get(status_key, status_key)
-                    if status_key
-                    else ""
-                )
+                # Empty offer shows as "—"; omit "Выполнено" on a dash.
+                if status_key == "met" and current == "—":
+                    status_label = ""
+                else:
+                    status_label = (
+                        status_labels.get(status_key, status_key)
+                        if status_key
+                        else ""
+                    )
             explanation = supplier.explanations.get(req) or ""
             changed = _values_changed(previous, current)
 
