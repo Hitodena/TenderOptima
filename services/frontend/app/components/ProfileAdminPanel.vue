@@ -220,7 +220,7 @@
 							color="warning"
 							variant="soft"
 							icon="i-lucide-info"
-							description="Смена тарифа начнёт подписку заново с текущей даты на месяц вперёд; предыдущий тариф перестанет действовать"
+							:description="t('subscription.changePlanDisclaimer')"
 						/>
 
 						<div class="grid gap-3 sm:grid-cols-3">
@@ -329,7 +329,7 @@ import type {
 	SubscriptionUpdate,
 	UserEmailSettingsUpdate,
 } from '#shared/types'
-import { catalogForPlan } from '#shared/utils/subscriptionDisplay'
+import { catalogForPlan, limitsAfterPlanChange } from '#shared/utils/subscriptionDisplay'
 import { getApiErrorDetail } from '#shared/utils/apiError'
 import { t } from '~/constants/translations'
 
@@ -421,6 +421,40 @@ function applyCatalogToForm(plan: SubscriptionPlan) {
 	subscriptionForm.module_2_enabled = catalog.module_2_enabled
 }
 
+function applyPlanChangeLimitsPreview(plan: SubscriptionPlan) {
+	const detail = selectedUser.value
+	const sub = detail?.subscription
+	const carried = limitsAfterPlanChange({
+		oldSearches: sub?.max_searches_per_month,
+		oldEmails: sub?.max_emails_per_month,
+		oldKp: sub?.max_kp_processed_per_month,
+		oldPages: sub?.max_pages_analyzed_per_month,
+		searchesUsed: detail?.searches_used_this_month
+			?? sub?.searches_used_this_month
+			?? 0,
+		emailsUsed: detail?.emails_sent_this_month
+			?? sub?.emails_sent_this_month
+			?? 0,
+		kpUsed: sub?.kp_processed_this_month ?? 0,
+		pagesUsed: detail?.pages_analyzed_this_month
+			?? sub?.pages_analyzed_this_month
+			?? 0,
+		newPlan: plan,
+	})
+	const catalog = catalogForPlan(plan)
+	subscriptionForm.max_searches_per_month
+		= carried.max_searches_per_month?.toString() ?? ''
+	subscriptionForm.max_emails_per_month
+		= carried.max_emails_per_month?.toString() ?? ''
+	subscriptionForm.max_pages_analyzed_per_month
+		= carried.max_pages_analyzed_per_month?.toString() ?? ''
+	subscriptionForm.price_module_1_monthly = catalog.price_module_1_monthly ?? ''
+	subscriptionForm.price_module_2_monthly = catalog.price_module_2_monthly ?? ''
+	subscriptionForm.price_bundle_monthly = catalog.price_bundle_monthly ?? ''
+	subscriptionForm.module_1_enabled = catalog.module_1_enabled
+	subscriptionForm.module_2_enabled = catalog.module_2_enabled
+}
+
 function priceEquals(
 	stored: string | number | null | undefined,
 	catalog: string | null,
@@ -445,9 +479,15 @@ function limitsDifferFromCatalog(
 }
 
 function onPlanChange(plan: SubscriptionPlan) {
+	const changingExisting = loadedPlan.value != null && plan !== loadedPlan.value
 	useCustomLimits.value = false
-	applyCatalogToForm(plan)
-	planChangeDisclaimer.value = loadedPlan.value != null && plan !== loadedPlan.value
+	if (changingExisting) {
+		applyPlanChangeLimitsPreview(plan)
+	}
+	else {
+		applyCatalogToForm(plan)
+	}
+	planChangeDisclaimer.value = changingExisting
 	const assigningOrChanging = loadedPlan.value == null || plan !== loadedPlan.value
 	if (!assigningOrChanging) return
 

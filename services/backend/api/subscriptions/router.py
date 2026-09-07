@@ -12,6 +12,9 @@ from backend.api.subscriptions.schemas import (
 from backend.db.dao import SubscriptionDAO
 from backend.db.models import User
 from backend.enums import SubscriptionPlan
+from backend.utils.subscription_carryover import (
+    limits_after_plan_change_for_subscription,
+)
 from backend.utils.subscription_catalog import catalog_for_plan
 from backend.utils.subscription_usage import SubscriptionUsageDAO
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -49,7 +52,7 @@ async def change_my_plan(
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> SubscriptionResponse:
-    """Replace the current plan; new period starts now (starts_at = UTC now)."""
+    """Replace the current plan; unused monthly quotas carry into new max_*."""
     plan = body.plan
     module_1, module_2 = _modules_for_tab(plan, body.module_tab)
 
@@ -60,6 +63,13 @@ async def change_my_plan(
     expires_at = existing.expires_at if existing else None
 
     catalog = catalog_for_plan(plan.value, geo_code)
+    usage = await SubscriptionUsageDAO.get_for_user(session, current_user.id)
+    carried = limits_after_plan_change_for_subscription(
+        existing,
+        new_plan=plan.value,
+        new_geo_code=geo_code,
+        usage=usage,
+    )
     now = datetime.now(UTC)
 
     updated = await SubscriptionDAO.upsert_for_user(
@@ -68,10 +78,7 @@ async def change_my_plan(
         plan=plan.value,
         module_1_enabled=module_1,
         module_2_enabled=module_2,
-        max_searches_per_month=catalog.max_searches_per_month,
-        max_emails_per_month=catalog.max_emails_per_month,
-        max_kp_processed_per_month=catalog.max_kp_processed_per_month,
-        max_pages_analyzed_per_month=catalog.max_pages_analyzed_per_month,
+        **carried.as_dict(),
         geo_code=geo_code,
         currency_code=currency_code,
         price_module_1_monthly=catalog.price_module_1_monthly,
@@ -81,8 +88,6 @@ async def change_my_plan(
         starts_at=now,
         expires_at=expires_at,
     )
-
-    usage = await SubscriptionUsageDAO.get_for_user(session, current_user.id)
     response = subscription_to_response(updated, usage=usage)
     if response is None:
         raise HTTPException(

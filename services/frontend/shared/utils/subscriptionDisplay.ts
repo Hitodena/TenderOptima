@@ -142,6 +142,64 @@ export function catalogForPlan(plan: SubscriptionPlan): PlanCatalogEntry {
 	return PLAN_CATALOG[plan] ?? PLAN_CATALOG.basic
 }
 
+/**
+ * Stored max after a plan change for one monthly quota.
+ * Usage counters are not reset, so leftover is stored as
+ * ``newCatalog + unused + used`` when the new plan is capped.
+ */
+export function carryQuota(
+	oldLimit: number | null | undefined,
+	used: number,
+	newCatalog: number | null | undefined,
+): number | null {
+	if (newCatalog == null) return null
+	if (oldLimit == null) return newCatalog
+	const safeUsed = Math.max(0, used)
+	const unused = Math.max(0, oldLimit - safeUsed)
+	return newCatalog + unused + safeUsed
+}
+
+export function limitsAfterPlanChange(params: {
+	oldSearches: number | null | undefined
+	oldEmails: number | null | undefined
+	oldKp: number | null | undefined
+	oldPages: number | null | undefined
+	searchesUsed: number
+	emailsUsed: number
+	kpUsed: number
+	pagesUsed: number
+	newPlan: SubscriptionPlan
+}): {
+	max_searches_per_month: number | null
+	max_emails_per_month: number | null
+	max_kp_processed_per_month: number | null
+	max_pages_analyzed_per_month: number | null
+} {
+	const catalog = catalogForPlan(params.newPlan)
+	return {
+		max_searches_per_month: carryQuota(
+			params.oldSearches,
+			params.searchesUsed,
+			catalog.max_searches_per_month,
+		),
+		max_emails_per_month: carryQuota(
+			params.oldEmails,
+			params.emailsUsed,
+			catalog.max_emails_per_month,
+		),
+		max_kp_processed_per_month: carryQuota(
+			params.oldKp,
+			params.kpUsed,
+			catalog.max_kp_processed_per_month,
+		),
+		max_pages_analyzed_per_month: carryQuota(
+			params.oldPages,
+			params.pagesUsed,
+			catalog.max_pages_analyzed_per_month,
+		),
+	}
+}
+
 export function subscriptionPlanLabel(
 	plan: string | null | undefined,
 ): string {

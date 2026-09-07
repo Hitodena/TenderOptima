@@ -64,7 +64,14 @@ from backend.utils.personal_data_retention import (
     PERSONAL_DATA_PURPOSES,
     get_purpose,
 )
-from backend.utils.subscription_usage import SubscriptionUsage
+from backend.utils.subscription_carryover import (
+    limits_after_plan_change_for_subscription,
+    merge_carryover_into_payload,
+)
+from backend.utils.subscription_usage import (
+    SubscriptionUsage,
+    SubscriptionUsageDAO,
+)
 from backend.utils.user_email_settings import email_settings_response
 from fastapi import (
     APIRouter,
@@ -365,6 +372,32 @@ async def update_user_subscription(
         plan = payload.get("plan")
         if plan is not None:
             payload["plan"] = plan.value if hasattr(plan, "value") else plan
+        existing = user.subscription
+        new_plan = payload.get("plan")
+        plan_changed = new_plan is not None and (
+            existing is None or existing.plan != new_plan
+        )
+        if plan_changed:
+            geo_code = payload.get(
+                "geo_code",
+                existing.geo_code if existing else "BY",
+            )
+            usage = await SubscriptionUsageDAO.get_for_user(
+                session,
+                user_id,
+            )
+            carried = limits_after_plan_change_for_subscription(
+                existing,
+                new_plan=new_plan,
+                new_geo_code=geo_code,
+                usage=usage,
+            )
+            merge_carryover_into_payload(
+                payload,
+                carried=carried,
+                plan=new_plan,
+                geo_code=geo_code,
+            )
         updated_sub = await SubscriptionDAO.upsert_for_user(
             session, user_id, **payload
         )
