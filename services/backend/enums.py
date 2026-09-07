@@ -30,6 +30,20 @@ class SupplierSource(StrEnum):
     IMPORT = "import"  # reserved for CSV/Excel bulk
 
 
+class SupplierEmailPreferenceStatus(StrEnum):
+    """Platform-wide RFQ mailing preference for a supplier email."""
+
+    SUBSCRIBED = "subscribed"
+    UNSUBSCRIBED = "unsubscribed"
+
+
+class SupplierPreferenceTokenPurpose(StrEnum):
+    """Signed-link purpose for public preference pages and one-click POST."""
+
+    SUBSCRIBE = "subscribe"
+    UNSUBSCRIBE = "unsubscribe"
+
+
 class EmailMessageDirection(StrEnum):
     """Direction of an EmailMessage (threaded conversation item)."""
 

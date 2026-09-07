@@ -18,6 +18,7 @@ from .subscription_billing import (
 from .subscription_payment import SubscriptionPayment
 from .supplier import RequestSupplier, Supplier
 from .supplier_bookmark import SupplierBookmarkItem, SupplierBookmarkList
+from .supplier_email_preference import SupplierEmailPreference
 from .tz_analysis import TZAnalysis
 from .tz_analysis_supplier import TZAnalysisSupplier
 from .tz_creation import TZCreationMessage, TZCreationSession
@@ -46,6 +47,7 @@ __all__ = [
     "SubscriptionBillingProfile",
     "SubscriptionPayment",
     "Supplier",
+    "SupplierEmailPreference",
     "RequestSupplier",
     "User",
     "VerifiedSupplier",

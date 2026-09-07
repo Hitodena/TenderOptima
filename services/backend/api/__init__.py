@@ -19,6 +19,9 @@ from backend.api.subscriptions.router import router as subscriptions_router
 from backend.api.supplier_bookmarks.router import (
     router as supplier_bookmarks_router,
 )
+from backend.api.supplier_preferences.router import (
+    router as supplier_preferences_router,
+)
 from backend.api.suppliers.router import (
     request_suppliers_router,
 )
@@ -38,6 +41,7 @@ api_router.include_router(billing_router)
 api_router.include_router(subscriptions_router)
 api_router.include_router(email_templates_router)
 api_router.include_router(supplier_bookmarks_router)
+api_router.include_router(supplier_preferences_router)
 api_router.include_router(auth_router)
 api_router.include_router(user_requests_router)
 api_router.include_router(responses_router)

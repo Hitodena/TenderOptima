@@ -32,6 +32,34 @@ class RequestCreate(BaseModel):
     ]
 
 
+class RequestFromBookmarksCreate(BaseModel):
+    """Create a request from a supplier bookmark list, skipping search."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, from_attributes=True)
+
+    query: Annotated[
+        str,
+        Field(
+            description="Request title shown to the user and in email subject",
+            min_length=3,
+            max_length=500,
+            examples=["Насосы для котельной"],
+        ),
+    ]
+    delivery_region: Annotated[
+        str,
+        Field(
+            description="Preferred delivery region or country",
+            max_length=100,
+            examples=["Минск"],
+        ),
+    ]
+    bookmark_list_id: Annotated[
+        uuid.UUID,
+        Field(description="Supplier bookmark list to import"),
+    ]
+
+
 class RequestResponse(BaseModel):
     """Full representation of a user request."""
 

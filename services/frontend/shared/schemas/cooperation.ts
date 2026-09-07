@@ -20,4 +20,10 @@ export const cooperationInviteSchema = z.object({
 	honeypot: z.string().max(0).optional(),
 })
 
+export const cooperationSubscribeSchema = z.object({
+	industry: z.string().trim().min(2, 'Укажите хотя бы одну категорию').max(500),
+	region: z.string().trim().min(2, 'Укажите регион').max(100),
+	consent: z.boolean().refine((value) => value === true, 'Необходимо согласие на обработку данных'),
+})
+
 export type CooperationInviteForm = z.infer<typeof cooperationInviteSchema>

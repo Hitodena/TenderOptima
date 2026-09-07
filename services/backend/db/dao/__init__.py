@@ -22,6 +22,7 @@ from .supplier_bookmark_dao import (
     SupplierBookmarkListDAO,
 )
 from .supplier_dao import RequestSupplier, RequestSupplierDAO, SupplierDAO
+from .supplier_email_preference_dao import SupplierEmailPreferenceDAO
 from .tz_analysis_dao import TZAnalysisDAO
 from .tz_analysis_supplier_dao import TZAnalysisSupplierDAO
 from .tz_creation_dao import TZCreationMessageDAO, TZCreationSessionDAO
@@ -43,6 +44,7 @@ __all__ = [
     "EmailTemplateDAO",
     "SupplierBookmarkListDAO",
     "SupplierBookmarkItemDAO",
+    "SupplierEmailPreferenceDAO",
     "UserDAO",
     "SearchHistoryDAO",
     "BlacklistedDomainDAO",

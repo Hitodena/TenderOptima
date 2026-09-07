@@ -146,7 +146,9 @@ if (auth.isAuthenticated.value) {
 }
 
 const MARKETING_ROUTES = new Set(['/', '/product', '/security', '/contacts', '/faq', '/cases', '/cooperation'])
-const isLandingPage = computed(() => MARKETING_ROUTES.has(route.path))
+const isLandingPage = computed(() =>
+	MARKETING_ROUTES.has(route.path) || route.path.startsWith('/s/'),
+)
 const showAppFooter = computed(
 	() => !/^\/requests\/[^/]+\/responses(?:\/|$)/.test(route.path),
 )

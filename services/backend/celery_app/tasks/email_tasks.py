@@ -26,17 +26,24 @@ from backend.db.dao import (
     EmailMessageDAO,
     RequestDAO,
     RequestSupplierDAO,
+    SupplierEmailPreferenceDAO,
     UserAdminDAO,
 )
 from backend.enums import (
     EmailMessageDirection,
     RequestStatus,
     RequestSupplierStatus,
+    SupplierEmailPreferenceStatus,
 )
 from backend.services.analysis.email_queue import queue_email_analysis
 from backend.utils.email_matching import (
     match_incoming_email,
     parse_email_address,
+)
+from backend.utils.email_preference_footer import (
+    append_plain_footer,
+    build_html_body,
+    build_preference_urls,
 )
 from backend.utils.email_utils import (
     build_outbound_subject,
@@ -69,6 +76,52 @@ class SendResult(NamedTuple):
     subject: str | None
     body_for_msg: str | None
     recipient: str | None
+
+
+def _build_rfq_mime(
+    *,
+    plain_body: str,
+    recipient: str,
+    request_id: uuid.UUID,
+    is_subscribed: bool,
+    attachment_data: list[dict],
+) -> tuple[email.message.Message, str]:
+    """Build multipart RFQ message with preference footer and headers."""
+    subscribe_url, unsubscribe_url, one_click_url = build_preference_urls(
+        recipient,
+        request_id=request_id,
+    )
+    shown_subscribe = None if is_subscribed else subscribe_url
+    plain_with_footer = append_plain_footer(
+        plain_body,
+        subscribe_url=shown_subscribe,
+        unsubscribe_url=unsubscribe_url,
+    )
+    html_body = build_html_body(
+        plain_body,
+        subscribe_url=shown_subscribe,
+        unsubscribe_url=unsubscribe_url,
+    )
+    alternative = MIMEMultipart("alternative")
+    alternative.attach(MIMEText(plain_with_footer, "plain", "utf-8"))
+    alternative.attach(MIMEText(html_body, "html", "utf-8"))
+    if attachment_data:
+        msg: email.message.Message = MIMEMultipart("mixed")
+        msg.attach(alternative)
+        for att in attachment_data:
+            part = MIMEBase("application", "octet-stream")
+            part.set_payload(att["data"])
+            encoders.encode_base64(part)
+            part.add_header(
+                "Content-Disposition",
+                f'attachment; filename="{att["filename"]}"',
+            )
+            msg.attach(part)
+    else:
+        msg = alternative
+    msg["List-Unsubscribe"] = f"<{one_click_url}>"
+    msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
+    return msg, plain_with_footer
 
 
 def _decode_header_value(value: str) -> str:
@@ -512,10 +565,20 @@ async def send_emails(self, request_id: str) -> dict:
             pending = pending[:remaining]
 
         smtp_creds = resolve_smtp_credentials(user, config)
+        pending_emails = [
+            (rs.sent_to_email or rs.supplier.main_email or "").lower().strip()
+            for rs in pending
+        ]
+        preference_statuses = (
+            await SupplierEmailPreferenceDAO.statuses_for_emails(
+                session, pending_emails
+            )
+        )
 
     sent = 0
     failed = 0
     results: list[SendResult] = []
+    skipped_unsubscribed: list[uuid.UUID] = []
     attachment_data = _prepare_attachments(request.attachment_paths)
 
     try:
@@ -552,6 +615,16 @@ async def send_emails(self, request_id: str) -> dict:
                         )
                     )
                     failed += 1
+                elif (
+                    preference_statuses.get(recipient.lower().strip())
+                    == SupplierEmailPreferenceStatus.UNSUBSCRIBED.value
+                ):
+                    logger.info(
+                        "Skipping unsubscribed supplier",
+                        supplier_id=str(supplier.id),
+                        recipient=recipient,
+                    )
+                    skipped_unsubscribed.append(rs.id)
                 else:
                     user = rs.request.user
                     rs_tracking_id = generate_tid()
@@ -560,21 +633,17 @@ async def send_emails(self, request_id: str) -> dict:
                         request,
                         rs_tracking_id,
                     )
-
-                    if attachment_data:
-                        msg = MIMEMultipart()
-                        msg.attach(MIMEText(plain_body, "plain", "utf-8"))
-                        for att in attachment_data:
-                            part = MIMEBase("application", "octet-stream")
-                            part.set_payload(att["data"])
-                            encoders.encode_base64(part)
-                            part.add_header(
-                                "Content-Disposition",
-                                f'attachment; filename="{att["filename"]}"',
-                            )
-                            msg.attach(part)
-                    else:
-                        msg = MIMEText(plain_body, "plain", "utf-8")
+                    is_subscribed = (
+                        preference_statuses.get(recipient.lower().strip())
+                        == SupplierEmailPreferenceStatus.SUBSCRIBED.value
+                    )
+                    msg, plain_with_footer = _build_rfq_mime(
+                        plain_body=plain_body,
+                        recipient=recipient,
+                        request_id=request.id,
+                        is_subscribed=is_subscribed,
+                        attachment_data=attachment_data,
+                    )
                     msg["From"] = (
                         f"{user.company_name or 'TenderOptima'} "
                         f"<{smtp_creds.user}>"
@@ -598,7 +667,7 @@ async def send_emails(self, request_id: str) -> dict:
                                 outbound_message_id,
                                 rs_tracking_id,
                                 msg["Subject"],
-                                plain_body,
+                                plain_with_footer,
                                 recipient,
                             )
                         )
@@ -675,6 +744,13 @@ async def send_emails(self, request_id: str) -> dict:
                     to_email=result.recipient,
                     mailbox_email=smtp_creds.user,
                 )
+
+        for skipped_id in skipped_unsubscribed:
+            await RequestSupplierDAO.update_fields(
+                session,
+                skipped_id,
+                is_enabled=False,
+            )
 
         await RequestDAO.update_fields(
             session,

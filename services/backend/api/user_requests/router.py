@@ -33,6 +33,7 @@ from backend.api.user_requests.schemas import (
     RequestCloseResponse,
     RequestCreate,
     RequestEmailUpdate,
+    RequestFromBookmarksCreate,
     RequestResponse,
     RequestUpdate,
     SearchQueuedResponse,
@@ -40,9 +41,15 @@ from backend.api.user_requests.schemas import (
 from backend.celery_app.tasks.email_tasks import send_emails
 from backend.celery_app.tasks.parser_tasks import run_parser_search
 from backend.core.config import ALLOWED_CONTENT_TYPES, Config
-from backend.db.dao import EmailMessageDAO, RequestDAO, RequestSupplierDAO
+from backend.db.dao import (
+    EmailMessageDAO,
+    RequestDAO,
+    RequestSupplierDAO,
+    SupplierBookmarkListDAO,
+)
 from backend.db.models import User
 from backend.enums import RequestStatus
+from backend.services.request_from_bookmarks import attach_bookmark_item
 from backend.utils.comparison_price import merge_multi_position_price_params
 from backend.utils.email_utils import build_request_email_body
 
@@ -120,6 +127,68 @@ async def create_request(
         delivery_region=body.delivery_region,
         is_multi_position=False,
         status=RequestStatus.DRAFT,
+    )
+    return RequestResponse.model_validate(request)
+
+
+@router.post(
+    "/from-bookmarks",
+    response_model=RequestResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a request from a supplier bookmark list",
+)
+async def create_request_from_bookmarks(
+    body: RequestFromBookmarksCreate,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> RequestResponse:
+    """Create an active request and attach all suppliers from a bookmark list."""
+    await ensure_module_1_access(session, current_user)
+    bookmark_list = await SupplierBookmarkListDAO.get_by_id_for_user(
+        session, body.bookmark_list_id, current_user.id
+    )
+    if bookmark_list is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="База поставщиков не найдена",
+        )
+    if not bookmark_list.items:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="В выбранной базе нет поставщиков",
+        )
+
+    request = await RequestDAO.create(
+        session,
+        user_id=current_user.id,
+        query=body.query,
+        delivery_region=body.delivery_region,
+        is_multi_position=False,
+        status=RequestStatus.ACTIVE,
+    )
+    attached = 0
+    for item in bookmark_list.items:
+        created = await attach_bookmark_item(
+            session,
+            request_id=request.id,
+            user_id=current_user.id,
+            item=item,
+        )
+        if created:
+            attached += 1
+
+    if attached == 0:
+        await RequestDAO.delete(session, request.id)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Не удалось добавить поставщиков из базы",
+        )
+
+    logger.info(
+        "Request created from bookmark list",
+        request_id=str(request.id),
+        bookmark_list_id=str(bookmark_list.id),
+        attached=attached,
     )
     return RequestResponse.model_validate(request)
 

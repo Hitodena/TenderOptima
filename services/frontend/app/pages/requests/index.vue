@@ -9,7 +9,17 @@
 						минут.</p>
 				</div>
 
-				<div class="flex justify-end mb-4">
+				<div class="flex justify-end mb-4 gap-2">
+					<UButton
+						v-if="canImportFromBookmarks"
+						size="lg"
+						variant="outline"
+						color="neutral"
+						leading-icon="i-lucide-database"
+						@click="importOpen = true"
+					>
+						Из базы
+					</UButton>
 					<UButton
 						to="/requests/history" size="lg" variant="outline" color="neutral"
 						leading-icon="i-lucide-history">
@@ -73,6 +83,8 @@
 				</UCard>
 			</div>
 
+			<ImportFromBookmarksModal v-model:open="importOpen" />
+
 		</div>
 	</UContainer>
 </template>
@@ -83,11 +95,13 @@ import { z } from 'zod'
 import { titleCaseWords } from '#shared/utils/textFormat'
 import {
 	canStartModule1Work,
+	isTestPlan,
 	module1WorkBlockMessage,
 } from '#shared/utils/subscriptionAccess'
 import { subscriptionPlansPath } from '#shared/utils/subscriptionDisplay'
 import { t } from '~/constants/translations'
 import SearchQueryRulesHint from '~/components/requests/SearchQueryRulesHint.vue'
+import ImportFromBookmarksModal from '~/components/ImportFromBookmarksModal.vue'
 
 const { post } = useApi()
 const { user, loaded, ensureLoaded } = useCurrentUser()
@@ -103,11 +117,16 @@ const form = reactive({
 })
 const loading = ref(false)
 const searchError = ref<unknown | null>(null)
+const importOpen = ref(false)
 
 onMounted(() => ensureLoaded())
 
 const canStartSearch = computed(() =>
 	canStartModule1Work(user.value?.subscription),
+)
+
+const canImportFromBookmarks = computed(() =>
+	canStartSearch.value && !isTestPlan(user.value?.subscription),
 )
 
 const module1BlockReason = computed(() =>

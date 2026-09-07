@@ -507,6 +507,12 @@ export interface RequestCreate {
 	delivery_region: string;
 }
 
+export interface RequestFromBookmarksCreate {
+	query: string;
+	delivery_region: string;
+	bookmark_list_id: string;
+}
+
 export interface RequestUpdate {
 	description: string;
 	additional_params?: string[] | null;
@@ -793,6 +799,28 @@ export interface SupplierBookmarkItemUpdate {
 	domain?: string | null;
 	phone?: string | null;
 	notes?: string | null;
+}
+
+export interface SupplierEmailPreference {
+	email: string;
+	status: 'subscribed' | 'unsubscribed' | null;
+	categories: string[];
+	region: string | null;
+	suggested_region: string | null;
+	consent_accepted_at: string | null;
+}
+
+export interface SupplierEmailPreferenceSubscribe {
+	token: string;
+	categories: string[];
+	region: string;
+	consent: boolean;
+}
+
+export interface SupplierEmailPreferenceAction {
+	email: string;
+	status: 'subscribed' | 'unsubscribed';
+	source_request_id: string | null;
 }
 
 export interface RequirementNode {
