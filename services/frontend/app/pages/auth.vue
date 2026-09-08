@@ -116,6 +116,15 @@ type="button"
 												>
 													{{ t('auth.termsLink') }}
 												</a>
+												{{ t('auth.termsAnd') }}
+												<a
+													:href="LEGAL_DOCUMENTS.privacyPolicy.href"
+													class="text-primary underline underline-offset-2 hover:opacity-80"
+													target="_blank"
+													rel="noopener noreferrer"
+												>
+													{{ t('auth.privacyLink') }}
+												</a>
 											</span>
 										</template>
 									</UCheckbox>

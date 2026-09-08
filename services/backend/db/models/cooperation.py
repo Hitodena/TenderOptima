@@ -25,6 +25,24 @@ class CooperationLead(IDMixinUUID, TimestampMixin, Base):
     agree_marketing: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
+    terms_accepted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    terms_version: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
+    privacy_version: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
+    consent_user_agent: Mapped[str | None] = mapped_column(
+        String(512), nullable=True
+    )
+    marketing_consent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    marketing_consent_version: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
     status: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
@@ -91,6 +109,28 @@ class VerifiedSupplier(IDMixinUUID, TimestampMixin, Base):
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
+    )
+    agree_marketing: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    terms_accepted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    terms_version: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
+    privacy_version: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
+    consent_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    consent_user_agent: Mapped[str | None] = mapped_column(
+        String(512), nullable=True
+    )
+    marketing_consent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    marketing_consent_version: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
     )
 
     source_lead: Mapped[CooperationLead | None] = relationship(

@@ -1,4 +1,6 @@
-from sqlalchemy import Boolean, String, Text
+from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.db.models.base import Base, IDMixinUUID, TimestampMixin
@@ -30,6 +32,24 @@ class Consultation(IDMixinUUID, TimestampMixin, Base):
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     agree_marketing: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
+    )
+    terms_accepted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    terms_version: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
+    privacy_version: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
+    consent_user_agent: Mapped[str | None] = mapped_column(
+        String(512), nullable=True
+    )
+    marketing_consent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    marketing_consent_version: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
     )
     status: Mapped[ConsultationStatus] = mapped_column(
         String(20),

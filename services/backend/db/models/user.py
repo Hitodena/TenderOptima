@@ -36,6 +36,27 @@ class User(IDMixinUUID, TimestampMixin, Base):
     is_admin: Mapped[bool] = mapped_column(default=False)
     agree_terms: Mapped[bool] = mapped_column(default=True)
     agree_marketing: Mapped[bool] = mapped_column(default=False)
+    terms_accepted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    terms_version: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
+    privacy_version: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
+    consent_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    consent_user_agent: Mapped[str | None] = mapped_column(
+        String(512), nullable=True
+    )
+    marketing_consent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    marketing_consent_version: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
     consent_revoked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,

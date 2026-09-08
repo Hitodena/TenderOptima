@@ -1,5 +1,6 @@
 """DAO helpers for the verified supplier registry."""
 
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -49,9 +50,27 @@ class VerifiedSupplierDAO(BaseDAO[VerifiedSupplier]):
         comments: str | None,
         source_lead_id: UUID,
         approved_by_admin_id: UUID,
+        agree_marketing: bool = False,
+        terms_accepted_at: datetime | None = None,
+        terms_version: str | None = None,
+        privacy_version: str | None = None,
+        consent_ip: str | None = None,
+        consent_user_agent: str | None = None,
+        marketing_consent_at: datetime | None = None,
+        marketing_consent_version: str | None = None,
     ) -> VerifiedSupplier:
         """Insert a verified supplier without committing (caller owns txn)."""
         existing = await cls.get_by_email(session, email)
+        consent_fields = {
+            "agree_marketing": agree_marketing,
+            "terms_accepted_at": terms_accepted_at,
+            "terms_version": terms_version,
+            "privacy_version": privacy_version,
+            "consent_ip": consent_ip,
+            "consent_user_agent": consent_user_agent,
+            "marketing_consent_at": marketing_consent_at,
+            "marketing_consent_version": marketing_consent_version,
+        }
         if existing is not None:
             existing.company_name = company_name
             existing.phone = phone
@@ -61,6 +80,8 @@ class VerifiedSupplierDAO(BaseDAO[VerifiedSupplier]):
             existing.source = "cooperation_approval"
             existing.source_lead_id = source_lead_id
             existing.approved_by_admin_id = approved_by_admin_id
+            for key, value in consent_fields.items():
+                setattr(existing, key, value)
             session.add(existing)
             await session.flush()
             await session.refresh(existing)
@@ -76,6 +97,7 @@ class VerifiedSupplierDAO(BaseDAO[VerifiedSupplier]):
             source="cooperation_approval",
             source_lead_id=source_lead_id,
             approved_by_admin_id=approved_by_admin_id,
+            **consent_fields,
         )
         session.add(row)
         await session.flush()

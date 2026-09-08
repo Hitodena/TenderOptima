@@ -84,6 +84,73 @@
 					</template>
 
 					<div class="space-y-5">
+						<div class="rounded-lg border border-default p-3 space-y-2">
+							<h3 class="text-sm font-semibold">Согласия</h3>
+							<div class="grid gap-2 text-xs text-muted sm:grid-cols-2">
+								<p>
+									ToS / Privacy:
+									<span class="text-default">
+										{{ selectedUser.agree_terms ? 'да' : 'нет' }}
+									</span>
+								</p>
+								<p>
+									Маркетинг:
+									<span class="text-default">
+										{{ selectedUser.agree_marketing ? 'да' : 'нет' }}
+									</span>
+								</p>
+								<p>
+									ToS версия:
+									<span class="text-default">
+										{{ selectedUser.terms_version || '—' }}
+									</span>
+								</p>
+								<p>
+									Privacy версия:
+									<span class="text-default">
+										{{ selectedUser.privacy_version || '—' }}
+									</span>
+								</p>
+								<p>
+									Принято:
+									<span class="text-default">
+										{{ selectedUser.terms_accepted_at
+											? formatDate(selectedUser.terms_accepted_at)
+											: '—' }}
+									</span>
+								</p>
+								<p>
+									Маркетинг версия:
+									<span class="text-default">
+										{{ selectedUser.marketing_consent_version || '—' }}
+									</span>
+								</p>
+								<p>
+									Маркетинг принято:
+									<span class="text-default">
+										{{ selectedUser.marketing_consent_at
+											? formatDate(selectedUser.marketing_consent_at)
+											: '—' }}
+									</span>
+								</p>
+								<p class="sm:col-span-2 truncate" :title="selectedUser.consent_ip || undefined">
+									IP:
+									<span class="text-default">
+										{{ selectedUser.consent_ip || '—' }}
+									</span>
+								</p>
+								<p
+									class="sm:col-span-2 break-all"
+									:title="selectedUser.consent_user_agent || undefined"
+								>
+									User-Agent:
+									<span class="text-default">
+										{{ selectedUser.consent_user_agent || '—' }}
+									</span>
+								</p>
+							</div>
+						</div>
+
 						<div>
 							<h3 class="text-sm font-semibold mb-3">SMTP</h3>
 							<div class="grid gap-3 sm:grid-cols-2">

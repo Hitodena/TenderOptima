@@ -13,6 +13,8 @@ from backend.api.admin.schemas import (
     AdminEmailMessagePage,
     AdminRequestSupplierRecipientUpdate,
     AdminSmtpDefaultsResponse,
+    AdminSupplierPreferenceItem,
+    AdminSupplierPreferencePage,
     AdminUserDetail,
     AdminUserListItem,
     DeletedUserPurposeCountdown,
@@ -47,11 +49,16 @@ from backend.db.dao import (
     RequestSupplierDAO,
     SubscriptionDAO,
     SupplierDAO,
+    SupplierEmailPreferenceDAO,
     UserAdminDAO,
     VerifiedSupplierDAO,
 )
 from backend.db.models import CooperationLead, ReferralInvitation, User
-from backend.enums import CooperationLeadStatus, EmailMessageDirection
+from backend.enums import (
+    CooperationLeadStatus,
+    EmailMessageDirection,
+    SupplierEmailPreferenceStatus,
+)
 from backend.schemas.user_email_settings import UserEmailSettingsUpdate
 from backend.services.personal_data_cleanup import (
     days_since,
@@ -138,6 +145,15 @@ def _admin_detail(
             user.subscription,
             usage=usage,
         ),
+        agree_terms=user.agree_terms,
+        agree_marketing=user.agree_marketing,
+        terms_accepted_at=user.terms_accepted_at,
+        terms_version=user.terms_version,
+        privacy_version=user.privacy_version,
+        consent_ip=user.consent_ip,
+        consent_user_agent=user.consent_user_agent,
+        marketing_consent_at=user.marketing_consent_at,
+        marketing_consent_version=user.marketing_consent_version,
     )
 
 
@@ -719,6 +735,64 @@ async def list_cooperation_leads(
     )
 
 
+def _supplier_preference_item(
+    pref,
+    source_request_query: str | None,
+) -> AdminSupplierPreferenceItem:
+    return AdminSupplierPreferenceItem(
+        id=pref.id,
+        email=pref.email,
+        status=pref.status,
+        categories=list(pref.categories or []),
+        region=pref.region,
+        consent_accepted_at=pref.consent_accepted_at,
+        consent_ip=pref.consent_ip,
+        terms_accepted_at=pref.terms_accepted_at,
+        terms_version=pref.terms_version,
+        privacy_version=pref.privacy_version,
+        consent_user_agent=pref.consent_user_agent,
+        agree_marketing=pref.agree_marketing,
+        marketing_consent_at=pref.marketing_consent_at,
+        marketing_consent_version=pref.marketing_consent_version,
+        source_request_id=pref.source_request_id,
+        source_request_query=source_request_query,
+        subscribed_at=pref.subscribed_at,
+        unsubscribed_at=pref.unsubscribed_at,
+        created_at=pref.created_at,
+    )
+
+
+@router.get(
+    "/supplier-preferences",
+    response_model=AdminSupplierPreferencePage,
+    summary="List supplier RFQ email preferences",
+)
+async def list_supplier_preferences(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _admin: Annotated[User, Depends(get_admin)],
+    page: Annotated[int, Query(ge=1)] = 1,
+    size: Annotated[int, Query(ge=1, le=100)] = 20,
+    status_filter: Annotated[
+        SupplierEmailPreferenceStatus | None, Query(alias="status")
+    ] = None,
+) -> AdminSupplierPreferencePage:
+    rows, total = await SupplierEmailPreferenceDAO.list_page(
+        session,
+        page=page,
+        size=size,
+        status=status_filter,
+    )
+    return AdminSupplierPreferencePage(
+        items=[
+            _supplier_preference_item(pref, source_query)
+            for pref, source_query in rows
+        ],
+        page=page,
+        size=size,
+        total=total,
+    )
+
+
 @router.post(
     "/cooperation/leads/{lead_id}/approve",
     response_model=CooperationLeadResponse,
@@ -766,6 +840,14 @@ async def approve_cooperation_lead(
             comments=approved.comment,
             source_lead_id=approved.id,
             approved_by_admin_id=admin.id,
+            agree_marketing=approved.agree_marketing,
+            terms_accepted_at=approved.terms_accepted_at,
+            terms_version=approved.terms_version,
+            privacy_version=approved.privacy_version,
+            consent_ip=approved.ip_address,
+            consent_user_agent=approved.consent_user_agent,
+            marketing_consent_at=approved.marketing_consent_at,
+            marketing_consent_version=approved.marketing_consent_version,
         )
         await session.commit()
         await session.refresh(approved)

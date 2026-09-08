@@ -45,6 +45,46 @@ class AdminUserDetail(BaseModel):
     pages_analyzed_this_month: int = 0
     pages_analysis_remaining: int | None = None
     subscription: SubscriptionResponse | None = None
+    agree_terms: bool = False
+    agree_marketing: bool = False
+    terms_accepted_at: datetime | None = None
+    terms_version: str | None = None
+    privacy_version: str | None = None
+    consent_ip: str | None = None
+    consent_user_agent: str | None = None
+    marketing_consent_at: datetime | None = None
+    marketing_consent_version: str | None = None
+
+
+class AdminSupplierPreferenceItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    email: EmailStr
+    status: str
+    categories: list[str] = Field(default_factory=list)
+    region: str | None = None
+    consent_accepted_at: datetime | None = None
+    consent_ip: str | None = None
+    terms_accepted_at: datetime | None = None
+    terms_version: str | None = None
+    privacy_version: str | None = None
+    consent_user_agent: str | None = None
+    agree_marketing: bool = False
+    marketing_consent_at: datetime | None = None
+    marketing_consent_version: str | None = None
+    source_request_id: uuid.UUID | None = None
+    source_request_query: str | None = None
+    subscribed_at: datetime | None = None
+    unsubscribed_at: datetime | None = None
+    created_at: datetime
+
+
+class AdminSupplierPreferencePage(BaseModel):
+    items: list[AdminSupplierPreferenceItem]
+    page: int
+    size: int
+    total: int
 
 
 class ReferralInvitationCreate(BaseModel):

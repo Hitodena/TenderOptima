@@ -71,8 +71,7 @@ class RegisterCreate(BaseModel):
     agree_terms: Annotated[
         bool,
         Field(
-            default=True,
-            description="Accept for terms",
+            description="Accept terms of use and privacy policy",
             examples=[True],
         ),
     ]

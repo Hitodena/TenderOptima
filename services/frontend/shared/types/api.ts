@@ -348,6 +348,44 @@ export interface AdminUserDetail {
 	pages_analyzed_this_month: number;
 	pages_analysis_remaining: number | null;
 	subscription: SubscriptionResponse | null;
+	agree_terms: boolean;
+	agree_marketing: boolean;
+	terms_accepted_at: string | null;
+	terms_version: string | null;
+	privacy_version: string | null;
+	consent_ip: string | null;
+	consent_user_agent: string | null;
+	marketing_consent_at: string | null;
+	marketing_consent_version: string | null;
+}
+
+export interface AdminSupplierPreferenceItem {
+	id: string;
+	email: string;
+	status: string;
+	categories: string[];
+	region: string | null;
+	consent_accepted_at: string | null;
+	consent_ip: string | null;
+	terms_accepted_at: string | null;
+	terms_version: string | null;
+	privacy_version: string | null;
+	consent_user_agent: string | null;
+	agree_marketing: boolean;
+	marketing_consent_at: string | null;
+	marketing_consent_version: string | null;
+	source_request_id: string | null;
+	source_request_query: string | null;
+	subscribed_at: string | null;
+	unsubscribed_at: string | null;
+	created_at: string;
+}
+
+export interface AdminSupplierPreferencePage {
+	items: AdminSupplierPreferenceItem[];
+	page: number;
+	size: number;
+	total: number;
 }
 
 export interface ReferralInvitationCreate {
@@ -815,6 +853,7 @@ export interface SupplierEmailPreferenceSubscribe {
 	categories: string[];
 	region: string;
 	consent: boolean;
+	agree_marketing: boolean;
 }
 
 export interface SupplierEmailPreferenceAction {

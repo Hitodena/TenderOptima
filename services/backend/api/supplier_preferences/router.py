@@ -22,6 +22,8 @@ from backend.enums import (
     SupplierEmailPreferenceStatus,
     SupplierPreferenceTokenPurpose,
 )
+from backend.utils.legal_document_versions import stamp_consent_audit
+from backend.utils.request_client_meta import client_ip, client_user_agent
 from backend.utils.supplier_preference_tokens import decode_preference_token
 
 router = APIRouter(
@@ -30,13 +32,6 @@ router = APIRouter(
 
 RATE_LIMIT_MAX_REQUESTS = 10
 RATE_LIMIT_WINDOW = timedelta(minutes=1)
-
-
-def _client_ip(request: Request) -> str:
-    forwarded_for = request.headers.get("x-forwarded-for")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
 
 
 def _email_from_payload(payload: dict) -> str:
@@ -131,12 +126,17 @@ async def subscribe(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Необходимо согласие на обработку персональных данных",
         )
+    if not body.agree_marketing:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Необходимо согласие на получение запросов по email",
+        )
     payload = decode_preference_token(
         body.token,
         expected_purpose=SupplierPreferenceTokenPurpose.SUBSCRIBE,
     )
     email = _email_from_payload(payload)
-    ip_address = _client_ip(request)
+    ip_address = client_ip(request)
     await _rate_limit(session, ip_address)
 
     categories = [c.strip() for c in body.categories if c and c.strip()]
@@ -148,6 +148,11 @@ async def subscribe(
 
     now = datetime.now(UTC)
     request_id = _request_id_from_payload(payload)
+    consent = stamp_consent_audit(
+        ip_address=ip_address,
+        user_agent=client_user_agent(request),
+        agree_marketing=True,
+    )
     pref = await SupplierEmailPreferenceDAO.get_by_email(session, email)
     if pref is None:
         pref = await SupplierEmailPreferenceDAO.create(
@@ -158,6 +163,13 @@ async def subscribe(
             region=body.region,
             consent_accepted_at=now,
             consent_ip=ip_address,
+            terms_accepted_at=consent.terms_accepted_at,
+            terms_version=consent.terms_version,
+            privacy_version=consent.privacy_version,
+            consent_user_agent=consent.consent_user_agent,
+            agree_marketing=True,
+            marketing_consent_at=consent.marketing_consent_at,
+            marketing_consent_version=consent.marketing_consent_version,
             source_request_id=request_id,
             subscribed_at=now,
             unsubscribed_at=None,
@@ -171,6 +183,13 @@ async def subscribe(
             region=body.region,
             consent_accepted_at=now,
             consent_ip=ip_address,
+            terms_accepted_at=consent.terms_accepted_at,
+            terms_version=consent.terms_version,
+            privacy_version=consent.privacy_version,
+            consent_user_agent=consent.consent_user_agent,
+            agree_marketing=True,
+            marketing_consent_at=consent.marketing_consent_at,
+            marketing_consent_version=consent.marketing_consent_version,
             source_request_id=request_id or pref.source_request_id,
             subscribed_at=now,
             unsubscribed_at=None,
@@ -208,6 +227,7 @@ async def _unsubscribe_email(
             region=None,
             consent_accepted_at=None,
             consent_ip=ip_address,
+            agree_marketing=False,
             source_request_id=request_id,
             subscribed_at=None,
             unsubscribed_at=now,
@@ -218,6 +238,7 @@ async def _unsubscribe_email(
             pref.id,
             status=SupplierEmailPreferenceStatus.UNSUBSCRIBED.value,
             consent_ip=ip_address,
+            agree_marketing=False,
             source_request_id=request_id or pref.source_request_id,
             unsubscribed_at=now,
         )
@@ -250,7 +271,7 @@ async def unsubscribe(
         session,
         email=email,
         request_id=_request_id_from_payload(payload),
-        ip_address=_client_ip(request),
+        ip_address=client_ip(request),
     )
     return SupplierPreferenceActionResponse(
         email=email,
@@ -278,7 +299,7 @@ async def one_click_unsubscribe(
         session,
         email=email,
         request_id=_request_id_from_payload(payload),
-        ip_address=_client_ip(request),
+        ip_address=client_ip(request),
     )
     return SupplierPreferenceActionResponse(
         email=email,

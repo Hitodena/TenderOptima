@@ -22,18 +22,13 @@ from backend.enums import (
     ConsultationRole,
     ConsultationStatus,
 )
+from backend.utils.legal_document_versions import stamp_consent_audit
+from backend.utils.request_client_meta import client_ip, client_user_agent
 
 router = APIRouter(prefix="/consultations", tags=["Consultations"])
 
 RATE_LIMIT_MAX_REQUESTS = 5
 RATE_LIMIT_WINDOW = timedelta(minutes=1)
-
-
-def _client_ip(request: Request) -> str:
-    forwarded_for = request.headers.get("x-forwarded-for")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
 
 
 def _consultation_response(row: Consultation) -> ConsultationResponse:
@@ -75,7 +70,7 @@ async def create_consultation(
             detail="Invalid submission",
         )
 
-    ip_address = _client_ip(request)
+    ip_address = client_ip(request)
     recent_count = await ConsultationDAO.count_recent_by_ip(
         session, ip_address, datetime.now(UTC) - RATE_LIMIT_WINDOW
     )
@@ -102,6 +97,11 @@ async def create_consultation(
             detail="Заявка с этим номером телефона уже отправлена",
         )
 
+    consent = stamp_consent_audit(
+        ip_address=ip_address,
+        user_agent=client_user_agent(request),
+        agree_marketing=body.agree_marketing,
+    )
     row = await ConsultationDAO.create(
         session,
         name=body.name,
@@ -112,6 +112,12 @@ async def create_consultation(
         request_type=body.request_type.value,
         comment=body.comment,
         agree_marketing=body.agree_marketing,
+        terms_accepted_at=consent.terms_accepted_at,
+        terms_version=consent.terms_version,
+        privacy_version=consent.privacy_version,
+        consent_user_agent=consent.consent_user_agent,
+        marketing_consent_at=consent.marketing_consent_at,
+        marketing_consent_version=consent.marketing_consent_version,
         status=ConsultationStatus.NEW.value,
         utm_source=body.utm_source,
         utm_medium=body.utm_medium,

@@ -122,6 +122,113 @@
 		</section>
 
 		<section class="space-y-4">
+			<div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+				<div>
+					<p class="font-semibold text-highlighted">
+						Подписки на запросы
+					</p>
+					<p class="text-sm text-muted mt-0.5">
+						Поставщики, подтвердившие opt-in из письма RFQ.
+					</p>
+				</div>
+				<UFormField label="Статус" class="sm:w-48">
+					<USelect
+						v-model="prefStatusFilter"
+						:items="prefStatusOptions"
+						class="w-full"
+						@update:model-value="reloadPrefsFirstPage"
+					/>
+				</UFormField>
+			</div>
+
+			<UAlert
+				v-if="prefsError"
+				color="error"
+				variant="soft"
+				icon="i-lucide-circle-alert"
+				:description="prefsError"
+			/>
+
+			<div class="overflow-x-auto rounded-lg border border-default">
+				<UTable
+					:data="preferences"
+					:columns="prefColumns"
+					:loading="loadingPrefs"
+					class="min-w-[980px]"
+					:ui="{ td: 'align-top py-3', th: 'whitespace-nowrap' }"
+				>
+					<template #empty>
+						<div class="flex flex-col items-center justify-center gap-3 py-12">
+							<UIcon name="i-lucide-mail" class="size-10 text-muted opacity-40" />
+							<p class="text-muted">Подписок пока нет</p>
+						</div>
+					</template>
+
+					<template #subscribed_at-cell="{ row }">
+						<span class="text-xs text-muted whitespace-nowrap">
+							{{ formatDate(row.original.subscribed_at || row.original.created_at) }}
+						</span>
+					</template>
+
+					<template #status-cell="{ row }">
+						<UBadge
+							:color="row.original.status === 'subscribed' ? 'success' : 'neutral'"
+							variant="soft"
+						>
+							{{ row.original.status === 'subscribed' ? 'Подписан' : 'Отписан' }}
+						</UBadge>
+					</template>
+
+					<template #email-cell="{ row }">
+						<div class="min-w-0 max-w-56">
+							<p class="text-sm font-medium truncate">{{ row.original.email }}</p>
+							<p class="text-xs text-muted truncate">
+								{{ row.original.region || '—' }}
+							</p>
+						</div>
+					</template>
+
+					<template #categories-cell="{ row }">
+						<p
+							class="text-xs text-muted max-w-48 line-clamp-3"
+							:title="row.original.categories.join(', ')"
+						>
+							{{ row.original.categories.join(', ') || '—' }}
+						</p>
+					</template>
+
+					<template #source-cell="{ row }">
+						<p
+							class="text-xs text-muted max-w-48 line-clamp-2"
+							:title="row.original.source_request_query || undefined"
+						>
+							{{ row.original.source_request_query || '—' }}
+						</p>
+					</template>
+
+					<template #consent-cell="{ row }">
+						<div class="text-xs text-muted space-y-0.5 max-w-52">
+							<p>ToS {{ row.original.terms_version || '—' }} / PD {{ row.original.privacy_version || '—' }}</p>
+							<p>Mkt {{ row.original.marketing_consent_version || '—' }}</p>
+							<p class="truncate" :title="row.original.consent_ip || undefined">
+								IP: {{ row.original.consent_ip || '—' }}
+							</p>
+						</div>
+					</template>
+				</UTable>
+			</div>
+
+			<div v-if="prefsTotal > PAGE_SIZE" class="flex justify-center">
+				<UPagination
+					v-model:page="prefsPage"
+					:total="prefsTotal"
+					:items-per-page="PAGE_SIZE"
+					size="sm"
+				/>
+			</div>
+		</section>
+
+		<section class="space-y-4">
 			<div>
 				<p class="font-semibold text-highlighted">
 					Проверенные поставщики
@@ -399,6 +506,8 @@ import type {
 	AdminCooperationSupplierItem,
 	AdminCooperationSupplierPage,
 	AdminSmtpDefaultsResponse,
+	AdminSupplierPreferenceItem,
+	AdminSupplierPreferencePage,
 	Attachment,
 	CooperationLeadPageResponse,
 	CooperationLeadResponse,
@@ -507,6 +616,63 @@ function reloadLeadsFirstPage() {
 		return
 	}
 	leadsPage.value = 1
+}
+
+const preferences = ref<AdminSupplierPreferenceItem[]>([])
+const prefsTotal = ref(0)
+const prefsPage = ref(1)
+const loadingPrefs = ref(false)
+const prefsError = ref<string | null>(null)
+const prefStatusFilter = ref<string>('all')
+
+const prefStatusOptions = [
+	{ label: 'Все', value: 'all' },
+	{ label: 'Подписан', value: 'subscribed' },
+	{ label: 'Отписан', value: 'unsubscribed' },
+]
+
+const prefColumns: TableColumn<AdminSupplierPreferenceItem>[] = [
+	{ id: 'subscribed_at', header: 'Дата' },
+	{ id: 'status', header: 'Статус' },
+	{ id: 'email', header: 'Email / регион' },
+	{ id: 'categories', header: 'Категории' },
+	{ id: 'source', header: 'Исходный запрос' },
+	{ id: 'consent', header: 'Согласия' },
+]
+
+async function fetchPreferences() {
+	loadingPrefs.value = true
+	prefsError.value = null
+	try {
+		const params = new URLSearchParams({
+			page: String(prefsPage.value),
+			size: String(PAGE_SIZE),
+		})
+		if (prefStatusFilter.value !== 'all') {
+			params.set('status', prefStatusFilter.value)
+		}
+		const data = await get<AdminSupplierPreferencePage>(
+			`/admin/supplier-preferences?${params.toString()}`,
+		)
+		preferences.value = data.items
+		prefsTotal.value = data.total
+	}
+	catch (e: unknown) {
+		preferences.value = []
+		prefsTotal.value = 0
+		prefsError.value = getApiErrorDetail(e) ?? 'Не удалось загрузить подписки'
+	}
+	finally {
+		loadingPrefs.value = false
+	}
+}
+
+function reloadPrefsFirstPage() {
+	if (prefsPage.value === 1) {
+		void fetchPreferences()
+		return
+	}
+	prefsPage.value = 1
 }
 
 async function approveLead(id: string) {
@@ -747,6 +913,9 @@ async function send() {
 watch(leadsPage, () => {
 	void fetchLeads()
 })
+watch(prefsPage, () => {
+	void fetchPreferences()
+})
 watch(verifiedPage, () => {
 	void fetchVerified()
 })
@@ -756,6 +925,7 @@ watch(page, () => {
 
 onMounted(() => {
 	void fetchLeads()
+	void fetchPreferences()
 	void fetchVerified()
 	void fetchSuppliers()
 	void loadSmtpDefaults()

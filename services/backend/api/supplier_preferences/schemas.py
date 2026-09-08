@@ -45,6 +45,15 @@ class SupplierPreferenceSubscribeRequest(BaseModel):
     consent: Annotated[
         bool, Field(description="Explicit personal-data consent")
     ]
+    agree_marketing: Annotated[
+        bool,
+        Field(
+            description=(
+                "Explicit consent to receive similar RFQ emails "
+                "(required for subscribe)"
+            ),
+        ),
+    ]
 
 
 class SupplierPreferenceTokenRequest(BaseModel):

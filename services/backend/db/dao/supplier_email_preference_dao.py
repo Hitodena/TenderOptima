@@ -1,9 +1,11 @@
 """DAO for platform-wide supplier email preferences."""
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from backend.db.dao.base_dao import BaseDAO
+from backend.db.models.request import Request
 from backend.db.models.supplier_email_preference import SupplierEmailPreference
 from backend.enums import SupplierEmailPreferenceStatus
 
@@ -45,3 +47,41 @@ class SupplierEmailPreferenceDAO(BaseDAO[SupplierEmailPreference]):
             pref is not None
             and pref.status == SupplierEmailPreferenceStatus.UNSUBSCRIBED.value
         )
+
+    @classmethod
+    async def list_page(
+        cls,
+        session: AsyncSession,
+        *,
+        page: int = 1,
+        size: int = 20,
+        status: SupplierEmailPreferenceStatus | None = None,
+    ) -> tuple[list[tuple[SupplierEmailPreference, str | None]], int]:
+        """Return preferences newest-first with optional source request query."""
+        filters = []
+        if status is not None:
+            filters.append(cls.model.status == status.value)
+
+        count_stmt = select(func.count()).select_from(cls.model)
+        for condition in filters:
+            count_stmt = count_stmt.where(condition)
+        total = (await session.execute(count_stmt)).scalar_one()
+
+        source_request = aliased(Request)
+        offset = max(page - 1, 0) * size
+        stmt = select(cls.model, source_request.query).outerjoin(
+            source_request,
+            source_request.id == cls.model.source_request_id,
+        )
+        for condition in filters:
+            stmt = stmt.where(condition)
+        stmt = (
+            stmt.order_by(
+                cls.model.subscribed_at.desc().nullslast(),
+                cls.model.created_at.desc(),
+            )
+            .offset(offset)
+            .limit(size)
+        )
+        rows = list((await session.execute(stmt)).all())
+        return [(row[0], row[1]) for row in rows], total

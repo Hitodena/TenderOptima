@@ -74,11 +74,13 @@
 			</UCheckbox>
 		</UFormField>
 
-		<UFormField v-if="!token" name="agree_marketing">
-			<UCheckbox v-model="form.agree_marketing">
+		<UFormField name="agree_marketing">
+			<UCheckbox v-model="form.agree_marketing" :required="Boolean(token)">
 				<template #label>
 					<span class="text-sm text-muted">
-						Согласен на получение информационных сообщений —
+						{{ token
+							? 'Согласен получать похожие запросы по email —'
+							: 'Согласен на получение информационных сообщений —' }}
 						<ULink :to="legalDocuments.marketingConsent.page" class="text-primary underline underline-offset-2 hover:opacity-80">
 							согласие на маркетинг
 						</ULink>
@@ -189,6 +191,7 @@ async function submit() {
 				categories,
 				region: form.region.trim(),
 				consent: form.consent,
+				agree_marketing: form.agree_marketing,
 			})
 		}
 		else {

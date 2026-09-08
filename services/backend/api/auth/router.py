@@ -2,7 +2,7 @@ import secrets
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,11 +30,13 @@ from backend.schemas.user_email_settings import (
     UserEmailSettingsUpdate,
 )
 from backend.utils.jwt_utils import create_access_token
+from backend.utils.legal_document_versions import stamp_consent_audit
 from backend.utils.login_lockout import (
     raise_if_locked,
     record_failed_login,
     reset_login_lockout,
 )
+from backend.utils.request_client_meta import client_ip, client_user_agent
 from backend.utils.security import hash_password, verify_password
 from backend.utils.user_email_settings import email_settings_response
 from backend.utils.user_utils import build_business_info
@@ -55,32 +57,33 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
     },
 )
 async def register(
-    request: RegisterCreate,
+    body: RegisterCreate,
+    http_request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> TokenResponse:
     """Creates a new user record. Returns a JWT access token on success. Fails
     with 409 if the email is already registered.
     """
-    existing_user = await UserDAO.get_by_email(session, request.email)
+    existing_user = await UserDAO.get_by_email(session, body.email)
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="User with this email already exists",
         )
-    existing_phone = await UserDAO.get_by_phone(session, request.phone)
+    existing_phone = await UserDAO.get_by_phone(session, body.phone)
     if existing_phone:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="User with this phone already exists",
         )
-    if not request.agree_terms:
+    if not body.agree_terms:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Required personal data processing consent is missing",
         )
 
     invitation = await ReferralInvitationDAO.get_available_by_code_for_update(
-        session, request.referral_code
+        session, body.referral_code
     )
     if invitation is None:
         raise HTTPException(
@@ -88,15 +91,27 @@ async def register(
             detail="Регистрация доступна только по действительной ссылке-приглашению",
         )
 
-    hashed_password = hash_password(request.password)
+    consent = stamp_consent_audit(
+        ip_address=client_ip(http_request),
+        user_agent=client_user_agent(http_request),
+        agree_marketing=body.agree_marketing,
+    )
+    hashed_password = hash_password(body.password)
     user = User(
-        email=request.email,
+        email=body.email,
         hashed_password=hashed_password,
-        full_name=request.full_name,
-        company_name=request.company_name,
-        phone=request.phone,
-        agree_terms=request.agree_terms,
-        agree_marketing=request.agree_marketing,
+        full_name=body.full_name,
+        company_name=body.company_name,
+        phone=body.phone,
+        agree_terms=body.agree_terms,
+        agree_marketing=body.agree_marketing,
+        terms_accepted_at=consent.terms_accepted_at,
+        terms_version=consent.terms_version,
+        privacy_version=consent.privacy_version,
+        consent_ip=consent.consent_ip,
+        consent_user_agent=consent.consent_user_agent,
+        marketing_consent_at=consent.marketing_consent_at,
+        marketing_consent_version=consent.marketing_consent_version,
         ref_by=invitation.inviter_name,
         referral_invitation_id=invitation.id,
         last_login_at=datetime.now(UTC),
