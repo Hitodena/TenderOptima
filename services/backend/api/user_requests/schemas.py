@@ -4,7 +4,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from backend.enums import RequestStatus
+from backend.enums import RequestHistoryGroup, RequestStatus
 
 
 class RequestCreate(BaseModel):
@@ -358,3 +358,13 @@ class RequestCloseResponse(BaseModel):
             examples=["123e4567-e89b-12d3-a456-426614174000"],
         ),
     ]
+
+
+class RequestHistoryPageResponse(BaseModel):
+    """Paginated request list for history tabs."""
+
+    items: list[RequestResponse]
+    page: int = Field(ge=1)
+    size: int = Field(ge=1, le=100)
+    has_more: bool
+    group: RequestHistoryGroup

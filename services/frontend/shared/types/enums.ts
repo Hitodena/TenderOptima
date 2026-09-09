@@ -19,10 +19,16 @@ export const RequestSupplierStatus = {
 export type RequestSupplierStatus =
 	(typeof RequestSupplierStatus)[keyof typeof RequestSupplierStatus];
 
-export const TZAnalysisHistoryGroup = {
-	DRAFT: 'draft',
+export const RequestHistoryGroup = {
 	ACTIVE: 'active',
-	PROCESSING: 'processing',
+	CLOSED: 'closed',
+} as const;
+
+export type RequestHistoryGroup =
+	(typeof RequestHistoryGroup)[keyof typeof RequestHistoryGroup];
+
+export const TZAnalysisHistoryGroup = {
+	ACTIVE: 'active',
 	COMPLETED: 'completed',
 } as const;
 

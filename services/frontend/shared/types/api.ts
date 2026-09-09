@@ -4,6 +4,7 @@ import type {
 	ConsultationStatus,
 	CooperationLeadStatus,
 	EmailTemplateCategory,
+	RequestHistoryGroup,
 	RequestStatus,
 	RequestSupplierStatus,
 	TZAnalysisHistoryGroup,
@@ -583,6 +584,14 @@ export interface RequestResponse {
 	supplier_messages_unread?: number;
 	supplier_messages_incoming_suppliers?: number;
 	is_first_request?: boolean;
+}
+
+export interface RequestHistoryPageResponse {
+	items: RequestResponse[];
+	page: number;
+	size: number;
+	has_more: boolean;
+	group: RequestHistoryGroup;
 }
 
 export interface RequestSupplierResponse {

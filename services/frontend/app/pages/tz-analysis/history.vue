@@ -10,11 +10,20 @@
 				</div>
 				<div class="flex items-center gap-3 shrink-0">
 					<UInput
-v-model="search" placeholder="Поиск по анализам..." icon="i-lucide-search"
-						class="w-full sm:w-56" size="lg" />
+						v-model="search"
+						placeholder="Поиск по анализам..."
+						icon="i-lucide-search"
+						class="w-full sm:w-56"
+						size="lg"
+					/>
 					<UButton
-to="/tz-analysis" variant="outline" color="neutral" leading-icon="i-lucide-scan-search"
-						size="lg" class="shrink-0">
+						to="/tz-analysis"
+						variant="outline"
+						color="neutral"
+						leading-icon="i-lucide-scan-search"
+						size="lg"
+						class="shrink-0"
+					>
 						Новый анализ
 					</UButton>
 				</div>
@@ -26,23 +35,27 @@ to="/tz-analysis" variant="outline" color="neutral" leading-icon="i-lucide-scan-
 				<USkeleton v-for="i in 8" :key="i" class="h-18 w-full rounded-xl" />
 			</div>
 
-			<template v-else-if="visibleHistory.length">
+			<template v-else-if="items.length">
 				<div class="space-y-2">
 					<UCard
-v-for="item in visibleHistory" :key="item.id"
+						v-for="item in items"
+						:key="item.id"
 						class="group cursor-pointer hover:shadow-md transition-all hover:-translate-y-px"
-						@click="openAnalysis(item)">
+						@click="openAnalysis(item)"
+					>
 						<div class="flex items-center gap-4">
 							<div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
 								<UIcon name="i-lucide-file-search" class="w-5 h-5 text-primary" />
 							</div>
 							<div class="flex-1 min-w-0">
 								<div class="flex items-center gap-2 mb-0.5">
-									<p class="font-semibold truncate">{{ item.title || item.tz_filename || 'Анализ ТЗ'
-										}}</p>
+									<p class="font-semibold truncate">{{ item.title || item.tz_filename || 'Анализ ТЗ' }}</p>
 									<UBadge
-:color="getTzRunStatusColor(item.status)" variant="subtle" size="sm"
-										class="shrink-0">
+										:color="getTzRunStatusColor(item.status)"
+										variant="subtle"
+										size="sm"
+										class="shrink-0"
+									>
 										{{ getTzRunStatusLabel(item.status) }}
 									</UBadge>
 								</div>
@@ -62,19 +75,29 @@ v-for="item in visibleHistory" :key="item.id"
 							<div class="flex items-center gap-1 shrink-0">
 								<template v-if="canComplete(item.status)">
 									<UButton
-:color="confirmCompleteId === item.id ? 'warning' : 'neutral'"
-										variant="ghost" size="md"
+										:color="confirmCompleteId === item.id ? 'warning' : 'neutral'"
+										variant="ghost"
+										size="md"
 										:leading-icon="confirmCompleteId === item.id ? 'i-lucide-check' : 'i-lucide-archive'"
 										:label="confirmCompleteId === item.id ? 'Подтвердить' : 'Завершить'"
-										:loading="completingId === item.id" class="opacity-0 group-hover:opacity-100"
+										:loading="completingId === item.id"
+										class="opacity-0 group-hover:opacity-100"
 										:class="confirmCompleteId === item.id ? 'opacity-100' : ''"
-										@click.stop="handleCompleteClick(item.id)" />
+										@click.stop="handleCompleteClick(item.id)"
+									/>
 									<UIcon
-v-if="confirmCompleteId !== item.id" name="i-lucide-chevron-right"
-										class="w-4 h-4 text-muted" />
+										v-if="confirmCompleteId !== item.id"
+										name="i-lucide-chevron-right"
+										class="w-4 h-4 text-muted"
+									/>
 									<UButton
-v-if="confirmCompleteId === item.id" color="neutral" variant="ghost"
-										size="xs" icon="i-lucide-x" @click.stop="confirmCompleteId = null" />
+										v-if="confirmCompleteId === item.id"
+										color="neutral"
+										variant="ghost"
+										size="xs"
+										icon="i-lucide-x"
+										@click.stop="confirmCompleteId = null"
+									/>
 								</template>
 								<UIcon v-else name="i-lucide-chevron-right" class="w-4 h-4 text-muted" />
 							</div>
@@ -88,7 +111,7 @@ v-if="confirmCompleteId === item.id" color="neutral" variant="ghost"
 					<UIcon name="i-lucide-loader" class="w-5 h-5 text-muted animate-spin" />
 				</div>
 
-				<p v-if="!hasMore && visibleHistory.length > 0" class="text-center text-xs text-muted py-4">
+				<p v-if="!hasMore && items.length > 0" class="text-center text-xs text-muted py-4">
 					Все записи загружены
 				</p>
 			</template>
@@ -105,7 +128,7 @@ v-if="confirmCompleteId === item.id" color="neutral" variant="ghost"
 </template>
 
 <script lang="ts" setup>
-import type { TZAnalysisListItem } from '#shared/types'
+import type { TZAnalysisHistoryPageResponse, TZAnalysisListItem } from '#shared/types'
 import {
 	getTzRunStatusColor,
 	getTzRunStatusLabel,
@@ -119,65 +142,28 @@ const { post, get } = useApi()
 const { formatDate } = useFormatDate()
 
 const PAGE_SIZE = 10
+const SEARCH_DEBOUNCE_MS = 300
 
-const allAnalyses = ref<TZAnalysisListItem[]>([])
+const items = ref<TZAnalysisListItem[]>([])
 const loadingHistory = ref(true)
 const loadingMore = ref(false)
 const page = ref(1)
+const hasMore = ref(false)
 const search = ref('')
+const searchQuery = ref('')
 const confirmCompleteId = ref<string | null>(null)
 const completingId = ref<string | null>(null)
 const activeTab = ref<TZAnalysisHistoryGroup>(TZAnalysisHistoryGroup.ACTIVE)
+const sentinel = ref<HTMLElement | null>(null)
+let fetchGeneration = 0
 
 const tabs = [
 	{ label: 'Активный', icon: 'i-lucide-activity', value: TZAnalysisHistoryGroup.ACTIVE },
 	{ label: 'Завершен', icon: 'i-lucide-archive', value: TZAnalysisHistoryGroup.COMPLETED },
 ]
 
-const ACTIVE_STATUSES = new Set<string>([
-	TZAnalysisRunStatus.DRAFT,
-	TZAnalysisRunStatus.ACTIVE,
-	TZAnalysisRunStatus.PROCESSING,
-	TZAnalysisRunStatus.FAILED,
-])
-
-function matchesTab(item: TZAnalysisListItem): boolean {
-	if (activeTab.value === TZAnalysisHistoryGroup.ACTIVE) {
-		return ACTIVE_STATUSES.has(item.status)
-	}
-	return item.status === TZAnalysisRunStatus.COMPLETED
-}
-
-function analysisSearchText(item: TZAnalysisListItem): string {
-	const parts = [
-		item.title,
-		item.tz_filename,
-		item.kp_filename,
-		...(item.kp_filenames ?? []),
-		getTzRunStatusLabel(item.status),
-	]
-	return parts.filter(Boolean).join(' ').toLowerCase()
-}
-
-const filteredHistory = computed(() => {
-	const q = search.value.trim().toLowerCase()
-	let list = allAnalyses.value.filter(matchesTab)
-	if (q) {
-		list = list.filter((item) => analysisSearchText(item).includes(q))
-	}
-	return list
-})
-
-const visibleHistory = computed(() =>
-	filteredHistory.value.slice(0, page.value * PAGE_SIZE),
-)
-
-const hasMore = computed(() =>
-	visibleHistory.value.length < filteredHistory.value.length,
-)
-
 const emptyMessage = computed(() => {
-	if (search.value.trim()) return 'Ничего не найдено'
+	if (searchQuery.value.trim()) return 'Ничего не найдено'
 	if (activeTab.value === TZAnalysisHistoryGroup.ACTIVE) {
 		return 'Активных анализов пока нет'
 	}
@@ -203,28 +189,80 @@ function openAnalysis(item: TZAnalysisListItem) {
 	navigateTo(`/tz-analysis/${item.id}`)
 }
 
-async function fetchHistory() {
-	loadingHistory.value = true
+async function fetchPage(nextPage: number, append: boolean) {
+	if (append) {
+		if (!hasMore.value || loadingMore.value) return
+		loadingMore.value = true
+	} else {
+		fetchGeneration += 1
+		loadingMore.value = false
+		loadingHistory.value = true
+	}
+	const generation = fetchGeneration
+
 	try {
-		const all = await get<TZAnalysisListItem[]>('/tz-analysis/')
-		allAnalyses.value = [...all].sort((a, b) =>
-			new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-		)
+		const q = searchQuery.value.trim()
+		const res = await get<TZAnalysisHistoryPageResponse>('/tz-analysis/history', {
+			params: {
+				group: activeTab.value,
+				page: nextPage,
+				size: PAGE_SIZE,
+				...(q ? { q } : {}),
+			},
+		})
+		if (generation !== fetchGeneration) return
+		items.value = append ? [...items.value, ...res.items] : res.items
+		page.value = res.page
+		hasMore.value = res.has_more
 	} catch {
-		allAnalyses.value = []
+		if (generation !== fetchGeneration) return
+		if (!append) {
+			items.value = []
+			hasMore.value = false
+		}
 	} finally {
-		loadingHistory.value = false
+		if (generation === fetchGeneration) {
+			loadingHistory.value = false
+			loadingMore.value = false
+			await nextTick()
+			maybeLoadMoreIfSentinelVisible()
+		}
 	}
 }
 
+function maybeLoadMoreIfSentinelVisible() {
+	const el = sentinel.value
+	if (!el || !hasMore.value || loadingMore.value || loadingHistory.value) return
+	const rect = el.getBoundingClientRect()
+	const visible = rect.top < window.innerHeight && rect.bottom > 0
+	if (visible) {
+		void fetchPage(page.value + 1, true)
+	}
+}
+
+function loadMore() {
+	void fetchPage(page.value + 1, true)
+}
+
 onMounted(() => {
-	fetchHistory()
+	void fetchPage(1, false)
 })
 
-watch(search, () => { page.value = 1 })
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+watch(search, (value) => {
+	if (searchTimer) clearTimeout(searchTimer)
+	searchTimer = setTimeout(() => {
+		searchQuery.value = value
+	}, SEARCH_DEBOUNCE_MS)
+})
+
+watch(searchQuery, () => {
+	void fetchPage(1, false)
+})
+
 watch(activeTab, () => {
-	page.value = 1
 	confirmCompleteId.value = null
+	void fetchPage(1, false)
 })
 
 onMounted(() => {
@@ -242,14 +280,7 @@ async function handleCompleteClick(id: string) {
 	confirmCompleteId.value = null
 	try {
 		await post(`/tz-analysis/${id}/complete`)
-		const idx = allAnalyses.value.findIndex((r) => r.id === id)
-		const existing = idx >= 0 ? allAnalyses.value[idx] : undefined
-		if (existing) {
-			allAnalyses.value[idx] = {
-				...existing,
-				status: TZAnalysisRunStatus.COMPLETED,
-			}
-		}
+		items.value = items.value.filter((r) => r.id !== id)
 	} catch {
 		// ignore
 	} finally {
@@ -257,17 +288,11 @@ async function handleCompleteClick(id: string) {
 	}
 }
 
-const sentinel = ref<HTMLElement | null>(null)
-
 onMounted(() => {
 	const observer = new IntersectionObserver((entries) => {
 		const entry = entries[0]
-		if (entry?.isIntersecting && hasMore.value && !loadingMore.value) {
-			loadingMore.value = true
-			setTimeout(() => {
-				page.value++
-				loadingMore.value = false
-			}, 300)
+		if (entry?.isIntersecting && hasMore.value && !loadingMore.value && !loadingHistory.value) {
+			loadMore()
 		}
 	}, { threshold: 0.1 })
 

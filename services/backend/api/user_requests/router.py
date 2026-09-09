@@ -34,6 +34,7 @@ from backend.api.user_requests.schemas import (
     RequestCreate,
     RequestEmailUpdate,
     RequestFromBookmarksCreate,
+    RequestHistoryPageResponse,
     RequestResponse,
     RequestUpdate,
     SearchQueuedResponse,
@@ -48,7 +49,7 @@ from backend.db.dao import (
     SupplierBookmarkListDAO,
 )
 from backend.db.models import User
-from backend.enums import RequestStatus
+from backend.enums import RequestHistoryGroup, RequestStatus
 from backend.services.request_from_bookmarks import attach_bookmark_item
 from backend.utils.comparison_price import merge_multi_position_price_params
 from backend.utils.email_utils import build_request_email_body
@@ -296,6 +297,47 @@ async def get_requests(
     )
     return await _request_responses_with_stats(
         session, requests, total_count=len(requests)
+    )
+
+
+@router.get(
+    "/history",
+    response_model=RequestHistoryPageResponse,
+    summary="Paginated request history by lifecycle group",
+)
+async def get_request_history(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    group: Annotated[
+        RequestHistoryGroup,
+        Query(description="History tab: active or closed"),
+    ],
+    page: Annotated[int, Query(ge=1)] = 1,
+    size: Annotated[int, Query(ge=1, le=100)] = 10,
+    q: Annotated[
+        str | None,
+        Query(
+            max_length=200,
+            description="Search in query and delivery_region",
+        ),
+    ] = None,
+) -> RequestHistoryPageResponse:
+    """Return a page of requests for the active or closed history tab."""
+    rows, has_more = await RequestDAO.get_history_page_by_user(
+        session,
+        current_user.id,
+        group,
+        page=page,
+        size=size,
+        search=q,
+    )
+    items = await _request_responses_with_stats(session, rows)
+    return RequestHistoryPageResponse(
+        items=items,
+        page=page,
+        size=size,
+        has_more=has_more,
+        group=group,
     )
 
 

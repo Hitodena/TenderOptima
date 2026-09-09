@@ -551,7 +551,7 @@ async def get_tz_analysis_history(
     current_user: Annotated[User, Depends(get_current_user)],
     group: Annotated[
         TZAnalysisHistoryGroup,
-        Query(description="History tab: active, processing, completed"),
+        Query(description="History tab: active or completed"),
     ],
     page: Annotated[int, Query(ge=1)] = 1,
     size: Annotated[int, Query(ge=1, le=100)] = 10,

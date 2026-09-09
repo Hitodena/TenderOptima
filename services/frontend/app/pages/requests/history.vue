@@ -20,26 +20,33 @@
 				<USkeleton v-for="i in 8" :key="i" class="h-18 w-full rounded-xl" />
 			</div>
 
-			<template v-else-if="filteredHistory.length">
+			<template v-else-if="items.length">
 				<div class="space-y-2">
 					<UCard
-v-for="req in visibleHistory" :key="req.id"
+						v-for="req in items"
+						:key="req.id"
 						class="group cursor-pointer hover:shadow-md transition-all hover:-translate-y-px"
-						@click="openRequest(req)">
+						@click="openRequest(req)"
+					>
 						<div class="flex items-center gap-4">
 							<div
-								class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 relative">
+								class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 relative"
+							>
 								<UIcon name="i-lucide-package-search" class="w-5 h-5 text-primary" />
 								<span
-v-if="hasUnreadMessages(req)"
-									class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-primary ring-2 ring-default" />
+									v-if="hasUnreadMessages(req)"
+									class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-primary ring-2 ring-default"
+								/>
 							</div>
 							<div class="flex-1 min-w-0">
 								<div class="flex items-center gap-2 mb-0.5">
 									<p class="font-semibold truncate">{{ req.query }}</p>
 									<UBadge
-:color="getRequestStatusColor(req.status)" variant="subtle" size="sm"
-										class="shrink-0">
+										:color="getRequestStatusColor(req.status)"
+										variant="subtle"
+										size="sm"
+										class="shrink-0"
+									>
 										{{ getRequestStatusLabel(req.status) }}
 									</UBadge>
 								</div>
@@ -65,18 +72,29 @@ v-if="hasUnreadMessages(req)"
 							<div class="flex items-center gap-1 shrink-0">
 								<template v-if="req.status !== RequestStatus.CLOSED">
 									<UButton
-:color="confirmCloseId === req.id ? 'warning' : 'neutral'" variant="ghost" size="md"
+										:color="confirmCloseId === req.id ? 'warning' : 'neutral'"
+										variant="ghost"
+										size="md"
 										:leading-icon="confirmCloseId === req.id ? 'i-lucide-check' : 'i-lucide-lock'"
 										:label="confirmCloseId === req.id ? 'Подтвердить' : 'Завершить'"
-										:loading="closingId === req.id" class="opacity-0 group-hover:opacity-100"
+										:loading="closingId === req.id"
+										class="opacity-0 group-hover:opacity-100"
 										:class="confirmCloseId === req.id ? 'opacity-100' : ''"
-										@click.stop="handleCloseClick(req.id)" />
+										@click.stop="handleCloseClick(req.id)"
+									/>
 									<UIcon
-v-if="confirmCloseId !== req.id" name="i-lucide-chevron-right"
-										class="w-4 h-4 text-muted" />
+										v-if="confirmCloseId !== req.id"
+										name="i-lucide-chevron-right"
+										class="w-4 h-4 text-muted"
+									/>
 									<UButton
-v-if="confirmCloseId === req.id" color="neutral" variant="ghost" size="xs"
-										icon="i-lucide-x" @click.stop="confirmCloseId = null" />
+										v-if="confirmCloseId === req.id"
+										color="neutral"
+										variant="ghost"
+										size="xs"
+										icon="i-lucide-x"
+										@click.stop="confirmCloseId = null"
+									/>
 								</template>
 								<UIcon v-else name="i-lucide-chevron-right" class="w-4 h-4 text-muted" />
 							</div>
@@ -90,7 +108,7 @@ v-if="confirmCloseId === req.id" color="neutral" variant="ghost" size="xs"
 					<UIcon name="i-lucide-loader" class="w-5 h-5 text-muted animate-spin" />
 				</div>
 
-				<p v-if="!hasMore && visibleHistory.length > PAGE_SIZE" class="text-center text-xs text-muted py-4">
+				<p v-if="!hasMore && items.length > PAGE_SIZE" class="text-center text-xs text-muted py-4">
 					Все запросы загружены
 				</p>
 			</template>
@@ -107,8 +125,13 @@ v-if="confirmCloseId === req.id" color="neutral" variant="ghost" size="xs"
 </template>
 
 <script lang="ts" setup>
-import type { RequestResponse } from '#shared/types'
-import { getRequestStatusColor, getRequestStatusLabel, RequestStatus } from '#shared/types'
+import type { RequestHistoryPageResponse, RequestResponse } from '#shared/types'
+import {
+	getRequestStatusColor,
+	getRequestStatusLabel,
+	RequestHistoryGroup,
+	RequestStatus,
+} from '#shared/types'
 import { pluralizeLetters, pluralizeSuppliers, titleCaseWords } from '#shared/utils/textFormat'
 import { t } from '~/constants/translations'
 
@@ -151,79 +174,109 @@ function openRequest(req: RequestResponse) {
 }
 
 const PAGE_SIZE = 10
+const SEARCH_DEBOUNCE_MS = 300
 
-const allHistory = ref<RequestResponse[]>([])
+const items = ref<RequestResponse[]>([])
 const loadingHistory = ref(true)
 const loadingMore = ref(false)
 const page = ref(1)
+const hasMore = ref(false)
 const search = ref('')
+const searchQuery = ref('')
 const confirmCloseId = ref<string | null>(null)
 const closingId = ref<string | null>(null)
-type HistoryTab = 'active' | 'closed'
+const activeTab = ref<RequestHistoryGroup>(RequestHistoryGroup.ACTIVE)
+const sentinel = ref<HTMLElement | null>(null)
+let fetchGeneration = 0
 
-const activeTab = ref<HistoryTab>('active')
 const tabs = [
-	{ label: 'Активные', icon: 'i-lucide-activity', value: 'active' as const },
-	{ label: 'Завершённые', icon: 'i-lucide-archive', value: 'closed' as const },
+	{ label: 'Активные', icon: 'i-lucide-activity', value: RequestHistoryGroup.ACTIVE },
+	{ label: 'Завершённые', icon: 'i-lucide-archive', value: RequestHistoryGroup.CLOSED },
 ]
 
-function matchesTab(status: RequestStatus, tab: HistoryTab): boolean {
-	if (tab === 'closed') {
-		return status === RequestStatus.CLOSED
-	}
-	return status !== RequestStatus.CLOSED
-}
-
-const filteredHistory = computed(() => {
-	const q = search.value.trim().toLowerCase()
-	const list = allHistory.value.filter((r) => matchesTab(r.status, activeTab.value))
-	if (!q) return list
-	return list.filter((r) => {
-		const haystack = [
-			r.query,
-			r.delivery_region,
-			getRequestStatusLabel(r.status),
-		].filter(Boolean).join(' ').toLowerCase()
-		return haystack.includes(q)
-	})
-})
-
-const visibleHistory = computed(() =>
-	filteredHistory.value.slice(0, page.value * PAGE_SIZE)
-)
-
-const hasMore = computed(() =>
-	visibleHistory.value.length < filteredHistory.value.length
-)
-
 const emptyMessage = computed(() => {
-	if (search.value.trim()) return 'Ничего не найдено'
-	if (activeTab.value === 'closed') {
+	if (searchQuery.value.trim()) return 'Ничего не найдено'
+	if (activeTab.value === RequestHistoryGroup.CLOSED) {
 		return 'Завершённых запросов пока нет'
 	}
 	return 'Активных запросов пока нет'
 })
 
-async function fetchHistory() {
-	loadingHistory.value = true
+async function fetchPage(nextPage: number, append: boolean) {
+	if (append) {
+		if (!hasMore.value || loadingMore.value) return
+		loadingMore.value = true
+	} else {
+		fetchGeneration += 1
+		loadingMore.value = false
+		loadingHistory.value = true
+	}
+	const generation = fetchGeneration
+
 	try {
-		const all = await get<RequestResponse[]>('/requests/')
-		allHistory.value = [...all].sort((a, b) =>
-			new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-		)
+		const q = searchQuery.value.trim()
+		const res = await get<RequestHistoryPageResponse>('/requests/history', {
+			params: {
+				group: activeTab.value,
+				page: nextPage,
+				size: PAGE_SIZE,
+				...(q ? { q } : {}),
+			},
+		})
+		if (generation !== fetchGeneration) return
+		items.value = append ? [...items.value, ...res.items] : res.items
+		page.value = res.page
+		hasMore.value = res.has_more
 	} catch {
-		allHistory.value = []
+		if (generation !== fetchGeneration) return
+		if (!append) {
+			items.value = []
+			hasMore.value = false
+		}
 	} finally {
-		loadingHistory.value = false
+		if (generation === fetchGeneration) {
+			loadingHistory.value = false
+			loadingMore.value = false
+			await nextTick()
+			maybeLoadMoreIfSentinelVisible()
+		}
 	}
 }
 
+function maybeLoadMoreIfSentinelVisible() {
+	const el = sentinel.value
+	if (!el || !hasMore.value || loadingMore.value || loadingHistory.value) return
+	const rect = el.getBoundingClientRect()
+	const visible = rect.top < window.innerHeight && rect.bottom > 0
+	if (visible) {
+		void fetchPage(page.value + 1, true)
+	}
+}
+
+function loadMore() {
+	void fetchPage(page.value + 1, true)
+}
+
 onMounted(() => {
-	fetchHistory()
+	void fetchPage(1, false)
 })
 
-watch(search, () => { page.value = 1 })
-watch(activeTab, () => { page.value = 1; confirmCloseId.value = null })
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+watch(search, (value) => {
+	if (searchTimer) clearTimeout(searchTimer)
+	searchTimer = setTimeout(() => {
+		searchQuery.value = value
+	}, SEARCH_DEBOUNCE_MS)
+})
+
+watch(searchQuery, () => {
+	void fetchPage(1, false)
+})
+
+watch(activeTab, () => {
+	confirmCloseId.value = null
+	void fetchPage(1, false)
+})
 
 onMounted(() => {
 	const dismissConfirm = () => { confirmCloseId.value = null }
@@ -240,7 +293,7 @@ async function handleCloseClick(id: string) {
 	confirmCloseId.value = null
 	try {
 		await post(`/requests/${id}/close`)
-		allHistory.value = allHistory.value.map(r => r.id === id ? { ...r, status: 'closed' as const } : r)
+		items.value = items.value.filter((r) => r.id !== id)
 	} catch {
 		// ignore close error
 	} finally {
@@ -248,22 +301,17 @@ async function handleCloseClick(id: string) {
 	}
 }
 
-const sentinel = ref<HTMLElement | null>(null)
-
 onMounted(() => {
-	const observer = new IntersectionObserver(entries => {
+	const observer = new IntersectionObserver((entries) => {
 		const entry = entries[0]
-		if (entry?.isIntersecting && hasMore.value && !loadingMore.value) {
-			loadingMore.value = true
-			setTimeout(() => {
-				page.value++
-				loadingMore.value = false
-			}, 300)
+		if (entry?.isIntersecting && hasMore.value && !loadingMore.value && !loadingHistory.value) {
+			loadMore()
 		}
 	}, { threshold: 0.1 })
 
-	if (sentinel.value) observer.observe(sentinel.value)
-	onUnmounted(() => observer.disconnect())
+	watch(sentinel, (el, _prev, onCleanup) => {
+		if (el) observer.observe(el)
+		onCleanup(() => observer.disconnect())
+	}, { immediate: true })
 })
-
 </script>

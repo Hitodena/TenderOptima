@@ -6,7 +6,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.dao.base_dao import BaseDAO
 from backend.db.models.tz_analysis import TZAnalysis
-from backend.enums import TZAnalysisHistoryGroup
+from backend.enums import TZAnalysisHistoryGroup, TZAnalysisRunStatus
+
+_ACTIVE_HISTORY_STATUSES = (
+    TZAnalysisRunStatus.DRAFT.value,
+    TZAnalysisRunStatus.ACTIVE.value,
+    TZAnalysisRunStatus.PROCESSING.value,
+    TZAnalysisRunStatus.FAILED.value,
+)
 
 
 class TZAnalysisDAO(BaseDAO[TZAnalysis]):
@@ -60,11 +67,17 @@ class TZAnalysisDAO(BaseDAO[TZAnalysis]):
         )
         try:
             offset = max(page - 1, 0) * size
+            if group == TZAnalysisHistoryGroup.COMPLETED:
+                status_filter = (
+                    cls.model.status == TZAnalysisRunStatus.COMPLETED.value
+                )
+            else:
+                status_filter = cls.model.status.in_(_ACTIVE_HISTORY_STATUSES)
             stmt = (
                 select(cls.model)
                 .where(
                     cls.model.user_id == user_id,
-                    cls.model.status == group.value,
+                    status_filter,
                 )
                 .order_by(cls.model.created_at.desc())
                 .offset(offset)

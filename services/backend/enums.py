@@ -58,12 +58,17 @@ class EmailTemplateCategory(StrEnum):
     LETTER = "letter"
 
 
+class RequestHistoryGroup(StrEnum):
+    """Tab groups for the request search history page."""
+
+    ACTIVE = "active"
+    CLOSED = "closed"
+
+
 class TZAnalysisHistoryGroup(StrEnum):
     """Tab groups for the TZ analysis history page."""
 
-    DRAFT = "draft"
     ACTIVE = "active"
-    PROCESSING = "processing"
     COMPLETED = "completed"
 
 
