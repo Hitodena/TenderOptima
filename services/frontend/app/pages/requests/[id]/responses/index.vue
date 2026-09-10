@@ -287,8 +287,20 @@ v-for="supplier in sortedComparisonSuppliers" :key="supplier.rs_id"
 												class="px-3 py-2.5 align-top wrap-break-word whitespace-normal max-w-52">
 												<div class="flex items-start gap-2">
 													<div class="flex-1 min-w-0 space-y-1">
-														<p class="text-xs wrap-break-word whitespace-normal">
+														<button
+															v-if="comparisonDisplayValue(supplier, req) !== '—'"
+															type="button"
+															class="text-left text-xs wrap-break-word whitespace-normal rounded-md -mx-1 px-1 py-0.5 hover:bg-elevated/80 hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary transition-colors cursor-pointer"
+															:title="t('inbox.openSourceEmail')"
+															@click="openSourceEmail(supplier, req)"
+														>
 															{{ comparisonDisplayValue(supplier, req) }}
+														</button>
+														<p
+															v-else
+															class="text-xs wrap-break-word whitespace-normal"
+														>
+															—
 														</p>
 														<p
 															v-if="formatPercentVsMin(supplier, req)"
@@ -298,6 +310,12 @@ v-for="supplier in sortedComparisonSuppliers" :key="supplier.rs_id"
 																: 'text-warning'"
 														>
 															{{ formatPercentVsMin(supplier, req) }}
+														</p>
+														<p
+															v-if="comparisonValueCalculated(supplier, req)"
+															class="text-[10px] text-muted"
+														>
+															{{ t('inbox.calculatedValue') }}
 														</p>
 														<p
 v-if="comparisonUserCorrected(supplier, req)"
@@ -492,8 +510,13 @@ v-if="!showParamsPanel" size="xs" variant="ghost" color="neutral"
 									v-for="msg in messages"
 									:key="msg.id"
 									:data-message-id="msg.id"
-									class="flex gap-2 md:gap-3"
-									:class="msg.direction === 'outgoing' ? 'flex-row-reverse' : ''"
+									class="flex gap-2 md:gap-3 rounded-xl transition-shadow duration-500"
+									:class="[
+										msg.direction === 'outgoing' ? 'flex-row-reverse' : '',
+										highlightedMessageId === msg.id
+											? 'ring-2 ring-primary/60 ring-offset-2 ring-offset-default'
+											: '',
+									]"
 								>
 									<div
 										class="w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center shrink-0 mt-1"
@@ -1086,11 +1109,16 @@ const selectedThread = computed(() =>
 	threads.value.find(t => t.rs_id === selectedRsId.value) ?? null,
 )
 
-function selectThread(rsId: string) {
+const pendingScrollMessageId = ref<string | null>(null)
+const highlightedMessageId = ref<string | null>(null)
+let highlightTimer: ReturnType<typeof setTimeout> | null = null
+
+function selectThread(rsId: string, messageId?: string | null) {
 	selectedRsId.value = rsId
 	mainTab.value = 'thread'
 	replyBody.value = ''
 	replyError.value = null
+	pendingScrollMessageId.value = messageId ?? null
 	void openThread(rsId)
 }
 
@@ -1100,6 +1128,20 @@ async function openThread(rsId: string) {
 		await markThreadRead(rsId)
 	}
 	fetchAnalysis()
+}
+
+function openSourceEmail(supplier: ComparisonSupplier, req: string) {
+	const messageId
+		= supplier.source_message_ids?.[req]
+			|| supplier.source_message_id
+			|| null
+	const hash = messageId
+		? `${supplier.rs_id}/${messageId}`
+		: supplier.rs_id
+	if (typeof window !== 'undefined') {
+		window.location.hash = hash
+	}
+	selectThread(supplier.rs_id, messageId)
 }
 
 async function markThreadRead(rsId: string) {
@@ -1138,7 +1180,9 @@ async function fetchMessages(rsId: string, options?: { silent?: boolean }): Prom
 		if (!silent) loadingMessages.value = false
 		if (!silent) {
 			await nextTick()
-			scrollToDefaultMessage()
+			const pending = pendingScrollMessageId.value
+			pendingScrollMessageId.value = null
+			scrollToMessage(pending)
 		}
 	}
 }
@@ -1152,8 +1196,8 @@ function resolveDefaultScrollMessageId(): string | null {
 	return firstOutgoing?.id ?? messages.value[0]?.id ?? null
 }
 
-function scrollToDefaultMessage() {
-	const targetId = resolveDefaultScrollMessageId()
+function scrollToMessage(messageId?: string | null) {
+	const targetId = messageId || resolveDefaultScrollMessageId()
 	if (!targetId || !messagesContainer.value) {
 		scrollToBottom()
 		return
@@ -1163,6 +1207,14 @@ function scrollToDefaultMessage() {
 	) as HTMLElement | null
 	if (el) {
 		el.scrollIntoView({ block: 'start' })
+		if (messageId) {
+			highlightedMessageId.value = messageId
+			if (highlightTimer) clearTimeout(highlightTimer)
+			highlightTimer = setTimeout(() => {
+				highlightedMessageId.value = null
+				highlightTimer = null
+			}, 2500)
+		}
 		return
 	}
 	scrollToBottom()
@@ -1723,6 +1775,13 @@ function comparisonDisplayValue(
 	return value || '—'
 }
 
+function comparisonValueCalculated(
+	supplier: ComparisonSupplier,
+	req: string,
+): boolean {
+	return supplier.value_origins?.[req] === 'calculated'
+}
+
 function comparisonShowStatusBadge(
 	supplier: ComparisonSupplier,
 	req: string,
@@ -1811,9 +1870,11 @@ async function downloadAttachment(att: Attachment) {
 }
 
 watch(threads, () => {
-	const hash = window.location.hash.replace('#', '')
-	if (hash && threads.value.find(t => t.rs_id === hash)) {
-		selectThread(hash)
+	const hash = window.location.hash.replace(/^#/, '')
+	if (!hash) return
+	const [rsId, messageId] = hash.split('/')
+	if (rsId && threads.value.find(t => t.rs_id === rsId)) {
+		selectThread(rsId, messageId || null)
 	}
 }, { immediate: false })
 

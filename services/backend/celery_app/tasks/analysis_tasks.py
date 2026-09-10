@@ -908,6 +908,7 @@ async def run_email_analysis(self, message_id: str) -> dict:
             attachment_paths=attachment_paths,
             baseline_matches=baseline_matches or None,
             prior_matches=prior_matches or None,
+            source_message_id=message_id,
         )
     except (UnsupportedFileTypeError, OcrNotAvailableError, ValueError) as exc:
         logger.warning(

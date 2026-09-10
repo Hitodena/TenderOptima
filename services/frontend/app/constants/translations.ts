@@ -420,6 +420,8 @@ export const translations = {
 		templatesDeleted: 'Шаблон удалён',
 		templatesDeleteError: 'Не удалось удалить шаблон',
 		correctedManually: '(изменено вручную)',
+		calculatedValue: 'рассчитано',
+		openSourceEmail: 'Открыть исходное письмо',
 		attachFile: 'Прикрепить файл',
 		attachFileRemove: 'Убрать файл',
 		attachFileTooLarge: 'Файл слишком большой',

@@ -753,6 +753,8 @@ export interface RequirementMatch {
 	explanation: string | null;
 	status: TZAnalysisStatus;
 	corrected_from?: string | null;
+	value_origin?: 'extracted' | 'calculated' | null;
+	source_message_id?: string | null;
 }
 
 export interface EmailAnalysisResponse {
@@ -768,6 +770,7 @@ export interface ComparisonSupplier {
 	company_name: string;
 	main_email: string;
 	is_winner?: boolean;
+	source_message_id?: string | null;
 	values: Record<string, string | null>;
 	previous_values: Record<string, string | null>;
 	explanations?: Record<string, string | null>;
@@ -775,6 +778,8 @@ export interface ComparisonSupplier {
 	statuses: Record<string, string | null>;
 	numeric_values?: Record<string, number | null>;
 	percent_vs_min?: Record<string, number | null>;
+	value_origins?: Record<string, string | null>;
+	source_message_ids?: Record<string, string | null>;
 }
 
 export interface ComparisonResponse {

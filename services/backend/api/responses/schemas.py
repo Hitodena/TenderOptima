@@ -182,6 +182,7 @@ class ComparisonSupplier(BaseModel):
     company_name: str
     main_email: str
     is_winner: bool = False
+    source_message_id: str | None = None
     values: dict[str, str | None]
     previous_values: dict[str, str | None]
     explanations: dict[str, str | None] = {}
@@ -189,6 +190,8 @@ class ComparisonSupplier(BaseModel):
     statuses: dict[str, str | None]
     numeric_values: dict[str, float | None] = {}
     percent_vs_min: dict[str, float | None] = {}
+    value_origins: dict[str, str | None] = {}
+    source_message_ids: dict[str, str | None] = {}
 
 
 class ComparisonResponse(BaseModel):

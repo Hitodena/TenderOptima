@@ -90,6 +90,13 @@ class TZAnalysisStatus(StrEnum):
     NOT_COMPARE = "not_compare"  # manual only; excluded from supplier letters
 
 
+class ValueOrigin(StrEnum):
+    """How a commercial offer numeric value was obtained."""
+
+    EXTRACTED = "extracted"
+    CALCULATED = "calculated"
+
+
 class TZAnalysisSupplierStatus(StrEnum):
     """Per-supplier KP extraction and comparison lifecycle."""
 

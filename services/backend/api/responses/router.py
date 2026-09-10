@@ -65,19 +65,23 @@ def _match_maps_from_analysis(
     dict[str, str | None],
     dict[str, float | None],
     dict[str, str | None],
+    dict[str, str | None],
+    dict[str, str | None],
 ]:
     if not raw:
-        return {}, {}, {}, {}, {}, {}
+        return {}, {}, {}, {}, {}, {}, {}, {}
     try:
         result = EmailAnalysisResult(**raw)
     except Exception:
-        return {}, {}, {}, {}, {}, {}
+        return {}, {}, {}, {}, {}, {}, {}, {}
     values: dict[str, str | None] = {}
     statuses: dict[str, str | None] = {}
     explanations: dict[str, str | None] = {}
     corrected_from: dict[str, str | None] = {}
     numeric_values: dict[str, float | None] = {}
     currencies: dict[str, str | None] = {}
+    value_origins: dict[str, str | None] = {}
+    source_message_ids: dict[str, str | None] = {}
     for match in result.matches:
         req = match.requirement.strip()
         values[req] = match.offer_value
@@ -94,6 +98,10 @@ def _match_maps_from_analysis(
             if match.currency and match.currency.strip()
             else None
         )
+        value_origins[req] = (
+            match.value_origin.value if match.value_origin else None
+        )
+        source_message_ids[req] = match.source_message_id
     return (
         values,
         statuses,
@@ -101,6 +109,8 @@ def _match_maps_from_analysis(
         corrected_from,
         numeric_values,
         currencies,
+        value_origins,
+        source_message_ids,
     )
 
 
@@ -161,8 +171,16 @@ async def _build_comparison(
             req: None for req in requirements
         }
         currencies: dict[str, str | None] = {req: None for req in requirements}
+        value_origins: dict[str, str | None] = {
+            req: None for req in requirements
+        }
+        source_message_ids: dict[str, str | None] = {
+            req: None for req in requirements
+        }
+        column_source_message_id: str | None = None
         if analyzed and analyzed.analysis:
             analysis = analyzed.analysis
+            column_source_message_id = str(analyzed.id)
             (
                 match_values,
                 match_statuses,
@@ -170,6 +188,8 @@ async def _build_comparison(
                 match_corrected,
                 match_numeric,
                 match_currencies,
+                match_origins,
+                match_source_ids,
             ) = _match_maps_from_analysis(analysis.raw_llm_response)
             prev = analysis.previous_parameters
             prev_map = prev if isinstance(prev, dict) else {}
@@ -186,6 +206,12 @@ async def _build_comparison(
                     numeric_values[req] = match_numeric[req]
                 if req in match_currencies:
                     currencies[req] = match_currencies[req]
+                if req in match_origins:
+                    value_origins[req] = match_origins[req]
+                if req in match_source_ids and match_source_ids[req]:
+                    source_message_ids[req] = match_source_ids[req]
+                else:
+                    source_message_ids[req] = column_source_message_id
                 if req in prev_map and prev_map[req] is not None:
                     previous_values[req] = str(prev_map[req])
         apply_delivery_total(
@@ -206,12 +232,15 @@ async def _build_comparison(
                 company_name=rs.supplier.company_name,
                 main_email=rs.supplier.main_email,
                 is_winner=bool(rs.is_winner),
+                source_message_id=column_source_message_id,
                 values=values,
                 previous_values=previous_values,
                 explanations=explanations,
                 corrected_from=corrected_from,
                 statuses=statuses,
                 numeric_values=numeric_values,
+                value_origins=value_origins,
+                source_message_ids=source_message_ids,
             )
         )
 

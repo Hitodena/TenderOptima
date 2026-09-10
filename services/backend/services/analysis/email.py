@@ -13,6 +13,10 @@ from backend.services.extraction.router import (
 from backend.services.llm.client import llm_client
 from backend.services.llm.prompts.email import build_email_prompt
 from backend.utils.ocr import OcrNotAvailableError
+from backend.utils.price_reconcile import (
+    reconcile_price_matches,
+    stamp_source_message_ids,
+)
 
 config = get_config()
 
@@ -45,6 +49,7 @@ def _merge_email_with_prior(
         if silent_in_new_email and (
             prior.offer_value and str(prior.offer_value).strip()
         ):
+            # Keep prior provenance (source_message_id / value_origin).
             merged.append(prior)
             continue
         if silent_in_new_email and prior.status != TZAnalysisStatus.NOT_FOUND:
@@ -100,6 +105,7 @@ async def analyze_email(
     attachment_paths: list[Path] | None = None,
     baseline_matches: dict[str, str] | None = None,
     prior_matches: dict[str, RequirementMatch] | None = None,
+    source_message_id: str | None = None,
 ) -> EmailAnalysisResult:
     parts: list[str] = []
     if email_body.strip():
@@ -133,4 +139,7 @@ async def analyze_email(
     result = EmailAnalysisResult(**raw)
     if prior_matches:
         result = _merge_email_with_prior(result, prior_matches)
+    result = reconcile_price_matches(result, full_text)
+    if source_message_id:
+        result = stamp_source_message_ids(result, source_message_id)
     return result

@@ -187,45 +187,19 @@ def apply_delivery_total(
     currencies: dict[str, str | None] | None = None,
 ) -> str | None:
     """
-    Set delivery total only when every per-item VAT-free price is numeric.
+    Preserve LLM/document delivery total; do not invent it from unit prices.
 
-    When any item price is missing, leaves the existing total untouched
-    (keeps an LLM-extracted value instead of clearing it).
-
-    Mutates ``numeric_values`` and ``values`` in place. Returns the shared
-    currency used for formatting (or None).
+    Summing per-item unit prices without quantity produces wrong delivery
+    totals whenever qty != 1. Call sites keep this helper for API symmetry
+    and shared currency resolution of an existing total.
     """
-    total_key = find_delivery_total_key(requirements)
-    if not total_key:
-        return None
-    item_reqs = [
-        req for req in requirements if is_position_price_requirement(req)
-    ]
-    if not item_reqs:
-        return None
-
-    amounts: list[float] = []
-    for req in item_reqs:
-        amount = numeric_values.get(req)
-        if amount is None:
-            # Keep LLM-extracted total when any per-item price is missing.
-            return None
-        amounts.append(float(amount))
-
-    currency = shared_item_currency(
-        item_reqs,
-        currencies or {},
-        values,
-    )
-    total = round(sum(amounts), 4)
-    numeric_values[total_key] = total
-    values[total_key] = format_price_amount(total, currency)
-    return currency
+    del requirements, numeric_values, values, currencies
+    return None
 
 
 def apply_delivery_total_to_matches(matches: list) -> list:
     """
-    Return match dicts with delivery total recomputed from per-item prices.
+    Normalize match dicts without overwriting delivery total from unit prices.
 
     Accepts dicts or Pydantic-like objects; always returns plain dicts.
     """
@@ -237,69 +211,66 @@ def apply_delivery_total_to_matches(matches: list) -> list:
             normalized.append(item.model_dump())
         else:
             continue
-
-    requirements: list[str] = []
-    numeric_values: dict[str, float | None] = {}
-    values: dict[str, str | None] = {}
-    currencies: dict[str, str | None] = {}
-    by_req: dict[str, dict] = {}
-
-    for entry in normalized:
-        req = str(entry.get("requirement", "")).strip()
-        if not req:
-            continue
-        requirements.append(req)
-        by_req[req] = entry
-        offer = entry.get("offer_value")
-        values[req] = str(offer) if offer is not None else None
-        currencies[req] = (
-            str(entry["currency"]).strip()
-            if entry.get("currency") is not None
-            and str(entry.get("currency")).strip()
-            else None
-        )
-        numeric_values[req] = resolve_numeric_value(
-            req,
-            values[req],
-            entry.get("numeric_value"),
-        )
-
-    total_key = find_delivery_total_key(by_req.keys())
-    if not total_key:
-        return normalized
-
-    currency = apply_delivery_total(
-        requirements,
-        numeric_values,
-        values,
-        currencies,
-    )
-    target = by_req[total_key]
-    target["numeric_value"] = numeric_values.get(total_key)
-    target["offer_value"] = values.get(total_key)
-    target["currency"] = currency
     return normalized
 
 
-def parse_offer_numeric(value: str | None) -> float | None:
-    """Extract the first numeric amount from a free-text offer value."""
-    if not value or not str(value).strip():
-        return None
-    normalized = (
-        str(value)
-        .replace("\u00a0", " ")
-        .replace("\u202f", " ")
+_NUMBER_TOKEN_RE = re.compile(
+    r"-?(?:\d{1,3}(?:[ \u00a0\u202f]\d{3})+|\d+)(?:[.,]\d+)?"
+)
+_UNIT_HINT_RE = re.compile(
+    r"(?:×|x|за\s*(?:ед\.?|шт\.?)|=)\s*"
+    r"(-?(?:\d{1,3}(?:[ \u00a0\u202f]\d{3})+|\d+)(?:[.,]\d+)?)",
+    re.IGNORECASE,
+)
+
+
+def _token_to_float(token: str) -> float | None:
+    cleaned = (
+        token.replace("\u00a0", "")
+        .replace("\u202f", "")
+        .replace(" ", "")
         .replace(",", ".")
     )
-
-    match = re.search(r"-?\d+(?:\.\d+)?", normalized)
-    if not match:
-        return None
     try:
-        num = float(match.group(0))
+        num = float(cleaned)
     except ValueError:
         return None
     return num if num == num else None  # NaN guard
+
+
+def parse_offer_numeric(value: str | None) -> float | None:
+    """Extract a numeric amount from free-text (handles spaced thousands)."""
+    if not value or not str(value).strip():
+        return None
+    text = str(value).replace("\u00a0", " ").replace("\u202f", " ")
+    # Prefer amount after × / x / за ед. (unit price in "600 × 0.43").
+    hint = _UNIT_HINT_RE.search(text)
+    if hint:
+        hinted = _token_to_float(hint.group(1))
+        if hinted is not None:
+            return hinted
+
+    tokens = list(_NUMBER_TOKEN_RE.finditer(text))
+    if not tokens:
+        return None
+
+    # Prefer a fractional amount when several numbers are present
+    # (qty often integer, unit price often decimal).
+    decimals: list[float] = []
+    integers: list[float] = []
+    for match in tokens:
+        num = _token_to_float(match.group(0))
+        if num is None:
+            continue
+        if "." in match.group(0).replace(",", ".") or "," in match.group(0):
+            decimals.append(num)
+        else:
+            integers.append(num)
+    if decimals:
+        return decimals[0]
+    if integers:
+        return integers[0]
+    return None
 
 
 def resolve_numeric_value(

@@ -239,9 +239,12 @@ async def patch_response_analysis(
             entry["offer_value"] = new_value
             if is_price_requirement(req):
                 entry["numeric_value"] = parse_offer_numeric(new_value)
+            entry["value_origin"] = None
             if new_value is not None and str(new_value).strip():
                 entry["status"] = TZAnalysisStatus.MET.value
                 entry["explanation"] = None
+            if not entry.get("source_message_id"):
+                entry["source_message_id"] = str(message_id)
         data["matches"] = apply_delivery_total_to_matches(
             list(by_req.values())
         )

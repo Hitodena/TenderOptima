@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from backend.enums import TZAnalysisRunStatus, TZAnalysisStatus
+from backend.enums import TZAnalysisRunStatus, TZAnalysisStatus, ValueOrigin
 
 
 class TZAnalysisItem(BaseModel):
@@ -70,6 +70,8 @@ class RequirementMatch(BaseModel):
     explanation: str | None = None
     status: TZAnalysisStatus
     corrected_from: str | None = None
+    value_origin: ValueOrigin | None = None
+    source_message_id: str | None = None
 
 
 class EmailAnalysisResult(BaseModel):
