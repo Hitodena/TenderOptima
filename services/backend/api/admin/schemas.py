@@ -154,6 +154,75 @@ class AdminSmtpDefaultsResponse(BaseModel):
     smtp_password_configured: bool
 
 
+class AdminAnalysisAttachment(BaseModel):
+    filename: str
+    content_type: str | None = None
+    size: int | None = None
+    path: str
+
+
+class AdminAnalysisMatchItem(BaseModel):
+    requirement: str
+    offer_value: str | None = None
+    numeric_value: float | None = None
+    currency: str | None = None
+    explanation: str | None = None
+    status: str
+    corrected_from: str | None = None
+    value_origin: str | None = None
+    source_message_id: str | None = None
+
+
+class AdminAnalysisListItem(BaseModel):
+    message_id: uuid.UUID
+    analysis_id: uuid.UUID | None = None
+    analysis_status: str | None = None
+    llm_model: str | None = None
+    subject: str | None = None
+    from_email: str | None = None
+    received_at: datetime | None = None
+    request_id: uuid.UUID | None = None
+    request_query: str | None = None
+    request_supplier_id: uuid.UUID
+    supplier_company: str | None = None
+    supplier_email: str | None = None
+    user_email: str | None = None
+    user_id: uuid.UUID | None = None
+    attachment_count: int = 0
+    match_count: int = 0
+    calculated_count: int = 0
+    manual_count: int = 0
+    extracted_count: int = 0
+
+
+class AdminAnalysisPage(BaseModel):
+    items: list[AdminAnalysisListItem]
+    total: int
+    page: int
+    size: int
+
+
+class AdminAnalysisDetail(BaseModel):
+    message_id: uuid.UUID
+    analysis_id: uuid.UUID | None = None
+    analysis_status: str | None = None
+    llm_model: str | None = None
+    subject: str | None = None
+    from_email: str | None = None
+    to_email: str | None = None
+    received_at: datetime | None = None
+    body_preview: str | None = None
+    request_id: uuid.UUID | None = None
+    request_query: str | None = None
+    request_supplier_id: uuid.UUID
+    supplier_company: str | None = None
+    supplier_email: str | None = None
+    user_email: str | None = None
+    user_id: uuid.UUID | None = None
+    attachments: list[AdminAnalysisAttachment] = Field(default_factory=list)
+    matches: list[AdminAnalysisMatchItem] = Field(default_factory=list)
+
+
 class AdminCooperationSupplierItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

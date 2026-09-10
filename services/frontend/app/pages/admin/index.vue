@@ -9,7 +9,7 @@
 						</div>
 						<div>
 							<h1 class="text-lg font-bold text-highlighted leading-tight">Админка</h1>
-							<p class="text-xs text-muted">Ошибки фронтенда, идеи, сотрудничество и реестр ПДн</p>
+							<p class="text-xs text-muted">Ошибки фронтенда, идеи, сотрудничество, отладка анализов и реестр ПДн</p>
 						</div>
 					</div>
 				</template>
@@ -21,6 +21,10 @@
 
 				<template #email>
 					<AdminEmailRoutingPanel />
+				</template>
+
+				<template #debug>
+					<AdminAnalysisDebugPanel />
 				</template>
 
 				<template #cooperation>
@@ -570,6 +574,7 @@ const activeTab = ref('users')
 const tabs = [
 	{ label: 'Пользователи', slot: 'users', value: 'users', icon: 'i-lucide-users' },
 	{ label: t('admin.emailRouting.tabLabel'), slot: 'email', value: 'email', icon: 'i-lucide-mail' },
+	{ label: t('admin.analysisDebug.tabLabel'), slot: 'debug', value: 'debug', icon: 'i-lucide-microscope' },
 	{
 		label: 'Сотрудничество',
 		slot: 'cooperation',

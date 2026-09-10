@@ -1,9 +1,15 @@
+import mimetypes
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
 from backend.api.admin.schemas import (
+    AdminAnalysisAttachment,
+    AdminAnalysisDetail,
+    AdminAnalysisListItem,
+    AdminAnalysisMatchItem,
+    AdminAnalysisPage,
     AdminCooperationSendRequest,
     AdminCooperationSendResponse,
     AdminCooperationSupplierItem,
@@ -35,6 +41,9 @@ from backend.api.cooperation.schemas import (
 from backend.api.deps import get_admin, get_config_instance, get_session
 from backend.api.subscriptions.helpers import subscription_to_response
 from backend.api.subscriptions.schemas import SubscriptionUpdate
+from backend.api.user_requests.router import (
+    _resolve_and_validate_attachment_path,
+)
 from backend.api.user_requests.schemas import Attachment
 from backend.celery_app.tasks.admin_cooperation_tasks import (
     send_cooperation_proposals,
@@ -59,6 +68,7 @@ from backend.enums import (
     EmailMessageDirection,
     SupplierEmailPreferenceStatus,
 )
+from backend.schemas.analysis import EmailAnalysisResult
 from backend.schemas.user_email_settings import UserEmailSettingsUpdate
 from backend.services.personal_data_cleanup import (
     days_since,
@@ -88,6 +98,7 @@ from fastapi import (
     UploadFile,
     status,
 )
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -230,6 +241,153 @@ def _email_message_item(message) -> AdminEmailMessageItem:
         supplier_domain=supplier.domain if supplier else None,
         user_email=owner.email if owner else None,
         user_id=owner.id if owner else None,
+    )
+
+
+def _attachment_items(raw: list | None) -> list[AdminAnalysisAttachment]:
+    items: list[AdminAnalysisAttachment] = []
+    if not isinstance(raw, list):
+        return items
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        path = str(entry.get("path") or "").strip()
+        filename = str(entry.get("filename") or "").strip()
+        if not path or not filename:
+            continue
+        size_raw = entry.get("size")
+        try:
+            size = int(size_raw) if size_raw is not None else None
+        except (TypeError, ValueError):
+            size = None
+        content_type = entry.get("content_type")
+        items.append(
+            AdminAnalysisAttachment(
+                filename=filename,
+                content_type=(
+                    str(content_type).strip() if content_type else None
+                ),
+                size=size,
+                path=path,
+            )
+        )
+    return items
+
+
+def _match_items_from_raw(raw: dict | None) -> list[AdminAnalysisMatchItem]:
+    if not raw:
+        return []
+    try:
+        result = EmailAnalysisResult(**raw)
+    except Exception:
+        return []
+    items: list[AdminAnalysisMatchItem] = []
+    for match in result.matches:
+        items.append(
+            AdminAnalysisMatchItem(
+                requirement=match.requirement,
+                offer_value=match.offer_value,
+                numeric_value=match.numeric_value,
+                currency=match.currency,
+                explanation=match.explanation,
+                status=match.status.value,
+                corrected_from=match.corrected_from,
+                value_origin=(
+                    match.value_origin.value if match.value_origin else None
+                ),
+                source_message_id=match.source_message_id,
+            )
+        )
+    return items
+
+
+def _match_origin_counts(
+    matches: list[AdminAnalysisMatchItem],
+) -> tuple[int, int, int, int]:
+    calculated = 0
+    manual = 0
+    extracted = 0
+    for match in matches:
+        if match.corrected_from:
+            manual += 1
+        elif match.value_origin == "calculated":
+            calculated += 1
+        elif match.value_origin == "extracted":
+            extracted += 1
+    return len(matches), calculated, manual, extracted
+
+
+def _analysis_list_item(message) -> AdminAnalysisListItem:
+    rs = message.request_supplier
+    supplier = rs.supplier if rs else None
+    request = rs.request if rs else None
+    owner = request.user if request else None
+    analysis = message.analysis
+    attachments = _attachment_items(message.attachments)
+    matches = _match_items_from_raw(
+        analysis.raw_llm_response if analysis else None
+    )
+    match_count, calculated, manual, extracted = _match_origin_counts(matches)
+    supplier_email = (rs.sent_to_email if rs else None) or (
+        supplier.main_email if supplier else None
+    )
+    return AdminAnalysisListItem(
+        message_id=message.id,
+        analysis_id=analysis.id if analysis else None,
+        analysis_status=analysis.status if analysis else None,
+        llm_model=analysis.llm_model if analysis else None,
+        subject=message.subject,
+        from_email=message.from_email or supplier_email,
+        received_at=message.received_at,
+        request_id=rs.request_id if rs else None,
+        request_query=request.query if request else None,
+        request_supplier_id=message.request_supplier_id,
+        supplier_company=supplier.company_name if supplier else None,
+        supplier_email=supplier_email,
+        user_email=owner.email if owner else None,
+        user_id=owner.id if owner else None,
+        attachment_count=len(attachments),
+        match_count=match_count,
+        calculated_count=calculated,
+        manual_count=manual,
+        extracted_count=extracted,
+    )
+
+
+def _analysis_detail(message) -> AdminAnalysisDetail:
+    rs = message.request_supplier
+    supplier = rs.supplier if rs else None
+    request = rs.request if rs else None
+    owner = request.user if request else None
+    analysis = message.analysis
+    attachments = _attachment_items(message.attachments)
+    matches = _match_items_from_raw(
+        analysis.raw_llm_response if analysis else None
+    )
+    body = (message.raw_body or "").strip()
+    body_preview = body[:2000] if body else None
+    supplier_email = (rs.sent_to_email if rs else None) or (
+        supplier.main_email if supplier else None
+    )
+    return AdminAnalysisDetail(
+        message_id=message.id,
+        analysis_id=analysis.id if analysis else None,
+        analysis_status=analysis.status if analysis else None,
+        llm_model=analysis.llm_model if analysis else None,
+        subject=message.subject,
+        from_email=message.from_email or supplier_email,
+        to_email=message.to_email,
+        received_at=message.received_at,
+        body_preview=body_preview,
+        request_id=rs.request_id if rs else None,
+        request_query=request.query if request else None,
+        request_supplier_id=message.request_supplier_id,
+        supplier_company=supplier.company_name if supplier else None,
+        supplier_email=supplier_email,
+        user_email=owner.email if owner else None,
+        user_id=owner.id if owner else None,
+        attachments=attachments,
+        matches=matches,
     )
 
 
@@ -503,6 +661,92 @@ async def relink_email_message(
     if refreshed is None:
         raise HTTPException(status_code=404, detail="Email message not found")
     return _email_message_item(refreshed)
+
+
+@router.get(
+    "/response-analyses",
+    response_model=AdminAnalysisPage,
+    summary="List email analyses for prompt/debug review",
+)
+async def list_response_analyses(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _admin: Annotated[User, Depends(get_admin)],
+    page: Annotated[int, Query(ge=1)] = 1,
+    size: Annotated[int, Query(ge=1, le=100)] = 20,
+    q: Annotated[str | None, Query(max_length=200)] = None,
+    with_attachments_only: Annotated[bool, Query()] = False,
+) -> AdminAnalysisPage:
+    rows, total = await EmailMessageDAO.list_admin_analysis_page(
+        session,
+        page=page,
+        size=size,
+        q=q,
+        with_attachments_only=with_attachments_only,
+    )
+    return AdminAnalysisPage(
+        items=[_analysis_list_item(row) for row in rows],
+        total=total,
+        page=page,
+        size=size,
+    )
+
+
+@router.get(
+    "/response-analyses/{message_id}",
+    response_model=AdminAnalysisDetail,
+    summary="Get email analysis detail with attachments and matches",
+)
+async def get_response_analysis_debug(
+    message_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _admin: Annotated[User, Depends(get_admin)],
+) -> AdminAnalysisDetail:
+    message = await EmailMessageDAO.get_admin_analysis_detail(
+        session, message_id
+    )
+    if not message or not message.analysis:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found",
+        )
+    return _analysis_detail(message)
+
+
+@router.get(
+    "/attachments/serve",
+    summary="Download a request/email attachment (admin)",
+)
+async def serve_admin_attachment(
+    _admin: Annotated[User, Depends(get_admin)],
+    config: Annotated[Config, Depends(get_config_instance)],
+    attachment_path: Annotated[
+        str,
+        Query(description="Stored attachment path (full or relative)"),
+    ],
+) -> FileResponse:
+    candidate = _resolve_and_validate_attachment_path(
+        attachment_path, config.upload_dir
+    )
+    if candidate is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Attachment not found",
+        )
+    filename = candidate.name
+    if "_" in filename:
+        prefix, rest = filename.split("_", 1)
+        if len(prefix) == 32 and all(
+            ch in "0123456789abcdefABCDEF" for ch in prefix
+        ):
+            filename = rest
+    media_type = (
+        mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    )
+    return FileResponse(
+        path=str(candidate),
+        filename=filename,
+        media_type=media_type,
+    )
 
 
 @router.patch(

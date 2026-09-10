@@ -433,6 +433,75 @@ export interface AdminEmailMessagePage {
 	size: number;
 }
 
+export interface AdminAnalysisAttachment {
+	filename: string;
+	content_type: string | null;
+	size: number | null;
+	path: string;
+}
+
+export interface AdminAnalysisMatchItem {
+	requirement: string;
+	offer_value: string | null;
+	numeric_value?: number | null;
+	currency?: string | null;
+	explanation: string | null;
+	status: string;
+	corrected_from?: string | null;
+	value_origin?: 'extracted' | 'calculated' | string | null;
+	source_message_id?: string | null;
+}
+
+export interface AdminAnalysisListItem {
+	message_id: string;
+	analysis_id: string | null;
+	analysis_status: string | null;
+	llm_model: string | null;
+	subject: string | null;
+	from_email: string | null;
+	received_at: string | null;
+	request_id: string | null;
+	request_query: string | null;
+	request_supplier_id: string;
+	supplier_company: string | null;
+	supplier_email: string | null;
+	user_email: string | null;
+	user_id: string | null;
+	attachment_count: number;
+	match_count: number;
+	calculated_count: number;
+	manual_count: number;
+	extracted_count: number;
+}
+
+export interface AdminAnalysisPage {
+	items: AdminAnalysisListItem[];
+	total: number;
+	page: number;
+	size: number;
+}
+
+export interface AdminAnalysisDetail {
+	message_id: string;
+	analysis_id: string | null;
+	analysis_status: string | null;
+	llm_model: string | null;
+	subject: string | null;
+	from_email: string | null;
+	to_email: string | null;
+	received_at: string | null;
+	body_preview: string | null;
+	request_id: string | null;
+	request_query: string | null;
+	request_supplier_id: string;
+	supplier_company: string | null;
+	supplier_email: string | null;
+	user_email: string | null;
+	user_id: string | null;
+	attachments: AdminAnalysisAttachment[];
+	matches: AdminAnalysisMatchItem[];
+}
+
 export interface AdminEmailMessageLinkUpdate {
 	request_supplier_id: string;
 }

@@ -6,7 +6,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.db.dao.base_dao import BaseDAO
-from backend.db.models import EmailMessage, Request, RequestSupplier
+from backend.db.models import (
+    EmailMessage,
+    Request,
+    RequestSupplier,
+    Supplier,
+    User,
+)
 from backend.enums import EmailMessageDirection
 from backend.schemas.thread import ThreadSummaryRow, is_thread_unread
 
@@ -192,6 +198,103 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
         )
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
+
+    @classmethod
+    async def list_admin_analysis_page(
+        cls,
+        session: AsyncSession,
+        *,
+        page: int = 1,
+        size: int = 20,
+        q: str | None = None,
+        with_attachments_only: bool = False,
+    ) -> tuple[list[EmailMessage], int]:
+        """Paginated incoming messages that have a response analysis."""
+        from backend.db.models.response import ResponseAnalysis
+
+        offset = max(page - 1, 0) * size
+        filters = [
+            cls.model.direction == EmailMessageDirection.INCOMING.value,
+            ResponseAnalysis.id.is_not(None),
+        ]
+        if with_attachments_only:
+            filters.append(cls.model.attachments.is_not(None))
+        if q and q.strip():
+            needle = f"%{q.strip()}%"
+            filters.append(
+                or_(
+                    cls.model.subject.ilike(needle),
+                    cls.model.from_email.ilike(needle),
+                    Request.query.ilike(needle),
+                    User.email.ilike(needle),
+                    Supplier.company_name.ilike(needle),
+                    Supplier.main_email.ilike(needle),
+                )
+            )
+
+        base = (
+            select(cls.model.id)
+            .join(cls.model.analysis)
+            .join(cls.model.request_supplier)
+            .join(RequestSupplier.request)
+            .outerjoin(Request.user)
+            .outerjoin(RequestSupplier.supplier)
+            .where(*filters)
+        )
+        total = int(
+            (
+                await session.execute(
+                    select(func.count()).select_from(base.subquery())
+                )
+            ).scalar_one()
+        )
+        id_stmt = (
+            base.order_by(cls.model.received_at.desc().nulls_last())
+            .offset(offset)
+            .limit(size)
+        )
+        ids = list((await session.execute(id_stmt)).scalars().all())
+        if not ids:
+            return [], total
+
+        stmt = (
+            select(cls.model)
+            .where(cls.model.id.in_(ids))
+            .options(
+                selectinload(cls.model.analysis),
+                selectinload(cls.model.request_supplier).selectinload(
+                    RequestSupplier.supplier
+                ),
+                selectinload(cls.model.request_supplier)
+                .selectinload(RequestSupplier.request)
+                .selectinload(Request.user),
+            )
+            .order_by(cls.model.received_at.desc().nulls_last())
+        )
+        rows = list((await session.execute(stmt)).unique().scalars().all())
+        return rows, total
+
+    @classmethod
+    async def get_admin_analysis_detail(
+        cls,
+        session: AsyncSession,
+        message_id: uuid.UUID,
+    ) -> EmailMessage | None:
+        """Load one message with analysis and supplier/request context."""
+        stmt = (
+            select(cls.model)
+            .where(cls.model.id == message_id)
+            .options(
+                selectinload(cls.model.analysis),
+                selectinload(cls.model.request_supplier).selectinload(
+                    RequestSupplier.supplier
+                ),
+                selectinload(cls.model.request_supplier)
+                .selectinload(RequestSupplier.request)
+                .selectinload(Request.user),
+            )
+        )
+        return (await session.execute(stmt)).scalar_one_or_none()
 
     @classmethod
     async def list_admin_page(
