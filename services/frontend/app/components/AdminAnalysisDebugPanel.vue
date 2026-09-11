@@ -90,7 +90,7 @@
 							<UBadge
 								v-if="item.extracted_count"
 								color="success"
-								variant="soft"
+								variant="solid"
 								size="sm"
 							>
 								{{ t('admin.analysisDebug.originExtracted') }}: {{ item.extracted_count }}
@@ -98,7 +98,7 @@
 							<UBadge
 								v-if="item.calculated_count"
 								color="warning"
-								variant="soft"
+								variant="solid"
 								size="sm"
 							>
 								{{ t('admin.analysisDebug.originCalculated') }}: {{ item.calculated_count }}
@@ -106,7 +106,7 @@
 							<UBadge
 								v-if="item.manual_count"
 								color="primary"
-								variant="soft"
+								variant="solid"
 								size="sm"
 							>
 								{{ t('admin.analysisDebug.originManual') }}: {{ item.manual_count }}
@@ -274,8 +274,8 @@
 										<td class="px-3 py-2.5">
 											<UBadge
 												:color="originColor(match)"
-												variant="soft"
-												size="sm"
+												:variant="originVariant(match)"
+												:size="originSize(match)"
 											>
 												{{ originLabel(match) }}
 											</UBadge>
@@ -356,25 +356,46 @@ function statusColor(status: string): 'success' | 'warning' | 'error' | 'neutral
 	return 'neutral'
 }
 
-function resolvedOrigin(match: AdminAnalysisMatchItem): 'manual' | 'calculated' | 'extracted' {
+function hasMatchValue(match: AdminAnalysisMatchItem): boolean {
+	return Boolean(match.offer_value?.trim()) || match.numeric_value != null
+}
+
+function resolvedOrigin(
+	match: AdminAnalysisMatchItem,
+): 'manual' | 'calculated' | 'extracted' | 'empty' {
 	if (match.corrected_from) return 'manual'
+	if (!hasMatchValue(match)) return 'empty'
 	if (match.value_origin === 'calculated') return 'calculated'
-	// Missing origin on legacy rows = AI extraction from letter/attachments.
-	return 'extracted'
+	if (match.value_origin === 'extracted' || match.value_origin == null) {
+		return 'extracted'
+	}
+	return 'empty'
 }
 
 function originLabel(match: AdminAnalysisMatchItem): string {
 	const origin = resolvedOrigin(match)
 	if (origin === 'manual') return t('admin.analysisDebug.originManual')
 	if (origin === 'calculated') return t('admin.analysisDebug.originCalculated')
-	return t('admin.analysisDebug.originExtracted')
+	if (origin === 'extracted') return t('admin.analysisDebug.originExtracted')
+	return t('admin.analysisDebug.originEmpty')
 }
 
-function originColor(match: AdminAnalysisMatchItem): 'primary' | 'warning' | 'success' {
+function originColor(
+	match: AdminAnalysisMatchItem,
+): 'primary' | 'warning' | 'success' | 'neutral' {
 	const origin = resolvedOrigin(match)
 	if (origin === 'manual') return 'primary'
 	if (origin === 'calculated') return 'warning'
-	return 'success'
+	if (origin === 'extracted') return 'success'
+	return 'neutral'
+}
+
+function originVariant(match: AdminAnalysisMatchItem): 'solid' | 'subtle' {
+	return resolvedOrigin(match) === 'empty' ? 'subtle' : 'solid'
+}
+
+function originSize(match: AdminAnalysisMatchItem): 'sm' | 'md' {
+	return resolvedOrigin(match) === 'empty' ? 'sm' : 'md'
 }
 
 function isImageAttachment(att: AdminAnalysisAttachment): boolean {

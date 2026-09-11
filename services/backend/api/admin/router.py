@@ -288,8 +288,15 @@ def _match_items_from_raw(raw: dict | None) -> list[AdminAnalysisMatchItem]:
             (match.offer_value and str(match.offer_value).strip())
             or match.numeric_value is not None
         )
-        # Legacy analyses: LLM extraction from letter/attachments, no origin.
-        if origin is None and has_value and not match.corrected_from:
+        if not has_value:
+            # Empty / not_found rows must never look like AI extraction.
+            origin = None
+        elif match.corrected_from:
+            pass
+        elif origin == "calculated":
+            pass
+        else:
+            # Legacy null + real value = LLM extraction from letter/attachments.
             origin = "extracted"
         items.append(
             AdminAnalysisMatchItem(
@@ -307,6 +314,13 @@ def _match_items_from_raw(raw: dict | None) -> list[AdminAnalysisMatchItem]:
     return items
 
 
+def _match_has_value(match: AdminAnalysisMatchItem) -> bool:
+    return bool(
+        (match.offer_value and str(match.offer_value).strip())
+        or match.numeric_value is not None
+    )
+
+
 def _match_origin_counts(
     matches: list[AdminAnalysisMatchItem],
 ) -> tuple[int, int, int, int]:
@@ -316,15 +330,9 @@ def _match_origin_counts(
     for match in matches:
         if match.corrected_from:
             manual += 1
-        elif match.value_origin == "calculated":
+        elif match.value_origin == "calculated" and _match_has_value(match):
             calculated += 1
-        elif match.value_origin == "extracted" or (
-            match.value_origin is None
-            and (
-                (match.offer_value and str(match.offer_value).strip())
-                or match.numeric_value is not None
-            )
-        ):
+        elif match.value_origin == "extracted" and _match_has_value(match):
             extracted += 1
     return len(matches), calculated, manual, extracted
 
