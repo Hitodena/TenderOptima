@@ -47,6 +47,8 @@ _VAT_AMOUNT_HEADER_RE = re.compile(
 )
 _MD_ROW_RE = re.compile(r"^\|(.+)\|$")
 _MD_SEP_RE = re.compile(r"^[\s|:-]+$")
+_PLAIN_TOKEN_NUM_RE = re.compile(r"^-?\d+(?:[.,]\d+)?$")
+_COMMON_VAT_RATES = frozenset({0.0, 10.0, 20.0, 25.0})
 
 
 @dataclass(frozen=True)
@@ -65,6 +67,41 @@ def _almost_equal(a: float, b: float, *, rel: float = _REL_TOLERANCE) -> bool:
         return True
     scale = max(abs(a), abs(b), 1e-9)
     return abs(a - b) / scale <= rel
+
+
+def _score_line_amounts(amounts: TableLineAmounts) -> int:
+    score = 0
+    if amounts.qty is not None:
+        score += 1
+    if amounts.unit_price is not None:
+        score += 2
+    if amounts.sum_without_vat is not None:
+        score += 2
+    if amounts.sum_with_vat is not None:
+        score += 1
+    if amounts.vat_amount is not None:
+        score += 1
+    if (
+        amounts.qty
+        and amounts.unit_price is not None
+        and amounts.sum_without_vat is not None
+        and _almost_equal(
+            amounts.unit_price * amounts.qty,
+            amounts.sum_without_vat,
+        )
+    ):
+        score += 3
+    if (
+        amounts.sum_without_vat is not None
+        and amounts.vat_amount is not None
+        and amounts.sum_with_vat is not None
+        and _almost_equal(
+            amounts.sum_without_vat + amounts.vat_amount,
+            amounts.sum_with_vat,
+        )
+    ):
+        score += 2
+    return score
 
 
 def _parse_markdown_tables(text: str) -> list[list[list[str]]]:
@@ -117,8 +154,8 @@ def _cell_number(cell: str) -> float | None:
     return parse_offer_numeric(cell)
 
 
-def extract_table_line_amounts(text: str) -> TableLineAmounts:
-    """Pull qty / unit / sums from the first matching markdown table row."""
+def _extract_markdown_table_amounts(text: str) -> TableLineAmounts:
+    """Pull qty / unit / sums from markdown tables (pdfplumber path)."""
     best = TableLineAmounts()
     best_score = -1
     for table in _parse_markdown_tables(text):
@@ -140,19 +177,135 @@ def extract_table_line_amounts(text: str) -> TableLineAmounts:
                 num = _cell_number(row[idx])
                 if num is not None:
                     amounts[role] = num
-            score = len(amounts)
+            candidate = TableLineAmounts(
+                qty=amounts.get("qty"),
+                unit_price=amounts.get("unit_price"),
+                sum_without_vat=amounts.get("sum_without_vat"),
+                sum_with_vat=amounts.get("sum_with_vat"),
+                vat_amount=amounts.get("vat_amount"),
+            )
+            score = _score_line_amounts(candidate)
             if score > best_score:
                 best_score = score
-                best = TableLineAmounts(
-                    qty=amounts.get("qty"),
-                    unit_price=amounts.get("unit_price"),
-                    sum_without_vat=amounts.get("sum_without_vat"),
-                    sum_with_vat=amounts.get("sum_with_vat"),
-                    vat_amount=amounts.get("vat_amount"),
-                )
-            if score >= 3:
+                best = candidate
+            if score >= 8:
                 return best
     return best
+
+
+def _plain_line_numbers(line: str) -> list[float]:
+    """
+    Tokenize a plain OCR line into numbers.
+
+    Avoids product codes (``ПИ-2-45/120``) and false thousands joins
+    (``м2 600`` must not become ``2600``).
+    """
+    nums: list[float] = []
+    for raw in re.split(r"\s+", line.strip()):
+        token = raw.strip(".,;:()[]")
+        if not token:
+            continue
+        # Skip mixed alphanumeric tokens (units, SKUs, codes).
+        if re.search(r"[A-Za-zА-Яа-яЁё]", token):
+            continue
+        if "/" in token or token.count("-") > 1:
+            continue
+        if not _PLAIN_TOKEN_NUM_RE.match(token):
+            continue
+        num = parse_offer_numeric(token.replace(",", "."))
+        if num is not None:
+            nums.append(num)
+    return nums
+
+
+def _candidate_from_number_window(
+    nums: list[float],
+) -> TableLineAmounts | None:
+    """
+    Match Belarusian invoice row shapes:
+
+    qty, unit, sum, vat_rate%, vat_amount, sum_with_vat
+    qty, unit, sum, vat_amount, sum_with_vat
+    """
+    if len(nums) == 6:
+        qty, unit, total, rate, vat, with_vat = nums
+        if qty < 2 or unit <= 0 or total <= 0:
+            return None
+        if rate not in _COMMON_VAT_RATES and not (0 <= rate <= 25):
+            return None
+        if not _almost_equal(unit * qty, total):
+            return None
+        if not (
+            _almost_equal(total + vat, with_vat)
+            or _almost_equal(total * (1 + rate / 100.0), with_vat)
+        ):
+            return None
+        return TableLineAmounts(
+            qty=qty,
+            unit_price=unit,
+            sum_without_vat=total,
+            sum_with_vat=with_vat,
+            vat_amount=vat,
+        )
+    if len(nums) == 5:
+        qty, unit, total, vat, with_vat = nums
+        if qty < 2 or unit <= 0 or total <= 0:
+            return None
+        if not _almost_equal(unit * qty, total):
+            return None
+        if not _almost_equal(total + vat, with_vat):
+            return None
+        return TableLineAmounts(
+            qty=qty,
+            unit_price=unit,
+            sum_without_vat=total,
+            sum_with_vat=with_vat,
+            vat_amount=vat,
+        )
+    return None
+
+
+def _extract_plain_invoice_amounts(text: str) -> TableLineAmounts:
+    """
+    Fallback for OCR / plain-text invoices without markdown tables.
+
+    Looks for validated number sequences like:
+    ``600 0.43 258.00 20 51.60 309.60`` (qty, цена, сумма, ставка, НДС, с НДС).
+    """
+    best = TableLineAmounts()
+    best_score = -1
+    # Join wrapped lines lightly so split cells still form one sequence.
+    compact = re.sub(r"[ \t]+", " ", text)
+    for source in (text, compact):
+        for line in source.splitlines():
+            nums = _plain_line_numbers(line)
+            if len(nums) < 5:
+                continue
+            for start in range(0, len(nums) - 4):
+                for width in (6, 5):
+                    if start + width > len(nums):
+                        continue
+                    candidate = _candidate_from_number_window(
+                        nums[start : start + width]
+                    )
+                    if candidate is None:
+                        continue
+                    score = _score_line_amounts(candidate)
+                    if score > best_score:
+                        best_score = score
+                        best = candidate
+    return best
+
+
+def extract_table_line_amounts(text: str) -> TableLineAmounts:
+    """Pull qty / unit / sums from markdown tables or plain invoice text."""
+    from_md = _extract_markdown_table_amounts(text)
+    if _score_line_amounts(from_md) >= 5:
+        return from_md
+    from_plain = _extract_plain_invoice_amounts(text or "")
+    if _score_line_amounts(from_plain) > _score_line_amounts(from_md):
+        return from_plain
+    return from_md
 
 
 def _infer_qty(

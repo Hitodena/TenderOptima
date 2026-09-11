@@ -48,6 +48,45 @@ def test_extract_pakstar_table() -> None:
     assert amounts.vat_amount == 51.6
 
 
+def test_extract_pakstar_plain_text_ocr() -> None:
+    """Scanned invoices often come as OCR text without markdown tables."""
+    text = """
+СЧЕТ-ФАКТУРА № 1198 от 8 Июля 2026 г.
+Поставщик: Частное предприятие "Пакстар" packstar.by@gmail.com
+Плательщик: ООО "Органик Продакшн" inbox@tenderoptima.online
+Наименование Ед изм К-во Цена, руб. Сумма, руб. Ставка НДС Сумма НДС Сумма с НДС
+ПИ-2-45/120 пленка прозрачная возд.-пузырьковая м2 600 0.43 258.00 20 51.60 309.60
+Итого 258.00 51.60 309.60
+Всего с НДС 309.60
+"""
+    amounts = extract_table_line_amounts(text)
+    assert amounts.qty == 600
+    assert amounts.unit_price == 0.43
+    assert amounts.sum_without_vat == 258.0
+    assert amounts.sum_with_vat == 309.6
+    assert amounts.vat_amount == 51.6
+
+
+def test_reconcile_pakstar_plain_text_fixes_llm_total() -> None:
+    text = """
+ПИ-2-45/120 пленка м2 600 0,43 258,00 20 51,60 309,60
+"""
+    result = EmailAnalysisResult(
+        parameters={},
+        matches=[
+            _match("Цена за единицу без НДС", "309.60", 309.6),
+            _match("Общая стоимость без НДС", "258", 258.0),
+            _match("Общая стоимость с НДС", "309.60", 309.6),
+        ],
+    )
+    fixed = reconcile_price_matches(result, text)
+    unit = next(
+        m for m in fixed.matches if m.requirement == "Цена за единицу без НДС"
+    )
+    assert unit.numeric_value == 0.43
+    assert unit.value_origin == ValueOrigin.EXTRACTED
+
+
 def test_reconcile_prefers_table_unit_over_llm_total() -> None:
     result = EmailAnalysisResult(
         parameters={},
