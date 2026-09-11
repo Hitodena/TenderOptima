@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from loguru import logger
 from sqlalchemy import select
@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.dao.base_dao import BaseDAO
 from backend.db.models import User
+
+_LAST_LOGIN_TOUCH_INTERVAL = timedelta(minutes=15)
 
 
 class UserDAO(BaseDAO[User]):
@@ -79,6 +81,37 @@ class UserDAO(BaseDAO[User]):
                 phone=phone,
             )
             raise
+
+    @classmethod
+    async def touch_last_login_if_stale(
+        cls,
+        session: AsyncSession,
+        user: User,
+        *,
+        min_interval: timedelta = _LAST_LOGIN_TOUCH_INTERVAL,
+    ) -> bool:
+        """
+        Refresh last_login_at when missing or older than ``min_interval``.
+
+        Returns True when the field was updated (and committed).
+        """
+        now = datetime.now(UTC)
+        last = user.last_login_at
+        if last is not None:
+            if last.tzinfo is None:
+                last = last.replace(tzinfo=UTC)
+            if now - last < min_interval:
+                return False
+        user.last_login_at = now
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+        logger.debug(
+            "Touched user last_login_at",
+            user_id=str(user.id),
+            last_login_at=now.isoformat(),
+        )
+        return True
 
     @classmethod
     async def update_contact_info(

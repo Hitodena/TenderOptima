@@ -25,7 +25,7 @@
 						v-for="item in users"
 						:key="item.id"
 						type="button"
-						class="w-full px-4 py-3 text-left hover:bg-elevated/60 transition-colors"
+						class="w-full px-4 py-3 text-left hover:bg-elevated/60 transition-colors cursor-pointer"
 						:class="selectedUserId === item.id ? 'bg-elevated/80' : ''"
 						@click="selectUser(item.id)"
 					>
@@ -35,7 +35,7 @@
 							<span v-if="item.company_name"> · {{ item.company_name }}</span>
 						</p>
 						<p class="text-[11px] text-muted mt-1">
-							{{ t('admin.users.registeredAt') }}: {{ formatDate(item.created_at) }}
+							{{ t('admin.users.registeredAt') }}: {{ formatDateTime(item.created_at) }}
 						</p>
 						<p class="text-[11px] text-muted">
 							{{ t('admin.users.lastLogin') }}: {{ formatLastLogin(item.last_login_at) }}
@@ -64,7 +64,7 @@
 								{{ selectedUser.full_name || 'Без имени' }}
 							</p>
 							<p class="text-xs text-muted mt-1">
-								{{ t('admin.users.registeredAt') }}: {{ formatDate(selectedUser.created_at) }}
+								{{ t('admin.users.registeredAt') }}: {{ formatDateTime(selectedUser.created_at) }}
 							</p>
 							<p class="text-xs text-muted mt-1">
 								{{ t('admin.users.lastLogin') }}: {{ formatLastLogin(selectedUser.last_login_at) }}

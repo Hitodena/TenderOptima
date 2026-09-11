@@ -102,10 +102,10 @@ export const translations = {
 			originColumn: 'Происхождение',
 			statusColumn: 'Статус',
 			bodyPreviewTitle: 'Текст письма (превью)',
-			originExtracted: 'извлечено',
+			originExtracted: 'AI · из документов',
 			originCalculated: 'рассчитано',
 			originManual: 'вручную',
-			originUnknown: 'не указано',
+			originUnknown: 'AI · из документов',
 		},
 		users: {
 			registeredAt: 'Регистрация',

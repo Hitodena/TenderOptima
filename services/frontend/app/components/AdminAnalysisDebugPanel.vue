@@ -1,16 +1,16 @@
 <template>
-	<div class="space-y-5">
-		<div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-			<div class="space-y-1">
-				<p class="text-base text-muted">
+	<div class="space-y-4">
+		<div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+			<div class="space-y-1 min-w-0">
+				<p class="text-sm text-muted">
 					{{ t('admin.analysisDebug.totalLabel') }}
-					<span class="font-semibold text-highlighted text-lg">{{ total }}</span>
+					<span class="font-semibold text-highlighted">{{ total }}</span>
 				</p>
-				<p class="text-sm text-muted max-w-2xl">
+				<p class="text-xs text-muted max-w-2xl">
 					{{ t('admin.analysisDebug.description') }}
 				</p>
 			</div>
-			<div class="flex flex-col sm:flex-row gap-3 sm:items-center">
+			<div class="flex flex-col sm:flex-row gap-3 sm:items-center shrink-0">
 				<UInput
 					v-model="search"
 					icon="i-lucide-search"
@@ -33,10 +33,11 @@
 			variant="soft"
 			icon="i-lucide-circle-alert"
 			:description="loadError"
+			role="alert"
 		/>
 
 		<div v-if="loading" class="space-y-4">
-			<USkeleton v-for="i in 3" :key="i" class="h-36 w-full rounded-xl" />
+			<USkeleton v-for="i in 3" :key="i" class="h-28 w-full rounded-xl" />
 		</div>
 
 		<div v-else-if="items.length === 0" class="flex flex-col items-center justify-center py-16 gap-3">
@@ -44,68 +45,77 @@
 			<p class="text-base text-muted">{{ t('admin.analysisDebug.empty') }}</p>
 		</div>
 
-		<div v-else class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-			<div class="space-y-3">
-				<button
-					v-for="item in items"
-					:key="item.message_id"
-					type="button"
-					class="w-full text-left rounded-xl border border-default bg-default p-4 space-y-3 transition-colors hover:border-primary/40 hover:bg-elevated/40"
-					:class="selectedId === item.message_id ? 'border-primary ring-1 ring-primary/30' : ''"
-					@click="selectItem(item.message_id)"
-				>
-					<div class="flex flex-wrap items-center gap-2">
-						<span class="text-sm text-muted tabular-nums">
-							{{ item.received_at ? formatDateTime(item.received_at) : '—' }}
-						</span>
-						<UBadge
-							v-if="item.analysis_status"
-							:color="statusColor(item.analysis_status)"
-							variant="subtle"
-							size="sm"
-						>
-							{{ item.analysis_status }}
-						</UBadge>
-					</div>
-					<p class="text-sm sm:text-base font-semibold text-highlighted break-words leading-snug">
-						{{ item.subject || t('admin.analysisDebug.noSubject') }}
-					</p>
-					<div class="grid gap-1 text-sm text-muted">
-						<p class="break-all">{{ item.user_email || '—' }}</p>
-						<p class="break-words font-medium text-default">
+		<div
+			v-else
+			class="grid gap-4 lg:grid-cols-[minmax(280px,0.95fr)_minmax(0,1.35fr)] lg:items-start"
+		>
+			<!-- List: own scroll, stays beside detail on desktop -->
+			<div class="flex flex-col min-h-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-8.5rem)]">
+				<div class="space-y-2 overflow-y-auto overscroll-contain pe-1 flex-1 min-h-0">
+					<button
+						v-for="item in items"
+						:key="item.message_id"
+						type="button"
+						class="w-full text-left rounded-xl border border-default bg-default p-3 space-y-2 transition-colors duration-200 hover:border-primary/40 hover:bg-elevated/40 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary"
+						:class="selectedId === item.message_id ? 'border-primary ring-1 ring-primary/30 bg-elevated/50' : ''"
+						@click="selectItem(item.message_id)"
+					>
+						<div class="flex flex-wrap items-center gap-2">
+							<span class="text-xs text-muted tabular-nums">
+								{{ item.received_at ? formatDateTime(item.received_at) : '—' }}
+							</span>
+							<UBadge
+								v-if="item.analysis_status"
+								:color="statusColor(item.analysis_status)"
+								variant="subtle"
+								size="sm"
+							>
+								{{ item.analysis_status }}
+							</UBadge>
+						</div>
+						<p class="text-sm font-semibold text-highlighted break-words leading-snug line-clamp-2">
+							{{ item.subject || t('admin.analysisDebug.noSubject') }}
+						</p>
+						<p class="text-xs text-muted truncate">{{ item.user_email || '—' }}</p>
+						<p class="text-xs font-medium text-default line-clamp-1">
 							{{ item.supplier_company || item.supplier_email || '—' }}
 						</p>
-						<p v-if="item.request_query" class="line-clamp-2 break-words">
-							{{ item.request_query }}
-						</p>
-					</div>
-					<div class="flex flex-wrap gap-2">
-						<UBadge color="neutral" variant="soft" size="sm">
-							{{ t('admin.analysisDebug.attachmentsShort') }}: {{ item.attachment_count }}
-						</UBadge>
-						<UBadge color="neutral" variant="soft" size="sm">
-							{{ t('admin.analysisDebug.matchesShort') }}: {{ item.match_count }}
-						</UBadge>
-						<UBadge
-							v-if="item.calculated_count"
-							color="warning"
-							variant="soft"
-							size="sm"
-						>
-							{{ t('admin.analysisDebug.originCalculated') }}: {{ item.calculated_count }}
-						</UBadge>
-						<UBadge
-							v-if="item.manual_count"
-							color="primary"
-							variant="soft"
-							size="sm"
-						>
-							{{ t('admin.analysisDebug.originManual') }}: {{ item.manual_count }}
-						</UBadge>
-					</div>
-				</button>
+						<div class="flex flex-wrap gap-1.5">
+							<UBadge color="neutral" variant="soft" size="sm">
+								{{ t('admin.analysisDebug.attachmentsShort') }}: {{ item.attachment_count }}
+							</UBadge>
+							<UBadge color="neutral" variant="soft" size="sm">
+								{{ t('admin.analysisDebug.matchesShort') }}: {{ item.match_count }}
+							</UBadge>
+							<UBadge
+								v-if="item.extracted_count"
+								color="success"
+								variant="soft"
+								size="sm"
+							>
+								{{ t('admin.analysisDebug.originExtracted') }}: {{ item.extracted_count }}
+							</UBadge>
+							<UBadge
+								v-if="item.calculated_count"
+								color="warning"
+								variant="soft"
+								size="sm"
+							>
+								{{ t('admin.analysisDebug.originCalculated') }}: {{ item.calculated_count }}
+							</UBadge>
+							<UBadge
+								v-if="item.manual_count"
+								color="primary"
+								variant="soft"
+								size="sm"
+							>
+								{{ t('admin.analysisDebug.originManual') }}: {{ item.manual_count }}
+							</UBadge>
+						</div>
+					</button>
+				</div>
 
-				<div v-if="total > PAGE_SIZE" class="flex justify-center pt-2">
+				<div v-if="total > PAGE_SIZE" class="flex justify-center pt-3 shrink-0">
 					<UPagination
 						v-model:page="page"
 						:total="total"
@@ -115,17 +125,18 @@
 				</div>
 			</div>
 
-			<div class="min-w-0">
+			<!-- Detail: independent scroll -->
+			<div class="min-w-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-8.5rem)] lg:overflow-y-auto overscroll-contain">
 				<div v-if="detailLoading" class="space-y-3">
-					<USkeleton class="h-48 w-full rounded-xl" />
-					<USkeleton class="h-64 w-full rounded-xl" />
+					<USkeleton class="h-40 w-full rounded-xl" />
+					<USkeleton class="h-56 w-full rounded-xl" />
 				</div>
 				<UCard
 					v-else-if="detail"
 					:ui="{ body: 'p-4 sm:p-5 space-y-5' }"
 				>
 					<div class="space-y-2">
-						<p class="text-lg font-semibold text-highlighted break-words">
+						<p class="text-base sm:text-lg font-semibold text-highlighted break-words">
 							{{ detail.subject || t('admin.analysisDebug.noSubject') }}
 						</p>
 						<div class="grid gap-2 sm:grid-cols-2 text-sm">
@@ -181,6 +192,7 @@
 										variant="soft"
 										color="neutral"
 										icon="i-lucide-download"
+										class="cursor-pointer"
 										:loading="downloadingPath === att.path"
 										@click="downloadAttachment(att)"
 									>
@@ -191,7 +203,7 @@
 									v-if="isImageAttachment(att) && previewUrls[att.path]"
 									:src="previewUrls[att.path]"
 									:alt="att.filename"
-									class="max-h-72 w-full rounded-md object-contain bg-elevated/40"
+									class="max-h-64 w-full rounded-md object-contain bg-elevated/40"
 								>
 							</div>
 						</div>
@@ -209,7 +221,7 @@
 						</div>
 						<div v-else class="overflow-x-auto rounded-lg border border-default">
 							<table class="min-w-full text-sm">
-								<thead class="bg-elevated/50">
+								<thead class="bg-elevated/50 sticky top-0 z-[1]">
 									<tr class="border-b border-default">
 										<th class="px-3 py-2 text-left font-medium">
 											{{ t('admin.analysisDebug.requirementColumn') }}
@@ -231,10 +243,10 @@
 										:key="`${match.requirement}-${idx}`"
 										class="border-b border-default/60 last:border-0 align-top"
 									>
-										<td class="px-3 py-2.5 max-w-56 break-words">
+										<td class="px-3 py-2.5 max-w-52 break-words">
 											{{ match.requirement }}
 										</td>
-										<td class="px-3 py-2.5 max-w-72 space-y-1">
+										<td class="px-3 py-2.5 max-w-64 space-y-1">
 											<p class="break-words whitespace-pre-wrap">
 												{{ match.offer_value || '—' }}
 											</p>
@@ -281,7 +293,7 @@
 						<p class="text-xs font-medium uppercase tracking-wide text-muted">
 							{{ t('admin.analysisDebug.bodyPreviewTitle') }}
 						</p>
-						<pre class="max-h-56 overflow-auto rounded-lg bg-elevated/50 p-3 text-xs whitespace-pre-wrap break-words">{{ detail.body_preview }}</pre>
+						<pre class="max-h-48 overflow-auto rounded-lg bg-elevated/50 p-3 text-xs whitespace-pre-wrap break-words">{{ detail.body_preview }}</pre>
 					</div>
 				</UCard>
 				<div
@@ -344,18 +356,25 @@ function statusColor(status: string): 'success' | 'warning' | 'error' | 'neutral
 	return 'neutral'
 }
 
-function originLabel(match: AdminAnalysisMatchItem): string {
-	if (match.corrected_from) return t('admin.analysisDebug.originManual')
-	if (match.value_origin === 'calculated') return t('admin.analysisDebug.originCalculated')
-	if (match.value_origin === 'extracted') return t('admin.analysisDebug.originExtracted')
-	return t('admin.analysisDebug.originUnknown')
+function resolvedOrigin(match: AdminAnalysisMatchItem): 'manual' | 'calculated' | 'extracted' {
+	if (match.corrected_from) return 'manual'
+	if (match.value_origin === 'calculated') return 'calculated'
+	// Missing origin on legacy rows = AI extraction from letter/attachments.
+	return 'extracted'
 }
 
-function originColor(match: AdminAnalysisMatchItem): 'primary' | 'warning' | 'success' | 'neutral' {
-	if (match.corrected_from) return 'primary'
-	if (match.value_origin === 'calculated') return 'warning'
-	if (match.value_origin === 'extracted') return 'success'
-	return 'neutral'
+function originLabel(match: AdminAnalysisMatchItem): string {
+	const origin = resolvedOrigin(match)
+	if (origin === 'manual') return t('admin.analysisDebug.originManual')
+	if (origin === 'calculated') return t('admin.analysisDebug.originCalculated')
+	return t('admin.analysisDebug.originExtracted')
+}
+
+function originColor(match: AdminAnalysisMatchItem): 'primary' | 'warning' | 'success' {
+	const origin = resolvedOrigin(match)
+	if (origin === 'manual') return 'primary'
+	if (origin === 'calculated') return 'warning'
+	return 'success'
 }
 
 function isImageAttachment(att: AdminAnalysisAttachment): boolean {

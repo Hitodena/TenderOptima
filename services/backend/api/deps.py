@@ -51,6 +51,8 @@ async def get_current_user(
             detail="Account access is disabled",
         )
 
+    # Keep admin "last login" current while JWT sessions last for weeks.
+    await UserDAO.touch_last_login_if_stale(session, user)
     return user
 
 

@@ -283,6 +283,14 @@ def _match_items_from_raw(raw: dict | None) -> list[AdminAnalysisMatchItem]:
         return []
     items: list[AdminAnalysisMatchItem] = []
     for match in result.matches:
+        origin = match.value_origin.value if match.value_origin else None
+        has_value = bool(
+            (match.offer_value and str(match.offer_value).strip())
+            or match.numeric_value is not None
+        )
+        # Legacy analyses: LLM extraction from letter/attachments, no origin.
+        if origin is None and has_value and not match.corrected_from:
+            origin = "extracted"
         items.append(
             AdminAnalysisMatchItem(
                 requirement=match.requirement,
@@ -292,9 +300,7 @@ def _match_items_from_raw(raw: dict | None) -> list[AdminAnalysisMatchItem]:
                 explanation=match.explanation,
                 status=match.status.value,
                 corrected_from=match.corrected_from,
-                value_origin=(
-                    match.value_origin.value if match.value_origin else None
-                ),
+                value_origin=origin,
                 source_message_id=match.source_message_id,
             )
         )
@@ -312,7 +318,13 @@ def _match_origin_counts(
             manual += 1
         elif match.value_origin == "calculated":
             calculated += 1
-        elif match.value_origin == "extracted":
+        elif match.value_origin == "extracted" or (
+            match.value_origin is None
+            and (
+                (match.offer_value and str(match.offer_value).strip())
+                or match.numeric_value is not None
+            )
+        ):
             extracted += 1
     return len(matches), calculated, manual, extracted
 
