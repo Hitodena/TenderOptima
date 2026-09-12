@@ -1,7 +1,7 @@
 import uuid
 
 from loguru import logger
-from sqlalchemy import cast, func, or_, select
+from sqlalchemy import case, cast, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -219,10 +219,19 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
             ResponseAnalysis.id.is_not(None),
         ]
         if with_attachments_only:
-            # Exclude NULL and empty JSON arrays ([] still is_not(None)).
+            # Exclude NULL, non-arrays, and empty arrays.
+            # jsonb_array_length() errors on non-arrays, so guard with CASE.
             attachments_jsonb = cast(cls.model.attachments, JSONB)
-            filters.append(cls.model.attachments.is_not(None))
-            filters.append(func.jsonb_array_length(attachments_jsonb) > 0)
+            filters.append(
+                case(
+                    (cls.model.attachments.is_(None), False),
+                    (
+                        func.jsonb_typeof(attachments_jsonb) != "array",
+                        False,
+                    ),
+                    else_=func.jsonb_array_length(attachments_jsonb) > 0,
+                )
+            )
         if q and q.strip():
             needle = f"%{q.strip()}%"
             filters.append(
