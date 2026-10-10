@@ -68,7 +68,7 @@ _DIGEST_MATCH_BATCH_SIZE = 30
 _DIGEST_MATCH_MAX_CHARS = 48000
 _COMPLIANCE_BATCH_SIZE = 25
 _COMPLIANCE_CONCURRENCY = 4
-_RECALL_KP_MAX_CHARS = 16000
+_RECALL_KP_CHUNK_MAX_CHARS = 8000
 _STATUS_RANK = {
     TZAnalysisStatus.NOT_FOUND: 0,
     TZAnalysisStatus.MISSING: 1,
@@ -703,14 +703,18 @@ async def _llm_recall_batch(
     tz_hierarchy: dict | None = None,
     tz_page_map: dict[str, int] | None = None,
     kp_page_map: dict[str, int] | None = None,
+    kp_chunk_idx: int = 0,
+    total_kp_chunks: int = 1,
 ) -> list[TZAnalysisItem]:
-    """Recall sweep for still-unmatched requirements."""
+    """Recall sweep for still-unmatched requirements in one KP chunk."""
     system, user = build_recall_sweep_prompt(
         tz_batch,
         kp_text,
         batch_idx=batch_idx,
         total_batches=total_batches,
         tz_page_map=tz_page_map,
+        kp_chunk_idx=kp_chunk_idx,
+        total_kp_chunks=total_kp_chunks,
     )
     parsed = await _llm_call_with_retry(
         system,
@@ -884,24 +888,18 @@ def _ensure_item_refs(
 def _needs_recall(item: TZAnalysisItem | None) -> bool:
     if item is None:
         return True
-    return item.status == TZAnalysisStatus.NOT_FOUND
-
-
-def _compact_kp_text(
-    kp_text: str, *, max_chars: int = _RECALL_KP_MAX_CHARS
-) -> str:
-    """Build compact raw KP text for recall sweep."""
-    cleaned = clean_text(kp_text)
-    if len(cleaned) <= max_chars:
-        return cleaned
-    return cleaned[: max_chars - 20].rstrip() + "\n...[КП обрезан]"
+    return item.status in {
+        TZAnalysisStatus.NOT_FOUND,
+        TZAnalysisStatus.MISSING,
+        TZAnalysisStatus.PARTIAL,
+    }
 
 
 def _remaining_tz_requirements(
     tz_flat: list[str],
     found: dict[str, TZAnalysisItem],
 ) -> list[str]:
-    """Return TZ requirements not yet matched with met/partial/missing."""
+    """Return requirements without a fully satisfied met verdict."""
     remaining: list[str] = []
     for requirement in tz_flat:
         req_key = requirement_key_from_flat(requirement) or ""
@@ -917,13 +915,30 @@ def _map_compliance_batch_to_items(
     kp_name: str,
 ) -> list[TZAnalysisItem]:
     """Align forced-verdict LLM items with the input TZ batch order."""
-    by_requirement = {
-        requirement_key_from_flat(item.requirement)
-        or item.requirement.strip(): item.model_copy(
-            update={"kp_name": kp_name},
+    expected_keys = {requirement_key_from_flat(req) for req in tz_batch}
+    expected_keys.discard(None)
+    by_requirement: dict[str, TZAnalysisItem] = {}
+    for parsed_item in parsed.items:
+        item = parsed_item.model_copy(update={"kp_name": kp_name})
+        # Prefer the model's explicit leaf key, but accept only keys actually
+        # present in this input batch. `ref` can point to an atomic-split parent.
+        candidates = [
+            requirement_key_from_flat(item.requirement),
+            item.ref,
+        ]
+        matched_key = next(
+            (key for key in candidates if key and key in expected_keys),
+            None,
         )
-        for item in parsed.items
-    }
+        if matched_key:
+            by_requirement[matched_key] = item
+        else:
+            logger.warning(
+                "LLM compliance item could not be aligned to TZ batch",
+                model_requirement=item.requirement,
+                model_ref=item.ref,
+                expected_keys=sorted(expected_keys),
+            )
     items: list[TZAnalysisItem] = []
     for req in tz_batch:
         req_key = requirement_key_from_flat(req) or req.strip()
@@ -1325,7 +1340,12 @@ async def _run_recall_sweep(
     if not recall_candidates:
         return
 
-    compact_kp = _compact_kp_text(kp_text)
+    recall_chunks = chunk_text(
+        clean_text(kp_text),
+        max_chars=_RECALL_KP_CHUNK_MAX_CHARS,
+    )
+    if not recall_chunks:
+        return
     recall_batches = _batch_requirements(recall_candidates, _RECALL_BATCH_SIZE)
     logger.info(
         "Recall sweep started",
@@ -1334,7 +1354,8 @@ async def _run_recall_sweep(
         kp_name=kp_name,
         candidates=len(recall_candidates),
         batches=len(recall_batches),
-        kp_chars=len(compact_kp),
+        kp_chars=sum(len(chunk) for chunk in recall_chunks),
+        kp_chunks=len(recall_chunks),
     )
 
     for batch_idx, tz_batch in enumerate(recall_batches):
@@ -1347,20 +1368,30 @@ async def _run_recall_sweep(
             total=len(recall_batches),
             requirements=len(tz_batch),
         )
-        items = await _llm_recall_batch(
-            tz_batch,
-            compact_kp,
-            batch_idx=batch_idx,
-            total_batches=len(recall_batches),
-            analysis_id=analysis_id,
-            user_id=user_id,
-            kp_name=kp_name,
-            tz_hierarchy=tz_hierarchy,
-            tz_page_map=tz_page_map,
-            kp_page_map=kp_page_map,
-        )
-        for item in items:
-            _merge_match_item(found, item, kp_name=kp_name)
+        for kp_chunk_idx, kp_chunk in enumerate(recall_chunks):
+            items = await _llm_recall_batch(
+                tz_batch,
+                kp_chunk,
+                batch_idx=batch_idx,
+                total_batches=len(recall_batches),
+                analysis_id=analysis_id,
+                user_id=user_id,
+                kp_name=kp_name,
+                tz_hierarchy=tz_hierarchy,
+                tz_page_map=tz_page_map,
+                kp_page_map=kp_page_map,
+                kp_chunk_idx=kp_chunk_idx,
+                total_kp_chunks=len(recall_chunks),
+            )
+            for item in items:
+                _merge_match_item(found, item, kp_name=kp_name)
+            if all(
+                found.get(requirement_key_from_flat(req) or "")
+                and found[requirement_key_from_flat(req) or ""].status
+                == TZAnalysisStatus.MET
+                for req in tz_batch
+            ):
+                break
         logger.info(
             "Recall batch done",
             analysis_id=analysis_id,
