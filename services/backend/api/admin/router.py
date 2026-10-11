@@ -89,6 +89,7 @@ from backend.utils.subscription_usage import (
     SubscriptionUsage,
     SubscriptionUsageDAO,
 )
+from backend.utils.upload_validation import reject_legacy_doc_upload
 from backend.utils.user_email_settings import email_settings_response
 from fastapi import (
     APIRouter,
@@ -894,6 +895,7 @@ async def upload_cooperation_attachments(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Filename is required",
             )
+        reject_legacy_doc_upload(file.filename)
 
         safe_filename = Path(file.filename).name.replace("..", "_")
         unique_filename = f"{uuid.uuid4().hex}_{safe_filename}"

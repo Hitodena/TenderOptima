@@ -10,8 +10,19 @@ from backend.services.llm.prompts.billing import (
     build_billing_profile_extract_prompt,
 )
 
+SUPPORTED_BILLING_PROFILE_EXTENSIONS = frozenset(
+    {".pdf", ".docx", ".png", ".jpg", ".jpeg", ".webp", ".txt"}
+)
+
 _router = ExtractorRouter()
 _assembler = TextAssembler()
+
+
+def is_supported_billing_profile_file(filename: str) -> bool:
+    """Whether a billing-profile upload has a supported file extension."""
+    return (
+        Path(filename).suffix.lower() in SUPPORTED_BILLING_PROFILE_EXTENSIONS
+    )
 
 
 async def extract_billing_profile_fields(

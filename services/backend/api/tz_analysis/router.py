@@ -89,6 +89,7 @@ from backend.utils.tz_storage import (
     save_supplier_kp_files,
     save_tz_only_file,
 )
+from backend.utils.upload_validation import reject_legacy_doc_upload
 from backend.utils.xlsx_export import (
     build_tz_analysis_workbook,
     workbook_to_bytes,
@@ -231,6 +232,7 @@ async def _save_upload(
     limit: int,
     dest_name: str | None = None,
 ) -> Path:
+    reject_legacy_doc_upload(upload.filename)
     if not upload.filename and not dest_name:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

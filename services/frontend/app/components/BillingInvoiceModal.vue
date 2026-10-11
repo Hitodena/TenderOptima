@@ -29,7 +29,10 @@ const billingGenerating = ref(false)
 const extractText = ref('')
 const extractFiles = ref<File[]>([])
 
-const billingFileAccept = '.pdf,.doc,.docx,.png,.jpg,.jpeg,.webp,.txt'
+const billingFileAccept = '.pdf,.docx,.png,.jpg,.jpeg,.webp,.txt'
+const billingFileExtensions = new Set(
+	billingFileAccept.split(',').map((extension) => extension.slice(1)),
+)
 
 function applyBillingProfile(data: BillingProfileResponse) {
 	for (const key of BILLING_PROFILE_FIELDS) {
@@ -97,7 +100,18 @@ function onExtractFilesChange(files: File | File[] | null | undefined) {
 		extractFiles.value = []
 		return
 	}
-	extractFiles.value = Array.isArray(files) ? files : [files]
+	const selected = Array.isArray(files) ? files : [files]
+	const supported = selected.filter((file) => {
+		const extension = file.name.split('.').pop()?.toLowerCase()
+		return Boolean(extension && billingFileExtensions.has(extension))
+	})
+	if (supported.length !== selected.length) {
+		toast.add({
+			title: 'Поддерживаются PDF, DOCX, PNG, JPG, WEBP и TXT',
+			color: 'warning',
+		})
+	}
+	extractFiles.value = supported
 }
 
 async function extractBillingProfile() {
@@ -216,7 +230,7 @@ watch(isOpen, (open) => {
 							placeholder="Вставьте реквизиты из письма, договора или карточки организации"
 						/>
 					</UFormField>
-					<UFormField label="Файлы PDF, DOCX, изображения">
+					<UFormField label="Файлы PDF, DOCX, TXT, изображения">
 						<UFileUpload
 							:model-value="extractFiles"
 							:accept="billingFileAccept"

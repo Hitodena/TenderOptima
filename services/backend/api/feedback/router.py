@@ -36,6 +36,7 @@ from backend.api.feedback.schemas import (
 from backend.core.config import ALLOWED_CONTENT_TYPES, Config
 from backend.db.dao import FrontendErrorLogDAO, IdeaSuggestionDAO
 from backend.db.models import FrontendErrorLog, IdeaSuggestion, User
+from backend.utils.upload_validation import reject_legacy_doc_upload
 
 router = APIRouter(prefix="/feedback", tags=["Feedback"])
 
@@ -223,6 +224,7 @@ async def submit_idea(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Filename is required",
             )
+        reject_legacy_doc_upload(file.filename)
 
     row = await IdeaSuggestionDAO.create(
         session,
