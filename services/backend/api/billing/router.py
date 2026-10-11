@@ -68,7 +68,9 @@ from backend.services.billing.doc_generator import (
     write_billing_documents,
 )
 from backend.services.billing.extract_profile import (
+    SUPPORTED_BILLING_PROFILE_EXTENSIONS,
     extract_billing_profile_fields,
+    is_supported_billing_profile_file,
 )
 from backend.services.billing.payment_activation import (
     activate_subscription_after_payment,
@@ -188,9 +190,21 @@ async def extract_billing_profile(
     upload_dir = _billing_storage_dir(current_user.id) / "extract"
     upload_dir.mkdir(parents=True, exist_ok=True)
     saved_paths: list[Path] = []
-    for upload in files or []:
-        if not upload.filename:
-            continue
+    uploads = [upload for upload in files or [] if upload.filename]
+    for upload in uploads:
+        if not is_supported_billing_profile_file(upload.filename):
+            supported = ", ".join(
+                sorted(
+                    extension.removeprefix(".").upper()
+                    for extension in SUPPORTED_BILLING_PROFILE_EXTENSIONS
+                )
+            )
+            raise HTTPException(
+                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                detail=f"Неподдерживаемый формат файла. Разрешены: {supported}.",
+            )
+
+    for upload in uploads:
         dest = upload_dir / upload.filename
         content = await upload.read()
         dest.write_bytes(content)

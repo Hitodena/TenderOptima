@@ -78,6 +78,7 @@ from backend.utils.requirements_struct import (
     requirements_nonempty,
 )
 from backend.utils.tz_storage import save_tz_creation_file
+from backend.utils.upload_validation import reject_legacy_doc_upload
 
 router = APIRouter(
     prefix="/tz-creation",
@@ -308,6 +309,7 @@ async def upload_tz_creation_source(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="File name is required",
             )
+        reject_legacy_doc_upload(tz_file.filename)
         data = await tz_file.read()
         if len(data) > upload_limit:
             limit_mb = upload_limit // (1024 * 1024)

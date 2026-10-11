@@ -53,6 +53,7 @@ from backend.enums import RequestHistoryGroup, RequestStatus
 from backend.services.request_from_bookmarks import attach_bookmark_item
 from backend.utils.comparison_price import merge_multi_position_price_params
 from backend.utils.email_utils import build_request_email_body
+from backend.utils.upload_validation import reject_legacy_doc_upload
 
 router = APIRouter(prefix="/requests", tags=["Requests"])
 
@@ -464,6 +465,7 @@ async def upload_attachments(
                 status_code=status.HTTP_417_EXPECTATION_FAILED,
                 detail="File name not found",
             )
+        reject_legacy_doc_upload(file.filename)
 
         safe_filename = Path(file.filename).name.replace("..", "_")
         unique_filename = f"{uuid.uuid4().hex}_{safe_filename}"
