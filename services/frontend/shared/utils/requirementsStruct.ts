@@ -1,4 +1,27 @@
-export interface RequirementNode {
+/**
+ * What a point carries besides its text. For a TZ read from a Word file the
+ * key (1, 1.1, 1.2 ...) is only an internal id: it gives the order and
+ * nesting, and what the document itself calls the point (label, number) is
+ * kept here and never recalculated. Points found by the model have none of
+ * the numbering fields; their key is their number.
+ */
+export interface RequirementMeta {
+	/** Mark shown in the row, as in the document ("3.1.", "а)"); "" = none. */
+	label?: string
+	/** Number to quote in references and letters ("3.1"); "" = none. */
+	number?: string
+	/** The mark was assigned by the system, not taken from the document. */
+	auto?: boolean
+	page?: number
+	/**
+	 * The point stays in the list but is not compared with offers, and neither
+	 * is anything under it (the title of the document, a section the customer
+	 * does not want compared).
+	 */
+	excluded?: boolean
+}
+
+export interface RequirementNode extends RequirementMeta {
 	text: string
 	children: Record<string, RequirementNode>
 	ref_value?: string
@@ -7,10 +30,39 @@ export interface RequirementNode {
 
 export type RequirementsHierarchy = Record<string, RequirementNode>
 
-export interface EditableRequirementRow {
+export interface EditableRequirementRow extends RequirementMeta {
 	key: string
 	text: string
 	isHeading?: boolean
+}
+
+function pickMeta(source: unknown): RequirementMeta {
+	if (!source || typeof source !== 'object') return {}
+	const record = source as Record<string, unknown>
+	const picked: RequirementMeta = {}
+	// An empty label/number is kept: it says "no number in the document",
+	// which is different from the field being absent.
+	if (typeof record.label === 'string') picked.label = record.label.trim()
+	if (typeof record.number === 'string') picked.number = record.number.trim()
+	if (record.auto === true) picked.auto = true
+	if (typeof record.page === 'number' && Number.isInteger(record.page) && record.page > 0) {
+		picked.page = record.page
+	}
+	if (record.excluded === true) picked.excluded = true
+	return picked
+}
+
+/** True when the points were read from Word with their own numbering. */
+export function hierarchyHasNumbering(
+	hierarchy: RequirementsHierarchy | null | undefined,
+): boolean {
+	if (!hierarchy || typeof hierarchy !== 'object') return false
+	return Object.values(hierarchy).some((node) => {
+		if (!node || typeof node !== 'object') return false
+		return node.label !== undefined
+			|| node.number !== undefined
+			|| hierarchyHasNumbering(node.children)
+	})
 }
 
 /** Textarea row count from text; trailing empty lines are ignored; minimum 1. */
@@ -64,6 +116,7 @@ function normalizeNode(node: unknown): RequirementNode {
 		...(String(record.ref ?? '').trim()
 			? { ref: normalizeRequirementKey(String(record.ref)) }
 			: {}),
+		...pickMeta(record),
 	}
 }
 
@@ -85,6 +138,8 @@ function mergeNode(existing: RequirementNode, incoming: RequirementNode): Requir
 		...(incoming.ref || existing.ref
 			? { ref: (incoming.ref || existing.ref || '').trim() }
 			: {}),
+		...pickMeta(existing),
+		...pickMeta(incoming),
 	}
 }
 
@@ -172,7 +227,46 @@ function isSplitParent(node: RequirementNode): boolean {
 	return Boolean(node.ref_value?.trim()) || !node.text.trim()
 }
 
+/**
+ * ref/ref_value for a hierarchy read from Word, from its structure alone: a
+ * leaf quotes the nearest ancestor that has text, a point with children
+ * quotes its own text. The same as the server computes, and the same however
+ * often it is applied (the general routine below moves the context of a leaf
+ * one level up on every pass, which shows in trees deeper than two levels).
+ */
+function enrichStructuredRefs(hierarchy: RequirementsHierarchy): RequirementsHierarchy {
+	function walk(
+		nodes: RequirementsHierarchy,
+		contextKey: string | null,
+		contextText: string,
+	): RequirementsHierarchy {
+		const result: RequirementsHierarchy = {}
+		for (const key of Object.keys(nodes).sort(compareVersionKeys)) {
+			const node = normalizeNode(nodes[key])
+			const text = node.text.trim()
+			const enriched: RequirementNode = { text, children: {} }
+			if (Object.keys(node.children).length > 0) {
+				enriched.children = text
+					? walk(node.children, key, text)
+					: walk(node.children, contextKey, contextText)
+				if (text) enriched.ref_value = text
+			} else if (contextKey && contextText) {
+				enriched.ref = contextKey
+				enriched.ref_value = contextText
+			} else if (text) {
+				enriched.ref_value = text
+			}
+			result[key] = { ...enriched, ...pickMeta(node) }
+		}
+		return result
+	}
+
+	return walk(hierarchy, null, '')
+}
+
 function enrichHierarchyRefs(hierarchy: RequirementsHierarchy): RequirementsHierarchy {
+	if (hierarchyHasNumbering(hierarchy)) return enrichStructuredRefs(hierarchy)
+
 	function enrichNodes(nodes: RequirementsHierarchy): RequirementsHierarchy {
 		const result: RequirementsHierarchy = {}
 		for (const key of Object.keys(nodes).sort(compareVersionKeys)) {
@@ -182,7 +276,7 @@ function enrichHierarchyRefs(hierarchy: RequirementsHierarchy): RequirementsHier
 			const children = enrichNodes(node.children)
 			if (!refValue && text) refValue = text
 
-			const enriched: RequirementNode = { text, children }
+			const enriched: RequirementNode = { text, children, ...pickMeta(node) }
 			if (refValue) enriched.ref_value = refValue
 			if (node.ref) enriched.ref = node.ref
 
@@ -203,6 +297,39 @@ function enrichHierarchyRefs(hierarchy: RequirementsHierarchy): RequirementsHier
 	return enrichNodes(hierarchy)
 }
 
+/**
+ * The point as it is quoted in a letter, for a TZ read from Word: the point
+ * itself, led by the line above it when that line introduces it with a colon
+ * («Гарантийный срок не менее 24 месяцев: на насос;»). A point of such a TZ is
+ * a point of the document in its own right, not a part of the line above it.
+ * Null for any other hierarchy.
+ */
+export function requirementQuoteForKey(
+	hierarchy: RequirementsHierarchy | null | undefined,
+	key: string | null,
+): string | null {
+	if (!key || !hierarchy || !hierarchyHasNumbering(hierarchy)) return null
+	const target = normalizeRequirementKey(key)
+	let found: string | null = null
+
+	function walk(nodes: RequirementsHierarchy, lead: string) {
+		for (const [nodeKey, node] of Object.entries(nodes)) {
+			if (found !== null) return
+			const text = (node.text ?? '').split(/\s+/).filter(Boolean).join(' ')
+			const children = node.children ?? {}
+			if (Object.keys(children).length > 0) {
+				// a line that ends with a colon introduces what stands under it
+				walk(children, text ? (text.endsWith(':') ? text : '') : lead)
+			} else if (text && normalizeRequirementKey(nodeKey) === target) {
+				found = lead ? `${lead} ${text}` : text
+			}
+		}
+	}
+
+	walk(hierarchy, '')
+	return found
+}
+
 export function resolveLetterTzFields(
 	item: {
 		requirement: string
@@ -214,6 +341,13 @@ export function resolveLetterTzFields(
 	const leafKey = extractRequirementKey(item)
 	let ref = item.ref?.trim() || null
 	let refValue = item.ref_value?.trim() || null
+
+	// A TZ read from Word: the item is about the point its line starts with,
+	// and that point is quoted from the TZ itself (what the model stored with
+	// the item may carry internal keys).
+	const ownKey = leafKeyFromRequirement(item.requirement) ?? leafKey
+	const quote = requirementQuoteForKey(hierarchy, ownKey)
+	if (ownKey && quote) return { ref: ownKey, refValue: quote }
 
 	if (hierarchy && leafKey) {
 		const node = findNodeByKey(hierarchy, leafKey)
@@ -269,6 +403,19 @@ export function resolveLetterItemGrouping(
 	fallbackGroupKey: string,
 ): LetterItemGrouping {
 	const leafKey = extractRequirementKey(item)
+
+	// A TZ read from Word: every point stands on its own in the letter, quoted
+	// in full; there is no clause above it to group the points under.
+	const ownKey = leafKeyFromRequirement(item.requirement) ?? leafKey
+	const quote = requirementQuoteForKey(hierarchy, ownKey)
+	if (ownKey && quote) {
+		return {
+			groupKey: `ref:${ownKey}`,
+			parentKey: ownKey,
+			tzVerbatim: quote,
+			isSplitChild: false,
+		}
+	}
 
 	if (leafKey && hierarchy) {
 		const parentKey = parentRequirementKey(leafKey)
@@ -332,6 +479,8 @@ export function flattenHierarchy(hierarchy: RequirementsHierarchy): string[] {
 	function walk(nodes: RequirementsHierarchy) {
 		for (const key of Object.keys(nodes).sort(compareVersionKeys)) {
 			const node = normalizeNode(nodes[key])
+			// not compared, together with everything under it
+			if (node.excluded) continue
 			const children = node.children
 			const hasChildren = Object.keys(children).length > 0
 			if (hasChildren) {
@@ -364,10 +513,10 @@ export function flattenRequirementsToEditableRows(
 			const node = normalizeNode(nodes[key])
 			const hasChildren = Object.keys(node.children).length > 0
 			if (hasChildren) {
-				rows.push({ key, text: node.text, isHeading: true })
+				rows.push({ key, text: node.text, isHeading: true, ...pickMeta(node) })
 				walk(node.children)
 			} else if (node.text) {
-				rows.push({ key, text: node.text, isHeading: false })
+				rows.push({ key, text: node.text, isHeading: false, ...pickMeta(node) })
 			}
 		}
 	}
@@ -386,6 +535,7 @@ function insertNode(
 	root: RequirementsHierarchy,
 	key: string,
 	text: string,
+	numbering: RequirementMeta = {},
 ): void {
 	const normalizedKey = key.trim().replace(/\//g, '.')
 	if (!normalizedKey) return
@@ -398,6 +548,7 @@ function insertNode(
 		root[normalizedKey] = {
 			text,
 			children: root[normalizedKey]?.children ?? {},
+			...numbering,
 		}
 		return
 	}
@@ -418,6 +569,7 @@ function insertNode(
 			children[path] = {
 				text,
 				children: children[path]?.children ?? {},
+				...numbering,
 			}
 			return
 		}
@@ -446,9 +598,18 @@ export function rowsToHierarchy(rows: EditableRequirementRow[]): RequirementsHie
 			const num = Number(key)
 			if (!Number.isNaN(num)) nextTop = Math.max(nextTop, num + 1)
 		}
-		insertNode(result, key, row.text.trim())
+		insertNode(result, key, row.text.trim(), pickMeta(row))
 	}
 	return normalizeTzRequirements(result)
+}
+
+/**
+ * Numbering fields for a row the user adds. In a hierarchy read from Word a
+ * new point has no number in the document, so it gets an empty mark rather
+ * than a made-up one; points found by the model keep using their key.
+ */
+export function blankNumbering(rows: EditableRequirementRow[]): RequirementMeta {
+	return rows.some((row) => row.label !== undefined) ? { label: '', number: '' } : {}
 }
 
 export function nextTopLevelKey(rows: EditableRequirementRow[]): string {
@@ -477,16 +638,59 @@ export function nextChildKey(
 	return `${parentKey}.${maxChild + 1}`
 }
 
+/** Keys of the rows marked «не сравнивать». */
+function markedKeys(rows: EditableRequirementRow[]): string[] {
+	return rows.filter((row) => row.excluded).map((row) => normalizeRequirementKey(row.key))
+}
+
+/** True for a key marked itself or lying under a marked one: a section takes its points along. */
+function isKeyExcluded(key: string, marked: string[]): boolean {
+	if (marked.length === 0) return false
+	const normalized = normalizeRequirementKey(key)
+	return marked.some((m) => normalized === m || normalized.startsWith(`${m}.`))
+}
+
+function isRequirementRow(row: EditableRequirementRow): boolean {
+	return !row.isHeading && Boolean(row.text.trim())
+}
+
+/** At least one row that is compared with offers. */
 export function requirementsRowsNonempty(rows: EditableRequirementRow[]): boolean {
-	return rows.some((row) => !row.isHeading && row.text.trim())
+	const marked = markedKeys(rows)
+	return rows.some((row) => isRequirementRow(row) && !isKeyExcluded(row.key, marked))
 }
 
 export function requirementsNonempty(data: RequirementsHierarchy | null | undefined): boolean {
 	return flattenHierarchy(normalizeTzRequirements(data)).length > 0
 }
 
+/** All rows holding a requirement text, compared or not. */
 export function countRequirementRows(rows: EditableRequirementRow[]): number {
-	return rows.filter((row) => !row.isHeading && row.text.trim()).length
+	return rows.filter(isRequirementRow).length
+}
+
+/** Rows that are compared with offers. */
+export function countComparedRows(rows: EditableRequirementRow[]): number {
+	const marked = markedKeys(rows)
+	return rows.filter((row) => isRequirementRow(row) && !isKeyExcluded(row.key, marked)).length
+}
+
+/** Rows kept in the list but not compared, either marked or lying under a marked section. */
+export function countExcludedRows(rows: EditableRequirementRow[]): number {
+	return countRequirementRows(rows) - countComparedRows(rows)
+}
+
+/** Switch a row between «compared» and «не сравнивать»; a section takes its points along. */
+export function toggleRowExcluded(
+	rows: EditableRequirementRow[],
+	index: number,
+): EditableRequirementRow[] {
+	if (!rows[index]) return rows
+	return rows.map((row, i) => {
+		if (i !== index) return row
+		const { excluded, ...rest } = row
+		return excluded ? rest : { ...rest, excluded: true }
+	})
 }
 
 export interface RequirementTreeNode {
@@ -494,6 +698,13 @@ export interface RequirementTreeNode {
 	text: string
 	isHeading: boolean
 	rowIndex?: number
+	/** Mark from the document (see `RequirementMeta`); absent = show the key. */
+	label?: string
+	auto?: boolean
+	/** Marked «не сравнивать» itself. */
+	excluded?: boolean
+	/** Not compared: marked itself or lying under a marked section. */
+	muted?: boolean
 	children: RequirementTreeNode[]
 }
 
@@ -512,8 +723,20 @@ export interface ResultTreeNode {
 	key: string
 	text: string
 	isHeading: boolean
+	label?: string
+	auto?: boolean
 	children: ResultTreeNode[]
 	items: MatchableAnalysisItem[]
+}
+
+/**
+ * What to show in the number column of a row: the mark the document has
+ * (possibly empty), or the key for points found by the model.
+ */
+export function requirementMark(node: { key: string; label?: string }): string {
+	if (node.label !== undefined) return node.label
+	if (node.key.startsWith('__row_')) return ''
+	return `${node.key}.`
 }
 
 function normalizeRequirementKey(key: string): string {
@@ -535,6 +758,7 @@ export function buildTreeFromRows(
 ): RequirementTreeNode[] {
 	const nodeByKey = new Map<string, RequirementTreeNode>()
 	const roots: RequirementTreeNode[] = []
+	const hasDocumentNumbering = rows.some((row) => row.label !== undefined)
 
 	function attachToParent(node: RequirementTreeNode) {
 		if (node.key.startsWith('__row_')) {
@@ -554,6 +778,8 @@ export function buildTreeFromRows(
 				key: parentKey,
 				text: '',
 				isHeading: true,
+				// a stand-in for a missing parent has no number of its own
+				...(hasDocumentNumbering ? { label: '' } : {}),
 				children: [],
 			}
 			nodeByKey.set(parentKey, parent)
@@ -578,6 +804,9 @@ export function buildTreeFromRows(
 			text: row.text,
 			isHeading: Boolean(row.isHeading),
 			rowIndex,
+			...(row.label !== undefined ? { label: row.label } : {}),
+			...(row.auto ? { auto: true } : {}),
+			...(row.excluded ? { excluded: true } : {}),
 			children: [],
 		}
 		nodeByKey.set(key, node)
@@ -587,7 +816,17 @@ export function buildTreeFromRows(
 	if (options?.sort !== false) {
 		sortTreeNodes(roots)
 	}
+	markNotCompared(roots, false)
 	return roots
+}
+
+/** A section marked «не сравнивать» takes everything under it along. */
+function markNotCompared(nodes: RequirementTreeNode[], inherited: boolean) {
+	for (const node of nodes) {
+		const notCompared = inherited || Boolean(node.excluded)
+		if (notCompared) node.muted = true
+		markNotCompared(node.children, notCompared)
+	}
 }
 
 export function isDescendantRowKey(key: string, ancestorKey: string): boolean {
@@ -687,6 +926,7 @@ export function insertSiblingAfterRow(
 		key: siblingPlaceholderKey(rows, afterIndex),
 		text: '',
 		isHeading: options?.isHeading,
+		...blankNumbering(rows),
 	})
 	return next
 }
@@ -702,6 +942,7 @@ export function insertSiblingBeforeRow(
 		key: siblingPlaceholderKey(rows, beforeIndex),
 		text: '',
 		isHeading: options?.isHeading,
+		...blankNumbering(rows),
 	})
 	return next
 }
@@ -725,14 +966,19 @@ export function insertChildAfterParentRow(
 		(row) => normalizeRequirementKey(row.key) === normalizedParent,
 	)
 	const childKey = nextChildKey(parentKey, rows)
+	const numbering = blankNumbering(rows)
 	if (parentIndex === -1) {
-		return [...rows, { key: childKey, text: '', isHeading: options?.isHeading }]
+		return [
+			...rows,
+			{ key: childKey, text: '', isHeading: options?.isHeading, ...numbering },
+		]
 	}
 	const next = [...rows]
 	next.splice(parentIndex + 1, 0, {
 		key: childKey,
 		text: '',
 		isHeading: options?.isHeading,
+		...numbering,
 	})
 	return next
 }
@@ -796,7 +1042,59 @@ export function extractRequirementKey(item: {
 	return null
 }
 
-/** Leaf requirement label from confirmed TZ hierarchy: «key. text». */
+/** Key a flattened requirement line starts with: «1.2.1. text» -> 1.2.1. */
+export function leafKeyFromRequirement(requirement: string): string | null {
+	const match = requirement.trim().match(/^(\d+(?:[./]\d+)*)\.\s/)
+	return match?.[1] ? normalizeRequirementKey(match[1]) : null
+}
+
+/** The line without the key it starts with; text that merely starts with a digit stays whole. */
+export function stripLeadingKey(requirement: string): string {
+	return requirement.trim().replace(/^\d+(?:[./]\d+)*\.\s+/, '')
+}
+
+/**
+ * Number to quote for a point in references and letters, or null when the
+ * document does not number it. For points found by the model that is the key;
+ * for points read from Word it is the number the document gives them (the
+ * key is then only an internal position).
+ */
+export function requirementNumberForKey(
+	data: RequirementsHierarchy | null | undefined,
+	key: string | null,
+): string | null {
+	if (!key) return null
+	const normalizedKey = normalizeRequirementKey(key)
+	if (!hierarchyHasNumbering(data)) return normalizedKey
+	return referenceNumber(findNodeByKey(data, normalizedKey), normalizedKey)
+}
+
+function referenceNumber(node: RequirementNode | null, key: string): string | null {
+	if (!node) return key
+	if (node.number !== undefined) return node.number || null
+	if (node.label !== undefined) return node.label.replace(/[.)]+$/, '') || null
+	return key
+}
+
+/** «number. text», or just the text when the point has no number. */
+export function formatNumberedText(number: string | null, text: string): string {
+	return number ? `${number}. ${text}` : text
+}
+
+/**
+ * The mark a line of a TZ read from Word starts with: as the document writes
+ * it («1.2.1», «а)», «3.»); a number the system assigned gets the closing dot.
+ * Inside its section the mark is enough, so the number that is quoted in
+ * references («1 (Приложение 1)») is not used here.
+ */
+function lineMark(node: RequirementNode, key: string): string {
+	if (node.auto && node.number) return `${node.number}.`
+	if (node.label) return node.label
+	if (node.label !== undefined) return ''
+	return node.number ? `${node.number}.` : `${key}.`
+}
+
+/** Leaf requirement line from confirmed TZ hierarchy: «mark text», «key. text» for points found by the model. */
 export function findRequirementLabelByKey(
 	data: RequirementsHierarchy | null | undefined,
 	key: string | null,
@@ -804,6 +1102,7 @@ export function findRequirementLabelByKey(
 	if (!key) return null
 	const hierarchy = normalizeTzRequirements(data)
 	const targetKey = normalizeRequirementKey(key)
+	const structured = hierarchyHasNumbering(hierarchy)
 
 	function walk(nodes: RequirementsHierarchy): string | null {
 		for (const nodeKey of Object.keys(nodes).sort(compareVersionKeys)) {
@@ -814,7 +1113,9 @@ export function findRequirementLabelByKey(
 				const found = walk(node.children)
 				if (found) return found
 			} else if (nk === targetKey && node.text.trim()) {
-				return `${nk}. ${node.text.trim()}`
+				if (!structured) return formatNumberedText(nk, node.text.trim())
+				const mark = lineMark(node, nk)
+				return mark ? `${mark} ${node.text.trim()}` : node.text.trim()
 			}
 		}
 		return null
@@ -860,6 +1161,8 @@ export function buildResultTree(
 				key: normalizedKey,
 				text: node.text,
 				isHeading: hasChildren || isHeading,
+				...(node.label !== undefined ? { label: node.label } : {}),
+				...(node.auto ? { auto: true } : {}),
 				children,
 				items: nodeItems,
 			})

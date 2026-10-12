@@ -14,6 +14,10 @@ from backend.services.analysis.docx_export import (
     _letter_tz_requirement_text,
 )
 from backend.utils.comparison_price import is_price_requirement
+from backend.utils.requirements_struct import (
+    renumber_reference,
+    tz_references,
+)
 
 _SUPPLIER_SUBCOLS = (
     "Первоначальное\nпредложение",
@@ -194,8 +198,15 @@ def _auto_fit_row_heights(
 def build_tz_analysis_workbook(
     items: list[TZAnalysisItem],
     status_labels: dict[TZAnalysisStatus, str],
+    requirements_tz: dict | None = None,
 ) -> Workbook:
-    """Build a styled worksheet for TZ/KP analysis export."""
+    """Build a styled worksheet for TZ/KP analysis export.
+
+    *requirements_tz* is the TZ hierarchy: for a TZ read from Word it tells
+    which number the document gives each point, so the sheet quotes that
+    instead of an internal position.
+    """
+    refs = tz_references(requirements_tz)
     wb = Workbook()
     ws = wb.active
     if ws is None:
@@ -211,8 +222,14 @@ def build_tz_analysis_workbook(
         values: list[Any] = [
             row_idx - 1,
             item.kp_name or "",
-            _letter_tz_requirement_text(item),
-            _letter_tz_requirement_ref(item) or (item.requirement_ref or ""),
+            _letter_tz_requirement_text(item, refs),
+            _letter_tz_requirement_ref(item, refs)
+            or (
+                renumber_reference(
+                    item.requirement_ref, refs.numbers if refs else None
+                )
+                or ""
+            ),
             item.offer_value or "",
             item.offer_ref or "",
             status_label,

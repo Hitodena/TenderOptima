@@ -41,9 +41,14 @@
 							aria-hidden="true"
 						/>
 						<span
-							class="text-sm text-muted font-medium tabular-nums pt-3 min-w-10 shrink-0 text-right"
+							:class="[
+								'text-sm text-muted tabular-nums pt-3 min-w-10 shrink-0 text-right whitespace-nowrap',
+								node.auto ? 'italic' : 'font-medium',
+								node.muted && 'opacity-60',
+							]"
+							:title="node.auto ? 'Номер присвоен системой, в документе его нет' : undefined"
 						>
-							<template v-if="!node.key.startsWith('__row_')">{{ node.key }}.</template>
+							{{ requirementMark(node) }}
 						</span>
 						<div class="flex-1 min-w-0">
 							<div v-if="node.rowIndex !== undefined" class="space-y-2">
@@ -51,6 +56,7 @@
 									v-if="rowsRef[node.rowIndex]"
 									v-model="rowsRef[node.rowIndex]!.text"
 									class="w-full whitespace-pre-wrap min-h-10"
+									:class="node.muted && 'opacity-60'"
 									:ui="{ base: 'resize-none field-sizing-content' }"
 									size="md"
 									:rows="1"
@@ -59,6 +65,9 @@
 									:readonly="readonly"
 									autoresize
 								/>
+								<p v-if="node.excluded" class="text-xs text-warning">
+									Не сравнивается с КП
+								</p>
 							</div>
 							<div v-else class="pt-2">
 								<p class="text-sm font-semibold text-highlighted">
@@ -91,6 +100,18 @@
 								aria-label="Подсказка ИИ по пункту"
 								title="Подсказка ИИ"
 								@click="emit('request-hint', node.key)"
+							/>
+							<UButton
+								v-if="canToggleExclude"
+								type="button"
+								:variant="node.excluded ? 'soft' : 'ghost'"
+								:color="node.excluded ? 'warning' : 'neutral'"
+								size="sm"
+								icon="i-lucide-eye-off"
+								:disabled="node.muted && !node.excluded"
+								:aria-label="excludeLabel(node)"
+								:title="excludeLabel(node)"
+								@click="emit('toggle-exclude', node.rowIndex!)"
 							/>
 							<template v-if="editor.confirmRemoveIndex.value === node.rowIndex">
 								<UButton
@@ -153,6 +174,7 @@
 						@add-heading="(parentKey) => emit('add-heading', parentKey)"
 						@add-sibling="(index) => emit('add-sibling', index)"
 						@reorder="(from, to) => emit('reorder', from, to)"
+						@toggle-exclude="(index) => emit('toggle-exclude', index)"
 						@toggle-section="(key) => emit('toggle-section', key)"
 						@request-hint="(key) => emit('request-hint', key)"
 					/>
@@ -175,15 +197,21 @@
 					<div class="flex items-start gap-2">
 						<div class="w-8 shrink-0" aria-hidden="true" />
 						<span
-							class="text-sm text-muted font-medium tabular-nums min-w-10 shrink-0 text-right pt-3"
+							:class="[
+								'text-sm text-muted tabular-nums min-w-10 shrink-0 text-right pt-3 whitespace-nowrap',
+								node.auto ? 'italic' : 'font-medium',
+								node.muted && 'opacity-60',
+							]"
+							:title="node.auto ? 'Номер присвоен системой, в документе его нет' : undefined"
 						>
-							<template v-if="!node.key.startsWith('__row_')">{{ node.key }}.</template>
+							{{ requirementMark(node) }}
 						</span>
 						<div class="flex-1 min-w-0">
 							<UTextarea
 								v-if="rowsRef[node.rowIndex]"
 								v-model="rowsRef[node.rowIndex]!.text"
 								class="w-full whitespace-pre-wrap min-h-10"
+								:class="node.muted && 'opacity-60'"
 								:ui="{ base: 'resize-none field-sizing-content' }"
 								size="md"
 								:rows="1"
@@ -192,6 +220,9 @@
 								:readonly="readonly"
 								autoresize
 							/>
+							<p v-if="node.excluded" class="mt-1 text-xs text-warning">
+								Не сравнивается с КП
+							</p>
 						<RequirementNodeRail
 							v-if="!readonly"
 							@add-child="emit('add-child', node.key)"
@@ -217,6 +248,18 @@
 								aria-label="Подсказка ИИ по пункту"
 								title="Подсказка ИИ"
 								@click="emit('request-hint', node.key)"
+							/>
+							<UButton
+								v-if="canToggleExclude"
+								type="button"
+								:variant="node.excluded ? 'soft' : 'ghost'"
+								:color="node.excluded ? 'warning' : 'neutral'"
+								size="sm"
+								icon="i-lucide-eye-off"
+								:disabled="node.muted && !node.excluded"
+								:aria-label="excludeLabel(node)"
+								:title="excludeLabel(node)"
+								@click="emit('toggle-exclude', node.rowIndex!)"
 							/>
 							<template v-if="editor.confirmRemoveIndex.value === node.rowIndex">
 								<UButton
@@ -272,7 +315,7 @@
 <script lang="ts" setup>
 import type { TZCreationRequirementHint } from '#shared/types'
 import type { EditableRequirementRow, RequirementTreeNode } from '#shared/utils/requirementsStruct'
-import { canReorderRequirementRows } from '#shared/utils/requirementsStruct'
+import { canReorderRequirementRows, requirementMark } from '#shared/utils/requirementsStruct'
 import RequirementNodeRail from '~/components/tz-analysis/RequirementNodeRail.vue'
 import RequirementTreeEditorLevel from '~/components/tz-analysis/RequirementTreeEditorLevel.vue'
 
@@ -289,6 +332,7 @@ const emit = defineEmits<{
 	'add-heading': [parentKey: string]
 	'add-sibling': [index: number]
 	reorder: [fromIndex: number, toIndex: number]
+	'toggle-exclude': [index: number]
 	'toggle-section': [key: string]
 	'request-hint': [requirementKey: string]
 }>()
@@ -304,7 +348,17 @@ const editor = inject<{
 	hints?: ComputedRef<Record<string, TZCreationRequirementHint>>
 	hintLoadingKey?: ComputedRef<string | null>
 	highlightKey?: ComputedRef<string | null>
+	allowExclude?: ComputedRef<boolean>
 }>('requirementTreeEditor')!
+
+// the "do not compare" switch is offered only where the page handles it
+const canToggleExclude = computed(() => Boolean(editor.allowExclude?.value))
+
+function excludeLabel(node: RequirementTreeNode) {
+	if (node.excluded) return 'Вернуть в сравнение с КП'
+	if (node.muted) return 'Раздел не сравнивается — пункт входит в него'
+	return 'Не сравнивать с КП'
+}
 
 function isHighlighted(node: RequirementTreeNode) {
 	return Boolean(editor.highlightKey?.value && editor.highlightKey.value === node.key)

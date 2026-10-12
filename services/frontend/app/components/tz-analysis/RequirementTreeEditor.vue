@@ -9,6 +9,7 @@
 		@add-heading="handleAddHeading"
 		@add-sibling="handleAddSibling"
 		@reorder="(from, to) => emit('reorder', from, to)"
+		@toggle-exclude="(index) => emit('toggle-exclude', index)"
 		@toggle-section="toggleSection"
 		@request-hint="(key) => emit('request-hint', key)"
 	/>
@@ -33,11 +34,14 @@ const props = withDefaults(
 		hintLoadingKey?: string | null
 		highlightKey?: string | null
 		focusKey?: string | null
+		/** Offer the «не сравнивать» switch on every row; the page handles `toggle-exclude`. */
+		allowExclude?: boolean
 	}>(),
 	{
 		showHeadingHint: false,
 		readonly: false,
 		showHints: false,
+		allowExclude: false,
 		hints: () => ({}),
 		hintLoadingKey: null,
 		highlightKey: null,
@@ -51,6 +55,7 @@ const emit = defineEmits<{
 	'add-heading': [parentKey: string]
 	'add-sibling': [index: number]
 	reorder: [fromIndex: number, toIndex: number]
+	'toggle-exclude': [index: number]
 	'request-hint': [requirementKey: string]
 }>()
 
@@ -151,6 +156,7 @@ provide('requirementTreeEditor', {
 	hints: computed(() => props.hints ?? {}),
 	hintLoadingKey: computed(() => props.hintLoadingKey),
 	highlightKey: computed(() => props.highlightKey),
+	allowExclude: computed(() => props.allowExclude),
 })
 provide('editableRequirementRows', toRef(props, 'rows'))
 </script>

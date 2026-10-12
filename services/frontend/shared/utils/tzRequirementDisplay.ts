@@ -1,7 +1,12 @@
 import {
 	extractRequirementKey,
 	findRequirementLabelByKey,
+	formatNumberedText,
+	hierarchyHasNumbering,
+	leafKeyFromRequirement,
+	requirementNumberForKey,
 	resolveLetterTzFields,
+	stripLeadingKey,
 	type RequirementsHierarchy,
 } from '#shared/utils/requirementsStruct'
 
@@ -34,27 +39,53 @@ function formatShortSourceRef(
 	prefix: string,
 	key: string | null,
 	page: number | null,
+	options?: { unnumbered?: boolean },
 ): string {
+	if (options?.unnumbered) {
+		return page != null ? `${prefix}, стр ${page}` : prefix
+	}
 	if (!key) return 'Не найдено'
 	const keyPart = `пункт ${key}`
 	if (page != null) return `${prefix}, стр ${page}, ${keyPart}`
 	return `${prefix}, ${keyPart}`
 }
 
+/**
+ * Short TZ reference for a requirement key. For a TZ read from Word the key is
+ * only an internal position, so the number the document gives the point is
+ * quoted instead, and a point the document does not number is quoted by page.
+ */
+function formatTzSourceRef(
+	key: string | null,
+	page: number | null,
+	hierarchy?: RequirementsHierarchy | null,
+): string {
+	if (!key || !hierarchyHasNumbering(hierarchy)) {
+		return formatShortSourceRef(TZ_SHORT_PREFIX, key, page)
+	}
+	const number = requirementNumberForKey(hierarchy, key)
+	return number
+		? formatShortSourceRef(TZ_SHORT_PREFIX, number, page)
+		: formatShortSourceRef(TZ_SHORT_PREFIX, null, page, { unnumbered: true })
+}
+
 /** Normalize stored TZ/KP refs to short clickable format. */
 export function formatShortTzRef(
 	ref: string | null,
 	fallbackKey?: string | null,
+	hierarchy?: RequirementsHierarchy | null,
 ): string | null {
 	if (!ref?.trim()) {
 		if (!fallbackKey) return null
-		return formatShortSourceRef(TZ_SHORT_PREFIX, fallbackKey, null)
+		return formatTzSourceRef(fallbackKey, null, hierarchy)
 	}
 	const trimmed = ref.trim()
-	if (trimmed.startsWith(TZ_SHORT_PREFIX)) return trimmed
+	if (trimmed.startsWith(TZ_SHORT_PREFIX) && !hierarchyHasNumbering(hierarchy)) {
+		return trimmed
+	}
 	const page = parsePageFromRef(trimmed)
 	const key = parseKeyFromRef(trimmed) ?? fallbackKey ?? null
-	return formatShortSourceRef(TZ_SHORT_PREFIX, key, page)
+	return formatTzSourceRef(key, page, hierarchy)
 }
 
 export function formatShortKpRef(
@@ -80,17 +111,25 @@ export function refValueStartsWithKey(
 	const normalizedKey = key.replace('/', '.')
 	const trimmed = refValue.trim()
 	if (trimmed.startsWith(`${normalizedKey}. `)) return true
-	return new RegExp(`^${normalizedKey.replace(/\./g, '\\.')}\\.\\s`).test(trimmed)
+	// a number from a Word file may hold brackets and letters («4 а)», «8 (1)»)
+	const escaped = normalizedKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+	return new RegExp(`^${escaped}\\.\\s`).test(trimmed)
 }
 
 export function formatNumberedRefValue(
 	key: string | null,
 	refValue: string | null | undefined,
+	hierarchy?: RequirementsHierarchy | null,
 ): string | null {
 	if (!refValue?.trim()) return null
 	const trimmed = refValue.trim()
-	if (key && refValueStartsWithKey(key, trimmed)) return trimmed
-	if (key) return `${key.replace('/', '.')}. ${trimmed}`
+	// For a TZ read from Word the key is an internal position: the line starts
+	// with the number the document gives the point (none if it has none).
+	const number = hierarchyHasNumbering(hierarchy)
+		? requirementNumberForKey(hierarchy, key)
+		: key
+	if (number && refValueStartsWithKey(number, trimmed)) return trimmed
+	if (number) return `${number.replace('/', '.')}. ${trimmed}`
 	return trimmed
 }
 
@@ -103,7 +142,7 @@ export function formatLetterRequirementLine(
 	requirementsTz?: RequirementsHierarchy | null,
 ): string {
 	const { ref, refValue } = resolveLetterTzFields(item, requirementsTz)
-	const formatted = formatNumberedRefValue(ref, refValue)
+	const formatted = formatNumberedRefValue(ref, refValue, requirementsTz)
 	if (formatted) return formatted
 	return item.requirement
 }
@@ -132,7 +171,7 @@ export function formatTzSourceRefLink(
 ): string | null {
 	const { ref } = resolveLetterTzFields(item, requirementsTz)
 	const key = ref ?? extractRequirementKey(item) ?? parseKeyFromRef(item.requirement_ref)
-	return formatShortTzRef(item.requirement_ref, key)
+	return formatShortTzRef(item.requirement_ref, key, requirementsTz)
 }
 
 export function formatKpSourceRefLink(
@@ -158,11 +197,7 @@ export function getTzRequirementDisplay(
 	if (ref && refValue) {
 		return {
 			tzOriginal: refValue,
-			analysisText: ensureNumberedAnalysisLabel(
-				extractRequirementKey(item),
-				findRequirementLabelByKey(requirementsTz, extractRequirementKey(item))
-					?? item.requirement,
-			),
+			analysisText: buildAnalysisLine(item, requirementsTz),
 		}
 	}
 
@@ -170,14 +205,37 @@ export function getTzRequirementDisplay(
 		?? formatNumberedRefValue(
 			extractRequirementKey(item),
 			item.ref_value,
+			requirementsTz,
 		)
-	const key = extractRequirementKey(item)
-	const fromHierarchy = findRequirementLabelByKey(requirementsTz, key)
-	const analysisText = ensureNumberedAnalysisLabel(
-		key,
-		fromHierarchy ?? item.requirement,
+	return { tzOriginal, analysisText: buildAnalysisLine(item, requirementsTz) }
+}
+
+/** Line with the requirement being analysed, starting with its number. */
+function buildAnalysisLine(
+	item: {
+		requirement: string
+		requirement_ref: string | null
+		ref?: string | null
+	},
+	requirementsTz?: RequirementsHierarchy | null,
+): string {
+	if (!hierarchyHasNumbering(requirementsTz)) {
+		const key = extractRequirementKey(item)
+		return ensureNumberedAnalysisLabel(
+			key,
+			findRequirementLabelByKey(requirementsTz, key) ?? item.requirement,
+		)
+	}
+	// A TZ read from Word: the item is about the leaf its line starts with, and
+	// the line carries the number the document gives that leaf, not the
+	// internal position the key stands for.
+	const leafKey = leafKeyFromRequirement(item.requirement) ?? extractRequirementKey(item)
+	const fromHierarchy = findRequirementLabelByKey(requirementsTz, leafKey)
+	if (fromHierarchy) return fromHierarchy
+	return formatNumberedText(
+		requirementNumberForKey(requirementsTz, leafKey),
+		stripLeadingKey(item.requirement),
 	)
-	return { tzOriginal, analysisText }
 }
 
 /** Ensure analysis line starts with «N.» or «N.M.» from hierarchy key. */

@@ -24,7 +24,9 @@ from backend.services.llm.prompts.tz import (
     build_section_mapping_prompt,
     build_tz_chunk_prompt,
 )
+from backend.services.tz_structure.requirements import load_docx_requirements
 from backend.utils.requirements_struct import (
+    TzReferences,
     build_requirement_page_map,
     collect_leaf_entries,
     collect_tz_sections,
@@ -34,17 +36,21 @@ from backend.utils.requirements_struct import (
     fix_requirement_ref_page,
     flatten_hierarchy_for_matching,
     format_kp_offer_ref,
+    format_kp_unnumbered_ref,
     format_numbered_ref_value,
     format_tz_requirement_ref,
     group_flat_by_top_section,
+    hierarchy_has_numbering,
     key_from_reference,
     lookup_page_for_key,
     merge_requirement_chunks,
     normalize_tz_requirements,
+    page_map_from_hierarchy,
     parse_page_from_ref,
     render_digest_for_matching,
     requirement_key_from_flat,
     resolve_letter_tz_fields,
+    tz_references,
 )
 from backend.utils.text_chunker import chunk_text, clean_text
 
@@ -788,9 +794,17 @@ def _merge_match_item(
 def _apply_item_tz_ref_fields(
     item: TZAnalysisItem,
     hierarchy: dict | None,
+    references: TzReferences | None = None,
 ) -> TZAnalysisItem:
     """Fill ref/ref_value from hierarchy for letter and source references."""
     req_key = requirement_key_from_flat(item.requirement)
+    if references is not None and req_key in references.quotes:
+        # A TZ read from Word: the model copies the numbered line it was
+        # given into ref_value, internal key included, and may join the line
+        # above it in its own way. The point is quoted from the hierarchy.
+        return item.model_copy(
+            update={"ref": req_key, "ref_value": references.quotes[req_key]},
+        )
     ref = item.ref
     ref_value = item.ref_value
     if hierarchy and req_key:
@@ -812,8 +826,9 @@ def _ensure_item_refs(
 ) -> list[TZAnalysisItem]:
     """Fill missing refs and normalize page numbers in TZ/KP source links."""
     updated: list[TZAnalysisItem] = []
+    references = tz_references(tz_hierarchy) if tz_hierarchy else None
     for item in items:
-        item = _apply_item_tz_ref_fields(item, tz_hierarchy)
+        item = _apply_item_tz_ref_fields(item, tz_hierarchy, references)
         req_key = requirement_key_from_flat(item.requirement)
         letter_key = item.ref or req_key
         letter_text = item.ref_value
@@ -852,7 +867,11 @@ def _ensure_item_refs(
                 tz_page,
             )
 
-        offer_key = key_from_reference(item.offer_ref) or req_key
+        # The position of a point in a TZ read from Word says nothing about
+        # where the offer discusses it, so it is not borrowed as a KP point.
+        offer_key = key_from_reference(item.offer_ref) or (
+            None if references is not None else req_key
+        )
         offer_page = (
             lookup_page_for_key(offer_key, kp_page_map)
             if kp_page_map and offer_key
@@ -864,10 +883,14 @@ def _ensure_item_refs(
         offer_ref = item.offer_ref
         if item.offer_value and item.offer_value.strip():
             if not offer_ref:
-                offer_ref = format_kp_offer_ref(
-                    offer_key,
-                    offer_page,
-                    item.offer_value,
+                offer_ref = (
+                    format_kp_unnumbered_ref(offer_page)
+                    if offer_key is None and references is not None
+                    else format_kp_offer_ref(
+                        offer_key,
+                        offer_page,
+                        item.offer_value,
+                    )
                 )
             elif offer_page is not None:
                 offer_ref = fix_offer_ref_page(offer_ref, offer_page)
@@ -1570,14 +1593,33 @@ async def extract_tz_from_file(
     *,
     analysis_id: str,
     user_id: str,
+    prefer_docx_structure: bool = False,
 ) -> dict:
-    """Extract TZ requirements from a file on disk."""
+    """Extract TZ requirements from a file on disk.
+
+    With *prefer_docx_structure* a numbered .docx is read straight from the
+    Word file, so the points keep the numbering of the document; any other
+    file, or a .docx with little numbering, goes to the model as before.
+    """
     logger.info(
         "TZ file extraction started",
         analysis_id=analysis_id,
         user_id=user_id,
         path=str(tz_path),
     )
+    if prefer_docx_structure and config.tz_docx_structure_enabled:
+        structured = await asyncio.to_thread(load_docx_requirements, tz_path)
+        if structured is not None:
+            result = normalize_tz_requirements(structured)
+            logger.info(
+                "TZ file extraction finished",
+                analysis_id=analysis_id,
+                user_id=user_id,
+                path=str(tz_path),
+                source="docx_structure",
+                items=count_requirements(result),
+            )
+            return result
     raw_text = _assemble_document_text(tz_path)
     result = await extract_tz_requirements(
         raw_text,
@@ -1592,6 +1634,24 @@ async def extract_tz_from_file(
         items=count_requirements(result),
     )
     return result
+
+
+def _build_tz_page_map(
+    tz_hierarchy: dict,
+    tz_path: Path | None,
+) -> dict[str, int] | None:
+    """Requirement key -> page, for the «Источник ТЗ, стр X» references.
+
+    A hierarchy read from Word keys its points by position, so the usual
+    text-based map (which matches keys to the numbers printed in the
+    document) would point at the wrong pages; its pages are recorded on
+    the points themselves, when the file has page marks at all.
+    """
+    if hierarchy_has_numbering(tz_hierarchy):
+        return page_map_from_hierarchy(tz_hierarchy)
+    if tz_path and tz_path.is_file():
+        return build_requirement_page_map(_assemble_document_text(tz_path))
+    return None
 
 
 async def analyze_kp_files(
@@ -1614,11 +1674,7 @@ async def analyze_kp_files(
     tz_hierarchy = normalize_tz_requirements(requirements_tz)
     tz_flat = flatten_hierarchy_for_matching(tz_hierarchy)
     tz_count = len(tz_flat)
-    tz_page_map: dict[str, int] | None = None
-    if tz_path and tz_path.is_file():
-        tz_page_map = build_requirement_page_map(
-            _assemble_document_text(tz_path)
-        )
+    tz_page_map = _build_tz_page_map(tz_hierarchy, tz_path)
 
     requirements_kp: dict[str, dict] = {}
     all_items: list[TZAnalysisItem] = []
@@ -1677,11 +1733,7 @@ async def analyze_supplier_kps(
     tz_flat = flatten_hierarchy_for_matching(tz_hierarchy)
     tz_count = len(tz_flat)
     kp_display_names = [name for name, _ in kp_files]
-    tz_page_map: dict[str, int] | None = None
-    if tz_path and tz_path.is_file():
-        tz_page_map = build_requirement_page_map(
-            _assemble_document_text(tz_path)
-        )
+    tz_page_map = _build_tz_page_map(tz_hierarchy, tz_path)
 
     requirements_kp: dict[str, dict] = {}
     all_items: list[TZAnalysisItem] = []

@@ -179,6 +179,12 @@ v-if="isTzReviewPhase && !isAnalysisClosed"
 										добавьте недостающие, затем подтвердите список —
 										после этого станет доступна загрузка КП.
 									</p>
+									<p v-if="excludedTzCount > 0" class="text-sm text-muted">
+										Строки, которые только называют документ (например, его заголовок),
+										помечены «Не сравнивать»: они остаются в списке, но с КП не сверяются.
+										Кнопка с перечёркнутым глазом возвращает строку в сравнение или,
+										наоборот, исключает любой пункт или раздел.
+									</p>
 								</div>
 							</div>
 						</div>
@@ -194,6 +200,9 @@ v-if="isTzReviewPhase && !isAnalysisClosed"
 										<p class="text-sm text-muted mt-1">
 											{{ requirementWord(displayedTzCount) }}
 										</p>
+										<p v-if="excludedTzCount > 0" class="text-xs text-muted mt-1">
+											не сравнивается: {{ excludedTzCount }}
+										</p>
 									</div>
 								</div>
 							</template>
@@ -206,15 +215,17 @@ v-if="isTzReviewPhase && !isAnalysisClosed"
 									: ''"
 							>
 								<RequirementTreeEditor
-									v-if="displayedTzCount > 0"
+									v-if="displayedTzRowsTotal > 0"
 									:rows="displayedTzRequirementsRows"
 									:scope-id="isTzConfirmed ? 'tz-results' : 'tz-review'"
 									:readonly="isTzConfirmed || isCompleted"
+									allow-exclude
 									@remove="removeTzRequirement"
 									@add-child="addTzChildRequirement"
 									@add-heading="addTzHeadingRequirement"
 									@add-sibling="addTzSiblingRequirement"
 									@reorder="reorderTzRequirement"
+									@toggle-exclude="toggleTzExcluded"
 								/>
 								<div
 									v-else-if="!isTzConfirmed && !isCompleted"
@@ -794,18 +805,24 @@ import {
 	supplierKpScopedPrefix,
 } from '#shared/utils/kpDisplay'
 import {
+	blankNumbering,
 	buildResultTree,
+	countComparedRows,
+	countExcludedRows,
 	countRequirementRows,
 	flattenRequirementsToRows,
+	hierarchyHasNumbering,
 	insertChildAfterParentRow,
 	getRowSubtreeRange,
 	renumberRequirementRows,
 	insertSiblingAfterRow,
 	moveRequirementRowBlock,
+	requirementNumberForKey,
 	requirementsNonempty,
 	requirementsRowsNonempty,
 	rowsToHierarchy,
 	resolveLetterItemGrouping,
+	toggleRowExcluded,
 	type EditableRequirementRow,
 } from '#shared/utils/requirementsStruct'
 import {
@@ -1345,11 +1362,15 @@ function toggleGroupSelect(group: LetterGroup, checked: boolean) {
 }
 
 function letterGroupTitle(group: LetterGroup): string {
-	if (group.isSplitChild && group.parentKey) {
-		return group.parentKey
-	}
-	if (group.items.length > 1 && group.parentKey) {
-		return group.parentKey
+	if ((group.isSplitChild || group.items.length > 1) && group.parentKey) {
+		// the number the TZ gives the clause; for a TZ read from Word the key
+		// is only an internal position
+		const number = requirementNumberForKey(
+			analysis.value?.requirements_tz,
+			group.parentKey,
+		)
+		if (number) return number
+		return group.refValue?.trim() || itemAnalysisText(group.items[0]!)
 	}
 	return itemAnalysisText(group.items[0]!)
 }
@@ -1719,8 +1740,15 @@ const displayedTzRequirementsRows = computed(() =>
 		? flattenRequirementsToRows(analysis.value?.requirements_tz)
 		: editableRequirementsTz.value,
 )
-const displayedTzCount = computed(() =>
+// rows holding a requirement text, and how many of them are compared with offers
+const displayedTzRowsTotal = computed(() =>
 	countRequirementRows(displayedTzRequirementsRows.value),
+)
+const displayedTzCount = computed(() =>
+	countComparedRows(displayedTzRequirementsRows.value),
+)
+const excludedTzCount = computed(() =>
+	countExcludedRows(displayedTzRequirementsRows.value),
 )
 const showComparisonResultsCard = computed(() =>
 	hasComparisonResults.value
@@ -1761,6 +1789,7 @@ function requirementRowsSignature(rows: EditableRequirementRow[]): string {
 			key: row.key,
 			text: row.text,
 			isHeading: row.isHeading ?? false,
+			excluded: row.excluded ?? false,
 		})),
 	)
 }
@@ -1876,7 +1905,7 @@ function scrollToRequirementRow(rowIndex: number) {
 function addTzRequirement() {
 	updateEditableRequirementsTz((rows) => [
 		...rows,
-		{ key: nextTopLevelKey(rows), text: '' },
+		{ key: nextTopLevelKey(rows), text: '', ...blankNumbering(rows) },
 	])
 	scrollToRequirementRow(editableRequirementsTz.value.length - 1)
 }
@@ -1920,6 +1949,14 @@ function removeTzRequirement(index: number) {
 	)
 }
 
+// «Не сравнивать»: the point stays in the list, the offer is not checked against it
+function toggleTzExcluded(index: number) {
+	editableRequirementsTz.value = toggleRowExcluded(
+		editableRequirementsTz.value,
+		index,
+	)
+}
+
 function addTzSiblingRequirement(afterIndex: number) {
 	const [, end] = getRowSubtreeRange(editableRequirementsTz.value, afterIndex)
 	const insertIndex = end + 1
@@ -1929,8 +1966,10 @@ function addTzSiblingRequirement(afterIndex: number) {
 	const inserted = editableRequirementsTz.value[insertIndex]
 	const rowKey = inserted?.key ?? ''
 	const isTopLevel = rowKey.length > 0 && !rowKey.includes('.')
+	// in a TZ read from Word the key is an internal position, not a number
+	const shownKey = inserted?.label === undefined && rowKey ? ` ${rowKey}` : ''
 	toast.add({
-		title: isTopLevel ? `Добавлен раздел ${rowKey}` : `Добавлен пункт ${rowKey}`,
+		title: isTopLevel ? `Добавлен раздел${shownKey}` : `Добавлен пункт${shownKey}`,
 		color: 'success',
 		icon: 'i-lucide-check',
 	})
@@ -2017,8 +2056,15 @@ const letterPreviewTabs = computed(() => {
 	]
 })
 
+// A TZ read from Word is quoted in the letter under the number the document
+// gives each point and with a reference to its source; otherwise the group's
+// verbatim text stands alone, as before.
+const tzReadFromWord = computed(() =>
+	hierarchyHasNumbering(analysis.value?.requirements_tz),
+)
+
 function formatGroupRequirementLine(group: LetterGroup): string {
-	if (group.refValue?.trim()) {
+	if (group.refValue?.trim() && !tzReadFromWord.value) {
 		return group.refValue.trim()
 	}
 	return formatLetterRequirementLine(
@@ -2028,7 +2074,7 @@ function formatGroupRequirementLine(group: LetterGroup): string {
 }
 
 function formatGroupRequirementRef(group: LetterGroup): string | null {
-	if (group.refValue?.trim()) return null
+	if (group.refValue?.trim() && !tzReadFromWord.value) return null
 	return formatLetterRequirementRef(
 		group.items[0]!,
 		analysis.value?.requirements_tz,

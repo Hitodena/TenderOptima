@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import NotRequired, TypedDict
 
 
@@ -9,10 +10,43 @@ class RequirementNode(TypedDict):
     children: dict[str, RequirementNode]
     ref_value: NotRequired[str]
     ref: NotRequired[str]
+    # Only for points read from a Word file (services.tz_structure). There the
+    # dotted key is just an internal id, and these fields tell what the
+    # document itself calls the point. Absent on points found by the model.
+    label: NotRequired[str]  # mark shown next to the text ("3.1.", "а)")
+    number: NotRequired[str]  # number to quote in references ("3.1")
+    auto: NotRequired[bool]  # label/number assigned by the system
+    page: NotRequired[int]
+    # Any node: the point (and everything under it) stays in the list but is
+    # not compared with offers, e.g. the title of the document.
+    excluded: NotRequired[bool]
 
 
 def _empty_node() -> RequirementNode:
     return {"text": "", "children": {}}
+
+
+def _meta_of(node: object) -> dict[str, object]:
+    """Document numbering and exclusion of a raw node, validated.
+
+    An empty ``label``/``number`` is kept: it says the point has no number
+    in the document, which is different from the field being absent.
+    """
+    if not isinstance(node, dict):
+        return {}
+    picked: dict[str, object] = {}
+    for name in ("label", "number"):
+        value = node.get(name)
+        if isinstance(value, str):
+            picked[name] = value.strip()
+    if node.get("auto") is True:
+        picked["auto"] = True
+    page = node.get("page")
+    if isinstance(page, int) and not isinstance(page, bool) and page > 0:
+        picked["page"] = page
+    if node.get("excluded") is True:
+        picked["excluded"] = True
+    return picked
 
 
 def parent_requirement_key(key: str) -> str | None:
@@ -57,6 +91,7 @@ def _normalize_node(node: object) -> RequirementNode:
     ref = str(node.get("ref") or "").strip().replace("/", ".")
     if ref:
         result["ref"] = ref
+    result.update(_meta_of(node))
     return result
 
 
@@ -93,6 +128,8 @@ def _merge_node(
         merged["ref_value"] = ref_value
     if ref:
         merged["ref"] = ref.replace("/", ".")
+    merged.update(_meta_of(existing))
+    merged.update(_meta_of(incoming))
     return merged
 
 
@@ -173,10 +210,56 @@ def _is_split_parent(node: RequirementNode) -> bool:
     return bool(ref_value) or not text
 
 
+def _enrich_structured_refs(
+    hierarchy: dict[str, RequirementNode],
+) -> dict[str, RequirementNode]:
+    """ref/ref_value for a hierarchy read from Word, from its structure alone.
+
+    A leaf quotes the nearest ancestor that has text («Гарантийный срок не
+    менее 24 месяцев:» for «на насос;»); a point with children quotes its
+    own text. Stored ref/ref_value are ignored, so the result is the same
+    however often it is applied. The general routine below pushes the
+    context of a leaf one level up on every pass, which only shows in trees
+    deeper than two levels, as those read from Word are.
+    """
+
+    def walk(
+        nodes: dict[str, RequirementNode],
+        context_key: str | None,
+        context_text: str,
+    ) -> dict[str, RequirementNode]:
+        result: dict[str, RequirementNode] = {}
+        for key in sorted(nodes.keys(), key=_version_sort_key):
+            node = _normalize_node(nodes[key])
+            key_str = str(key)
+            text = node["text"].strip()
+            raw_children = _node_children(node)
+            enriched: RequirementNode = {"text": text, "children": {}}
+            if raw_children:
+                own_key, own_text = (
+                    (key_str, text) if text else (context_key, context_text)
+                )
+                enriched["children"] = walk(raw_children, own_key, own_text)
+                if text:
+                    enriched["ref_value"] = text
+            elif context_key and context_text:
+                enriched["ref"] = context_key
+                enriched["ref_value"] = context_text
+            elif text:
+                enriched["ref_value"] = text
+            enriched.update(_meta_of(node))
+            result[key_str] = enriched
+        return result
+
+    return walk(hierarchy, None, "")
+
+
 def enrich_hierarchy_refs(
     hierarchy: dict[str, RequirementNode],
 ) -> dict[str, RequirementNode]:
     """Fill ref/ref_value on nodes and propagate parent refs to split leaves."""
+    if hierarchy_has_numbering(hierarchy):
+        return _enrich_structured_refs(hierarchy)
 
     def enrich_nodes(
         nodes: dict[str, RequirementNode],
@@ -198,6 +281,7 @@ def enrich_hierarchy_refs(
             explicit_ref = str(node.get("ref") or "").strip().replace("/", ".")
             if explicit_ref:
                 enriched["ref"] = explicit_ref
+            enriched.update(_meta_of(node))
 
             if _is_split_parent(enriched):
                 parent_ref_value = str(
@@ -311,6 +395,7 @@ def _prune_hierarchy(
             ref = str(normalized.get("ref") or "").strip()
             if ref:
                 node["ref"] = ref.replace("/", ".")
+            node.update(_meta_of(normalized))
             result[str(key)] = node
     return result
 
@@ -318,12 +403,17 @@ def _prune_hierarchy(
 def collect_leaf_entries(
     hierarchy: dict[str, RequirementNode],
 ) -> list[tuple[str, str]]:
-    """Return (key, text) pairs for leaf requirements only."""
+    """Return (key, text) pairs for leaf requirements only.
+
+    A point marked ``excluded`` is left out together with everything under it.
+    """
     entries: list[tuple[str, str]] = []
 
     def walk(nodes: dict[str, RequirementNode]) -> None:
         for key in sorted(nodes.keys(), key=_version_sort_key):
             node = _normalize_node(nodes[key])
+            if node.get("excluded"):
+                continue
             text = node["text"].strip()
             children = _node_children(node)
             if children:
@@ -367,6 +457,8 @@ def flatten_hierarchy_for_matching(
 
 
 def _count_leaves_in_node(node: RequirementNode) -> int:
+    if node.get("excluded"):
+        return 0
     children = _node_children(node)
     if not children:
         return 1 if node["text"].strip() else 0
@@ -508,6 +600,7 @@ def merge_requirement_chunks(
                 ref = str(normalized.get("ref") or "").strip()
                 if ref:
                     merged["ref"] = ref.replace("/", ".")
+                merged.update(_meta_of(normalized))
                 result[key_str] = merged
     return result
 
@@ -541,6 +634,7 @@ def dedupe_hierarchy(
                 ref = str(node.get("ref") or "").strip()
                 if ref:
                     out["ref"] = ref.replace("/", ".")
+                out.update(_meta_of(node))
                 result[str(key)] = out
         return result
 
@@ -569,6 +663,48 @@ def build_requirement_page_map(raw_text: str) -> dict[str, int]:
         if req_match:
             key = req_match.group(1).replace("/", ".")
             page_map[key] = current_page
+    return page_map
+
+
+def hierarchy_has_numbering(hierarchy: object) -> bool:
+    """True when the points were read from Word with their own numbering.
+
+    Such a hierarchy keys its points by position, so anything that matches
+    keys against the printed numbers of the document (the text-based page
+    map) must not be applied to it.
+    """
+    if not isinstance(hierarchy, dict):
+        return False
+    for node in hierarchy.values():
+        if not isinstance(node, dict):
+            continue
+        if "label" in node or "number" in node:
+            return True
+        if hierarchy_has_numbering(node.get("children")):
+            return True
+    return False
+
+
+def page_map_from_hierarchy(hierarchy: object) -> dict[str, int]:
+    """Map requirement keys to pages recorded on the points themselves."""
+    page_map: dict[str, int] = {}
+
+    def walk(nodes: object) -> None:
+        if not isinstance(nodes, dict):
+            return
+        for key, node in nodes.items():
+            if not isinstance(node, dict):
+                continue
+            page = node.get("page")
+            if (
+                isinstance(page, int)
+                and not isinstance(page, bool)
+                and page > 0
+            ):
+                page_map[str(key).replace("/", ".")] = page
+            walk(node.get("children"))
+
+    walk(hierarchy)
     return page_map
 
 
@@ -637,6 +773,135 @@ def format_tz_requirement_ref(
     return f"Источник ТЗ, {key_part}"
 
 
+def format_tz_unnumbered_ref(page: int | None) -> str:
+    """TZ source reference for a point the document does not number."""
+    return "Источник ТЗ" if page is None else f"Источник ТЗ, стр {page}"
+
+
+def _reference_number(node: dict, key: str) -> str | None:
+    number = node.get("number")
+    if isinstance(number, str):
+        return number or None
+    label = node.get("label")
+    if isinstance(label, str):
+        return label.rstrip(".)") or None
+    return key
+
+
+def requirement_numbers(hierarchy: object) -> dict[str, str | None] | None:
+    """Key -> the number to quote for the point, for a TZ read from Word.
+
+    There the key is an internal position, and the document may number a
+    point differently (or not at all: None). Returns None for any other
+    hierarchy, where the key is the number.
+    """
+    if not hierarchy_has_numbering(hierarchy):
+        return None
+    numbers: dict[str, str | None] = {}
+
+    def walk(nodes: object) -> None:
+        if not isinstance(nodes, dict):
+            return
+        for key, node in nodes.items():
+            if not isinstance(node, dict):
+                continue
+            normalized = str(key).replace("/", ".")
+            numbers[normalized] = _reference_number(node, normalized)
+            walk(node.get("children"))
+
+    walk(hierarchy)
+    return numbers
+
+
+def quoted_number(
+    numbers: dict[str, str | None] | None,
+    key: str | None,
+) -> str | None:
+    """Number to quote for *key*: the key itself unless the TZ came from Word."""
+    if not key:
+        return None
+    if numbers is None:
+        return key
+    normalized = key.replace("/", ".")
+    return numbers.get(normalized, normalized)
+
+
+_LEADING_KEY_RE = re.compile(r"^\d+(?:[./]\d+)*\.\s+")
+_REF_POINT_RE = re.compile(r"(?:п\.|пункт)\s*([\d./]+)", re.IGNORECASE)
+
+
+def strip_leading_key(text: str) -> str:
+    """Text without the key it starts with; a plain «3.5 мм» stays whole."""
+    return _LEADING_KEY_RE.sub("", text.strip(), count=1)
+
+
+def renumber_reference(
+    ref: str | None,
+    numbers: dict[str, str | None] | None,
+) -> str | None:
+    """Put the document's number into a stored «..., пункт 1.2» reference."""
+    if not ref or numbers is None:
+        return ref
+    match = _REF_POINT_RE.search(ref)
+    if match is None:
+        return ref
+    number = quoted_number(numbers, match.group(1))
+    if number:
+        return f"{ref[: match.start(1)]}{number}{ref[match.end(1) :]}"
+    without = re.sub(
+        r",?\s*(?:п\.|пункт)\s*[\d./]+", "", ref, count=1, flags=re.IGNORECASE
+    )
+    return without.strip() or None
+
+
+@dataclass(frozen=True)
+class TzReferences:
+    """How the points of a TZ read from Word are named outside the editor.
+
+    ``numbers``  key -> the number to cite (None: the document gives none)
+    ``quotes``   leaf key -> clean text to quote in a letter: the point, led
+                 by the line above it when that line introduces it with a
+                 colon («Гарантийный срок не менее 24 месяцев: на насос;»);
+                 it never carries an internal key
+    """
+
+    numbers: dict[str, str | None]
+    quotes: dict[str, str]
+
+
+def tz_references(hierarchy: object) -> TzReferences | None:
+    """References for a TZ read from Word; None for any other hierarchy."""
+    numbers = requirement_numbers(hierarchy)
+    if numbers is None:
+        return None
+    quotes: dict[str, str] = {}
+
+    def walk(nodes: object, lead: str) -> None:
+        if not isinstance(nodes, dict):
+            return
+        for key, node in nodes.items():
+            if not isinstance(node, dict):
+                continue
+            text = " ".join(str(node.get("text") or "").split())
+            children = node.get("children")
+            if isinstance(children, dict) and children:
+                # a line that ends with a colon introduces what stands under it
+                inner = (text if text.endswith(":") else "") if text else lead
+                walk(children, inner)
+            elif text:
+                quotes[str(key).replace("/", ".")] = (
+                    f"{lead} {text}" if lead else text
+                )
+
+    walk(hierarchy, "")
+    return TzReferences(numbers=numbers, quotes=quotes)
+
+
+def format_numbered_text(number: str | None, text: str) -> str:
+    """«number. text», or just the text for a point without a number."""
+    return f"{number}. {text}" if number else text
+
+
 def format_kp_offer_ref(
     key: str | None,
     page: int | None,
@@ -650,6 +915,11 @@ def format_kp_offer_ref(
     if page is not None:
         return f"Источник КП, стр {page}, {key_part}"
     return f"Источник КП, {key_part}"
+
+
+def format_kp_unnumbered_ref(page: int | None) -> str:
+    """KP source reference when no point of the offer is known."""
+    return "Источник КП" if page is None else f"Источник КП, стр {page}"
 
 
 def _inject_page_into_ref(

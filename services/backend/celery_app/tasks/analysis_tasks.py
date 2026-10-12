@@ -284,6 +284,7 @@ async def run_tz_extract(self, analysis_id: str) -> dict:
             tz_path,
             analysis_id=analysis_id,
             user_id=user_id,
+            prefer_docx_structure=True,
         )
     except (UnsupportedFileTypeError, OcrNotAvailableError, ValueError) as exc:
         logger.warning(
