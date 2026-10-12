@@ -50,6 +50,7 @@ _CAPTION_KINDS = (NodeKind.SECTION, NodeKind.TABLE)
 # Lines that name a part of the document and own nothing under them: the
 # title, a heading or appendix with no content, an empty group of a table.
 _NAMING_KINDS = (NodeKind.HEADING, NodeKind.SECTION, NodeKind.TABLE_GROUP)
+_EMPTY_GROUP_KINDS = (*_NAMING_KINDS, NodeKind.ITEM)
 
 # Unnumbered lines before the first numbered point (subtitle, description of
 # the object) are not compared, but only when there are few of them: a long
@@ -203,37 +204,60 @@ def _convert(
 ) -> dict[str, RequirementNode]:
     converted: dict[str, RequirementNode] = {}
     position = 0
-    for node in nodes:
-        if not _has_content(node):
-            continue
-        position += 1
-        key = f"{prefix}{position}"
-        label, number, auto = _numbering_of(node)
-        # the mark in the row stays as the document has it; the number that
-        # is quoted in references says where a repeated number belongs
-        quoted = (
-            f"{number} ({scope})" if number in repeated and scope else number
-        )
-        entry: RequirementNode = {
-            "text": _text_of(node).strip(),
-            "children": _convert(
-                node.children,
-                f"{key}.",
-                not_compared,
-                repeated,
-                _scope_of(node, anchor) or scope,
-                number or anchor,
-            ),
-            "label": label,
-            "number": quoted,
-        }
-        if auto:
-            entry["auto"] = True
-        if node.page:
-            entry["page"] = node.page
-        if node.id in not_compared:
-            entry["excluded"] = True
-        converted[key] = entry
+
+    def add_nodes(
+        current_nodes: list[Node],
+        current_scope: str,
+        current_anchor: str,
+    ) -> None:
+        nonlocal position
+        for node in current_nodes:
+            if not _has_content(node):
+                continue
+            text = _text_of(node).strip()
+            label, number, auto = _numbering_of(node)
+            node_scope = _scope_of(node, current_anchor) or current_scope
+            node_anchor = number or current_anchor
+
+            # DOCX can contain a numbered item or heading whose text was lost
+            # during extraction. Do not surface it as an empty heading;
+            # preserve its descendants at this level. Table containers remain
+            # explicit even when their text is empty.
+            if not text and node.children and node.kind in _EMPTY_GROUP_KINDS:
+                add_nodes(node.children, node_scope, node_anchor)
+                continue
+
+            position += 1
+            key = f"{prefix}{position}"
+            # the mark in the row stays as the document has it; the number that
+            # is quoted in references says where a repeated number belongs
+            quoted = (
+                f"{number} ({node_scope})"
+                if number in repeated and node_scope
+                else number
+            )
+            entry: RequirementNode = {
+                "text": text,
+                "children": _convert(
+                    node.children,
+                    f"{key}.",
+                    not_compared,
+                    repeated,
+                    node_scope,
+                    node_anchor,
+                ),
+                "label": label,
+                "number": quoted,
+            }
+            if auto:
+                entry["auto"] = True
+            if node.page:
+                entry["page"] = node.page
+            if node.id in not_compared:
+                entry["excluded"] = True
+            converted[key] = entry
+
+    add_nodes(nodes, scope, anchor)
     return converted
 
 
@@ -242,10 +266,10 @@ def outline_to_requirements(
 ) -> dict[str, RequirementNode]:
     """Requirements hierarchy of the product from an extracted outline.
 
-    Nothing is dropped except nodes with neither text nor content below
-    them; nothing is renumbered: the document's own numbers stay in
-    ``label`` / ``number``. Lines that only name the document are marked
-    ``excluded`` (kept, but not compared).
+    Textless grouping nodes are collapsed so they cannot appear as empty
+    headings; their descendants and document numbering are preserved. Nothing
+    is renumbered in ``label`` / ``number``. Lines that only name the document
+    are marked ``excluded`` (kept, but not compared).
     """
     return _convert(
         result.nodes,

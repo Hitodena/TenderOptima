@@ -75,6 +75,38 @@ def test_keys_are_positions_and_document_numbers_stay_beside_the_text(
     ]
 
 
+def test_textless_word_heading_is_collapsed_but_its_children_are_kept(
+    tmp_path,
+) -> None:
+    builder = DocxBuilder()
+    builder.abstract(
+        1,
+        [
+            {"fmt": "decimal", "text": "%1."},
+            {"fmt": "decimal", "text": "%1.%2"},
+            {"fmt": "decimal", "text": "%1.%2.%3"},
+        ],
+    ).num(1, 1)
+    builder.p("Паровой плавитель", num=(1, 0))
+    builder.p("", num=(1, 1))
+    builder.p(
+        "Производительность не менее 1200 кг/час.",
+        num=(1, 2),
+    )
+    builder.p("Нагрев сырного пласта паром.", num=(1, 2))
+
+    hierarchy_ = hierarchy(builder, tmp_path)
+    section = hierarchy_["1"]
+    children = list(section["children"].values())
+
+    assert section["text"] == "Паровой плавитель"
+    assert [(node["label"], node["text"]) for node in children] == [
+        ("1.1.1", "Производительность не менее 1200 кг/час."),
+        ("1.1.2", "Нагрев сырного пласта паром."),
+    ]
+    assert all(node["text"].strip() for node in children)
+
+
 def test_a_skipped_number_is_kept_in_the_label_not_closed_up(tmp_path) -> None:
     result = hierarchy(doc("1. Первый", "2. Второй", "4. Четвёртый"), tmp_path)
     assert [(k, label) for k, label, *_ in rows(result)] == [
