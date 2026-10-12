@@ -317,6 +317,12 @@ async def remove_supplier_from_request(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Request supplier link not found",
         )
+    if rs.sent_status != RequestSupplierStatus.PENDING:
+        # Deleting the link cascades to its letters and offers.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Поставщику уже отправлен запрос — удалить его нельзя",
+        )
     deleted = await RequestSupplierDAO.delete(session, request_supplier_id)
     if not deleted:
         raise HTTPException(
