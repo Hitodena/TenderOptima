@@ -19,7 +19,10 @@
 					/>
 					<div class="min-w-0 flex-1">
 						<p class="text-sm font-semibold text-highlighted">
-							<span class="text-muted font-medium tabular-nums">{{ node.key }}.</span>
+							<span
+								v-if="requirementMark(node)"
+								:class="['text-muted tabular-nums', node.auto ? 'italic' : 'font-medium']"
+							>{{ requirementMark(node) }}</span>
 							<span v-if="node.text" class="ml-1">{{ node.text }}</span>
 							<span v-else class="ml-1 text-muted font-normal">Раздел</span>
 						</p>
@@ -82,7 +85,7 @@
 
 <script lang="ts" setup>
 import type { TZAnalysisStatus } from '#shared/types'
-import type { ResultTreeNode } from '#shared/utils/requirementsStruct'
+import { requirementMark, type ResultTreeNode } from '#shared/utils/requirementsStruct'
 import RequirementResultsTreeLevel from '~/components/tz-analysis/RequirementResultsTreeLevel.vue'
 
 defineProps<{

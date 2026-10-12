@@ -8,11 +8,22 @@ from docx.styles.style import ParagraphStyle
 from backend.enums import TZAnalysisStatus
 from backend.schemas.analysis import TZAnalysisItem
 from backend.utils.requirements_struct import (
+    TzReferences,
     format_letter_requirement_line,
+    format_numbered_text,
     format_tz_requirement_ref,
+    format_tz_unnumbered_ref,
     parse_page_from_ref,
+    quoted_number,
+    renumber_reference,
     requirement_key_from_flat,
+    strip_leading_key,
+    tz_references,
 )
+
+# How the points of a TZ read from Word are named and quoted; None for any
+# other TZ, where the key is the number. See ``tz_references``.
+Refs = TzReferences | None
 
 _RU_MONTHS_GENITIVE = (
     "",
@@ -54,16 +65,41 @@ def _letter_tz_key(item: TZAnalysisItem) -> str | None:
     return requirement_key_from_flat(item.requirement)
 
 
-def _letter_tz_requirement_text(item: TZAnalysisItem) -> str:
-    key = _letter_tz_key(item)
+def _letter_tz_requirement_text(
+    item: TZAnalysisItem,
+    refs: Refs = None,
+) -> str:
+    if refs is not None:
+        # A TZ read from Word: the point is quoted from the TZ itself, under
+        # the number the document gives it. What the model stored with the
+        # item carries internal keys and is not used.
+        leaf = requirement_key_from_flat(item.requirement)
+        number = quoted_number(refs.numbers, leaf)
+        if leaf in refs.quotes:
+            return format_numbered_text(number, refs.quotes[leaf])
+        return format_numbered_text(
+            number, strip_leading_key(item.requirement)
+        )
     return format_letter_requirement_line(
-        key,
+        _letter_tz_key(item),
         item.ref_value,
         fallback_requirement=item.requirement,
     )
 
 
-def _letter_tz_requirement_ref(item: TZAnalysisItem) -> str | None:
+def _letter_tz_requirement_ref(
+    item: TZAnalysisItem,
+    refs: Refs = None,
+) -> str | None:
+    if refs is not None:
+        leaf = requirement_key_from_flat(item.requirement)
+        if leaf in refs.numbers:
+            page = parse_page_from_ref(item.requirement_ref)
+            number = refs.numbers[leaf]
+            if not number:
+                return format_tz_unnumbered_ref(page)
+            return format_tz_requirement_ref(number, page, item.requirement)
+        return renumber_reference(item.requirement_ref, refs.numbers)
     key = _letter_tz_key(item)
     text = item.ref_value
     if key and text:
@@ -117,15 +153,16 @@ def _append_mismatch_items(
     doc: Document,
     items: list[TZAnalysisItem],
     start_num: int,
+    refs: Refs = None,
 ) -> int:
     num = start_num
     for item in items:
         doc.add_paragraph(f"{num}. По пункту:")
         doc.add_paragraph(
-            f'Требование: "{_letter_tz_requirement_text(item)}"'
+            f'Требование: "{_letter_tz_requirement_text(item, refs)}"'
             + (
                 f" ({ref})"
-                if (ref := _letter_tz_requirement_ref(item))
+                if (ref := _letter_tz_requirement_ref(item, refs))
                 else ""
             )
         )
@@ -143,15 +180,16 @@ def _append_not_found_items(
     doc: Document,
     items: list[TZAnalysisItem],
     start_num: int,
+    refs: Refs = None,
 ) -> int:
     num = start_num
     for item in items:
         doc.add_paragraph(f"{num}. По пункту:")
         doc.add_paragraph(
-            f'Требование: "{_letter_tz_requirement_text(item)}"'
+            f'Требование: "{_letter_tz_requirement_text(item, refs)}"'
             + (
                 f" ({ref})"
-                if (ref := _letter_tz_requirement_ref(item))
+                if (ref := _letter_tz_requirement_ref(item, refs))
                 else ""
             )
         )
@@ -164,8 +202,15 @@ def build_clarification_docx(
     items: list[TZAnalysisItem],
     selected_indices: list[int],
     deadline_date: str | None = None,
+    requirements_tz: dict | None = None,
 ) -> bytes:
-    """Build a DOCX letter requesting clarifications from the supplier."""
+    """Build a DOCX letter requesting clarifications from the supplier.
+
+    *requirements_tz* is the TZ hierarchy: for a TZ read from Word it tells
+    which number the document gives each point, so the letter quotes that
+    instead of an internal position.
+    """
+    refs = tz_references(requirements_tz)
     doc = Document()
     normal = doc.styles["Normal"]
     if isinstance(normal, ParagraphStyle):
@@ -211,13 +256,13 @@ def build_clarification_docx(
         doc.add_paragraph()
         p = doc.add_paragraph()
         p.add_run(HEADER_MISMATCH).bold = True
-        item_num = _append_mismatch_items(doc, mismatches, item_num)
+        item_num = _append_mismatch_items(doc, mismatches, item_num, refs)
 
     if not_found:
         doc.add_paragraph()
         p = doc.add_paragraph()
         p.add_run(HEADER_NOT_FOUND).bold = True
-        item_num = _append_not_found_items(doc, not_found, item_num)
+        item_num = _append_not_found_items(doc, not_found, item_num, refs)
 
     if clarifications:
         doc.add_paragraph()
@@ -226,10 +271,10 @@ def build_clarification_docx(
         for item in clarifications:
             doc.add_paragraph(f"{item_num}. Пункт:")
             doc.add_paragraph(
-                f'Требуется: "{_letter_tz_requirement_text(item)}"'
+                f'Требуется: "{_letter_tz_requirement_text(item, refs)}"'
                 + (
                     f" ({ref})"
-                    if (ref := _letter_tz_requirement_ref(item))
+                    if (ref := _letter_tz_requirement_ref(item, refs))
                     else ""
                 )
             )
@@ -259,12 +304,13 @@ def _append_preview_mismatch_lines(
     paragraphs: list[str],
     items: list[TZAnalysisItem],
     start_num: int,
+    refs: Refs = None,
 ) -> int:
     num = start_num
     for item in items:
         paragraphs.append(f"{num}. По пункту:")
-        req = f'Требование: "{_letter_tz_requirement_text(item)}"'
-        if ref := _letter_tz_requirement_ref(item):
+        req = f'Требование: "{_letter_tz_requirement_text(item, refs)}"'
+        if ref := _letter_tz_requirement_ref(item, refs):
             req += f" ({ref})"
         paragraphs.append(req)
         if item.offer_value:
@@ -281,12 +327,13 @@ def _append_preview_not_found_lines(
     paragraphs: list[str],
     items: list[TZAnalysisItem],
     start_num: int,
+    refs: Refs = None,
 ) -> int:
     num = start_num
     for item in items:
         paragraphs.append(f"{num}. По пункту:")
-        req = f'Требование: "{_letter_tz_requirement_text(item)}"'
-        if ref := _letter_tz_requirement_ref(item):
+        req = f'Требование: "{_letter_tz_requirement_text(item, refs)}"'
+        if ref := _letter_tz_requirement_ref(item, refs):
             req += f" ({ref})"
         paragraphs.append(req)
         paragraphs.append(_mismatch_reason(item))
@@ -298,8 +345,13 @@ def build_clarification_preview(
     items: list[TZAnalysisItem],
     selected_indices: list[int],
     deadline_date: str | None = None,
+    requirements_tz: dict | None = None,
 ) -> tuple[str, list[str], bool]:
-    """Build plain-text preview paragraphs for the clarification letter."""
+    """Build plain-text preview paragraphs for the clarification letter.
+
+    *requirements_tz* works as in ``build_clarification_docx``.
+    """
+    refs = tz_references(requirements_tz)
     selected = [
         items[i]
         for i in selected_indices
@@ -336,21 +388,21 @@ def build_clarification_preview(
     if mismatches:
         paragraphs.extend(["", HEADER_MISMATCH])
         item_num = _append_preview_mismatch_lines(
-            paragraphs, mismatches, item_num
+            paragraphs, mismatches, item_num, refs
         )
 
     if not_found:
         paragraphs.extend(["", HEADER_NOT_FOUND])
         item_num = _append_preview_not_found_lines(
-            paragraphs, not_found, item_num
+            paragraphs, not_found, item_num, refs
         )
 
     if clarifications:
         paragraphs.extend(["", HEADER_PARTIAL])
         for item in clarifications:
             paragraphs.append(f"{item_num}. Пункт:")
-            req = f'Требуется: "{_letter_tz_requirement_text(item)}"'
-            if ref := _letter_tz_requirement_ref(item):
+            req = f'Требуется: "{_letter_tz_requirement_text(item, refs)}"'
+            if ref := _letter_tz_requirement_ref(item, refs):
                 req += f" ({ref})"
             paragraphs.append(req)
             if item.offer_value:

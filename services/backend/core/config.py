@@ -104,6 +104,11 @@ class Config(BaseSettings):
     max_idea_upload_files: int = 10
     max_idea_upload_size: int = 5 * 1024 * 1024
 
+    # TZ analysis: read the points of a .docx straight from the Word file
+    # (numbering as in the document) instead of asking the model; false
+    # goes back to model-based extraction for every file type.
+    tz_docx_structure_enabled: bool = True
+
     # TZ creation wizard (Module 3)
     tz_creation_max_messages_per_session: int = 40
 

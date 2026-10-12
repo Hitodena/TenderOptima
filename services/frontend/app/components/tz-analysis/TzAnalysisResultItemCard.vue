@@ -115,7 +115,7 @@
 <script lang="ts" setup>
 import type { TZAnalysisItem, TZAnalysisStatus } from '#shared/types'
 import { getTzItemStatusColor, getTzItemStatusLabel } from '#shared/types'
-import type { RequirementsHierarchy } from '#shared/utils/requirementsStruct'
+import { hierarchyHasNumbering, type RequirementsHierarchy } from '#shared/utils/requirementsStruct'
 import { formatTzSourceRefLink, formatKpSourceRefLink } from '#shared/utils/tzRequirementDisplay'
 import { t } from '~/constants/translations'
 import TzRequirementDualText from '~/components/tz-analysis/TzRequirementDualText.vue'
@@ -165,8 +165,13 @@ const itemKpFilename = computed(() =>
 	props.item.kp_name || props.defaultKpFilename || null,
 )
 
+// With no point of the offer given, the TZ key stands in for it; in a TZ read
+// from Word that key is an internal position, so nothing is shown instead.
 const kpSourceRef = computed(() =>
-	formatKpSourceRefLink(props.item, props.item.ref),
+	formatKpSourceRefLink(
+		props.item,
+		hierarchyHasNumbering(requirementsTz.value) ? null : props.item.ref,
+	),
 )
 
 function matchBorderClass(status: TZAnalysisStatus) {

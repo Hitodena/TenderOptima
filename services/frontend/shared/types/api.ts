@@ -950,6 +950,11 @@ export interface RequirementNode {
 	children: Record<string, RequirementNode>;
 	ref_value?: string;
 	ref?: string;
+	/** Only for points read from a Word file; see `requirementsStruct.ts`. */
+	label?: string;
+	number?: string;
+	auto?: boolean;
+	page?: number;
 }
 
 export type RequirementsHierarchy = Record<string, RequirementNode>;

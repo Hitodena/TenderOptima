@@ -1400,7 +1400,11 @@ async def export_tz_analysis_xlsx(
         [TZAnalysisItem(**item) for item in (row.items or [])],
         getattr(row, "items_overrides", None),
     )
-    wb = build_tz_analysis_workbook(items, STATUS_LABELS)
+    wb = build_tz_analysis_workbook(
+        items,
+        STATUS_LABELS,
+        requirements_tz=row.requirements_tz,
+    )
 
     filename = f"tz_analysis_{analysis_id}.xlsx"
     return Response(
@@ -1455,6 +1459,7 @@ async def preview_tz_analysis_letter(
         items=items,
         selected_indices=body.selected_indices,
         deadline_date=body.deadline_date,
+        requirements_tz=row.requirements_tz,
     )
     return TZAnalysisPreviewResponse(
         title=title,
@@ -1508,6 +1513,7 @@ async def export_tz_analysis_docx(
             items=items,
             selected_indices=body.selected_indices,
             deadline_date=body.deadline_date,
+            requirements_tz=row.requirements_tz,
         )
     filename = f"clarification_{analysis_id}.docx"
     return Response(
