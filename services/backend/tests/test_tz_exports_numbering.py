@@ -245,6 +245,29 @@ def test_the_sheet_quotes_the_same_text() -> None:
     ]
 
 
+def test_the_sheet_carries_the_quote_and_what_to_check() -> None:
+    quoted = delivery_item().model_copy(
+        update={
+            "offer_quote": "Delivery within 90 days",
+            "review_note": "Проверьте этот пункт по КП.",
+        }
+    )
+    wb = build_tz_analysis_workbook(
+        [quoted, tolerance_item()], STATUS_LABELS, requirements_tz=word_tz()
+    )
+    ws = wb.active
+    assert ws is not None
+    header = [cell.value for cell in ws[1]]
+    assert header[-2:] == ["Цитата из КП", "Проверить вручную"]
+    rows = [[cell.value for cell in row] for row in ws.iter_rows(min_row=2)]
+    assert rows[0][-2:] == [
+        "Delivery within 90 days",
+        "Проверьте этот пункт по КП.",
+    ]
+    assert rows[1][-2:] == ["", ""]
+    assert ws.cell(row=2, column=10).fill.fgColor.rgb.endswith("FFE0B2")
+
+
 def test_number_helpers() -> None:
     numbers = requirement_numbers(word_tz())
     assert numbers == {

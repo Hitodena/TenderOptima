@@ -109,6 +109,19 @@ class Config(BaseSettings):
     # goes back to model-based extraction for every file type.
     tz_docx_structure_enabled: bool = True
 
+    # KP comparison: compare each piece of equipment in the TZ only with the
+    # parts of the offer that describe it (services/kp_compare); false keeps
+    # the earlier digest-and-recall pipeline.
+    kp_compare_v2_enabled: bool = True
+    # parallel model calls of one comparison
+    kp_compare_concurrency: int = 6
+    # let the model reason before each verdict (slower and dearer)
+    kp_compare_reasoning: bool = True
+    # model answers are cached in Redis (db below) for this many seconds, so
+    # the same TZ and offer get the same verdicts; 0 switches the cache off
+    llm_cache_ttl_seconds: int = 7 * 24 * 3600
+    llm_cache_redis_db: int = 2
+
     # TZ creation wizard (Module 3)
     tz_creation_max_messages_per_session: int = 40
 

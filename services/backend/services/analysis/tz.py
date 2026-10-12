@@ -14,6 +14,7 @@ from backend.schemas.analysis import (
 )
 from backend.services.extraction.assembler import TextAssembler
 from backend.services.extraction.router import ExtractorRouter
+from backend.services.kp_compare import run_kp_comparison
 from backend.services.llm.client import llm_client
 from backend.services.llm.prompts.tz import (
     build_compliance_prompt,
@@ -1553,7 +1554,12 @@ async def _match_kp_paths_against_tz(
     user_id: str,
     tz_page_map: dict[str, int] | None = None,
 ) -> tuple[list[TZAnalysisItem], dict]:
-    """Match one or more KP files against TZ using staged pipeline."""
+    """Match one or more KP files against TZ.
+
+    With ``kp_compare_v2_enabled`` each object of the TZ is compared with the
+    parts of the offer that describe it (services/kp_compare); otherwise the
+    earlier digest-and-recall pipeline runs.
+    """
     combined_text_parts: list[str] = []
     for kp_path in kp_paths:
         logger.info(
@@ -1572,6 +1578,25 @@ async def _match_kp_paths_against_tz(
             kp_name=kp_name,
             path=str(kp_path),
             chars=len(raw_text),
+        )
+
+    if config.kp_compare_v2_enabled:
+        items, hierarchy = await run_kp_comparison(
+            [
+                (kp_path.name, text)
+                for kp_path, text in zip(
+                    kp_paths, combined_text_parts, strict=True
+                )
+            ],
+            tz_flat,
+            tz_hierarchy,
+            kp_name,
+            analysis_id=analysis_id,
+            user_id=user_id,
+        )
+        return (
+            _ensure_item_refs(items, tz_hierarchy, tz_page_map=tz_page_map),
+            hierarchy,
         )
 
     combined_text = "\n\n".join(combined_text_parts)

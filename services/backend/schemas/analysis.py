@@ -13,6 +13,10 @@ class TZAnalysisItem(BaseModel):
     explanation: str
     status: TZAnalysisStatus
     kp_name: str | None = None
+    # the offer's own words the verdict rests on (checked against the text)
+    offer_quote: str | None = None
+    # what the reader should check by hand, when the verdict is not certain
+    review_note: str | None = None
 
 
 def apply_items_overrides(

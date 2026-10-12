@@ -969,6 +969,10 @@ export interface TZAnalysisItem {
 	explanation: string;
 	status: TZAnalysisStatus;
 	kp_name?: string | null;
+	/** The offer's own words the verdict rests on (checked against the text). */
+	offer_quote?: string | null;
+	/** What to check by hand when the verdict is not certain. */
+	review_note?: string | null;
 }
 
 export interface TZAnalysisSession {

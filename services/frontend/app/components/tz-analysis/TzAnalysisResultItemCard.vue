@@ -45,12 +45,28 @@
 					class="w-3.5 h-3.5 shrink-0 text-muted"
 					title="Изменено вручную"
 				/>
+				<UIcon
+					v-if="item.review_note"
+					name="i-lucide-triangle-alert"
+					class="w-4 h-4 shrink-0 mt-0.5 text-warning"
+					:title="item.review_note"
+					aria-label="Проверьте вручную"
+				/>
 			</div>
 
 			<div
 				v-show="isExpanded"
 				class="mt-4 pt-4 border-t border-default/60 space-y-4 pl-7"
 			>
+				<UAlert
+					v-if="item.review_note"
+					color="warning"
+					variant="soft"
+					icon="i-lucide-triangle-alert"
+					title="Проверьте вручную"
+					:description="item.review_note"
+				/>
+
 				<div class="space-y-1.5">
 					<p class="text-xs font-semibold uppercase tracking-wide text-muted">
 						Полное требование
@@ -85,6 +101,12 @@
 					<p v-else class="text-sm text-muted italic">
 						Не указано в КП
 					</p>
+					<blockquote
+						v-if="item.offer_quote"
+						class="border-l-2 border-default pl-3 text-sm italic text-default/80 whitespace-pre-wrap"
+					>
+						«{{ item.offer_quote }}»
+					</blockquote>
 					<p v-if="kpSourceRef" class="text-xs text-muted">
 						<span class="font-medium text-default/70">Ссылка:</span>
 						<button

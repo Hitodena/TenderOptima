@@ -42,6 +42,8 @@ _TZ_STATUS_FILLS = {
     TZAnalysisStatus.MISSING: PatternFill("solid", fgColor="FFEBEE"),
     TZAnalysisStatus.NOT_FOUND: PatternFill("solid", fgColor="F1F3F5"),
 }
+# a verdict the reader should check by hand
+_TZ_REVIEW_FILL = PatternFill("solid", fgColor="FFE0B2")
 _TZ_HEADER = (
     "№",
     "КП",
@@ -51,6 +53,8 @@ _TZ_HEADER = (
     "Ссылка КП",
     "Статус",
     "Объяснение",
+    "Цитата из КП",
+    "Проверить вручную",
 )
 _TZ_COL_WIDTHS: dict[int, tuple[float, float]] = {
     1: (6, 8),
@@ -61,7 +65,10 @@ _TZ_COL_WIDTHS: dict[int, tuple[float, float]] = {
     6: (18, 40),
     7: (14, 22),
     8: (20, 48),
+    9: (24, 52),
+    10: (20, 44),
 }
+_TZ_REVIEW_COLUMN = 10
 
 
 class ComparisonSupplierLike(Protocol):
@@ -234,6 +241,8 @@ def build_tz_analysis_workbook(
             item.offer_ref or "",
             status_label,
             item.explanation,
+            item.offer_quote or "",
+            item.review_note or "",
         ]
         alt_row = (row_idx - 2) % 2 == 1
         status_fill = _TZ_STATUS_FILLS.get(item.status)
@@ -243,6 +252,8 @@ def build_tz_analysis_workbook(
             _style_data_cell(cell)
             if alt_row and col_idx != 7:
                 cell.fill = _ALT_ROW_FILL
+            if col_idx == _TZ_REVIEW_COLUMN and item.review_note:
+                cell.fill = _TZ_REVIEW_FILL
             if col_idx == 7 and status_fill is not None:
                 cell.fill = status_fill
                 cell.alignment = Alignment(
