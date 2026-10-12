@@ -314,9 +314,12 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
         if not rs_ids:
             return 0
         try:
+            # Only unsent rows: a sent letter's thread and offer must stay
+            # visible, and they are listed for enabled rows only.
             stmt = select(cls.model).where(
                 cls.model.request_id == request_id,
                 cls.model.id.in_(rs_ids),
+                cls.model.sent_status == RequestSupplierStatus.PENDING,
             )
             result = await session.execute(stmt)
             instances = list(result.scalars().all())

@@ -424,6 +424,7 @@ import {
 	TEST_PLAN_MANUAL_SUPPLIER_BONUS,
 } from '#shared/utils/subscriptionAccess'
 import { subscriptionPlansPath } from '#shared/utils/subscriptionDisplay'
+import { isPendingRequestSupplier, supplierIdsOverQuota } from '#shared/utils/supplierQuota'
 import { t } from '~/constants/translations'
 import type { TableColumn, TableRow } from '@nuxt/ui'
 import SupplierBookmarkModal from '~/components/SupplierBookmarkModal.vue'
@@ -491,20 +492,17 @@ const canManageMailingSelection = computed(() =>
 	canManageSuppliers.value || isCompletedStatus.value,
 )
 
-function isPendingSupplier(rs: RequestSupplierResponse): boolean {
-	return rs.sent_status === RequestSupplierStatus.PENDING
-}
+const isPendingSupplier = isPendingRequestSupplier
 
+// A supplier that already got the letter keeps its thread: never toggled or removed.
 function canToggleSupplier(rs: RequestSupplierResponse): boolean {
 	if (isLockedStatus.value) return false
-	if (isCompletedStatus.value) return isPendingSupplier(rs)
-	return true
+	return isPendingSupplier(rs)
 }
 
 function canDeleteSupplier(rs: RequestSupplierResponse): boolean {
 	if (isLockedStatus.value) return false
-	if (isCompletedStatus.value) return isPendingSupplier(rs)
-	return true
+	return isPendingSupplier(rs)
 }
 
 const supplierActionHint = computed(() => {
@@ -568,7 +566,7 @@ const canSelectMoreSuppliers = computed(() => {
 		(s) => !s.is_enabled && !isSupplierRowLocked(s),
 	)
 	if (!hasUnlockable) return false
-	if (emailRemaining.value != null && enabledCount.value >= emailRemaining.value) {
+	if (emailRemaining.value != null && pendingEnabledCount.value >= emailRemaining.value) {
 		return false
 	}
 	const selectableLimit = testPlanSelectableLimit.value
@@ -687,39 +685,13 @@ async function fetchSuppliersAndEnforceQuota(silent = false) {
 async function trimEnabledToQuota() {
 	if (isLockedStatus.value) return
 
-	let maxEnabled = emailRemaining.value
-	if (maxEnabled == null) return
-
-	const selectableLimit = testPlanSelectableLimit.value
-	if (selectableLimit != null) {
-		maxEnabled = Math.min(maxEnabled, selectableLimit)
-	}
-
-	let keptSearch = 0
-	let keptManual = 0
-	const searchLimit = testPlanVisibleSupplierLimit(subscription.value)
-	const toDisable: string[] = []
-
-	for (const s of suppliers.value) {
-		if (!s.is_enabled) continue
-		if (isManualSupplierSource(s.supplier?.from_source)) {
-			if (keptManual < 1) {
-				keptManual++
-				continue
-			}
-			toDisable.push(s.id)
-			continue
-		}
-		if (searchLimit != null && keptSearch >= searchLimit) {
-			toDisable.push(s.id)
-			continue
-		}
-		if (keptSearch + keptManual >= maxEnabled) {
-			toDisable.push(s.id)
-			continue
-		}
-		keptSearch++
-	}
+	const trial = isTestPlan(subscription.value)
+	const toDisable = supplierIdsOverQuota(suppliers.value, {
+		emailRemaining: emailRemaining.value,
+		searchLimit: trial ? testPlanVisibleSupplierLimit(subscription.value) : null,
+		selectableLimit: trial ? testPlanSelectableLimit.value : null,
+		manualLimit: trial ? TEST_PLAN_MANUAL_SUPPLIER_BONUS : null,
+	})
 
 	if (toDisable.length > 0) {
 		await updateSuppliersEnabled(toDisable, false)
@@ -779,7 +751,7 @@ async function handleToggle(
 			})
 			return
 		}
-		if (!canSendEmail(subscription.value, enabledCount.value + 1)) {
+		if (!canSendEmail(subscription.value, pendingEnabledCount.value + 1)) {
 			const msg = emailQuotaBlockMessage(subscription.value, 1)
 			if (msg) {
 				toast.add({ title: msg, color: 'warning' })
@@ -831,7 +803,7 @@ async function toggleAll(enabled: boolean) {
 		candidates = [...searchCandidates, ...manualCandidates]
 	}
 	if (remaining != null) {
-		const slots = Math.max(0, remaining - enabledCount.value)
+		const slots = Math.max(0, remaining - pendingEnabledCount.value)
 		candidates = candidates.slice(0, slots)
 	}
 	if (candidates.length === 0) {
