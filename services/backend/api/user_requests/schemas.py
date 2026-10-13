@@ -346,6 +346,9 @@ class RequestEmailUpdate(BaseModel):
 
     email_subject: Annotated[str | None, Field(default=None)] = None
     email_message: Annotated[str | None, Field(default=None)] = None
+    # with email_message: update its parameter list and description from
+    # the request instead of saving the text as it is
+    refresh_params: bool = False
 
 
 class RequestCloseResponse(BaseModel):

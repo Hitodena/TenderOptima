@@ -146,7 +146,7 @@ async def analyze_response(
     if not _requirements_text(request):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Request has no additional_params requirements",
+            detail="В запросе нет обязательных параметров — сравнивать нечего",
         )
 
     existing = await ResponseAnalysisDAO.get_by_response_id(

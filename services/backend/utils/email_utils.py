@@ -9,6 +9,32 @@ from backend.utils.user_utils import build_business_info
 
 _RE_PREFIX_RE = re.compile(r"^re:\s*", re.IGNORECASE)
 
+_PARAMS_HEADER = "! В вашем ответе обязательно укажите:"
+_PARAMS_RULE = "-------------------------------------"
+_DESCRIPTION_LEAD = (
+    "Направляем запрос для получения вашего коммерческого предложения на:"
+)
+# the generated letter keeps the parameters between two rules under the
+# header, and the description between its lead line and that header
+_PARAMS_BLOCK_RE = re.compile(
+    rf"({re.escape(_PARAMS_HEADER)}[ \t]*\n-{{5,}})(.*?)(-{{5,}})", re.DOTALL
+)
+_DESCRIPTION_RE = re.compile(
+    rf"({re.escape(_DESCRIPTION_LEAD)}[ \t]*\n\n)(.*?)(\n\n{re.escape(_PARAMS_HEADER)})",
+    re.DOTALL,
+)
+
+
+def _labels_block(request: Request) -> str:
+    params = request.additional_params
+    if not isinstance(params, list) or not params:
+        return ""
+    return (
+        "\n"
+        + "\n".join(f"{i}. {label}" for i, label in enumerate(params, 1))
+        + "\n"
+    )
+
 
 def build_request_email_body(
     request: Request,
@@ -18,31 +44,53 @@ def build_request_email_body(
     if request.email_message and request.email_message.strip():
         return request.email_message.strip()
 
-    labels_block = ""
-
-    params = request.additional_params
-    if params:
-        if isinstance(params, list) and params:
-            labels_block = (
-                "\n"
-                + "\n".join(
-                    f"{i}. {label}" for i, label in enumerate(params, 1)
-                )
-                + "\n"
-            )
-
     return (
         "Добрый день.\n\n"
-        "Направляем запрос для получения вашего коммерческого предложения на:\n\n"
+        f"{_DESCRIPTION_LEAD}\n\n"
         f"{request.description}\n\n"
-        "! В вашем ответе обязательно укажите:\n"
-        "-------------------------------------"
-        f"{labels_block}"
-        "-------------------------------------\n\n"
+        f"{_PARAMS_HEADER}\n"
+        f"{_PARAMS_RULE}"
+        f"{_labels_block(request)}"
+        f"{_PARAMS_RULE}\n\n"
         ""
         "Важно: не меняйте тему сообщения в ответе, чтобы не потерять идентификатор отслеживания.\n\n"
         f"{user.business_info or build_business_info(user)}\n"
     )
+
+
+def refresh_request_email_body(
+    text: str,
+    request: Request,
+    user: User,
+) -> tuple[str, bool]:
+    """The saved letter with the current parameters and description.
+
+    Only the parameter list between its two rules and the description under
+    its lead line are replaced; whatever else the user wrote stays. When the
+    user removed the rules, the parameter section is put back before the
+    signature. Returns the text and whether the section had to be put back.
+    """
+    labels = _labels_block(request)
+    refreshed, found = _PARAMS_BLOCK_RE.subn(
+        lambda m: f"{m.group(1)}{labels}{m.group(3)}", text, count=1
+    )
+    inserted = False
+    if not found and labels:
+        section = f"{_PARAMS_HEADER}\n{_PARAMS_RULE}{labels}{_PARAMS_RULE}\n\n"
+        signature = (user.business_info or build_business_info(user)).strip()
+        position = refreshed.rfind(signature) if signature else -1
+        if position > 0:
+            refreshed = refreshed[:position] + section + refreshed[position:]
+        else:
+            refreshed = refreshed.rstrip() + "\n\n" + section.rstrip() + "\n"
+        inserted = True
+    if request.description:
+        refreshed = _DESCRIPTION_RE.sub(
+            lambda m: f"{m.group(1)}{request.description}{m.group(3)}",
+            refreshed,
+            count=1,
+        )
+    return refreshed.strip(), inserted
 
 
 def build_request_email_subject(request: Request) -> str:

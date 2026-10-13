@@ -52,7 +52,10 @@ from backend.db.models import User
 from backend.enums import RequestHistoryGroup, RequestStatus
 from backend.services.request_from_bookmarks import attach_bookmark_item
 from backend.utils.comparison_price import merge_multi_position_price_params
-from backend.utils.email_utils import build_request_email_body
+from backend.utils.email_utils import (
+    build_request_email_body,
+    refresh_request_email_body,
+)
 from backend.utils.upload_validation import reject_legacy_doc_upload
 
 router = APIRouter(prefix="/requests", tags=["Requests"])
@@ -565,11 +568,21 @@ async def update_request_email_message(
             session, request_id, email_subject=email_update.email_subject
         )
 
-    email_message = (
-        email_update.email_message
-        if email_update.email_message is not None
-        else build_request_email_body(request, current_user)
-    )
+    if email_update.email_message is not None and email_update.refresh_params:
+        # the text as edited on screen, with the current parameters
+        email_message, _ = refresh_request_email_body(
+            email_update.email_message, request, current_user
+        )
+    elif email_update.email_message is not None:
+        email_message = email_update.email_message
+    elif request.email_message and request.email_message.strip():
+        # back from the letter to the parameters and forward again: keep the
+        # user's wording, bring the parameters and description up to date
+        email_message, _ = refresh_request_email_body(
+            request.email_message, request, current_user
+        )
+    else:
+        email_message = build_request_email_body(request, current_user)
     await RequestDAO.update_fields(
         session,
         request_id,

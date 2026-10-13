@@ -134,7 +134,19 @@
                 </template>
 
                 <div>
-                    <p class="text-sm font-semibold mb-1">Дополнительные параметры</p>
+                    <div class="flex items-center justify-between gap-2 mb-1">
+                        <p class="text-sm font-semibold">Дополнительные параметры</p>
+                        <UButton
+                            v-if="form.labels.length"
+                            type="button"
+                            size="xs"
+                            variant="ghost"
+                            color="neutral"
+                            @click="clearLabels"
+                        >
+                            Снять все
+                        </UButton>
+                    </div>
                     <p class="text-xs text-muted mb-2">
                         Укажите, что должен указать поставщик в ответе
                     </p>
@@ -381,6 +393,8 @@ const toast = useToast()
 
 type Step = "params" | "confirm"
 const step = ref<Step>("params")
+// the line the generated letter puts above the list of parameters
+const LETTER_PARAMS_HEADER = "! В вашем ответе обязательно укажите:"
 
 const MIN_POSITIONS = 2
 const MAX_POSITIONS = 8
@@ -680,6 +694,10 @@ function removeLabel(idx: number) {
     form.labels.splice(idx, 1)
 }
 
+function clearLabels() {
+    form.labels = []
+}
+
 function formatBytes(bytes: number): string {
     if (bytes === 0) return "0 Б"
     const k = 1024
@@ -805,14 +823,34 @@ async function goToConfirm() {
             }
         }
 
+        // the letter as it is on screen keeps the user's edits; the server
+        // puts the current parameters and description into it
+        const previousLetter = form.emailMessage.trim()
         const updated = await patch<RequestResponse>(
             `/requests/${props.request.id}/email_message`,
-            { email_subject: form.emailSubject || null },
+            previousLetter
+                ? {
+                    email_subject: form.emailSubject || null,
+                    email_message: form.emailMessage,
+                    refresh_params: true,
+                }
+                : { email_subject: form.emailSubject || null },
         )
 
         if (updated?.email_message) {
             const msg = updated.email_message
             form.emailMessage = Array.isArray(msg) ? msg.join("\n") : String(msg)
+            if (
+                previousLetter
+                && !previousLetter.includes(LETTER_PARAMS_HEADER)
+                && form.emailMessage.includes(LETTER_PARAMS_HEADER)
+            ) {
+                toast.add({
+                    title: "Список параметров добавлен в письмо — проверьте",
+                    color: "info",
+                    icon: "i-lucide-info",
+                })
+            }
         }
 
         step.value = "confirm"

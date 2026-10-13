@@ -525,7 +525,7 @@ async def refresh_all_analysis(
     if not _requirements_list(request):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Request has no additional_params requirements",
+            detail="В запросе нет обязательных параметров — сравнивать нечего",
         )
 
     enabled = await RequestSupplierDAO.get_enabled_by_request(

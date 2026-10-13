@@ -798,6 +798,17 @@ type="button"
 							</div>
 						</div>
 						<div
+v-else-if="!hasRequirements"
+							class="flex flex-col items-center justify-center py-8 gap-2 text-muted">
+							<UIcon name="i-lucide-list-checks" class="w-7 h-7 opacity-20" />
+							<p class="text-xs text-center">
+								В запросе нет обязательных параметров — сравнивать нечего
+							</p>
+							<UButton size="xs" variant="link" :to="`/requests/${id}`">
+								Добавить параметры
+							</UButton>
+						</div>
+						<div
 v-else-if="analysisNotReady && !extracting && !analysisPolling"
 							class="flex flex-col items-center justify-center py-8 gap-3 text-muted">
 							<UIcon name="i-lucide-loader" class="w-7 h-7 animate-spin opacity-50" />
@@ -888,6 +899,7 @@ import type {
 	EmailAnalysisResponse,
 	Message,
 	RefreshAllResponse,
+	RequestResponse,
 	RequirementMatch,
 	SubscriptionResponse,
 	Supplier,
@@ -1012,9 +1024,11 @@ const { pause: pauseThreadPoll, resume: resumeThreadPoll } = useIntervalFn(
 async function refreshAll() {
 	refreshingAll.value = true
 	try {
-		const result = await post<RefreshAllResponse>(
-			`/requests/${id}/analysis/refresh-all`,
-		)
+		// without required parameters there is nothing to compare: refresh the
+		// threads only, instead of asking for an analysis that cannot run
+		const result: Pick<RefreshAllResponse, 'queued'> = hasRequirements.value
+			? await post<RefreshAllResponse>(`/requests/${id}/analysis/refresh-all`)
+			: { queued: 0 }
 		await fetchThreads()
 		if (selectedRsId.value) {
 			await fetchMessages(selectedRsId.value)
@@ -1042,7 +1056,26 @@ async function refreshAll() {
 	}
 }
 
+// the request's required parameters; null until loaded (then assumed present)
+const requestParams = ref<string[] | null>(null)
+const hasRequirements = computed(
+	() => requestParams.value === null || requestParams.value.length > 0,
+)
+
+async function fetchRequestParams() {
+	try {
+		const request = await get<RequestResponse>(`/requests/${id}`)
+		const params = request.additional_params
+		requestParams.value = Array.isArray(params)
+			? params.filter(p => typeof p === 'string' && p.trim())
+			: []
+	} catch {
+		requestParams.value = null
+	}
+}
+
 onMounted(async () => {
+	void fetchRequestParams()
 	await fetchThreads()
 	selectDefaultThread()
 	resumeThreadPoll()
@@ -1687,7 +1720,7 @@ async function saveParams(showToast = true) {
 }
 
 async function reExtract(silent = false) {
-	if (!latestIncomingId.value) return
+	if (!latestIncomingId.value || !hasRequirements.value) return
 	extracting.value = true
 	try {
 		const data = await post<EmailAnalysisResponse>(
