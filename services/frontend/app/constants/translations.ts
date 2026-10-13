@@ -363,8 +363,9 @@ export const translations = {
 			'Можно добавить поставщиков и отправить запрос тем, кому письмо ещё не отправлено.',
 		mailingPendingHint:
 			'Выберите поставщиков без отправленного письма и нажмите «Отправить запрос»',
-		receivedLettersStats:
-			'Получено {emails} {emailsLabel} от {suppliers} {suppliersLabel}',
+		sentLettersStats:
+			'Отправлено {sent} {sentLabel}, получены ответы от {suppliers} {suppliersLabel}',
+		sentLettersNoReplies: 'Отправлено {sent} {sentLabel}, ответов пока нет',
 		businessCardHintTitle: 'Заполните визитную карточку',
 		businessCardHintSubtitle: 'Это повысит конверсию ответов от поставщиков',
 		businessCardHintBody:

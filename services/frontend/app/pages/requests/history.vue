@@ -132,7 +132,7 @@ import {
 	RequestHistoryGroup,
 	RequestStatus,
 } from '#shared/types'
-import { pluralizeLetters, pluralizeSuppliers, titleCaseWords } from '#shared/utils/textFormat'
+import { pluralizeLetters, pluralizeSuppliersGenitive, titleCaseWords } from '#shared/utils/textFormat'
 import { t } from '~/constants/translations'
 
 const { post, get } = useApi()
@@ -147,14 +147,16 @@ function showMessageStats(req: RequestResponse): boolean {
 	)
 }
 
+// letters sent and the suppliers who answered; several replies from one
+// supplier count once
 function requestMessageStatsLabel(req: RequestResponse): string {
-	const emails = req.supplier_messages_incoming ?? 0
+	const sent = req.supplier_messages_sent ?? 0
 	const suppliers = req.supplier_messages_incoming_suppliers ?? 0
-	return t('requests.receivedLettersStats')
-		.replace('{emails}', String(emails))
-		.replace('{emailsLabel}', pluralizeLetters(emails))
+	return t(suppliers > 0 ? 'requests.sentLettersStats' : 'requests.sentLettersNoReplies')
+		.replace('{sent}', String(sent))
+		.replace('{sentLabel}', pluralizeLetters(sent))
 		.replace('{suppliers}', String(suppliers))
-		.replace('{suppliersLabel}', pluralizeSuppliers(suppliers))
+		.replace('{suppliersLabel}', pluralizeSuppliersGenitive(suppliers))
 }
 
 function hasUnreadMessages(req: RequestResponse): boolean {

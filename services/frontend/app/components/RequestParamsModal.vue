@@ -271,7 +271,7 @@
                     color="info"
                     variant="soft"
                     icon="i-lucide-info"
-                    :description="`Запрос будет отправлен на ${props.supplierCount} ${pluralizeSuppliers(props.supplierCount ?? 0)}`"
+                    :description="`Запрос будет отправлен ${props.supplierCount} ${pluralizeSuppliersDative(props.supplierCount ?? 0)}`"
                 />
 
                 <UAlert
@@ -375,7 +375,7 @@ import {
     EMAIL_LETTER_MODAL_UI,
 } from "#shared/constants/emailModal"
 import { getApiErrorDetail } from "#shared/utils/apiError"
-import { pluralizeSuppliers } from "#shared/utils/textFormat"
+import { pluralizeSuppliersDative } from "#shared/utils/textFormat"
 import { emailQuotaBlockMessage, emailQuotaRemaining, effectiveEmailLimit } from "#shared/utils/subscriptionAccess"
 import { t } from "~/constants/translations"
 

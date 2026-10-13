@@ -915,7 +915,7 @@ import {
 	supplierHasMismatches,
 } from '#shared/utils/mismatchLetter'
 import { getApiErrorDetail } from '#shared/utils/apiError'
-import { pluralizeSuppliers } from '#shared/utils/textFormat'
+import { pluralizeSuppliersGenitive } from '#shared/utils/textFormat'
 import { splitTextWithLinks } from '#shared/utils/url'
 import {
 	canSendEmail,
@@ -1039,7 +1039,7 @@ async function refreshAll() {
 		}
 		if (result.queued > 0) {
 			toast.add({
-				title: `Анализ запущен для ${result.queued} ${pluralizeSuppliers(result.queued)}`,
+				title: `Анализ запущен для ${result.queued} ${pluralizeSuppliersGenitive(result.queued)}`,
 				color: 'success',
 				icon: 'i-lucide-check',
 			})

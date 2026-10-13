@@ -526,11 +526,12 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
         cls,
         session: AsyncSession,
         request_ids: list[uuid.UUID],
-    ) -> dict[uuid.UUID, tuple[int, int, int, int]]:
-        """Return (total, incoming, unread_threads, incoming_suppliers).
+    ) -> dict[uuid.UUID, tuple[int, int, int, int, int]]:
+        """Return (total, incoming, unread_threads, incoming_suppliers, sent).
 
         unread_threads = supplier links whose latest incoming message is newer
         than thread_read_at (or never marked read).
+        sent = request letters that went out to suppliers (one per supplier).
         """
         if not request_ids:
             return {}
@@ -541,6 +542,7 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
         incoming_suppliers: dict[uuid.UUID, int] = dict.fromkeys(
             request_ids, 0
         )
+        sent: dict[uuid.UUID, int] = dict.fromkeys(request_ids, 0)
 
         def _count_stmt(*, incoming_only: bool = False):
             stmt = (
@@ -593,6 +595,20 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
         ):
             incoming_suppliers[request_id] = int(count)
 
+        sent_stmt = (
+            select(
+                RequestSupplier.request_id,
+                func.count(RequestSupplier.id).label("sent_count"),
+            )
+            .where(
+                RequestSupplier.request_id.in_(request_ids),
+                RequestSupplier.sent_at.is_not(None),
+            )
+            .group_by(RequestSupplier.request_id)
+        )
+        for request_id, count in await session.execute(sent_stmt):
+            sent[request_id] = int(count)
+
         latest_messages = await cls._latest_messages_for_requests(
             session, request_ids
         )
@@ -609,6 +625,7 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
                 incoming.get(req_id, 0),
                 unread.get(req_id, 0),
                 incoming_suppliers.get(req_id, 0),
+                sent.get(req_id, 0),
             )
             for req_id in request_ids
         }

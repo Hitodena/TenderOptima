@@ -26,6 +26,16 @@ export function pluralizeSuppliers(count: number): string {
 	return pluralizeRu(count, 'поставщик', 'поставщика', 'поставщиков')
 }
 
+/** «от 1 поставщика», «от 2 поставщиков», «от 21 поставщика». */
+export function pluralizeSuppliersGenitive(count: number): string {
+	return pluralizeRu(count, 'поставщика', 'поставщиков', 'поставщиков')
+}
+
+/** «отправлен 1 поставщику», «отправлен 5 поставщикам». */
+export function pluralizeSuppliersDative(count: number): string {
+	return pluralizeRu(count, 'поставщику', 'поставщикам', 'поставщикам')
+}
+
 export function pluralizeLetters(count: number): string {
 	return pluralizeRu(count, 'письмо', 'письма', 'писем')
 }

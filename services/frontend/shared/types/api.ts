@@ -652,6 +652,7 @@ export interface RequestResponse {
 	supplier_messages_incoming?: number;
 	supplier_messages_unread?: number;
 	supplier_messages_incoming_suppliers?: number;
+	supplier_messages_sent?: number;
 	is_first_request?: boolean;
 }
 

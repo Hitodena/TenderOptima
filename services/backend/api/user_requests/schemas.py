@@ -179,6 +179,13 @@ class RequestResponse(BaseModel):
             description="Suppliers that sent at least one incoming email",
         ),
     ] = 0
+    supplier_messages_sent: Annotated[
+        int,
+        Field(
+            default=0,
+            description="Request letters sent to suppliers (one per supplier)",
+        ),
+    ] = 0
     is_first_request: Annotated[
         bool,
         Field(
@@ -199,6 +206,7 @@ class RequestResponse(BaseModel):
         supplier_messages_incoming: int = 0,
         supplier_messages_unread: int = 0,
         supplier_messages_incoming_suppliers: int = 0,
+        supplier_messages_sent: int = 0,
         is_first_request: bool = False,
     ) -> "RequestResponse":
         """Build response from ORM row plus optional message aggregates."""
@@ -211,6 +219,7 @@ class RequestResponse(BaseModel):
                 "supplier_messages_incoming_suppliers": (
                     supplier_messages_incoming_suppliers
                 ),
+                "supplier_messages_sent": supplier_messages_sent,
                 "is_first_request": is_first_request,
             }
         )

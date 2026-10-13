@@ -72,7 +72,7 @@ async def _request_responses_with_stats(
         return []
     ids = [r.id for r in requests]
     stats = await EmailMessageDAO.get_message_stats_for_requests(session, ids)
-    empty_stats = (0, 0, 0, 0)
+    empty_stats = (0, 0, 0, 0, 0)
     is_first = total_count == 1
     return [
         RequestResponse.from_model(
@@ -83,6 +83,7 @@ async def _request_responses_with_stats(
             supplier_messages_incoming_suppliers=stats.get(r.id, empty_stats)[
                 3
             ],
+            supplier_messages_sent=stats.get(r.id, empty_stats)[4],
             is_first_request=is_first,
         )
         for r in requests
