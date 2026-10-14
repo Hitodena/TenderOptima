@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class UserEmailSettingsResponse(BaseModel):
@@ -24,10 +24,9 @@ class UserEmailSettingsResponse(BaseModel):
 class UserEmailSettingsUpdate(BaseModel):
     """Payload for updating per-user SMTP/IMAP credentials."""
 
-    model_config = ConfigDict(str_strip_whitespace=True)
-
     smtp_host: str | None = None
-    smtp_port: int | None = None
+    smtp_port: int | None = Field(default=None, ge=1, le=65535)
+    clear_smtp_port: bool = False
     smtp_user: str | None = None
     smtp_password: Annotated[
         str | None,
@@ -35,10 +34,20 @@ class UserEmailSettingsUpdate(BaseModel):
     ] = None
     clear_smtp_password: bool = False
     imap_host: str | None = None
-    imap_port: int | None = None
+    imap_port: int | None = Field(default=None, ge=1, le=65535)
+    clear_imap_port: bool = False
     imap_user: str | None = None
     imap_password: Annotated[
         str | None,
         Field(default=None, description="Set only to change password"),
     ] = None
     clear_imap_password: bool = False
+
+    @field_validator(
+        "smtp_host", "smtp_user", "imap_host", "imap_user", mode="before"
+    )
+    @classmethod
+    def strip_non_secret_fields(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip()
+        return value

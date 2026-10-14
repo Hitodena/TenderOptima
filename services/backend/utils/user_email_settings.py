@@ -38,6 +38,8 @@ def apply_email_settings_update(
     smtp_password: str | None = None,
     imap_host: str | None = None,
     imap_port: int | None = None,
+    clear_smtp_port: bool = False,
+    clear_imap_port: bool = False,
     imap_user: str | None = None,
     imap_password: str | None = None,
     clear_smtp_password: bool = False,
@@ -47,6 +49,8 @@ def apply_email_settings_update(
         user.smtp_host = smtp_host or None
     if smtp_port is not None:
         user.smtp_port = smtp_port
+    elif clear_smtp_port:
+        user.smtp_port = None
     if smtp_user is not None:
         user.smtp_user = smtp_user or None
     if smtp_password:
@@ -57,6 +61,8 @@ def apply_email_settings_update(
         user.imap_host = imap_host or None
     if imap_port is not None:
         user.imap_port = imap_port
+    elif clear_imap_port:
+        user.imap_port = None
     if imap_user is not None:
         user.imap_user = imap_user or None
     if imap_password:
