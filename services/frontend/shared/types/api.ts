@@ -197,11 +197,13 @@ export interface UserEmailSettingsResponse {
 export interface UserEmailSettingsUpdate {
 	smtp_host?: string | null;
 	smtp_port?: number | null;
+	clear_smtp_port?: boolean;
 	smtp_user?: string | null;
 	smtp_password?: string | null;
 	clear_smtp_password?: boolean;
 	imap_host?: string | null;
 	imap_port?: number | null;
+	clear_imap_port?: boolean;
 	imap_user?: string | null;
 	imap_password?: string | null;
 	clear_imap_password?: boolean;

@@ -1,5 +1,6 @@
 """Resolve per-user SMTP/IMAP credentials with global env fallback."""
 
+import imaplib
 import smtplib
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -39,7 +40,7 @@ def resolve_smtp_credentials(
     if user and user.smtp_host and user.smtp_user and password:
         return SmtpCredentials(
             host=user.smtp_host,
-            port=cfg.smtp_port,
+            port=user.smtp_port or cfg.smtp_port,
             user=user.smtp_user,
             password=password,
         )
@@ -61,7 +62,7 @@ def resolve_imap_credentials(
     if user and user.imap_host and user.imap_user and password:
         return ImapCredentials(
             host=user.imap_host,
-            port=cfg.imap_port,
+            port=user.imap_port or cfg.imap_port,
             user=user.imap_user,
             password=password,
         )
@@ -108,6 +109,40 @@ def smtp_connection(
     finally:
         try:
             smtp.quit()
+        except Exception:
+            pass
+
+
+def verify_smtp_credentials(
+    creds: SmtpCredentials,
+    *,
+    timeout: float = 10,
+) -> None:
+    """Verify SMTP reachability and authentication without sending mail."""
+    with smtp_connection(creds, timeout=timeout) as server:
+        code, _ = server.noop()
+        if code != 250:
+            raise smtplib.SMTPException("SMTP NOOP failed")
+
+
+def verify_imap_credentials(
+    creds: ImapCredentials,
+    *,
+    timeout: float = 10,
+) -> None:
+    """Verify IMAP reachability and authentication without reading mail."""
+    client = imaplib.IMAP4_SSL(
+        creds.host,
+        creds.port,
+        timeout=timeout,
+    )
+    try:
+        status, _ = client.login(creds.user, creds.password)
+        if status != "OK":
+            raise imaplib.IMAP4.error("IMAP login failed")
+    finally:
+        try:
+            client.logout()
         except Exception:
             pass
 

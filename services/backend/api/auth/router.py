@@ -1,3 +1,4 @@
+import asyncio
 import secrets
 from datetime import UTC, datetime
 from typing import Annotated
@@ -39,6 +40,10 @@ from backend.utils.login_lockout import (
 from backend.utils.request_client_meta import client_ip, client_user_agent
 from backend.utils.security import hash_password, verify_password
 from backend.utils.user_email_settings import email_settings_response
+from backend.utils.user_email_settings_validation import (
+    UserEmailSettingsConnectionError,
+    validate_user_email_settings_update,
+)
 from backend.utils.user_utils import build_business_info
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -353,6 +358,29 @@ async def update_my_email_settings(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> UserEmailSettingsResponse:
+    try:
+        await asyncio.to_thread(
+            validate_user_email_settings_update,
+            current_user,
+            body,
+        )
+    except UserEmailSettingsConnectionError as exc:
+        protocol = "SMTP" if exc.protocol == "smtp" else "IMAP"
+        if exc.reason == "incomplete":
+            detail = (
+                f"Для проверки {protocol} укажите host и логин. "
+                "Настройки не сохранены."
+            )
+        else:
+            detail = (
+                f"Не удалось проверить подключение {protocol}. Проверьте "
+                "host, порт, логин и пароль; настройки не сохранены."
+            )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=detail,
+        ) from exc
+
     updated = await UserAdminDAO.update_email_settings(
         session,
         current_user.id,
@@ -360,8 +388,10 @@ async def update_my_email_settings(
         smtp_port=body.smtp_port,
         smtp_user=body.smtp_user,
         smtp_password=body.smtp_password,
+        clear_smtp_port=body.clear_smtp_port,
         imap_host=body.imap_host,
         imap_port=body.imap_port,
+        clear_imap_port=body.clear_imap_port,
         imap_user=body.imap_user,
         imap_password=body.imap_password,
         clear_smtp_password=body.clear_smtp_password,

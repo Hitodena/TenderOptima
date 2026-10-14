@@ -174,6 +174,14 @@ v-if="profileSuccess" color="success" variant="soft" icon="i-lucide-check"
 										<UFormField :label="t('profile.smtpHost')">
 											<UInput v-model="mailForm.smtp_host" class="w-full" placeholder="smtp.example.com" />
 										</UFormField>
+										<UFormField :label="t('profile.smtpPort')">
+											<UInput v-model="mailForm.smtp_port" type="number" min="1" max="65535" class="w-full" :disabled="mailForm.use_default_smtp_port" />
+										</UFormField>
+										<UCheckbox
+											v-model="mailForm.use_default_smtp_port"
+											:label="t('profile.useDefaultMailPort')"
+											class="sm:col-span-2"
+										/>
 										<UFormField :label="t('profile.smtpUser')">
 											<UInput v-model="mailForm.smtp_user" class="w-full" />
 										</UFormField>
@@ -204,6 +212,14 @@ v-if="profileSuccess" color="success" variant="soft" icon="i-lucide-check"
 										<UFormField :label="t('profile.imapHost')">
 											<UInput v-model="mailForm.imap_host" class="w-full" placeholder="imap.example.com" />
 										</UFormField>
+										<UFormField :label="t('profile.imapPort')">
+											<UInput v-model="mailForm.imap_port" type="number" min="1" max="65535" class="w-full" :disabled="mailForm.use_default_imap_port" />
+										</UFormField>
+										<UCheckbox
+											v-model="mailForm.use_default_imap_port"
+											:label="t('profile.useDefaultMailPort')"
+											class="sm:col-span-2"
+										/>
 										<UFormField :label="t('profile.imapUser')">
 											<UInput v-model="mailForm.imap_user" class="w-full" />
 										</UFormField>
@@ -532,10 +548,14 @@ const customMailboxOpen = ref(false)
 const mailSettings = ref<UserEmailSettingsResponse | null>(null)
 const mailForm = reactive({
 	smtp_host: '',
+	smtp_port: '',
+	use_default_smtp_port: true,
 	smtp_user: '',
 	smtp_password: '',
 	clear_smtp_password: false,
 	imap_host: '',
+	imap_port: '',
+	use_default_imap_port: true,
 	imap_user: '',
 	imap_password: '',
 	clear_imap_password: false,
@@ -547,10 +567,14 @@ const mailLoadError = ref<string | null>(null)
 
 function fillMailForm(settings: UserEmailSettingsResponse) {
 	mailForm.smtp_host = settings.smtp_host ?? ''
+	mailForm.smtp_port = settings.smtp_port == null ? '' : String(settings.smtp_port)
+	mailForm.use_default_smtp_port = settings.smtp_port == null
 	mailForm.smtp_user = settings.smtp_user ?? ''
 	mailForm.smtp_password = ''
 	mailForm.clear_smtp_password = false
 	mailForm.imap_host = settings.imap_host ?? ''
+	mailForm.imap_port = settings.imap_port == null ? '' : String(settings.imap_port)
+	mailForm.use_default_imap_port = settings.imap_port == null
 	mailForm.imap_user = settings.imap_user ?? ''
 	mailForm.imap_password = ''
 	mailForm.clear_imap_password = false
@@ -575,15 +599,33 @@ async function saveMailSettings() {
 		const payload: UserEmailSettingsUpdate = {
 			smtp_host: mailForm.smtp_host.trim() || null,
 			smtp_user: mailForm.smtp_user.trim() || null,
+			clear_smtp_port: mailForm.use_default_smtp_port,
 			imap_host: mailForm.imap_host.trim() || null,
 			imap_user: mailForm.imap_user.trim() || null,
+			clear_imap_port: mailForm.use_default_imap_port,
 			clear_smtp_password: mailForm.clear_smtp_password,
 			clear_imap_password: mailForm.clear_imap_password,
 		}
-		if (mailForm.smtp_password.trim()) {
+		if (!mailForm.use_default_smtp_port) {
+			const port = Number(mailForm.smtp_port)
+			if (!Number.isInteger(port) || port < 1 || port > 65535) {
+				mailError.value = t('profile.invalidMailPort')
+				return
+			}
+			payload.smtp_port = port
+		}
+		if (!mailForm.use_default_imap_port) {
+			const port = Number(mailForm.imap_port)
+			if (!Number.isInteger(port) || port < 1 || port > 65535) {
+				mailError.value = t('profile.invalidMailPort')
+				return
+			}
+			payload.imap_port = port
+		}
+		if (mailForm.smtp_password.length > 0) {
 			payload.smtp_password = mailForm.smtp_password
 		}
-		if (mailForm.imap_password.trim()) {
+		if (mailForm.imap_password.length > 0) {
 			payload.imap_password = mailForm.imap_password
 		}
 		mailSettings.value = await patch<UserEmailSettingsResponse>(
