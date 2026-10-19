@@ -764,6 +764,9 @@ async def send_emails(self, request_id: str) -> dict:
     return {"sent": sent, "failed": failed}
 
 
+IMAP_TIMEOUT_SECONDS = 30
+
+
 @app.task(name="mail.poll", bind=True, max_retries=3, default_retry_delay=120)
 @async_task
 async def poll_imap(self) -> dict:
@@ -776,20 +779,42 @@ async def poll_imap(self) -> dict:
         imap_users = await UserAdminDAO.list_imap_configured_users(session)
 
     mailboxes = build_poll_mailboxes(imap_users, config)
+    logger.info(
+        "IMAP mailboxes resolved",
+        count=len(mailboxes),
+        mailboxes=[m.label for m in mailboxes],
+    )
 
     for mailbox in mailboxes:
         mailbox_label = mailbox.label
         imap_creds = mailbox.creds
+        imap: imaplib.IMAP4_SSL | None = None
         try:
-            imap = imaplib.IMAP4_SSL(imap_creds.host, imap_creds.port)
+            imap = imaplib.IMAP4_SSL(
+                imap_creds.host,
+                imap_creds.port,
+                timeout=IMAP_TIMEOUT_SECONDS,
+            )
             imap.login(imap_creds.user, imap_creds.password)
-            imap.select("INBOX")
-        except imaplib.IMAP4.error as exc:
-            logger.exception(
+            status, data = imap.select("INBOX")
+            if status != "OK":
+                raise imaplib.IMAP4.error(f"SELECT INBOX failed: {data!r}")
+        except (imaplib.IMAP4.error, OSError) as exc:
+            # IMAP4.error: auth/protocol rejection. OSError covers DNS,
+            # refused/reset connections, timeouts and SSL errors. In every
+            # case this mailbox is skipped and the others are still polled.
+            # The server's reply is the whole story: no traceback.
+            logger.error(
                 "IMAP connection failed",
-                mailbox=mailbox_label,
+                **mailbox.log_context,
+                error_type=type(exc).__name__,
                 error=str(exc),
             )
+            if imap is not None:
+                try:
+                    imap.shutdown()  # release the socket; login() failed
+                except Exception:
+                    pass
             continue
 
         processed = 0
@@ -1044,6 +1069,15 @@ async def poll_imap(self) -> dict:
             for uid in seen_uids:
                 imap.store(uid, "+FLAGS", "\\Seen")
 
+        except Exception as exc:
+            # Isolate failures per mailbox: one broken mailbox (dropped
+            # connection mid-search, DB error, ...) must not abort the task
+            # and starve the mailboxes that come after it in the list.
+            logger.exception(
+                "IMAP mailbox processing failed",
+                **mailbox.log_context,
+                error=str(exc),
+            )
         finally:
             try:
                 imap.close()

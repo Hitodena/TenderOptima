@@ -19,6 +19,16 @@ class MailPollMailbox:
     owner_user_id: uuid.UUID | None
     creds: ImapCredentials
 
+    @property
+    def log_context(self) -> dict[str, str | int]:
+        """Safe-to-log identity of the mailbox (never includes the password)."""
+        return {
+            "mailbox": self.label,
+            "imap_host": self.creds.host,
+            "imap_port": self.creds.port,
+            "imap_user": self.creds.user,
+        }
+
 
 def build_mailbox_imap_id(creds: ImapCredentials, uid: str) -> str:
     """Stable dedup key scoped to a physical mailbox, not bare IMAP UID."""
@@ -53,11 +63,24 @@ def build_poll_mailboxes(
     mailboxes: list[MailPollMailbox] = []
     for key, entries in groups.items():
         creds = entries[0][1]
-        is_shared = len(entries) > 1 or key == global_key
-        if is_shared:
+        if key == global_key:
+            # Same host/user as the .env mailbox; credentials still come
+            # from entries[0] (a user row), so they may differ from .env.
             mailboxes.append(
                 MailPollMailbox(
-                    label="global",
+                    label=f"global:{creds.user}@{creds.host}",
+                    owner_user_id=None,
+                    creds=creds,
+                )
+            )
+        elif len(entries) > 1:
+            # Several users configured the same custom mailbox.
+            mailboxes.append(
+                MailPollMailbox(
+                    label=(
+                        f"shared({len(entries)} users):"
+                        f"{creds.user}@{creds.host}"
+                    ),
                     owner_user_id=None,
                     creds=creds,
                 )
@@ -66,7 +89,7 @@ def build_poll_mailboxes(
             owner = entries[0][0]
             mailboxes.append(
                 MailPollMailbox(
-                    label=str(owner.id),
+                    label=f"user:{owner.id}",
                     owner_user_id=owner.id,
                     creds=creds,
                 )
@@ -75,7 +98,9 @@ def build_poll_mailboxes(
     if global_key not in groups:
         mailboxes.append(
             MailPollMailbox(
-                label="global",
+                label=(
+                    f"global:env:{global_creds.user}@{global_creds.host}"
+                ),
                 owner_user_id=None,
                 creds=global_creds,
             )
