@@ -26,6 +26,24 @@ class MailAccountCreate(BaseModel):
         return value.strip().lower() if isinstance(value, str) else value
 
 
+class MailAccountUpdate(BaseModel):
+    """Editable mailbox settings; omit password to keep the current secret."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    email: EmailStr
+    password: str | None = Field(default=None, min_length=1, max_length=512)
+    smtp_host: str = Field(min_length=1, max_length=255)
+    smtp_port: int = Field(ge=1, le=65535)
+    imap_host: str = Field(min_length=1, max_length=255)
+    imap_port: int = Field(ge=1, le=65535)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, value: object) -> object:
+        return value.strip().lower() if isinstance(value, str) else value
+
+
 class MailAccountResponse(BaseModel):
     """Safe mail-account view; passwords are intentionally absent."""
 

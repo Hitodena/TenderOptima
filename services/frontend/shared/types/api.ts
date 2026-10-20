@@ -212,6 +212,15 @@ imap_host: string;
 imap_port: number;
 }
 
+export interface MailAccountUpdate {
+	email: string;
+	password?: string;
+	smtp_host: string;
+	smtp_port: number;
+	imap_host: string;
+	imap_port: number;
+}
+
 export interface MyMailAccountResponse {
 account: MailAccountResponse | null;
 current_sender_email: string | null;

@@ -14,6 +14,7 @@ from sqlalchemy.orm import selectinload
 from backend.db.dao.base_dao import BaseDAO
 from backend.db.models import MailAccount, User
 from backend.enums import MailAccountSource
+from backend.schemas.mail_account import MailAccountUpdate
 from backend.utils.secret_encryption import store_secret
 
 
@@ -77,6 +78,50 @@ class MailAccountDAO(BaseDAO[MailAccount]):
         await session.commit()
         logger.info("Mail account deleted", account_id=str(account_id))
         return True
+
+    @classmethod
+    async def update_admin_mail_account(
+        cls,
+        session: AsyncSession,
+        account: MailAccount,
+        *,
+        payload: MailAccountUpdate,
+        smtp_available: bool,
+        imap_available: bool,
+        last_error: str | None,
+    ) -> MailAccount:
+        """Persist settings only after successful external verification."""
+        normalized_email = cls.normalize_email(str(payload.email))
+        account.email = normalized_email
+        account.smtp_user = normalized_email
+        account.imap_user = normalized_email
+        account.smtp_host = payload.smtp_host.strip()
+        account.smtp_port = payload.smtp_port
+        account.imap_host = payload.imap_host.strip()
+        account.imap_port = payload.imap_port
+        if payload.password is not None:
+            account.smtp_password = store_secret(payload.password)
+            account.imap_password = store_secret(payload.password)
+        account.smtp_available = smtp_available
+        account.imap_available = imap_available
+        account.availability = smtp_available and imap_available
+        account.last_checked_at = datetime.now(UTC)
+        account.last_error = last_error
+        session.add(account)
+        try:
+            await session.flush()
+            await session.refresh(account)
+            await session.commit()
+        except IntegrityError as exc:
+            await session.rollback()
+            logger.info(
+                "Mail account update rejected due to duplicate email",
+                account_id=str(account.id),
+                email=normalized_email,
+            )
+            raise MailAccountDuplicateError(normalized_email) from exc
+        logger.info("Mail account updated", account_id=str(account.id))
+        return account
 
     @classmethod
     async def list_assignable_admin(
