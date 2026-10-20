@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 
 from backend.db.models import MailAccount
-from backend.schemas.mail_account import MailAccountCreate
+from backend.schemas.mail_account import MailAccountCreate, MailAccountUpdate
 from backend.utils.secret_encryption import decrypt_secret
 from backend.utils.user_email_credentials import (
     ImapCredentials,
@@ -70,6 +70,43 @@ def verify_new_mail_account(
             port=payload.imap_port,
             user=email,
             password=payload.password,
+        ),
+    )
+
+
+def verify_updated_mail_account(
+    account: MailAccount,
+    payload: MailAccountUpdate,
+) -> MailAccountVerification:
+    """Verify edited endpoints using a submitted or currently stored secret."""
+    email = str(payload.email).strip().lower()
+    try:
+        smtp_password = payload.password or decrypt_secret(account.smtp_password)
+        imap_password = payload.password or decrypt_secret(account.imap_password)
+    except Exception:
+        return MailAccountVerification(
+            smtp_available=False,
+            imap_available=False,
+            last_error="Saved mail-account credentials could not be decrypted",
+        )
+    if not smtp_password or not imap_password:
+        return MailAccountVerification(
+            smtp_available=False,
+            imap_available=False,
+            last_error="Mail account password is required",
+        )
+    return _verify(
+        SmtpCredentials(
+            host=payload.smtp_host,
+            port=payload.smtp_port,
+            user=email,
+            password=smtp_password,
+        ),
+        ImapCredentials(
+            host=payload.imap_host,
+            port=payload.imap_port,
+            user=email,
+            password=imap_password,
         ),
     )
 

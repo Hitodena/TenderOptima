@@ -19,6 +19,7 @@ from backend.schemas.mail_account import (
     MailAccountBulkVerificationResponse,
     MailAccountCreate,
     MailAccountResponse,
+    MailAccountUpdate,
     MailAccountVerificationResponse,
     MyMailAccountResponse,
 )
@@ -26,6 +27,7 @@ from backend.services.mail_account_verification import (
     MailAccountVerification,
     verify_new_mail_account,
     verify_saved_mail_account,
+    verify_updated_mail_account,
 )
 
 admin_router = APIRouter(prefix="/admin/mail-accounts", tags=["Mail accounts"])
@@ -221,6 +223,62 @@ async def create_admin_mail_account(
         creator_id=None,
         session=session,
     )
+
+
+@admin_router.put("/{account_id}", response_model=MailAccountResponse)
+async def update_admin_mail_account(
+    account_id: uuid.UUID,
+    payload: MailAccountUpdate,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _admin: Annotated[User, Depends(get_admin)],
+) -> MailAccountResponse:
+    """Edit a reusable admin mailbox after verifying the submitted settings."""
+    account = await MailAccountDAO.get_with_relations(session, account_id)
+    if account is None:
+        raise HTTPException(status_code=404, detail="Mail account not found")
+    if account.source != MailAccountSource.ADMIN.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrative mail accounts can be edited here",
+        )
+
+    existing = await MailAccountDAO.get_by_email(session, str(payload.email))
+    if existing is not None and existing.id != account.id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Mail account with this email already exists",
+        )
+
+    result = await asyncio.to_thread(verify_updated_mail_account, account, payload)
+    if not result.availability:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": (
+                    "SMTP/IMAP verification failed; account was not updated "
+                    f"(SMTP: {'OK' if result.smtp_available else 'failed'}, "
+                    f"IMAP: {'OK' if result.imap_available else 'failed'})"
+                ),
+                "smtp_available": result.smtp_available,
+                "imap_available": result.imap_available,
+            },
+        )
+
+    try:
+        updated = await MailAccountDAO.update_admin_mail_account(
+            session,
+            account,
+            payload=payload,
+            smtp_available=result.smtp_available,
+            imap_available=result.imap_available,
+            last_error=result.last_error,
+        )
+    except MailAccountDuplicateError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Mail account with this email already exists",
+        ) from exc
+    return _account_response(updated)
 
 
 @admin_router.delete("/{account_id}", status_code=status.HTTP_204_NO_CONTENT)

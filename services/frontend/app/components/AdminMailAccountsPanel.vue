@@ -13,6 +13,7 @@
 </div>
 </template>
 
+<p class="font-semibold">{{ editingAccount ? `Редактирование ${editingAccount.email}` : 'Добавить аккаунт' }}</p>
 <UFormField label="Email">
 <UInput v-model="form.email" type="email" class="w-full" autocomplete="email" />
 </UFormField>
@@ -24,9 +25,13 @@
 </div>
 <UFormField label="Пароль">
 <UInput v-model="form.password" type="password" class="w-full" autocomplete="new-password" />
+<template #help>{{ editingAccount ? 'Оставьте пустым, чтобы сохранить текущий пароль' : 'Пароль проверяется для SMTP и IMAP' }}</template>
 </UFormField>
 <UAlert v-if="formError" color="error" variant="soft" :description="formError" />
-<UButton :loading="creating" icon="i-lucide-plus" @click="createAccount">Добавить административную почту</UButton>
+<div class="flex flex-wrap gap-2">
+	<UButton :loading="creating" :icon="editingAccount ? 'i-lucide-save' : 'i-lucide-plus'" @click="createAccount">{{ editingAccount ? 'Проверить и сохранить' : 'Добавить административную почту' }}</UButton>
+	<UButton v-if="editingAccount" variant="ghost" color="neutral" @click="cancelEdit">Отмена</UButton>
+</div>
 </UCard>
 
 	<UAlert v-if="loadError" color="error" variant="soft" :description="loadError" />
@@ -48,6 +53,7 @@
 <template #checked-cell="{ row }"><span class="text-xs text-muted">{{ row.original.last_checked_at ? formatDateTime(row.original.last_checked_at) : '—' }}</span><p v-if="row.original.last_error" class="max-w-64 text-xs text-error">{{ row.original.last_error }}</p></template>
 <template #actions-cell="{ row }">
 	<div class="flex gap-2">
+		<UButton v-if="row.original.source === 'admin'" size="xs" variant="soft" icon="i-lucide-pencil" @click="beginEdit(row.original)">Изменить</UButton>
 		<UButton size="xs" variant="soft" :loading="verifyingId === row.original.id" @click="verifyOne(row.original.id)">Проверить</UButton>
 		<UButton size="xs" color="error" variant="soft" icon="i-lucide-trash-2" :loading="deletingId === row.original.id" @click="deleteAccount(row.original)">Удалить</UButton>
 	</div>
@@ -60,10 +66,10 @@
 
 <script lang="ts" setup>
 import type { TableColumn } from '@nuxt/ui'
-import type { MailAccountCreate, MailAccountResponse } from '#shared/types'
+import type { MailAccountCreate, MailAccountResponse, MailAccountUpdate } from '#shared/types'
 import { getApiErrorDetail } from '#shared/utils/apiError'
 
-const { get, post, del } = useApi()
+const { get, post, put, del } = useApi()
 const { formatDateTime } = useFormatDate()
 const accounts = ref<MailAccountResponse[]>([])
 const loading = ref(false)
@@ -73,6 +79,7 @@ const verifyingId = ref<string | null>(null)
 const deletingId = ref<string | null>(null)
 const verifyingAll = ref(false)
 const formError = ref<string | null>(null)
+const editingAccount = ref<MailAccountResponse | null>(null)
 const form = reactive({ email: '', password: '', smtp_host: '', smtp_port: '465', imap_host: '', imap_port: '993' })
 const sourceFilter = ref<'all' | 'admin' | 'custom'>('all')
 const availabilityFilter = ref<'all' | 'available' | 'unavailable'>('all')
@@ -117,15 +124,40 @@ finally { loading.value = false }
 async function createAccount() {
 const values = ports()
 if (!values) { formError.value = 'Порты должны быть целыми числами от 1 до 65535'; return }
+if (!editingAccount.value && !form.password) { formError.value = 'Введите пароль'; return }
 creating.value = true; formError.value = null
 try {
-const payload: MailAccountCreate = { email: form.email.trim(), password: form.password, smtp_host: form.smtp_host.trim(), smtp_port: values.smtp, imap_host: form.imap_host.trim(), imap_port: values.imap }
-await post<MailAccountResponse>('/admin/mail-accounts', payload)
+if (editingAccount.value) {
+	const payload: MailAccountUpdate = { email: form.email.trim(), smtp_host: form.smtp_host.trim(), smtp_port: values.smtp, imap_host: form.imap_host.trim(), imap_port: values.imap }
+	if (form.password) payload.password = form.password
+	await put<MailAccountResponse>(`/admin/mail-accounts/${editingAccount.value.id}`, payload)
+} else {
+	const payload: MailAccountCreate = { email: form.email.trim(), password: form.password, smtp_host: form.smtp_host.trim(), smtp_port: values.smtp, imap_host: form.imap_host.trim(), imap_port: values.imap }
+	await post<MailAccountResponse>('/admin/mail-accounts', payload)
+}
 Object.assign(form, { email: '', password: '', smtp_host: '', smtp_port: '465', imap_host: '', imap_port: '993' })
+editingAccount.value = null
 await load()
 }
-catch (error: unknown) { formError.value = getApiErrorDetail(error) ?? 'Не удалось создать аккаунт' }
+catch (error: unknown) { formError.value = getApiErrorDetail(error) ?? (editingAccount.value ? 'Не удалось изменить аккаунт' : 'Не удалось создать аккаунт') }
 finally { creating.value = false }
+}
+function beginEdit(account: MailAccountResponse) {
+	editingAccount.value = account
+	Object.assign(form, {
+		email: account.email,
+		password: '',
+		smtp_host: account.smtp_host ?? '',
+		smtp_port: String(account.smtp_port ?? 465),
+		imap_host: account.imap_host ?? '',
+		imap_port: String(account.imap_port ?? 993),
+	})
+	formError.value = null
+}
+function cancelEdit() {
+	editingAccount.value = null
+	Object.assign(form, { email: '', password: '', smtp_host: '', smtp_port: '465', imap_host: '', imap_port: '993' })
+	formError.value = null
 }
 async function verifyOne(id: string) {
 verifyingId.value = id
