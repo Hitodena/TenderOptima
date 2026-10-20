@@ -46,7 +46,12 @@
 	<template #created-cell="{ row }"><span class="text-xs text-muted">{{ formatDateTime(row.original.created_at) }}</span></template>
 	<template #assigned-cell="{ row }"><span>{{ row.original.assigned_user_count }}</span></template>
 <template #checked-cell="{ row }"><span class="text-xs text-muted">{{ row.original.last_checked_at ? formatDateTime(row.original.last_checked_at) : '—' }}</span><p v-if="row.original.last_error" class="max-w-64 text-xs text-error">{{ row.original.last_error }}</p></template>
-<template #actions-cell="{ row }"><UButton size="xs" variant="soft" :loading="verifyingId === row.original.id" @click="verifyOne(row.original.id)">Проверить</UButton></template>
+<template #actions-cell="{ row }">
+	<div class="flex gap-2">
+		<UButton size="xs" variant="soft" :loading="verifyingId === row.original.id" @click="verifyOne(row.original.id)">Проверить</UButton>
+		<UButton size="xs" color="error" variant="soft" icon="i-lucide-trash-2" :loading="deletingId === row.original.id" @click="deleteAccount(row.original)">Удалить</UButton>
+	</div>
+</template>
 <template #empty><div class="py-10 text-center text-muted">Почтовых аккаунтов пока нет</div></template>
 </UTable>
 </div>
@@ -58,13 +63,14 @@ import type { TableColumn } from '@nuxt/ui'
 import type { MailAccountCreate, MailAccountResponse } from '#shared/types'
 import { getApiErrorDetail } from '#shared/utils/apiError'
 
-const { get, post } = useApi()
+const { get, post, del } = useApi()
 const { formatDateTime } = useFormatDate()
 const accounts = ref<MailAccountResponse[]>([])
 const loading = ref(false)
 const loadError = ref<string | null>(null)
 const creating = ref(false)
 const verifyingId = ref<string | null>(null)
+const deletingId = ref<string | null>(null)
 const verifyingAll = ref(false)
 const formError = ref<string | null>(null)
 const form = reactive({ email: '', password: '', smtp_host: '', smtp_port: '465', imap_host: '', imap_port: '993' })
@@ -132,6 +138,22 @@ verifyingAll.value = true
 try { await post('/admin/mail-accounts/verify-all', {}); await load() }
 catch (error: unknown) { loadError.value = getApiErrorDetail(error) ?? 'Не удалось запустить массовую проверку' }
 finally { verifyingAll.value = false }
+}
+async function deleteAccount(account: MailAccountResponse) {
+	const warning = account.assigned_user_count > 0
+		? `Аккаунт ${account.email} назначен пользователям (${account.assigned_user_count}). Удаление снимет эти назначения; история писем останется. Продолжить?`
+		: `Удалить почтовый аккаунт ${account.email}? История писем останется.`
+	if (!window.confirm(warning)) return
+	deletingId.value = account.id
+	loadError.value = null
+	try {
+		await del(`/admin/mail-accounts/${account.id}`)
+		await load()
+	} catch (error: unknown) {
+		loadError.value = getApiErrorDetail(error) ?? 'Не удалось удалить почтовый аккаунт'
+	} finally {
+		deletingId.value = null
+	}
 }
 onMounted(load)
 </script>
