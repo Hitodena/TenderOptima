@@ -328,7 +328,9 @@ async def send_reply(
     try:
         smtp_creds = resolve_smtp_credentials(account)
     except MailAccountUnavailableError as exc:
-        logger.warning("Reply mail account unavailable", rs_id=rs_id, reason=exc.reason)
+        logger.warning(
+            "Reply mail account unavailable", rs_id=rs_id, reason=exc.reason
+        )
         return {"status": "error", "reason": exc.reason}
 
     att_data = _prepare_attachments(attachment_paths)
@@ -456,7 +458,9 @@ async def send_custom_email(
         smtp_creds = resolve_smtp_credentials(account)
     except MailAccountUnavailableError as exc:
         logger.warning(
-            "Custom email mail account unavailable", rs_id=rs_id, reason=exc.reason
+            "Custom email mail account unavailable",
+            rs_id=rs_id,
+            reason=exc.reason,
         )
         return {"status": "error", "reason": exc.reason}
     att_data = _prepare_attachments(attachment_paths)
@@ -581,9 +585,7 @@ async def send_emails(self, request_id: str) -> dict:
             )
             pending = pending[:remaining]
 
-        account = await MailAccountDAO.get_by_id(
-            session, user.mail_account_id
-        )
+        account = await MailAccountDAO.get_by_id(session, user.mail_account_id)
         try:
             smtp_creds = resolve_smtp_credentials(account)
         except MailAccountUnavailableError as exc:

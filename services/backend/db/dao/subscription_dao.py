@@ -130,7 +130,10 @@ class UserAdminDAO:
     async def list_users(session: AsyncSession) -> list[User]:
         stmt = (
             select(User)
-            .options(selectinload(User.subscription), selectinload(User.mail_account))
+            .options(
+                selectinload(User.subscription),
+                selectinload(User.mail_account),
+            )
             .order_by(User.created_at.desc())
         )
         result = await session.execute(stmt)
@@ -143,7 +146,10 @@ class UserAdminDAO:
         stmt = (
             select(User)
             .where(User.id == user_id)
-            .options(selectinload(User.subscription), selectinload(User.mail_account))
+            .options(
+                selectinload(User.subscription),
+                selectinload(User.mail_account),
+            )
         )
         result = await session.execute(stmt)
         return result.scalar_one_or_none()

@@ -34,8 +34,8 @@ admin_router = APIRouter(prefix="/admin/mail-accounts", tags=["Mail accounts"])
 auth_router = APIRouter(prefix="/auth/me/mail-account", tags=["Mail accounts"])
 
 _bulk_verification_lock = asyncio.Lock()
-_account_verification_locks: defaultdict[uuid.UUID, asyncio.Lock] = defaultdict(
-    asyncio.Lock
+_account_verification_locks: defaultdict[uuid.UUID, asyncio.Lock] = (
+    defaultdict(asyncio.Lock)
 )
 
 
@@ -249,7 +249,9 @@ async def update_admin_mail_account(
             detail="Mail account with this email already exists",
         )
 
-    result = await asyncio.to_thread(verify_updated_mail_account, account, payload)
+    result = await asyncio.to_thread(
+        verify_updated_mail_account, account, payload
+    )
     if not result.availability:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -353,9 +355,7 @@ async def verify_all_mail_accounts(
     return MailAccountBulkVerificationResponse(items=results)
 
 
-@admin_router.patch(
-    "/users/{user_id}", response_model=MyMailAccountResponse
-)
+@admin_router.patch("/users/{user_id}", response_model=MyMailAccountResponse)
 async def assign_user_mail_account(
     user_id: uuid.UUID,
     payload: MailAccountAssignmentUpdate,

@@ -81,8 +81,12 @@ def verify_updated_mail_account(
     """Verify edited endpoints using a submitted or currently stored secret."""
     email = str(payload.email).strip().lower()
     try:
-        smtp_password = payload.password or decrypt_secret(account.smtp_password)
-        imap_password = payload.password or decrypt_secret(account.imap_password)
+        smtp_password = payload.password or decrypt_secret(
+            account.smtp_password
+        )
+        imap_password = payload.password or decrypt_secret(
+            account.imap_password
+        )
     except Exception:
         return MailAccountVerification(
             smtp_available=False,

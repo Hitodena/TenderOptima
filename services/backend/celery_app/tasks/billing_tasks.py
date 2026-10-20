@@ -108,7 +108,11 @@ async def send_billing_document_email(
         try:
             smtp_creds = await resolve_system_smtp_credentials(session, config)
         except MailAccountUnavailableError as exc:
-            logger.warning("Billing email skipped", document_id=document_id, reason=exc.reason)
+            logger.warning(
+                "Billing email skipped",
+                document_id=document_id,
+                reason=exc.reason,
+            )
             return {"status": "error", "reason": exc.reason}
     subject = f"Документы по подписке TenderOptima — {receipt_id}"
     body = (

@@ -205,7 +205,9 @@ def _admin_detail(
 def _owner_mailbox(user: User | None) -> str | None:
     if user is None:
         return None
-    return user.mail_account.email if user and user.mail_account else user.email
+    return (
+        user.mail_account.email if user and user.mail_account else user.email
+    )
 
 
 def _referral_item(
@@ -530,7 +532,6 @@ async def get_user_detail(
     )
 
 
-
 @router.patch(
     "/users/{user_id}/subscription",
     response_model=AdminUserDetail,
@@ -778,7 +779,6 @@ async def update_request_supplier_recipient(
         sent_to_email=str(body.sent_to_email),
     )
     return {"status": "updated", "rs_id": str(rs_id)}
-
 
 
 @router.get(

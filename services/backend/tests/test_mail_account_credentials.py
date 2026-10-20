@@ -13,9 +13,13 @@ from backend.utils.user_email_credentials import (
 
 
 def test_unassigned_account_never_uses_a_global_fallback() -> None:
-    with pytest.raises(MailAccountUnavailableError, match="mail_account_not_assigned"):
+    with pytest.raises(
+        MailAccountUnavailableError, match="mail_account_not_assigned"
+    ):
         resolve_smtp_credentials(None)
-    with pytest.raises(MailAccountUnavailableError, match="mail_account_not_assigned"):
+    with pytest.raises(
+        MailAccountUnavailableError, match="mail_account_not_assigned"
+    ):
         resolve_imap_credentials(None)
 
 
@@ -27,7 +31,9 @@ def test_unavailable_persisted_account_is_rejected_before_connection() -> None:
         smtp_available=False,
         imap_available=False,
     )
-    with pytest.raises(MailAccountUnavailableError, match="mail_account_unavailable"):
+    with pytest.raises(
+        MailAccountUnavailableError, match="mail_account_unavailable"
+    ):
         resolve_smtp_credentials(account)
 
 

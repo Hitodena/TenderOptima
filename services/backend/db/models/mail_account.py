@@ -15,7 +15,9 @@ class MailAccount(IDMixinUUID, TimestampMixin, Base):
 
     __tablename__ = "mail_accounts"
 
-    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    email: Mapped[str] = mapped_column(
+        String(255), nullable=False, unique=True
+    )
     source: Mapped[str] = mapped_column(String(16), nullable=False)
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
