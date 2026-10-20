@@ -348,10 +348,11 @@ const selectedUserId = ref<string | null>(null)
 const selectedUser = ref<AdminUserDetail | null>(null)
 const loadError = ref<string | null>(null)
 
+const NO_MAIL_ACCOUNT = '__no_mail_account__'
 const emailForm = reactive({ mail_account_id: '' })
 const mailAccounts = ref<MailAccountResponse[]>([])
 const mailAccountOptions = computed(() => [
-	{ label: 'Не назначать', value: '' },
+	{ label: 'Не назначать', value: NO_MAIL_ACCOUNT },
 	...mailAccounts.value.map(account => ({
 		label: `${account.email} · ${account.availability ? 'доступен' : 'недоступен'}`,
 		value: account.id,
@@ -553,7 +554,7 @@ function parseOptionalPrice(value: string | number | null | undefined): string |
 }
 
 function fillForms(detail: AdminUserDetail) {
-	emailForm.mail_account_id = detail.mail_account?.id ?? ''
+	emailForm.mail_account_id = detail.mail_account?.id ?? NO_MAIL_ACCOUNT
 
 	const sub = detail.subscription
 	subscriptionForm.plan = sub?.plan ?? 'starter'
@@ -624,7 +625,11 @@ savingEmail.value = true
 emailError.value = null
 emailSuccess.value = false
 try {
-const payload: MailAccountAssignmentUpdate = { mail_account_id: emailForm.mail_account_id || null }
+	const payload: MailAccountAssignmentUpdate = {
+		mail_account_id: emailForm.mail_account_id === NO_MAIL_ACCOUNT
+			? null
+			: emailForm.mail_account_id,
+	}
 await patch(`/admin/mail-accounts/users/${selectedUserId.value}`, payload)
 await selectUser(selectedUserId.value)
 await loadUsers()
