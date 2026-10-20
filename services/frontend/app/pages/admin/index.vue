@@ -23,6 +23,10 @@
 					<AdminEmailRoutingPanel />
 				</template>
 
+				<template #mail-accounts>
+					<AdminMailAccountsPanel />
+				</template>
+
 				<template #debug>
 					<AdminAnalysisDebugPanel />
 				</template>
@@ -574,6 +578,7 @@ const activeTab = ref('users')
 const tabs = [
 	{ label: 'Пользователи', slot: 'users', value: 'users', icon: 'i-lucide-users' },
 	{ label: t('admin.emailRouting.tabLabel'), slot: 'email', value: 'email', icon: 'i-lucide-mail' },
+	{ label: 'Почтовые аккаунты', slot: 'mail-accounts', value: 'mail-accounts', icon: 'i-lucide-at-sign' },
 	{ label: t('admin.analysisDebug.tabLabel'), slot: 'debug', value: 'debug', icon: 'i-lucide-microscope' },
 	{
 		label: 'Сотрудничество',
