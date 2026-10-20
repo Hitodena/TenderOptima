@@ -10,6 +10,10 @@ from backend.api.consultations.router import router as consultations_router
 from backend.api.cooperation.router import router as cooperation_router
 from backend.api.email_templates.router import router as email_templates_router
 from backend.api.feedback.router import router as feedback_router
+from backend.api.mail_accounts import (
+    admin_router as mail_accounts_admin_router,
+)
+from backend.api.mail_accounts import auth_router as mail_accounts_auth_router
 from backend.api.response_analysis.router import (
     router as response_analysis_router,
 )
@@ -34,6 +38,8 @@ from backend.api.user_requests.router import router as user_requests_router
 
 api_router = APIRouter(prefix="/api")
 api_router.include_router(admin_router)
+api_router.include_router(mail_accounts_admin_router)
+api_router.include_router(mail_accounts_auth_router)
 api_router.include_router(consultations_router)
 api_router.include_router(cooperation_router)
 api_router.include_router(feedback_router)

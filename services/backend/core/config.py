@@ -1,3 +1,4 @@
+import uuid
 from enum import StrEnum
 from functools import lru_cache
 
@@ -53,22 +54,11 @@ class Config(BaseSettings):
     # Environment
     app_environment: AppEnvironment
 
-    # SMTP
-    smtp_host: str
-    smtp_port: int
-    smtp_user: str
-    smtp_password: str
-
-    # IMAP
-    imap_host: str
-    imap_port: int
-    imap_user: str
-    imap_password: str
-
     # Auth
     secret_key: str
     alghoritm: str
     admin_alert_email: str = ""
+    system_mail_account_id: uuid.UUID | None = None
 
     # Parser
     parser_url: str

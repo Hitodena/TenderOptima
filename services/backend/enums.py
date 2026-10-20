@@ -44,6 +44,13 @@ class SupplierPreferenceTokenPurpose(StrEnum):
     UNSUBSCRIBE = "unsubscribe"
 
 
+class MailAccountSource(StrEnum):
+    """How a centralized mailbox was created and may be assigned."""
+
+    ADMIN = "admin"
+    CUSTOM = "custom"
+
+
 class EmailMessageDirection(StrEnum):
     """Direction of an EmailMessage (threaded conversation item)."""
 

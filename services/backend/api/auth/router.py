@@ -1,4 +1,3 @@
-import asyncio
 import secrets
 from datetime import UTC, datetime
 from typing import Annotated
@@ -21,15 +20,10 @@ from backend.celery_app.tasks.security_tasks import send_login_lockout_alert
 from backend.db.dao import (
     ReferralInvitationDAO,
     SubscriptionDAO,
-    UserAdminDAO,
     UserDAO,
 )
 from backend.db.models import User
 from backend.enums import SubscriptionPlan
-from backend.schemas.user_email_settings import (
-    UserEmailSettingsResponse,
-    UserEmailSettingsUpdate,
-)
 from backend.utils.jwt_utils import create_access_token
 from backend.utils.legal_document_versions import stamp_consent_audit
 from backend.utils.login_lockout import (
@@ -39,11 +33,6 @@ from backend.utils.login_lockout import (
 )
 from backend.utils.request_client_meta import client_ip, client_user_agent
 from backend.utils.security import hash_password, verify_password
-from backend.utils.user_email_settings import email_settings_response
-from backend.utils.user_email_settings_validation import (
-    UserEmailSettingsConnectionError,
-    validate_user_email_settings_update,
-)
 from backend.utils.user_utils import build_business_info
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -335,66 +324,3 @@ async def delete_my_account(
         status="account_deleted",
         message="Account deleted and access disabled",
     )
-
-
-@router.get(
-    "/me/email-settings",
-    response_model=UserEmailSettingsResponse,
-    summary="Get current user SMTP/IMAP settings",
-)
-async def get_my_email_settings(
-    current_user: Annotated[User, Depends(get_current_user)],
-) -> UserEmailSettingsResponse:
-    return email_settings_response(current_user)
-
-
-@router.patch(
-    "/me/email-settings",
-    response_model=UserEmailSettingsResponse,
-    summary="Update current user SMTP/IMAP settings",
-)
-async def update_my_email_settings(
-    body: UserEmailSettingsUpdate,
-    current_user: Annotated[User, Depends(get_current_user)],
-    session: Annotated[AsyncSession, Depends(get_session)],
-) -> UserEmailSettingsResponse:
-    try:
-        await asyncio.to_thread(
-            validate_user_email_settings_update,
-            current_user,
-            body,
-        )
-    except UserEmailSettingsConnectionError as exc:
-        protocol = "SMTP" if exc.protocol == "smtp" else "IMAP"
-        if exc.reason == "incomplete":
-            detail = (
-                f"Для проверки {protocol} укажите host и логин. "
-                "Настройки не сохранены."
-            )
-        else:
-            detail = (
-                f"Не удалось проверить подключение {protocol}. Проверьте "
-                "host, порт, логин и пароль; настройки не сохранены."
-            )
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=detail,
-        ) from exc
-
-    updated = await UserAdminDAO.update_email_settings(
-        session,
-        current_user.id,
-        smtp_host=body.smtp_host,
-        smtp_port=body.smtp_port,
-        smtp_user=body.smtp_user,
-        smtp_password=body.smtp_password,
-        clear_smtp_port=body.clear_smtp_port,
-        imap_host=body.imap_host,
-        imap_port=body.imap_port,
-        clear_imap_port=body.clear_imap_port,
-        imap_user=body.imap_user,
-        imap_password=body.imap_password,
-        clear_smtp_password=body.clear_smtp_password,
-        clear_imap_password=body.clear_imap_password,
-    )
-    return email_settings_response(updated)

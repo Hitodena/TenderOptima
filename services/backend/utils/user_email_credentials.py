@@ -1,4 +1,4 @@
-"""Resolve per-user SMTP/IMAP credentials with global env fallback."""
+"""SMTP/IMAP connections resolved only from a centralized mail account."""
 
 import imaplib
 import smtplib
@@ -6,12 +6,16 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 
-from backend.core.config import Config, get_config
-from backend.db.models import User
-from backend.utils.user_email_settings import (
-    decrypted_imap_password,
-    decrypted_smtp_password,
-)
+from backend.db.models import MailAccount
+from backend.utils.secret_encryption import decrypt_secret
+
+
+class MailAccountUnavailableError(RuntimeError):
+    """A requested mailbox cannot be used and must never fall back silently."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
 
 
 @dataclass(frozen=True)
@@ -30,47 +34,49 @@ class ImapCredentials:
     password: str
 
 
-def resolve_smtp_credentials(
-    user: User | None,
-    config: Config | None = None,
-) -> SmtpCredentials:
-    """Return user SMTP settings when complete, else global config."""
-    cfg = config or get_config()
-    password = decrypted_smtp_password(user) if user else None
-    if user and user.smtp_host and user.smtp_user and password:
-        return SmtpCredentials(
-            host=user.smtp_host,
-            port=user.smtp_port or cfg.smtp_port,
-            user=user.smtp_user,
-            password=password,
-        )
+def _require_available(account: MailAccount | None) -> MailAccount:
+    if account is None:
+        raise MailAccountUnavailableError("mail_account_not_assigned")
+    if not account.availability:
+        raise MailAccountUnavailableError("mail_account_unavailable")
+    return account
+
+
+def resolve_smtp_credentials(account: MailAccount | None) -> SmtpCredentials:
+    """Return current SMTP credentials for one verified central account."""
+    account = _require_available(account)
+    password = decrypt_secret(account.smtp_password)
+    if not (
+        account.smtp_host
+        and account.smtp_port
+        and account.smtp_user
+        and password
+    ):
+        raise MailAccountUnavailableError("smtp_configuration_invalid")
     return SmtpCredentials(
-        host=cfg.smtp_host,
-        port=cfg.smtp_port,
-        user=cfg.smtp_user,
-        password=cfg.smtp_password,
+        host=account.smtp_host,
+        port=account.smtp_port,
+        user=account.smtp_user,
+        password=password,
     )
 
 
-def resolve_imap_credentials(
-    user: User | None,
-    config: Config | None = None,
-) -> ImapCredentials:
-    """Return user IMAP settings when complete, else global config."""
-    cfg = config or get_config()
-    password = decrypted_imap_password(user) if user else None
-    if user and user.imap_host and user.imap_user and password:
-        return ImapCredentials(
-            host=user.imap_host,
-            port=user.imap_port or cfg.imap_port,
-            user=user.imap_user,
-            password=password,
-        )
+def resolve_imap_credentials(account: MailAccount | None) -> ImapCredentials:
+    """Return current IMAP credentials for one verified central account."""
+    account = _require_available(account)
+    password = decrypt_secret(account.imap_password)
+    if not (
+        account.imap_host
+        and account.imap_port
+        and account.imap_user
+        and password
+    ):
+        raise MailAccountUnavailableError("imap_configuration_invalid")
     return ImapCredentials(
-        host=cfg.imap_host,
-        port=cfg.imap_port,
-        user=cfg.imap_user,
-        password=cfg.imap_password,
+        host=account.imap_host,
+        port=account.imap_port,
+        user=account.imap_user,
+        password=password,
     )
 
 
@@ -85,7 +91,7 @@ def smtp_connection(
     *,
     timeout: float = 30,
 ) -> Iterator[smtplib.SMTP]:
-    """Open an authenticated SMTP session (SSL on 465, STARTTLS otherwise)."""
+    """Open and authenticate one SMTP connection, then always close it."""
     if _uses_implicit_tls(creds.port):
         smtp = smtplib.SMTP_SSL(creds.host, creds.port, timeout=timeout)
         try:
@@ -131,11 +137,7 @@ def verify_imap_credentials(
     timeout: float = 10,
 ) -> None:
     """Verify IMAP reachability and authentication without reading mail."""
-    client = imaplib.IMAP4_SSL(
-        creds.host,
-        creds.port,
-        timeout=timeout,
-    )
+    client = imaplib.IMAP4_SSL(creds.host, creds.port, timeout=timeout)
     try:
         status, _ = client.login(creds.user, creds.password)
         if status != "OK":
@@ -145,9 +147,3 @@ def verify_imap_credentials(
             client.logout()
         except Exception:
             pass
-
-
-def user_has_imap_config(user: User) -> bool:
-    return bool(
-        user.imap_host and user.imap_user and decrypted_imap_password(user)
-    )

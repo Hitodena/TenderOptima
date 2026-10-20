@@ -2,13 +2,11 @@
 
 import uuid
 
-from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.db.dao.base_dao import BaseDAO
-from backend.db.dao.user_dao import UserDAO
 from backend.db.models import Subscription, User
 from backend.enums import SubscriptionPlan
 from backend.utils.subscription_catalog import catalog_for_plan
@@ -17,7 +15,6 @@ from backend.utils.subscription_usage import (
     SubscriptionUsageDAO,
     pages_analysis_remaining_for_user,
 )
-from backend.utils.user_email_settings import apply_email_settings_update
 
 
 class SubscriptionDAO(BaseDAO[Subscription]):
@@ -133,7 +130,7 @@ class UserAdminDAO:
     async def list_users(session: AsyncSession) -> list[User]:
         stmt = (
             select(User)
-            .options(selectinload(User.subscription))
+            .options(selectinload(User.subscription), selectinload(User.mail_account))
             .order_by(User.created_at.desc())
         )
         result = await session.execute(stmt)
@@ -146,67 +143,10 @@ class UserAdminDAO:
         stmt = (
             select(User)
             .where(User.id == user_id)
-            .options(selectinload(User.subscription))
+            .options(selectinload(User.subscription), selectinload(User.mail_account))
         )
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
-
-    @staticmethod
-    async def update_email_settings(
-        session: AsyncSession,
-        user_id: uuid.UUID,
-        *,
-        smtp_host: str | None = None,
-        smtp_port: int | None = None,
-        smtp_user: str | None = None,
-        smtp_password: str | None = None,
-        clear_smtp_port: bool = False,
-        imap_host: str | None = None,
-        imap_port: int | None = None,
-        clear_imap_port: bool = False,
-        imap_user: str | None = None,
-        imap_password: str | None = None,
-        clear_smtp_password: bool = False,
-        clear_imap_password: bool = False,
-    ) -> User:
-        user = await UserDAO.get_by_id(session, user_id)
-        if user is None:
-            raise ValueError(f"User with id {user_id} not found")
-
-        apply_email_settings_update(
-            user,
-            smtp_host=smtp_host,
-            smtp_port=smtp_port,
-            smtp_user=smtp_user,
-            smtp_password=smtp_password,
-            clear_smtp_port=clear_smtp_port,
-            imap_host=imap_host,
-            imap_port=imap_port,
-            clear_imap_port=clear_imap_port,
-            imap_user=imap_user,
-            imap_password=imap_password,
-            clear_smtp_password=clear_smtp_password,
-            clear_imap_password=clear_imap_password,
-        )
-
-        session.add(user)
-        await session.flush()
-        await session.refresh(user)
-        await session.commit()
-        logger.info("User email settings updated", user_id=str(user_id))
-        return user
-
-    @staticmethod
-    async def list_imap_configured_users(
-        session: AsyncSession,
-    ) -> list[User]:
-        stmt = select(User).where(
-            User.imap_host.is_not(None),
-            User.imap_user.is_not(None),
-            User.imap_password.is_not(None),
-        )
-        result = await session.execute(stmt)
-        return list(result.scalars().all())
 
     @staticmethod
     async def usage_snapshot(

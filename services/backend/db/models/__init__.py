@@ -5,6 +5,7 @@ from .cooperation import CooperationLead, VerifiedSupplier
 from .email_template import EmailTemplate
 from .frontend_error_log import FrontendErrorLog
 from .idea_suggestion import IdeaSuggestion
+from .mail_account import MailAccount
 from .personal_data_cleanup import PersonalDataCleanupRun
 from .referral_invitation import ReferralInvitation
 from .request import Request
@@ -34,6 +35,7 @@ __all__ = [
     "EmailTemplate",
     "FrontendErrorLog",
     "IdeaSuggestion",
+    "MailAccount",
     "PersonalDataCleanupRun",
     "Request",
     "ReferralInvitation",

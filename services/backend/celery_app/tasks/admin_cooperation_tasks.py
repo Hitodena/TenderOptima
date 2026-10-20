@@ -1,4 +1,4 @@
-"""Admin outreach: cooperation proposals to suppliers who previously replied."""
+"""Admin outreach sent through an explicitly selected admin mail account."""
 
 from __future__ import annotations
 
@@ -18,16 +18,13 @@ from backend.celery_app.tasks.email_tasks import (
     _send_mime,
 )
 from backend.celery_app.utils import async_task, get_db_manager
-from backend.core import get_config
-from backend.db.dao import SupplierDAO
+from backend.db.dao import MailAccountDAO, SupplierDAO
 from backend.db.models import Request, RequestSupplier
-from backend.enums import RequestSupplierStatus
+from backend.enums import MailAccountSource, RequestSupplierStatus
 from backend.utils.user_email_credentials import (
-    SmtpCredentials,
+    MailAccountUnavailableError,
     resolve_smtp_credentials,
 )
-
-config = get_config()
 
 
 def _apply_placeholders(
@@ -38,31 +35,6 @@ def _apply_placeholders(
 ) -> str:
     return template.replace("{company_name}", company_name).replace(
         "{query}", query
-    )
-
-
-def _resolve_send_credentials(
-    smtp_host: str | None,
-    smtp_user: str | None,
-    smtp_password: str | None,
-) -> SmtpCredentials:
-    """Use per-send SMTP override when complete, else global .env credentials."""
-    host = (smtp_host or "").strip()
-    user = (smtp_user or "").strip()
-    password = smtp_password if smtp_password is not None else ""
-    if host and user and password:
-        return SmtpCredentials(
-            host=host,
-            port=config.smtp_port,
-            user=user,
-            password=password,
-        )
-    defaults = resolve_smtp_credentials(None, config)
-    return SmtpCredentials(
-        host=host or defaults.host,
-        port=defaults.port,
-        user=user or defaults.user,
-        password=password or defaults.password,
     )
 
 
@@ -78,26 +50,33 @@ async def send_cooperation_proposals(
     supplier_ids: list[str],
     subject: str,
     body: str,
-    attachment_paths: list[str] | None = None,
-    smtp_host: str | None = None,
-    smtp_user: str | None = None,
-    smtp_password: str | None = None,
+    attachment_paths: list[str] | None,
+    mail_account_id: str,
 ) -> dict:
-    """Send personalized cooperation emails to selected suppliers."""
-    smtp_creds = _resolve_send_credentials(smtp_host, smtp_user, smtp_password)
-    att_data = _prepare_attachments(attachment_paths)
+    """Send personalized cooperation emails through one verified admin account."""
     db_manager = get_db_manager()
+    try:
+        account_uuid = uuid.UUID(mail_account_id)
+    except ValueError:
+        return {"status": "error", "reason": "mail_account_not_found"}
 
-    uuids = [uuid.UUID(sid) for sid in supplier_ids]
     async with db_manager.session() as session:
+        account = await MailAccountDAO.get_by_id(session, account_uuid)
+        if account is None or account.source != MailAccountSource.ADMIN.value:
+            return {"status": "error", "reason": "mail_account_not_available"}
+        try:
+            smtp_creds = resolve_smtp_credentials(account)
+        except MailAccountUnavailableError as exc:
+            return {"status": "error", "reason": exc.reason}
+
         suppliers = []
-        for sid in uuids:
-            supplier = await SupplierDAO.get_by_id(session, sid)
+        for supplier_id in [uuid.UUID(sid) for sid in supplier_ids]:
+            supplier = await SupplierDAO.get_by_id(session, supplier_id)
             if supplier is not None:
                 suppliers.append(supplier)
 
         queries_by_supplier: dict[uuid.UUID, list[str]] = {
-            s.id: [] for s in suppliers
+            supplier.id: [] for supplier in suppliers
         }
         if suppliers:
             replied = RequestSupplierStatus.REPLIED.value
@@ -105,30 +84,25 @@ async def send_cooperation_proposals(
                 select(RequestSupplier.supplier_id, Request.query)
                 .join(Request, Request.id == RequestSupplier.request_id)
                 .where(
-                    RequestSupplier.supplier_id.in_([s.id for s in suppliers]),
+                    RequestSupplier.supplier_id.in_(
+                        [supplier.id for supplier in suppliers]
+                    ),
                     RequestSupplier.sent_status == replied,
                 )
                 .distinct()
             )
-            for supplier_id, query_text in (
-                await session.execute(q_stmt)
-            ).all():
+            for supplier_id, query_text in (await session.execute(q_stmt)).all():
                 bucket = queries_by_supplier.setdefault(supplier_id, [])
                 if query_text and query_text not in bucket:
                     bucket.append(query_text)
 
     sent = 0
     failed: list[dict] = []
-
+    attachment_data = _prepare_attachments(attachment_paths)
     for supplier in suppliers:
         recipient = supplier.main_email
         if not recipient:
-            failed.append(
-                {
-                    "supplier_id": str(supplier.id),
-                    "reason": "no_recipient",
-                }
-            )
+            failed.append({"supplier_id": str(supplier.id), "reason": "no_recipient"})
             continue
 
         query_text = "; ".join(queries_by_supplier.get(supplier.id, []))
@@ -142,33 +116,32 @@ async def send_cooperation_proposals(
             company_name=supplier.company_name,
             query=query_text,
         )
-
-        if att_data:
-            msg = MIMEMultipart()
-            msg.attach(MIMEText(personalized_body, "plain", "utf-8"))
-            for att in att_data:
+        if attachment_data:
+            message = MIMEMultipart()
+            message.attach(MIMEText(personalized_body, "plain", "utf-8"))
+            for attachment in attachment_data:
                 part = MIMEBase("application", "octet-stream")
-                part.set_payload(att["data"])
+                part.set_payload(attachment["data"])
                 encoders.encode_base64(part)
                 part.add_header(
                     "Content-Disposition",
-                    f'attachment; filename="{att["filename"]}"',
+                    f'attachment; filename="{attachment["filename"]}"',
                 )
-                msg.attach(part)
+                message.attach(part)
         else:
-            msg = MIMEText(personalized_body, "plain", "utf-8")
-
-        msg["From"] = smtp_creds.user
-        msg["To"] = recipient
-        msg["Subject"] = personalized_subject
+            message = MIMEText(personalized_body, "plain", "utf-8")
+        message["From"] = smtp_creds.user
+        message["To"] = recipient
+        message["Subject"] = personalized_subject
 
         try:
-            _send_mime(msg, recipient, smtp_creds)
+            _send_mime(message, recipient, smtp_creds)
             sent += 1
             logger.info(
                 "Cooperation proposal sent",
                 supplier_id=str(supplier.id),
                 recipient=recipient,
+                mail_account_id=mail_account_id,
             )
         except (smtplib.SMTPException, UnicodeEncodeError, ValueError) as exc:
             logger.exception(
@@ -176,16 +149,6 @@ async def send_cooperation_proposals(
                 supplier_id=str(supplier.id),
                 error=str(exc),
             )
-            failed.append(
-                {
-                    "supplier_id": str(supplier.id),
-                    "reason": str(exc),
-                }
-            )
+            failed.append({"supplier_id": str(supplier.id), "reason": "smtp"})
 
-    return {
-        "status": "done",
-        "sent": sent,
-        "failed": failed,
-        "total": len(suppliers),
-    }
+    return {"status": "done", "sent": sent, "failed": failed, "total": len(suppliers)}

@@ -446,38 +446,17 @@
 
 			<LetterAttachmentsField v-model="filesToUpload" />
 
-			<div class="space-y-3 rounded-lg border border-default p-4">
-				<div>
-					<p class="text-sm font-semibold">SMTP</p>
-					<p class="text-xs text-muted mt-0.5">
-						По умолчанию из .env. Можно переопределить только для этой отправки.
-						Пустой пароль — пароль из окружения.
-					</p>
-				</div>
-				<div class="grid gap-3 sm:grid-cols-2">
-					<UFormField label="SMTP host">
-						<UInput v-model="smtpForm.smtp_host" class="w-full" placeholder="smtp.example.com" />
-					</UFormField>
-					<UFormField label="SMTP user">
-						<UInput v-model="smtpForm.smtp_user" class="w-full" />
-					</UFormField>
-					<UFormField
-						label="SMTP password"
-						class="sm:col-span-2"
-						:hint="smtpPasswordConfigured ? 'Пароль из .env настроен' : undefined"
-					>
-						<UInput
-							v-model="smtpForm.smtp_password"
-							type="password"
-							class="w-full"
-							autocomplete="new-password"
-							placeholder="Оставьте пустым, чтобы использовать .env"
-						/>
-					</UFormField>
-				</div>
-			</div>
+					<div class="space-y-3 rounded-lg border border-default p-4">
+<div>
+<p class="text-sm font-semibold">Почтовый аккаунт</p>
+<p class="text-xs text-muted mt-0.5">Для рассылки используется только проверенный административный аккаунт.</p>
+</div>
+<UFormField label="Аккаунт">
+<USelect v-model="mailAccountId" :items="mailAccountOptions" class="w-full" placeholder="Выберите аккаунт" />
+</UFormField>
+</div>
 
-			<UAlert
+<UAlert
 				v-if="sendError"
 				color="error"
 				variant="soft"
@@ -505,7 +484,7 @@ import type {
 	AdminCooperationSendResponse,
 	AdminCooperationSupplierItem,
 	AdminCooperationSupplierPage,
-	AdminSmtpDefaultsResponse,
+	MailAccountResponse,
 	AdminSupplierPreferenceItem,
 	AdminSupplierPreferencePage,
 	Attachment,
@@ -769,16 +748,16 @@ const body = ref(`Добрый день!
 Заполните форму сотрудничества: ${cooperationFormUrl}
 
 Будем рады обсудить детали.`)
-const filesToUpload = ref<File[]>([])
-const sending = ref(false)
-const sendError = ref('')
+	const filesToUpload = ref<File[]>([])
+	const sending = ref(false)
+	const sendError = ref('')
 
-const smtpForm = reactive({
-	smtp_host: '',
-	smtp_user: '',
-	smtp_password: '',
-})
-const smtpPasswordConfigured = ref(false)
+	const mailAccounts = ref<MailAccountResponse[]>([])
+	const mailAccountId = ref('')
+	const mailAccountOptions = computed(() => mailAccounts.value.map(account => ({
+		label: `${account.email} · ${account.availability ? 'доступен' : 'недоступен'}`,
+		value: account.id,
+	})))
 
 const columns: TableColumn<AdminCooperationSupplierItem>[] = [
 	{ id: 'select', header: '', meta: { class: { th: 'w-12', td: 'w-12' } } },
@@ -788,10 +767,11 @@ const columns: TableColumn<AdminCooperationSupplierItem>[] = [
 ]
 
 const canSend = computed(
-	() =>
-		selectedIds.value.size > 0
-		&& subject.value.trim().length > 0
-		&& body.value.trim().length > 0,
+		() =>
+			selectedIds.value.size > 0
+			&& subject.value.trim().length > 0
+			&& body.value.trim().length > 0
+			&& Boolean(mailAccountId.value),
 )
 
 function toggleRow(id: string, checked: boolean) {
@@ -845,18 +825,14 @@ function reloadFirstPage() {
 	page.value = 1
 }
 
-async function loadSmtpDefaults() {
-	try {
-		const data = await get<AdminSmtpDefaultsResponse>('/admin/smtp-defaults')
-		smtpForm.smtp_host = data.smtp_host
-		smtpForm.smtp_user = data.smtp_user
-		smtpForm.smtp_password = ''
-		smtpPasswordConfigured.value = data.smtp_password_configured
+	async function loadMailAccounts() {
+		try {
+			mailAccounts.value = await get<MailAccountResponse[]>('/admin/mail-accounts/assignable')
+		}
+		catch (e: unknown) {
+			sendError.value = getApiErrorDetail(e) ?? 'Не удалось загрузить почтовые аккаунты'
+		}
 	}
-	catch {
-		// Non-blocking: send still falls back to .env on the server.
-	}
-}
 
 async function send() {
 	if (!canSend.value) {
@@ -883,11 +859,9 @@ async function send() {
 		const payload = {
 			supplier_ids: [...selectedIds.value],
 			subject: subject.value.trim(),
-			body: body.value.trim(),
-			attachment_paths: attachmentPaths ?? null,
-			smtp_host: smtpForm.smtp_host.trim() || null,
-			smtp_user: smtpForm.smtp_user.trim() || null,
-			smtp_password: smtpForm.smtp_password.trim() || null,
+				body: body.value.trim(),
+				attachment_paths: attachmentPaths ?? null,
+				mail_account_id: mailAccountId.value,
 		}
 
 		const result = await post<AdminCooperationSendResponse>(
@@ -900,7 +874,6 @@ async function send() {
 			icon: 'i-lucide-check',
 		})
 		filesToUpload.value = []
-		smtpForm.smtp_password = ''
 	}
 	catch (e: unknown) {
 		sendError.value = getApiErrorDetail(e) ?? 'Не удалось отправить письма'
@@ -928,6 +901,6 @@ onMounted(() => {
 	void fetchPreferences()
 	void fetchVerified()
 	void fetchSuppliers()
-	void loadSmtpDefaults()
+	void loadMailAccounts()
 })
 </script>

@@ -23,15 +23,12 @@ class User(IDMixinUUID, TimestampMixin, Base):
     contact_email: Mapped[str | None] = mapped_column()
     business_info: Mapped[str | None] = mapped_column(Text)
 
-    smtp_host: Mapped[str | None] = mapped_column()
-    smtp_port: Mapped[int | None] = mapped_column()
-    smtp_user: Mapped[str | None] = mapped_column()
-    smtp_password: Mapped[str | None] = mapped_column()
-
-    imap_host: Mapped[str | None] = mapped_column()
-    imap_port: Mapped[int | None] = mapped_column()
-    imap_user: Mapped[str | None] = mapped_column()
-    imap_password: Mapped[str | None] = mapped_column()
+    mail_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("mail_accounts.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     is_admin: Mapped[bool] = mapped_column(default=False)
     agree_terms: Mapped[bool] = mapped_column(default=True)
@@ -85,6 +82,18 @@ class User(IDMixinUUID, TimestampMixin, Base):
     locked_until: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
+    )
+
+    mail_account: Mapped["MailAccount | None"] = relationship(  # noqa: F821
+        "MailAccount",
+        foreign_keys=[mail_account_id],
+        back_populates="assigned_users",
+        lazy="selectin",
+    )
+    created_mail_accounts: Mapped[list["MailAccount"]] = relationship(  # noqa: F821
+        "MailAccount",
+        foreign_keys="MailAccount.created_by_user_id",
+        back_populates="created_by_user",
     )
 
     requests: Mapped[list["Request"]] = relationship(  # noqa: F821 # type: ignore

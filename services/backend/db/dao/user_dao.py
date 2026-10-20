@@ -212,14 +212,7 @@ class UserDAO(BaseDAO[User]):
         user.phone = None
         user.contact_email = None
         user.business_info = None
-        user.smtp_host = None
-        user.smtp_port = None
-        user.smtp_user = None
-        user.smtp_password = None
-        user.imap_host = None
-        user.imap_port = None
-        user.imap_user = None
-        user.imap_password = None
+        user.mail_account_id = None
         user.agree_terms = False
         user.agree_marketing = False
         user.consent_revoked_at = user.consent_revoked_at or now

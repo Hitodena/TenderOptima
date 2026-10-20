@@ -24,10 +24,10 @@ from backend.celery_app.utils import async_task, get_db_manager
 from backend.core import get_config
 from backend.db.dao import (
     EmailMessageDAO,
+    MailAccountDAO,
     RequestDAO,
     RequestSupplierDAO,
     SupplierEmailPreferenceDAO,
-    UserAdminDAO,
 )
 from backend.enums import (
     EmailMessageDirection,
@@ -60,6 +60,7 @@ from backend.utils.imap_poll import (
 )
 from backend.utils.short_id import generate_tid
 from backend.utils.user_email_credentials import (
+    MailAccountUnavailableError,
     SmtpCredentials,
     resolve_smtp_credentials,
     smtp_connection,
@@ -322,7 +323,13 @@ async def send_reply(
             logger.warning("Email quota exhausted for reply", rs_id=rs_id)
             return {"status": "error", "reason": "subscription_limit"}
 
-    smtp_creds = resolve_smtp_credentials(user, config)
+    async with db_manager.session() as session:
+        account = await MailAccountDAO.get_by_id(session, user.mail_account_id)
+    try:
+        smtp_creds = resolve_smtp_credentials(account)
+    except MailAccountUnavailableError as exc:
+        logger.warning("Reply mail account unavailable", rs_id=rs_id, reason=exc.reason)
+        return {"status": "error", "reason": exc.reason}
 
     att_data = _prepare_attachments(attachment_paths)
     if att_data:
@@ -375,6 +382,7 @@ async def send_reply(
         await EmailMessageDAO.create(
             session,
             request_supplier_id=rs.id,
+            mail_account_id=account.id,
             direction=EmailMessageDirection.OUTGOING,
             message_id=outbound_message_id,
             in_reply_to=in_reply_to,
@@ -442,7 +450,15 @@ async def send_custom_email(
             )
             return {"status": "error", "reason": "subscription_limit"}
 
-    smtp_creds = resolve_smtp_credentials(user, config)
+    async with db_manager.session() as session:
+        account = await MailAccountDAO.get_by_id(session, user.mail_account_id)
+    try:
+        smtp_creds = resolve_smtp_credentials(account)
+    except MailAccountUnavailableError as exc:
+        logger.warning(
+            "Custom email mail account unavailable", rs_id=rs_id, reason=exc.reason
+        )
+        return {"status": "error", "reason": exc.reason}
     att_data = _prepare_attachments(attachment_paths)
     if att_data:
         msg = MIMEMultipart()
@@ -498,6 +514,7 @@ async def send_custom_email(
         await EmailMessageDAO.create(
             session,
             request_supplier_id=rs.id,
+            mail_account_id=account.id,
             direction=EmailMessageDirection.OUTGOING,
             message_id=outbound_message_id,
             in_reply_to=in_reply_to,
@@ -564,7 +581,18 @@ async def send_emails(self, request_id: str) -> dict:
             )
             pending = pending[:remaining]
 
-        smtp_creds = resolve_smtp_credentials(user, config)
+        account = await MailAccountDAO.get_by_id(
+            session, user.mail_account_id
+        )
+        try:
+            smtp_creds = resolve_smtp_credentials(account)
+        except MailAccountUnavailableError as exc:
+            logger.warning(
+                "Bulk send mail account unavailable",
+                request_id=request_id,
+                reason=exc.reason,
+            )
+            return {"sent": 0, "failed": 0, "error": exc.reason}
         pending_emails = [
             (rs.sent_to_email or rs.supplier.main_email or "").lower().strip()
             for rs in pending
@@ -733,6 +761,7 @@ async def send_emails(self, request_id: str) -> dict:
                 await EmailMessageDAO.create(
                     session,
                     request_supplier_id=result.rs_id,
+                    mail_account_id=account.id,
                     direction=EmailMessageDirection.OUTGOING,
                     message_id=normalize_message_id(result.message_id),
                     in_reply_to=None,
@@ -776,9 +805,9 @@ async def poll_imap(self) -> dict:
     total_skipped = 0
 
     async with db_manager.session() as session:
-        imap_users = await UserAdminDAO.list_imap_configured_users(session)
+        imap_accounts = await MailAccountDAO.list_imap_mailboxes(session)
 
-    mailboxes = build_poll_mailboxes(imap_users, config)
+    mailboxes = build_poll_mailboxes(imap_accounts)
     logger.info(
         "IMAP mailboxes resolved",
         count=len(mailboxes),
@@ -820,7 +849,7 @@ async def poll_imap(self) -> dict:
         processed = 0
         skipped = 0
         try:
-            status_code, message_ids = imap.search(None, "UNSEEN")
+            status_code, message_ids = imap.uid("SEARCH", None, "UNSEEN")
             if status_code != "OK" or not message_ids[0]:
                 logger.info("No unseen messages", mailbox=mailbox_label)
                 continue
@@ -838,7 +867,7 @@ async def poll_imap(self) -> dict:
             for uid in uid_list:
                 uid_str = uid.decode()
                 try:
-                    _, msg_data = imap.fetch(uid, "(RFC822)")
+                    _, msg_data = imap.uid("FETCH", uid, "(RFC822)")
                     msg = email.message_from_bytes(msg_data[0][1])  # type: ignore
 
                     subject = _decode_header_value(msg.get("Subject", ""))
@@ -858,9 +887,7 @@ async def poll_imap(self) -> dict:
                         {
                             "uid": uid,
                             "uid_str": uid_str,
-                            "imap_id": build_mailbox_imap_id(
-                                imap_creds, uid_str
-                            ),
+                            "imap_id": build_mailbox_imap_id(mailbox, uid_str),
                             "subject": subject,
                             "body": body,
                             "attachments": attachments,
@@ -880,7 +907,7 @@ async def poll_imap(self) -> dict:
                 except Exception as exc:
                     logger.exception(
                         "Failed to parse message",
-                        imap_id=build_mailbox_imap_id(imap_creds, uid_str),
+                        imap_id=build_mailbox_imap_id(mailbox, uid_str),
                         error=str(exc),
                     )
                     skipped += 1
@@ -1019,6 +1046,7 @@ async def poll_imap(self) -> dict:
                         email_msg = await EmailMessageDAO.create(
                             session,
                             request_supplier_id=rs.id,
+                            mail_account_id=mailbox.account_id,
                             direction=EmailMessageDirection.INCOMING,
                             message_id=item.get("message_id"),
                             in_reply_to=item.get("in_reply_to"),
@@ -1067,7 +1095,7 @@ async def poll_imap(self) -> dict:
                         continue
 
             for uid in seen_uids:
-                imap.store(uid, "+FLAGS", "\\Seen")
+                imap.uid("STORE", uid, "+FLAGS", "\\Seen")
 
         except Exception as exc:
             # Isolate failures per mailbox: one broken mailbox (dropped
