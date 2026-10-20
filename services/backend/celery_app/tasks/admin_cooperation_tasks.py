@@ -91,7 +91,9 @@ async def send_cooperation_proposals(
                 )
                 .distinct()
             )
-            for supplier_id, query_text in (await session.execute(q_stmt)).all():
+            for supplier_id, query_text in (
+                await session.execute(q_stmt)
+            ).all():
                 bucket = queries_by_supplier.setdefault(supplier_id, [])
                 if query_text and query_text not in bucket:
                     bucket.append(query_text)
@@ -102,7 +104,9 @@ async def send_cooperation_proposals(
     for supplier in suppliers:
         recipient = supplier.main_email
         if not recipient:
-            failed.append({"supplier_id": str(supplier.id), "reason": "no_recipient"})
+            failed.append(
+                {"supplier_id": str(supplier.id), "reason": "no_recipient"}
+            )
             continue
 
         query_text = "; ".join(queries_by_supplier.get(supplier.id, []))
@@ -151,4 +155,9 @@ async def send_cooperation_proposals(
             )
             failed.append({"supplier_id": str(supplier.id), "reason": "smtp"})
 
-    return {"status": "done", "sent": sent, "failed": failed, "total": len(suppliers)}
+    return {
+        "status": "done",
+        "sent": sent,
+        "failed": failed,
+        "total": len(suppliers),
+    }
