@@ -182,31 +182,56 @@ export interface SubscriptionResponse {
 	pages_analysis_remaining?: number | null;
 }
 
-export interface UserEmailSettingsResponse {
-	smtp_host: string | null;
-	smtp_port: number | null;
-	smtp_user: string | null;
-	smtp_password_configured: boolean;
-	imap_host: string | null;
-	imap_port: number | null;
-	imap_user: string | null;
-	imap_password_configured: boolean;
-	current_sender_email: string | null;
+export type MailAccountSource = 'admin' | 'custom';
+
+export interface MailAccountResponse {
+id: string;
+email: string;
+source: MailAccountSource;
+created_by_user_id: string | null;
+created_by_user_email: string | null;
+smtp_host: string | null;
+smtp_port: number | null;
+imap_host: string | null;
+imap_port: number | null;
+smtp_available: boolean;
+imap_available: boolean;
+availability: boolean;
+last_checked_at: string | null;
+last_error: string | null;
+created_at: string;
+assigned_user_count: number;
 }
 
-export interface UserEmailSettingsUpdate {
-	smtp_host?: string | null;
-	smtp_port?: number | null;
-	clear_smtp_port?: boolean;
-	smtp_user?: string | null;
-	smtp_password?: string | null;
-	clear_smtp_password?: boolean;
-	imap_host?: string | null;
-	imap_port?: number | null;
-	clear_imap_port?: boolean;
-	imap_user?: string | null;
-	imap_password?: string | null;
-	clear_imap_password?: boolean;
+export interface MailAccountCreate {
+email: string;
+password: string;
+smtp_host: string;
+smtp_port: number;
+imap_host: string;
+imap_port: number;
+}
+
+export interface MyMailAccountResponse {
+account: MailAccountResponse | null;
+current_sender_email: string | null;
+}
+
+export interface MailAccountAssignmentUpdate {
+mail_account_id: string | null;
+}
+
+export interface MailAccountVerificationResponse {
+mail_account_id: string;
+smtp_available: boolean;
+imap_available: boolean;
+availability: boolean;
+last_checked_at: string | null;
+last_error: string | null;
+}
+
+export interface MailAccountBulkVerificationResponse {
+items: MailAccountVerificationResponse[];
 }
 
 export interface BillingProfileResponse {
@@ -345,7 +370,7 @@ export interface AdminUserDetail {
 	is_admin: boolean;
 	created_at: string;
 	last_login_at: string | null;
-	email_settings: UserEmailSettingsResponse;
+	mail_account: MailAccountResponse | null;
 	searches_used_this_month: number;
 	emails_sent_this_month: number;
 	pages_analyzed_this_month: number;
@@ -510,13 +535,6 @@ export interface AdminEmailMessageLinkUpdate {
 
 export interface AdminRequestSupplierRecipientUpdate {
 	sent_to_email: string;
-}
-
-export interface AdminSmtpDefaultsResponse {
-	smtp_host: string;
-	smtp_port: number;
-	smtp_user: string;
-	smtp_password_configured: boolean;
 }
 
 export interface AdminCooperationSupplierItem {

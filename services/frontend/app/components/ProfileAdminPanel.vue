@@ -151,85 +151,24 @@
 							</div>
 						</div>
 
-						<div>
-							<h3 class="text-sm font-semibold mb-3">SMTP</h3>
-							<div class="grid gap-3 sm:grid-cols-2">
-								<UFormField label="SMTP host">
-									<UInput v-model="emailForm.smtp_host" class="w-full" />
-								</UFormField>
-								<UFormField label="SMTP user">
-									<UInput v-model="emailForm.smtp_user" class="w-full" />
-								</UFormField>
-								<UFormField
-									label="SMTP password"
-									class="sm:col-span-2"
-									:hint="selectedUser.email_settings.smtp_password_configured
-										? 'Пароль сохранён. Оставьте пустым, чтобы не менять.'
-										: undefined"
-								>
-									<UInput
-										v-model="emailForm.smtp_password"
-										type="password"
-										class="w-full"
-										placeholder="Новый пароль"
-									/>
-								</UFormField>
-							</div>
-						</div>
+						<div class="space-y-4">
+<div>
+<h3 class="text-sm font-semibold">Почтовый аккаунт</h3>
+<p class="text-sm text-muted">Назначаются только аккаунты, созданные администратором. Личные аккаунты пользователей недоступны для выбора.</p>
+</div>
+<UFormField label="Аккаунт">
+<USelect v-model="emailForm.mail_account_id" :items="mailAccountOptions" class="w-full" />
+</UFormField>
+<p v-if="selectedUser.mail_account" class="text-sm text-muted">Текущее назначение: {{ selectedUser.mail_account.email }} · {{ selectedUser.mail_account.availability ? 'доступен' : 'недоступен' }}</p>
+<UAlert v-if="emailError" color="error" variant="soft" icon="i-lucide-circle-alert" :description="emailError" />
+<UAlert v-if="emailSuccess" color="success" variant="soft" icon="i-lucide-check" description="Назначение почтового аккаунта сохранено" />
+	<UButton block :loading="savingEmail" leading-icon="i-lucide-save" @click="saveEmailSettings">Сохранить назначение</UButton>
+	</div>
 
-						<div>
-							<h3 class="text-sm font-semibold mb-3">IMAP</h3>
-							<div class="grid gap-3 sm:grid-cols-2">
-								<UFormField label="IMAP host">
-									<UInput v-model="emailForm.imap_host" class="w-full" />
-								</UFormField>
-								<UFormField label="IMAP user">
-									<UInput v-model="emailForm.imap_user" class="w-full" />
-								</UFormField>
-								<UFormField
-									label="IMAP password"
-									class="sm:col-span-2"
-									:hint="selectedUser.email_settings.imap_password_configured
-										? 'Пароль сохранён. Оставьте пустым, чтобы не менять.'
-										: undefined"
-								>
-									<UInput
-										v-model="emailForm.imap_password"
-										type="password"
-										class="w-full"
-										placeholder="Новый пароль"
-									/>
-								</UFormField>
-							</div>
-						</div>
+	</div>
+	</UCard>
 
-						<UAlert
-							v-if="emailError"
-							color="error"
-							variant="soft"
-							icon="i-lucide-circle-alert"
-							:description="emailError"
-						/>
-						<UAlert
-							v-if="emailSuccess"
-							color="success"
-							variant="soft"
-							icon="i-lucide-check"
-							description="Почтовые настройки сохранены"
-						/>
-
-						<UButton
-							block
-							:loading="savingEmail"
-							leading-icon="i-lucide-save"
-							@click="saveEmailSettings"
-						>
-							Сохранить почту
-						</UButton>
-					</div>
-				</UCard>
-
-				<UCard>
+<UCard>
 					<template #header>
 						<p class="font-semibold">Подписка</p>
 					</template>
@@ -392,9 +331,10 @@
 import type {
 	AdminUserDetail,
 	AdminUserListItem,
+	MailAccountAssignmentUpdate,
+	MailAccountResponse,
 	SubscriptionPlan,
 	SubscriptionUpdate,
-	UserEmailSettingsUpdate,
 } from '#shared/types'
 import { catalogForPlan, limitsAfterPlanChange } from '#shared/utils/subscriptionDisplay'
 import { getApiErrorDetail } from '#shared/utils/apiError'
@@ -408,14 +348,15 @@ const selectedUserId = ref<string | null>(null)
 const selectedUser = ref<AdminUserDetail | null>(null)
 const loadError = ref<string | null>(null)
 
-const emailForm = reactive({
-	smtp_host: '',
-	smtp_user: '',
-	smtp_password: '',
-	imap_host: '',
-	imap_user: '',
-	imap_password: '',
-})
+const emailForm = reactive({ mail_account_id: '' })
+const mailAccounts = ref<MailAccountResponse[]>([])
+const mailAccountOptions = computed(() => [
+	{ label: 'Не назначать', value: '' },
+	...mailAccounts.value.map(account => ({
+		label: `${account.email} · ${account.availability ? 'доступен' : 'недоступен'}`,
+		value: account.id,
+	})),
+])
 
 const subscriptionForm = reactive({
 	plan: 'starter' as SubscriptionPlan,
@@ -612,12 +553,7 @@ function parseOptionalPrice(value: string | number | null | undefined): string |
 }
 
 function fillForms(detail: AdminUserDetail) {
-	emailForm.smtp_host = detail.email_settings.smtp_host ?? ''
-	emailForm.smtp_user = detail.email_settings.smtp_user ?? ''
-	emailForm.smtp_password = ''
-	emailForm.imap_host = detail.email_settings.imap_host ?? ''
-	emailForm.imap_user = detail.email_settings.imap_user ?? ''
-	emailForm.imap_password = ''
+	emailForm.mail_account_id = detail.mail_account?.id ?? ''
 
 	const sub = detail.subscription
 	subscriptionForm.plan = sub?.plan ?? 'starter'
@@ -673,36 +609,31 @@ async function selectUser(userId: string) {
 	}
 }
 
+async function loadMailAccounts() {
+try {
+mailAccounts.value = await get<MailAccountResponse[]>('/admin/mail-accounts/assignable')
+}
+catch (e: unknown) {
+emailError.value = getApiErrorDetail(e) ?? 'Не удалось загрузить доступные почтовые аккаунты'
+}
+}
+
 async function saveEmailSettings() {
-	if (!selectedUserId.value) return
-	savingEmail.value = true
-	emailError.value = null
-	emailSuccess.value = false
-	try {
-		const payload: UserEmailSettingsUpdate = {
-			smtp_host: emailForm.smtp_host || null,
-			smtp_user: emailForm.smtp_user || null,
-			imap_host: emailForm.imap_host || null,
-			imap_user: emailForm.imap_user || null,
-		}
-		if (emailForm.smtp_password.trim()) {
-			payload.smtp_password = emailForm.smtp_password
-		}
-		if (emailForm.imap_password.trim()) {
-			payload.imap_password = emailForm.imap_password
-		}
-		selectedUser.value = await patch<AdminUserDetail>(
-			`/admin/users/${selectedUserId.value}/email-settings`,
-			payload,
-		)
-		fillForms(selectedUser.value)
-		await loadUsers()
-		emailSuccess.value = true
-	} catch (e: unknown) {
-		emailError.value = getApiErrorDetail(e) ?? 'Ошибка сохранения почты'
-	} finally {
-		savingEmail.value = false
-	}
+if (!selectedUserId.value) return
+savingEmail.value = true
+emailError.value = null
+emailSuccess.value = false
+try {
+const payload: MailAccountAssignmentUpdate = { mail_account_id: emailForm.mail_account_id || null }
+await patch(`/admin/mail-accounts/users/${selectedUserId.value}`, payload)
+await selectUser(selectedUserId.value)
+await loadUsers()
+emailSuccess.value = true
+}
+catch (e: unknown) {
+emailError.value = getApiErrorDetail(e) ?? 'Ошибка сохранения назначения почты'
+}
+finally { savingEmail.value = false }
 }
 
 async function saveSubscription() {
@@ -779,5 +710,6 @@ async function saveSubscription() {
 
 onMounted(() => {
 	void loadUsers()
+	void loadMailAccounts()
 })
 </script>

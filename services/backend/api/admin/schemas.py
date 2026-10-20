@@ -2,9 +2,7 @@ import uuid
 from datetime import datetime
 
 from backend.api.subscriptions.schemas import SubscriptionResponse
-from backend.schemas.user_email_settings import (
-    UserEmailSettingsResponse,
-)
+from backend.schemas.mail_account import MailAccountResponse
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
@@ -19,8 +17,9 @@ class AdminUserListItem(BaseModel):
     is_admin: bool
     created_at: datetime
     last_login_at: datetime | None = None
-    smtp_password_configured: bool
-    imap_password_configured: bool
+    mail_account_id: uuid.UUID | None = None
+    mail_account_email: EmailStr | None = None
+    mail_account_available: bool | None = None
     searches_used_this_month: int = 0
     emails_sent_this_month: int = 0
     pages_analyzed_this_month: int = 0
@@ -39,7 +38,7 @@ class AdminUserDetail(BaseModel):
     is_admin: bool
     created_at: datetime
     last_login_at: datetime | None = None
-    email_settings: UserEmailSettingsResponse
+    mail_account: MailAccountResponse | None = None
     searches_used_this_month: int = 0
     emails_sent_this_month: int = 0
     pages_analyzed_this_month: int = 0
@@ -145,15 +144,6 @@ class AdminRequestSupplierRecipientUpdate(BaseModel):
     sent_to_email: EmailStr
 
 
-class AdminSmtpDefaultsResponse(BaseModel):
-    """Global SMTP settings from environment (passwords not exposed)."""
-
-    smtp_host: str
-    smtp_port: int
-    smtp_user: str
-    smtp_password_configured: bool
-
-
 class AdminAnalysisAttachment(BaseModel):
     filename: str
     content_type: str | None = None
@@ -244,12 +234,10 @@ class AdminCooperationSendRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     supplier_ids: list[uuid.UUID] = Field(min_length=1)
+    mail_account_id: uuid.UUID
     subject: str = Field(min_length=1, max_length=500)
     body: str = Field(min_length=1, max_length=20000)
     attachment_paths: list[str] | None = None
-    smtp_host: str | None = Field(default=None, max_length=255)
-    smtp_user: str | None = Field(default=None, max_length=255)
-    smtp_password: str | None = Field(default=None, max_length=512)
 
 
 class AdminCooperationSendResponse(BaseModel):

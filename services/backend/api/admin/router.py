@@ -18,7 +18,6 @@ from backend.api.admin.schemas import (
     AdminEmailMessageLinkUpdate,
     AdminEmailMessagePage,
     AdminRequestSupplierRecipientUpdate,
-    AdminSmtpDefaultsResponse,
     AdminSupplierPreferenceItem,
     AdminSupplierPreferencePage,
     AdminUserDetail,
@@ -53,6 +52,7 @@ from backend.core.config import ALLOWED_CONTENT_TYPES, Config
 from backend.db.dao import (
     CooperationLeadDAO,
     EmailMessageDAO,
+    MailAccountDAO,
     PersonalDataCleanupRunDAO,
     ReferralInvitationDAO,
     RequestSupplierDAO,
@@ -62,14 +62,20 @@ from backend.db.dao import (
     UserAdminDAO,
     VerifiedSupplierDAO,
 )
-from backend.db.models import CooperationLead, ReferralInvitation, User
+from backend.db.models import (
+    CooperationLead,
+    MailAccount,
+    ReferralInvitation,
+    User,
+)
 from backend.enums import (
     CooperationLeadStatus,
     EmailMessageDirection,
+    MailAccountSource,
     SupplierEmailPreferenceStatus,
 )
 from backend.schemas.analysis import EmailAnalysisResult
-from backend.schemas.user_email_settings import UserEmailSettingsUpdate
+from backend.schemas.mail_account import MailAccountResponse
 from backend.services.personal_data_cleanup import (
     days_since,
     days_until_cleanup,
@@ -90,7 +96,6 @@ from backend.utils.subscription_usage import (
     SubscriptionUsageDAO,
 )
 from backend.utils.upload_validation import reject_legacy_doc_upload
-from backend.utils.user_email_settings import email_settings_response
 from fastapi import (
     APIRouter,
     Depends,
@@ -103,6 +108,29 @@ from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
+
+
+def _mail_account_response(
+    account: MailAccount | None,
+) -> MailAccountResponse | None:
+    if account is None:
+        return None
+    return MailAccountResponse(
+        id=account.id,
+        email=account.email,
+        source=account.source,
+        created_by_user_id=account.created_by_user_id,
+        smtp_host=account.smtp_host,
+        smtp_port=account.smtp_port,
+        imap_host=account.imap_host,
+        imap_port=account.imap_port,
+        smtp_available=account.smtp_available,
+        imap_available=account.imap_available,
+        availability=account.availability,
+        last_checked_at=account.last_checked_at,
+        last_error=account.last_error,
+        created_at=account.created_at,
+    )
 
 
 def _admin_list_item(
@@ -120,8 +148,13 @@ def _admin_list_item(
         is_admin=user.is_admin,
         created_at=user.created_at,
         last_login_at=user.last_login_at,
-        smtp_password_configured=bool(user.smtp_password),
-        imap_password_configured=bool(user.imap_password),
+        mail_account_id=user.mail_account_id,
+        mail_account_email=user.mail_account.email
+        if user.mail_account
+        else None,
+        mail_account_available=user.mail_account.availability
+        if user.mail_account
+        else None,
         searches_used_this_month=usage.searches_used,
         emails_sent_this_month=usage.emails_sent,
         pages_analyzed_this_month=usage.pages_analyzed,
@@ -148,7 +181,7 @@ def _admin_detail(
         is_admin=user.is_admin,
         created_at=user.created_at,
         last_login_at=user.last_login_at,
-        email_settings=email_settings_response(user),
+        mail_account=_mail_account_response(user.mail_account),
         searches_used_this_month=usage.searches_used,
         emails_sent_this_month=usage.emails_sent,
         pages_analyzed_this_month=usage.pages_analyzed,
@@ -172,7 +205,7 @@ def _admin_detail(
 def _owner_mailbox(user: User | None) -> str | None:
     if user is None:
         return None
-    return user.smtp_user or user.email
+    return user.mail_account.email if user and user.mail_account else user.email
 
 
 def _referral_item(
@@ -497,55 +530,6 @@ async def get_user_detail(
     )
 
 
-@router.patch(
-    "/users/{user_id}/email-settings",
-    response_model=AdminUserDetail,
-    summary="Update user SMTP/IMAP settings",
-)
-async def update_user_email_settings(
-    user_id: uuid.UUID,
-    body: UserEmailSettingsUpdate,
-    session: Annotated[AsyncSession, Depends(get_session)],
-    _admin: Annotated[User, Depends(get_admin)],
-) -> AdminUserDetail:
-    user = await UserAdminDAO.get_with_subscription(session, user_id)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
-        )
-    await UserAdminDAO.update_email_settings(
-        session,
-        user_id,
-        smtp_host=body.smtp_host,
-        smtp_port=body.smtp_port,
-        smtp_user=body.smtp_user,
-        smtp_password=body.smtp_password,
-        clear_smtp_port=body.clear_smtp_port,
-        imap_host=body.imap_host,
-        imap_port=body.imap_port,
-        clear_imap_port=body.clear_imap_port,
-        imap_user=body.imap_user,
-        imap_password=body.imap_password,
-        clear_smtp_password=body.clear_smtp_password,
-        clear_imap_password=body.clear_imap_password,
-    )
-    refreshed = await UserAdminDAO.get_with_subscription(session, user_id)
-    if not refreshed:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
-        )
-    usage, pages_remaining = await UserAdminDAO.usage_snapshot(
-        session,
-        user_id,
-    )
-    return _admin_detail(
-        refreshed,
-        usage=usage,
-        pages_remaining=pages_remaining,
-    )
-
 
 @router.patch(
     "/users/{user_id}/subscription",
@@ -796,22 +780,6 @@ async def update_request_supplier_recipient(
     return {"status": "updated", "rs_id": str(rs_id)}
 
 
-@router.get(
-    "/smtp-defaults",
-    response_model=AdminSmtpDefaultsResponse,
-    summary="Global SMTP defaults from environment",
-)
-async def get_smtp_defaults(
-    config: Annotated[Config, Depends(get_config_instance)],
-    _admin: Annotated[User, Depends(get_admin)],
-) -> AdminSmtpDefaultsResponse:
-    return AdminSmtpDefaultsResponse(
-        smtp_host=config.smtp_host,
-        smtp_port=config.smtp_port,
-        smtp_user=config.smtp_user,
-        smtp_password_configured=bool(config.smtp_password),
-    )
-
 
 @router.get(
     "/cooperation/suppliers",
@@ -928,6 +896,7 @@ async def upload_cooperation_attachments(
 )
 async def send_cooperation_emails(
     body: AdminCooperationSendRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
     _admin: Annotated[User, Depends(get_admin)],
 ) -> AdminCooperationSendResponse:
     if not body.subject.strip() or not body.body.strip():
@@ -936,14 +905,24 @@ async def send_cooperation_emails(
             detail="Subject and body cannot be empty",
         )
 
+    account = await MailAccountDAO.get_by_id(session, body.mail_account_id)
+    if account is None or account.source != MailAccountSource.ADMIN.value:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Select an administrative mail account",
+        )
+    if not account.availability:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Selected mail account is unavailable",
+        )
+
     send_cooperation_proposals.delay(  # type: ignore[attr-defined]
         [str(sid) for sid in body.supplier_ids],
         body.subject.strip(),
         body.body.strip(),
         body.attachment_paths,
-        body.smtp_host,
-        body.smtp_user,
-        body.smtp_password,
+        str(body.mail_account_id),
     )
     return AdminCooperationSendResponse(
         status="queued",

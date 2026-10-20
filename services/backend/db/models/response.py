@@ -11,6 +11,13 @@ from backend.db.models.base import Base, IDMixinUUID, TimestampMixin
 class EmailMessage(IDMixinUUID, TimestampMixin, Base):
     __tablename__ = "email_messages"
 
+    mail_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("mail_accounts.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     request_supplier_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("request_suppliers.id", ondelete="CASCADE"),
@@ -38,6 +45,10 @@ class EmailMessage(IDMixinUUID, TimestampMixin, Base):
         DateTime(timezone=True)
     )
 
+    mail_account: Mapped["MailAccount | None"] = relationship(  # noqa: F821
+        "MailAccount",
+        foreign_keys=[mail_account_id],
+    )
     request_supplier: Mapped["RequestSupplier"] = relationship(  # noqa: F821 # type: ignore
         back_populates="email_messages",
     )

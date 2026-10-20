@@ -16,8 +16,11 @@ from backend.celery_app.utils import async_task, get_db_manager
 from backend.core import get_config
 from backend.db.dao import SubscriptionBillingDocumentDAO
 from backend.services.extraction.docx_to_pdf import convert_docx_to_pdf_file
+from backend.services.mail_account_delivery import (
+    resolve_system_smtp_credentials,
+)
 from backend.utils.user_email_credentials import (
-    resolve_smtp_credentials,
+    MailAccountUnavailableError,
     smtp_connection,
 )
 
@@ -101,7 +104,12 @@ async def send_billing_document_email(
         logger.error("Billing PDF files missing", document_id=document_id)
         return {"status": "error", "reason": "file_missing"}
 
-    smtp_creds = resolve_smtp_credentials(None, config)
+    async with db_manager.session() as session:
+        try:
+            smtp_creds = await resolve_system_smtp_credentials(session, config)
+        except MailAccountUnavailableError as exc:
+            logger.warning("Billing email skipped", document_id=document_id, reason=exc.reason)
+            return {"status": "error", "reason": exc.reason}
     subject = f"Документы по подписке TenderOptima — {receipt_id}"
     body = (
         "Добрый день.\n\n"
