@@ -223,6 +223,18 @@ async def create_admin_mail_account(
     )
 
 
+@admin_router.delete("/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_mail_account(
+    account_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _admin: Annotated[User, Depends(get_admin)],
+) -> None:
+    """Delete a mailbox; user assignments are cleared and message history kept."""
+    deleted = await MailAccountDAO.delete_mail_account(session, account_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Mail account not found")
+
+
 @admin_router.post(
     "/{account_id}/verify",
     response_model=MailAccountVerificationResponse,

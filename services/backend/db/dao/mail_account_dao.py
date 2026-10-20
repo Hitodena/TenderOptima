@@ -66,6 +66,19 @@ class MailAccountDAO(BaseDAO[MailAccount]):
         return list((await session.execute(stmt)).unique().scalars().all())
 
     @classmethod
+    async def delete_mail_account(
+        cls, session: AsyncSession, account_id: uuid.UUID
+    ) -> bool:
+        """Delete an account; database SET NULL FKs preserve related records."""
+        account = await session.get(cls.model, account_id)
+        if account is None:
+            return False
+        await session.delete(account)
+        await session.commit()
+        logger.info("Mail account deleted", account_id=str(account_id))
+        return True
+
+    @classmethod
     async def list_assignable_admin(
         cls, session: AsyncSession
     ) -> list[MailAccount]:
