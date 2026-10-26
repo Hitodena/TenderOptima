@@ -19,6 +19,10 @@
 					<ProfileAdminPanel />
 				</template>
 
+				<template #news>
+					<AdminNewsPanel />
+				</template>
+
 				<template #email>
 					<AdminEmailRoutingPanel />
 				</template>
@@ -589,10 +593,11 @@ const tabs = [
 	{
 		label: 'ПДн',
 		slot: 'personal-data',
-		value: 'personal-data',
-		icon: 'i-lucide-shield-check',
-	},
+			value: 'personal-data',
+			icon: 'i-lucide-shield-check',
+		},
 	{ label: t('admin.referrals.tabLabel'), slot: 'referrals', value: 'referrals', icon: 'i-lucide-ticket' },
+	{ label: t('admin.news.tabLabel'), slot: 'news', value: 'news', icon: 'i-lucide-megaphone' },
 	{ label: 'Ошибки', slot: 'errors', value: 'errors', icon: 'i-lucide-bug' },
 	{ label: 'Идеи и проблемы', slot: 'ideas', value: 'ideas', icon: 'i-lucide-lightbulb' },
 	{ label: 'Блэклист', slot: 'blacklist', value: 'blacklist', icon: 'i-lucide-shield-ban' },

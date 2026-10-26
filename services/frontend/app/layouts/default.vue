@@ -113,6 +113,7 @@
 	</UHeader>
 
 		<div class="flex-1">
+			<SystemNewsNotices v-if="auth.isAuthenticated.value" />
 			<slot />
 		</div>
 		<AppFooter v-if="showAppFooter" />

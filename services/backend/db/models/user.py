@@ -139,6 +139,17 @@ class User(IDMixinUUID, TimestampMixin, Base):
     idea_suggestions: Mapped[list["IdeaSuggestion"]] = relationship(  # noqa: F821 # type: ignore
         back_populates="user",
     )
+    created_news: Mapped[list["News"]] = relationship(  # noqa: F821
+        "News",
+        foreign_keys="News.created_by_admin_id",
+        back_populates="created_by_admin",
+    )
+    news_reads: Mapped[list["NewsRead"]] = relationship(  # noqa: F821
+        "NewsRead",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
     referral_invitation: Mapped["ReferralInvitation | None"] = relationship(  # noqa: F821
         "ReferralInvitation",
         foreign_keys=[referral_invitation_id],

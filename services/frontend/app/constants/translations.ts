@@ -3,10 +3,48 @@
  * Add new user-facing strings here; do not hardcode them in components.
  */
 export const translations = {
+	news: {
+		acknowledge: 'Понятно, скрыть',
+		acknowledgeError: 'Не удалось сохранить отметку о прочтении',
+		severity: {
+			info: 'Информация',
+			warning: 'Предупреждение',
+			error: 'Сбой',
+		},
+	},
 	navigation: {
 		offerHistory: 'История предложений',
 	},
 	admin: {
+		news: {
+			tabLabel: 'Новости',
+			title: 'Новости и уведомления',
+			description: 'Публикация системных сообщений для всех пользователей. Прочитанные уведомления больше не показываются конкретному пользователю.',
+			formTitle: 'Новое уведомление',
+			titleLabel: 'Заголовок',
+			titlePlaceholder: 'Например: Модуль поиска временно недоступен',
+			titleError: 'Заголовок должен содержать не менее 3 символов',
+			moduleLabel: 'Модуль (необязательно)',
+			modulePlaceholder: 'Например: Поиск поставщиков',
+			severityLabel: 'Важность',
+			statusLabel: 'Статус',
+			contentLabel: 'Сообщение',
+			contentPlaceholder: 'Опишите проблему или статус восстановительных работ',
+			contentError: 'Введите текст уведомления',
+			publish: 'Опубликовать всем',
+			publishing: 'Публикуем…',
+			publishSuccess: 'Уведомление опубликовано',
+			publishError: 'Не удалось опубликовать уведомление',
+			loadError: 'Не удалось загрузить новости',
+			updateError: 'Не удалось изменить статус уведомления',
+			active: 'Показывается',
+			inactive: 'Скрыта',
+			readCount: 'Прочитали',
+			createdAt: 'Создано',
+			deactivate: 'Скрыть',
+			reactivate: 'Показать снова',
+			empty: 'Новостей пока нет',
+		},
 		errors: {
 			dateColumn: 'Дата',
 			timeColumn: 'Время',

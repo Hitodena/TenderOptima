@@ -136,6 +136,38 @@ export interface UserResponse {
 	subscription?: SubscriptionResponse | null;
 }
 
+export type NewsSeverity = 'info' | 'warning' | 'error';
+
+export interface NewsResponse {
+	id: string;
+	title: string;
+	content: string;
+	module_name: string | null;
+	severity: NewsSeverity;
+	is_active: boolean;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface AdminNewsResponse extends NewsResponse {
+	read_count: number;
+}
+
+export interface NewsCreate {
+	title: string;
+	content: string;
+	module_name?: string | null;
+	severity: NewsSeverity;
+}
+
+export interface NewsUpdate {
+	title?: string;
+	content?: string;
+	module_name?: string | null;
+	severity?: NewsSeverity;
+	is_active?: boolean;
+}
+
 export interface ConsentActionRequest {
 	acknowledged: boolean;
 	reason?: string | null;
