@@ -188,12 +188,17 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
         session: AsyncSession,
         request_supplier_id: uuid.UUID,
     ) -> list[EmailMessage]:
-        """All incoming messages for a supplier, newest first, with analysis."""
+        """Supplier letters, newest first, with analysis.
+
+        Robot letters are left out: an old delivery report that was analysed
+        before kind existed must not hide the supplier's real offer.
+        """
         stmt = (
             select(cls.model)
             .where(
                 cls.model.request_supplier_id == request_supplier_id,
                 cls.model.direction == EmailMessageDirection.INCOMING.value,
+                cls.model.kind.is_(None),
             )
             .options(selectinload(cls.model.analysis))
             .order_by(cls.model.received_at.desc().nulls_last())

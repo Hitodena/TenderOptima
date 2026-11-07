@@ -12,6 +12,7 @@ from fastapi import (
     UploadFile,
     status,
 )
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -51,6 +52,7 @@ from backend.db.dao import (
 from backend.db.models import User
 from backend.enums import RequestHistoryGroup, RequestStatus
 from backend.services.request_from_bookmarks import attach_bookmark_item
+from backend.utils import attachment_thumbnail as thumbs
 from backend.utils.comparison_price import merge_multi_position_price_params
 from backend.utils.email_utils import (
     build_request_email_body,
@@ -514,6 +516,64 @@ async def serve_attachment(
     ),
 ) -> FileResponse:
     """Stream an attachment file after path sanitization and ownership check."""
+    candidate = await _owned_attachment(
+        attachment_path, session, current_user, config
+    )
+    filename = candidate.name
+    media_type = (
+        mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    )
+    return FileResponse(
+        path=str(candidate),
+        filename=filename,
+        media_type=media_type,
+    )
+
+
+@router.get(
+    "/attachments/thumbnail",
+    summary="PNG preview of a private attachment (PDF first page or image)",
+)
+async def attachment_thumbnail(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    config: Annotated[Config, Depends(get_config_instance)],
+    attachment_path: Annotated[
+        str, Query(description="Stored attachment path (full or relative)")
+    ],
+    width: Annotated[
+        int, Query(ge=thumbs.MIN_WIDTH, le=thumbs.MAX_WIDTH)
+    ] = 320,
+) -> FileResponse:
+    """Same access rules as /attachments/serve; 404 when no preview exists."""
+    candidate = await _owned_attachment(
+        attachment_path, session, current_user, config
+    )
+    thumb = await run_in_threadpool(
+        thumbs.make_thumbnail,
+        candidate,
+        Path(config.upload_dir) / thumbs.THUMB_DIR_NAME,
+        width,
+    )
+    if thumb is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No preview for this file",
+        )
+    return FileResponse(
+        path=str(thumb),
+        media_type="image/png",
+        headers={"Cache-Control": "private, max-age=86400"},
+    )
+
+
+async def _owned_attachment(
+    attachment_path: str,
+    session: AsyncSession,
+    current_user: User,
+    config: Config,
+) -> Path:
+    """Resolve a stored attachment path and check the request belongs to the user."""
     candidate = _resolve_and_validate_attachment_path(
         attachment_path, config.upload_dir
     )
@@ -538,16 +598,7 @@ async def serve_attachment(
         ) from None
 
     await get_request_or_404(request_id, session, current_user)
-
-    filename = candidate.name
-    media_type = (
-        mimetypes.guess_type(filename)[0] or "application/octet-stream"
-    )
-    return FileResponse(
-        path=str(candidate),
-        filename=filename,
-        media_type=media_type,
-    )
+    return candidate
 
 
 @router.patch(

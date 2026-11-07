@@ -14,10 +14,7 @@
 						class="flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-elevated"
 						:class="item.att.is_latest === false ? 'opacity-60' : ''"
 					>
-						<span
-							class="w-8 h-10 rounded grid place-items-end justify-center pb-1 text-[8.5px] font-bold text-white shrink-0 font-mono"
-							:class="toneClass(kind(item.att).tone)"
-						>{{ kind(item.att).label }}</span>
+						<InboxAttachmentThumb :attachment="item.att" size="sm" />
 						<div class="min-w-0 flex-1">
 							<p class="text-xs font-medium leading-snug line-clamp-2 [overflow-wrap:anywhere]" :class="item.att.is_latest === false ? 'line-through decoration-dimmed' : ''" :title="item.att.filename">
 								{{ item.att.filename }}
@@ -68,7 +65,8 @@
 
 <script lang="ts" setup>
 import type { Message, ThreadAttachment } from '#shared/types'
-import { fileKind, type FileTone } from '#shared/utils/emailThread'
+import { fileKind } from '#shared/utils/emailThread'
+import InboxAttachmentThumb from '~/components/inbox/InboxAttachmentThumb.vue'
 
 const props = defineProps<{
 	messages: Message[]
@@ -146,16 +144,6 @@ function canPreview(att: ThreadAttachment) {
 	return tone === 'pdf' || tone === 'image'
 }
 
-function toneClass(tone: FileTone) {
-	switch (tone) {
-		case 'pdf': return 'bg-red-600'
-		case 'sheet': return 'bg-green-700'
-		case 'doc': return 'bg-blue-600'
-		case 'image': return 'bg-amber-600'
-		case 'archive': return 'bg-slate-600'
-		default: return 'bg-slate-500'
-	}
-}
 
 function formatBytes(b: number) {
 	if (b < 1024) return `${b} Б`
