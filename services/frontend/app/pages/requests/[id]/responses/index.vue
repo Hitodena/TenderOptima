@@ -79,8 +79,23 @@
 
 				<div class="px-3 py-2 border-b border-default space-y-2 shrink-0">
 					<UInput
-v-model="threadSearch" placeholder="Поиск..." icon="i-lucide-search" size="sm"
+v-model="threadSearch" placeholder="Поиск по поставщику или email" icon="i-lucide-search" size="sm"
 						class="w-full" />
+					<div class="flex flex-wrap gap-1" role="group" aria-label="Фильтр поставщиков">
+						<button
+							v-for="f in threadFilterOptions"
+							:key="f.value"
+							type="button"
+							class="text-[11px] px-2 py-0.5 rounded-full border transition-colors cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+							:class="threadFilter === f.value
+								? 'bg-inverted text-inverted border-inverted'
+								: 'border-default text-muted hover:text-default hover:border-accented'"
+							:aria-pressed="threadFilter === f.value"
+							@click="threadFilter = f.value"
+						>
+							{{ f.label }} <span class="font-semibold tabular-nums">{{ threadFilterCounts[f.value] }}</span>
+						</button>
+					</div>
 					<USelect v-model="threadSort" :items="threadSortOptions" size="sm" class="w-full" />
 				</div>
 
@@ -94,55 +109,60 @@ v-else-if="sortedThreads.length === 0"
 						class="flex flex-col items-center justify-center py-12 gap-2 px-4">
 						<UIcon name="i-lucide-mail-open" class="w-8 h-8 text-muted opacity-40" />
 						<p class="text-sm text-muted text-center">
-							{{ threadSearch ? 'Ничего не найдено' : 'Ответов пока нет' }}
+							{{ threadSearch || threadFilter !== 'all' ? 'Ничего не найдено' : 'Ответов пока нет' }}
 						</p>
 					</div>
 
 					<div
 						v-for="thread in sortedThreads"
 						:key="thread.rs_id"
-						class="flex items-stretch border-b border-default/50"
-						:class="selectedRsId === thread.rs_id ? 'bg-elevated border-l-2 border-l-primary' : ''">
+						class="relative flex items-stretch border-b border-default/50"
+						:class="selectedRsId === thread.rs_id ? 'bg-primary/5' : ''">
+						<span
+							v-if="selectedRsId === thread.rs_id"
+							class="absolute inset-y-0 left-0 w-0.5 bg-primary"
+							aria-hidden="true"
+						/>
 						<button
 							type="button"
-							class="flex-1 min-w-0 text-left px-4 py-4 hover:bg-elevated/50 transition-colors cursor-pointer"
+							class="flex-1 min-w-0 text-left pl-4 pr-1 py-3 hover:bg-elevated/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50"
+							:aria-current="selectedRsId === thread.rs_id ? 'true' : undefined"
 							@click="selectThread(thread.rs_id)">
 						<div class="flex items-start gap-3">
-							<div
-								class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
-								:class="thread.message_count > 0 ? 'bg-primary/10' : 'bg-elevated'"
-							>
-								<UIcon
-									name="i-lucide-building-2"
-									class="w-5 h-5"
-									:class="thread.message_count > 0 ? 'text-primary' : 'text-muted'"
-								/>
-							</div>
+							<span
+								class="w-9 h-9 rounded-lg grid place-items-center shrink-0 text-xs font-bold"
+								:class="thread.message_count > 0 ? 'bg-primary/10 text-primary' : 'bg-elevated text-muted'"
+								aria-hidden="true"
+							>{{ companyInitials(thread.supplier.company_name) }}</span>
 							<div class="flex-1 min-w-0">
-								<div class="flex items-center justify-between gap-2 mb-1">
-									<p class="text-sm font-semibold leading-snug line-clamp-3 min-w-0 break-words">
+								<div class="flex items-center gap-1.5 min-w-0">
+									<span v-if="thread.unread" class="w-2 h-2 rounded-full bg-primary shrink-0" aria-label="Не прочитано" />
+									<p
+										class="text-[13px] leading-snug truncate min-w-0"
+										:class="thread.unread ? 'font-bold' : 'font-semibold'"
+										:title="thread.supplier.company_name"
+									>
 										{{ thread.supplier.company_name }}
 									</p>
-									<span v-if="thread.unread" class="w-2 h-2 rounded-full bg-primary shrink-0" />
-								</div>
-								<p class="text-xs text-muted truncate mb-2">
-									{{ thread.last_message?.body
-										? thread.last_message.body.slice(0, 60)
-										: 'Нет сообщений' }}
-								</p>
-								<div class="flex items-center justify-between gap-2">
-									<span
-										class="text-xs text-primary/80 tabular-nums"
-										:title="incomingCountLabel(thread.message_count)"
-										:aria-label="incomingCountLabel(thread.message_count)"
-									>
-										{{ incomingCountLabel(thread.message_count) }}
-									</span>
-									<span class="text-xs text-muted whitespace-nowrap shrink-0">
+									<span class="ml-auto text-[11px] text-dimmed whitespace-nowrap shrink-0 tabular-nums">
 										{{ thread.last_message?.received_at
 											? formatDateShort(thread.last_message.received_at)
-											: '—' }}
+											: '' }}
 									</span>
+								</div>
+								<p class="text-xs mt-0.5 line-clamp-2 break-words" :class="thread.last_message ? 'text-default' : 'text-muted'">
+									<span v-if="thread.last_message?.direction === 'outgoing'" class="text-muted">Вы: </span>{{ threadPreview(thread) }}
+								</p>
+								<div class="flex items-center gap-2 mt-1.5 text-[11px] text-muted">
+									<span
+										class="font-semibold px-1.5 py-px rounded"
+										:class="threadStateClass(threadState(thread))"
+									>{{ THREAD_STATE_LABEL[threadState(thread)] }}</span>
+									<span
+										v-if="thread.message_count > 0"
+										class="tabular-nums"
+										:title="incomingCountLabel(thread.message_count)"
+									>{{ incomingLettersLabel(thread.message_count) }}</span>
 								</div>
 							</div>
 						</div>
@@ -481,136 +501,86 @@ size="sm" variant="outline" leading-icon="i-lucide-download"
 					</div>
 
 					<template v-else>
-						<div class="px-3 md:px-5 py-2.5 border-b border-default flex items-center gap-2 shrink-0">
+						<div class="px-3 md:px-5 py-2.5 border-b border-default flex items-center gap-3 shrink-0">
+							<UButton
+								v-if="isMobile"
+								size="xs"
+								color="neutral"
+								variant="ghost"
+								icon="i-lucide-arrow-left"
+								aria-label="К списку поставщиков"
+								@click="() => { selectedRsId = null }"
+							/>
+							<span
+								class="hidden sm:grid w-9 h-9 rounded-lg place-items-center shrink-0 text-xs font-bold bg-primary/10 text-primary"
+								aria-hidden="true"
+							>{{ companyInitials(selectedThread?.supplier.company_name || '') }}</span>
 							<div class="min-w-0 flex-1">
 								<p class="font-semibold truncate text-sm">
 									{{ selectedThread?.supplier.company_name }}
 								</p>
-								<p
-v-if="selectedThread?.supplier.main_email"
-									class="text-[11px] md:text-xs text-muted truncate">
-									{{ selectedThread.supplier.main_email }}
+								<p class="text-[11px] md:text-xs text-muted truncate">
+									<span v-if="selectedThread?.supplier.main_email">{{ selectedThread.supplier.main_email }}</span>
+									<span v-if="selectedThread?.supplier.main_email && threadStatsLabel"> · </span>
+									<span class="tabular-nums">{{ threadStatsLabel }}</span>
 								</p>
 							</div>
 							<div class="flex items-center gap-1.5 shrink-0">
 								<UButton
-v-if="!showParamsPanel" size="xs" variant="ghost" color="neutral"
-									icon="i-lucide-cpu" :disabled="!latestIncomingId"
-									:class="latestIncomingId ? '' : 'opacity-40'" @click="showParamsPanel = true" />
+									v-if="!showParamsPanel"
+									size="xs"
+									variant="outline"
+									color="neutral"
+									icon="i-lucide-list-checks"
+									:disabled="!latestIncomingId"
+									@click="showParamsPanel = true"
+								>
+									<span class="hidden md:inline">Соответствие ТЗ</span>
+								</UButton>
 							</div>
 						</div>
 
-						<div ref="messagesContainer" class="flex-1 overflow-y-auto px-3 md:px-5 py-4 space-y-4">
-							<div v-if="loadingMessages" class="space-y-4">
-								<USkeleton v-for="i in 3" :key="i" class="h-28 w-full rounded-xl" />
+						<div ref="messagesContainer" class="flex-1 overflow-y-auto px-3 md:px-5 py-4 bg-elevated/40">
+							<div v-if="loadingMessages" class="space-y-3">
+								<USkeleton v-for="i in 2" :key="i" class="h-11 w-full rounded-xl" />
+								<USkeleton class="h-48 w-full rounded-xl" />
 							</div>
 
-							<template v-else-if="messages.length">
-								<div
-									v-for="msg in messages"
-									:key="msg.id"
-									:data-message-id="msg.id"
-									class="flex gap-2 md:gap-3 rounded-xl transition-shadow duration-500"
-									:class="[
-										msg.direction === 'outgoing' ? 'flex-row-reverse' : '',
-										highlightedMessageId === msg.id
-											? 'ring-2 ring-primary/60 ring-offset-2 ring-offset-default'
-											: '',
-									]"
-								>
-									<div
-										class="w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center shrink-0 mt-1"
-										:class="msg.direction === 'outgoing'
-											? 'bg-primary text-inverted'
-											: 'bg-primary/10'"
-									>
-										<UIcon
-											:name="msg.direction === 'outgoing'
-												? 'i-lucide-send'
-												: 'i-lucide-building-2'"
-											class="w-3.5 h-3.5 md:w-4 md:h-4"
-											:class="msg.direction === 'outgoing' ? '' : 'text-primary'"
-										/>
+							<div v-else-if="messages.length" class="flex flex-col gap-2 max-w-4xl mx-auto">
+								<template v-for="group in messageGroups" :key="group.key">
+									<div class="flex items-center gap-3 text-[11px] uppercase tracking-wider text-dimmed mt-2 first:mt-0">
+										<span class="flex-1 h-px bg-default" />
+										<span>{{ group.label }}</span>
+										<span class="flex-1 h-px bg-default" />
 									</div>
-
-									<div
-										class="flex-1 min-w-0 max-w-[85%] md:max-w-[75%]"
-										:class="msg.direction === 'outgoing' ? 'flex flex-col items-end' : ''"
-									>
+									<template v-for="msg in group.messages" :key="msg.id">
 										<div
-											class="flex items-center gap-2 mb-1"
-											:class="msg.direction === 'outgoing' ? 'flex-row-reverse' : ''"
+											v-if="msg.id === newDividerMessageId"
+											class="flex items-center gap-3 text-[11px] font-semibold text-primary my-1"
 										>
-											<span class="text-xs font-medium">
-												{{ msg.direction === 'outgoing'
-													? t('inbox.you')
-													: selectedThread?.supplier.company_name }}
-											</span>
-											<span class="text-xs text-muted">
-												{{ msg.received_at ? formatDateTime(msg.received_at) : '' }}
-											</span>
+											<span class="flex-1 h-px bg-primary/40" />
+											<span>{{ newDividerLabel }}</span>
+											<span class="flex-1 h-px bg-primary/40" />
 										</div>
-
 										<div
-											class="min-w-0 max-w-full overflow-hidden rounded-xl px-3.5 py-2.5 text-sm shadow-sm border"
-											:class="msg.direction === 'outgoing'
-												? 'rounded-tr-md bg-primary/10 border-primary/20'
-												: 'rounded-tl-md bg-elevated border-default/60'"
+											:data-message-id="msg.id"
+											:class="msg.id === newDividerMessageId ? 'scroll-mt-10' : 'scroll-mt-3'"
 										>
-											<p
-												v-if="msg.subject"
-												class="text-[10px] text-muted mb-1.5 font-medium tracking-tight wrap-break-word"
-											>
-												{{ msg.subject }}
-											</p>
-											<p
-												class="whitespace-pre-wrap wrap-break-word font-sans text-[13px] md:text-sm leading-relaxed"
-											>
-												<template
-													v-for="(segment, segIdx) in splitTextWithLinks(msg.raw_body || '')"
-													:key="`${msg.id}-seg-${segIdx}`"
-												>
-													<a
-														v-if="segment.type === 'link'"
-														:href="segment.href"
-														:title="segment.href"
-														target="_blank"
-														rel="noopener noreferrer"
-														class="inline-block max-w-full overflow-hidden text-ellipsis align-bottom text-primary underline underline-offset-2"
-													>{{ segment.label }}</a>
-													<span v-else>{{ segment.value }}</span>
-												</template>
-											</p>
+											<InboxMessageCard
+												:message="msg"
+												:sender-name="selectedThread?.supplier.company_name || 'Поставщик'"
+												:sender-initials="companyInitials(selectedThread?.supplier.company_name || '')"
+												:sender-email="selectedThread?.supplier.main_email"
+												:expanded="isMessageExpanded(msg.id)"
+												:collapsible="msg.id !== lastMessageId"
+												:highlighted="highlightedMessageId === msg.id"
+												@toggle="toggleMessage(msg.id)"
+												@download="downloadAttachment"
+											/>
 										</div>
-
-										<div
-											v-if="msg.attachments?.length"
-											class="flex flex-wrap gap-2 mt-2"
-											:class="msg.direction === 'outgoing' ? 'justify-end' : ''"
-										>
-											<button
-												v-for="att in msg.attachments"
-												:key="att.filename"
-												type="button"
-												class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-default transition-colors text-xs"
-												:class="att.path
-													? 'hover:bg-elevated cursor-pointer'
-													: 'opacity-50 cursor-not-allowed'"
-												:disabled="!att.path"
-												@click="downloadAttachment(att)"
-											>
-												<UIcon
-													:name="fileIcon(att.content_type)"
-													class="w-3.5 h-3.5 text-primary"
-												/>
-												<span class="truncate max-w-28 md:max-w-36">{{ att.filename }}</span>
-												<span v-if="att.size" class="text-muted shrink-0">{{
-													formatBytes(att.size) }}</span>
-											</button>
-										</div>
-									</div>
-								</div>
-							</template>
+									</template>
+								</template>
+							</div>
 
 							<div v-else class="flex flex-col items-center justify-center py-16 gap-2 text-muted">
 								<UIcon name="i-lucide-inbox" class="w-10 h-10 opacity-20" />
@@ -620,8 +590,20 @@ v-if="!showParamsPanel" size="xs" variant="ghost" color="neutral"
 
 						<div class="border-t border-default px-3 md:px-5 py-4 shrink-0 min-w-0">
 							<div class="flex flex-col gap-2 mb-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-								<p class="text-xs text-muted font-medium sm:mr-auto">Ответить на письмо</p>
+								<p class="text-xs text-muted font-medium sm:mr-auto">
+									Ответить {{ selectedThread?.supplier.company_name }}
+								</p>
 								<div class="flex flex-wrap items-center gap-2 min-w-0">
+									<UButton
+										v-if="threadLetterMismatches.length"
+										size="xs"
+										variant="outline"
+										color="primary"
+										leading-icon="i-lucide-mail-question"
+										@click="openThreadLetterModal"
+									>
+										Запросить недостающее · {{ threadLetterMismatches.length }}
+									</UButton>
 									<ReceiptAcknowledgementButton
 										v-model="replyBody"
 										:company-name="selectedThread?.supplier.company_name"
@@ -716,7 +698,28 @@ v-if="showParamsPanel && mainTab === 'thread'" class="shrink-0 border-l border-d
 					<UButton
 v-if="isMobile" variant="ghost" color="neutral" size="xs" icon="i-lucide-arrow-left"
 						@click="showParamsPanel = false" />
-					<p class="text-sm font-semibold truncate">Соответствие требованиям</p>
+					<div class="min-w-0 flex-1">
+						<p class="text-sm font-semibold truncate">Соответствие требованиям</p>
+						<button
+							v-if="latestIncomingMessage?.received_at"
+							type="button"
+							class="text-[11px] text-muted hover:text-primary cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 rounded"
+							title="Показать это письмо в переписке"
+							@click="showAnalysedLetter"
+						>
+							По письму от <span class="underline decoration-dotted underline-offset-2 tabular-nums">{{ formatDateTime(latestIncomingMessage.received_at) }}</span>
+						</button>
+					</div>
+					<UButton
+						v-if="!isMobile"
+						variant="ghost"
+						color="neutral"
+						size="xs"
+						icon="i-lucide-panel-right-close"
+						aria-label="Скрыть панель соответствия"
+						title="Скрыть панель"
+						@click="() => { showParamsPanel = false }"
+					/>
 				</div>
 
 				<div class="flex-1 overflow-y-auto px-3 py-3">
@@ -915,13 +918,23 @@ import {
 	supplierHasMismatches,
 } from '#shared/utils/mismatchLetter'
 import { getApiErrorDetail } from '#shared/utils/apiError'
-import { pluralizeSuppliersGenitive } from '#shared/utils/textFormat'
-import { splitTextWithLinks } from '#shared/utils/url'
+import { pluralizeLetters, pluralizeRu, pluralizeSuppliersGenitive } from '#shared/utils/textFormat'
 import {
 	canSendEmail,
 	emailQuotaBlockMessage,
 } from '#shared/utils/subscriptionAccess'
 import { useIntervalFn } from '@vueuse/core'
+import {
+	companyInitials,
+	dayKey,
+	dayLabel,
+	firstUnansweredIncomingId,
+	letterPreview,
+	threadState,
+	THREAD_STATE_LABEL,
+	type ThreadState,
+} from '#shared/utils/emailThread'
+import InboxMessageCard from '~/components/inbox/InboxMessageCard.vue'
 import ImproveConditionsModal from '~/components/ImproveConditionsModal.vue'
 import AddSupplierModal from '~/components/AddSupplierModal.vue'
 import ResponseMismatchLetterModal from '~/components/ResponseMismatchLetterModal.vue'
@@ -946,6 +959,8 @@ const isMobile = ref(false)
 onMounted(() => {
 	const update = () => { isMobile.value = window.innerWidth < 768 }
 	update()
+	// on a phone the panel covers the whole thread: open it on demand only
+	if (isMobile.value) showParamsPanel.value = false
 	window.addEventListener('resize', update)
 	document.documentElement.classList.add('overflow-hidden')
 	onUnmounted(() => {
@@ -1085,12 +1100,40 @@ onUnmounted(() => {
 	pauseThreadPoll()
 })
 
+type ThreadFilter = 'all' | 'new' | 'replied' | 'awaiting'
+const threadFilter = ref<ThreadFilter>('all')
+const threadFilterOptions: { value: ThreadFilter, label: string }[] = [
+	{ value: 'all', label: 'Все' },
+	{ value: 'new', label: 'Новые' },
+	{ value: 'replied', label: 'Ответили' },
+	{ value: 'awaiting', label: 'Ждём ответа' },
+]
+
+function matchesThreadFilter(thread: ThreadSummary, filter: ThreadFilter) {
+	if (filter === 'all') return true
+	if (filter === 'new') return threadState(thread) === 'new'
+	// "Ответили" — every supplier who wrote at least once
+	if (filter === 'replied') return thread.message_count > 0
+	return threadState(thread) === 'awaiting'
+}
+
+const threadFilterCounts = computed(() => {
+	const counts: Record<ThreadFilter, number> = { all: 0, new: 0, replied: 0, awaiting: 0 }
+	for (const thread of threads.value) {
+		for (const f of threadFilterOptions) {
+			if (matchesThreadFilter(thread, f.value)) counts[f.value]++
+		}
+	}
+	return counts
+})
+
 const filteredThreads = computed(() => {
 	const q = threadSearch.value.toLowerCase()
-	if (!q) return threads.value
 	return threads.value.filter(t =>
-		t.supplier.company_name.toLowerCase().includes(q)
-		|| t.supplier.main_email.toLowerCase().includes(q),
+		matchesThreadFilter(t, threadFilter.value)
+		&& (!q
+			|| t.supplier.company_name.toLowerCase().includes(q)
+			|| t.supplier.main_email.toLowerCase().includes(q)),
 	)
 })
 
@@ -1147,6 +1190,9 @@ const highlightedMessageId = ref<string | null>(null)
 let highlightTimer: ReturnType<typeof setTimeout> | null = null
 
 function selectThread(rsId: string, messageId?: string | null) {
+	// remember whether the thread was unread before opening marks it read:
+	// it decides where the "Новое" divider goes
+	openedUnread.value = threads.value.find(t => t.rs_id === rsId)?.unread ?? false
 	selectedRsId.value = rsId
 	mainTab.value = 'thread'
 	replyBody.value = ''
@@ -1174,6 +1220,7 @@ function openSourceEmail(supplier: ComparisonSupplier, req: string) {
 	if (typeof window !== 'undefined') {
 		window.location.hash = hash
 	}
+	handledHash = hash
 	selectThread(supplier.rs_id, messageId)
 }
 
@@ -1193,18 +1240,107 @@ const messages = ref<Message[]>([])
 const loadingMessages = ref(false)
 const messagesContainer = ref<HTMLElement | null>(null)
 
-const latestIncomingId = computed(() =>
-	[...messages.value].reverse().find(m => m.direction === 'incoming')?.id ?? null,
+const latestIncomingMessage = computed(() =>
+	[...messages.value].reverse().find(m => m.direction === 'incoming') ?? null,
 )
+const latestIncomingId = computed(() => latestIncomingMessage.value?.id ?? null)
+const lastMessageId = computed(() => messages.value.at(-1)?.id ?? null)
+
+/** Letters shown in full; the rest are one-line rows. */
+const expandedMessageIds = ref<Set<string>>(new Set())
+const openedUnread = ref(false)
+const newDividerMessageId = ref<string | null>(null)
+
+const newDividerLabel = computed(() => {
+	const id = newDividerMessageId.value
+	if (!id) return ''
+	const idx = messages.value.findIndex(m => m.id === id)
+	const count = idx < 0 ? 0 : messages.value.length - idx
+	return count > 1 ? `Новые · ${count} ${pluralizeLetters(count)}` : 'Новое письмо'
+})
+
+function defaultExpandedIds(list: Message[], extra: (string | null | undefined)[] = []) {
+	const ids = new Set<string>()
+	const last = list.at(-1)
+	if (last) ids.add(last.id)
+	const lastIncoming = [...list].reverse().find(m => m.direction === 'incoming')
+	if (lastIncoming) ids.add(lastIncoming.id)
+	// everything that arrived since our last letter, when it was unread
+	if (newDividerMessageId.value) {
+		const from = list.findIndex(m => m.id === newDividerMessageId.value)
+		if (from >= 0) for (const m of list.slice(from)) ids.add(m.id)
+	}
+	for (const id of extra) if (id) ids.add(id)
+	return ids
+}
+
+function isMessageExpanded(messageId: string) {
+	return messageId === lastMessageId.value || expandedMessageIds.value.has(messageId)
+}
+
+function toggleMessage(messageId: string) {
+	const next = new Set(expandedMessageIds.value)
+	if (next.has(messageId)) next.delete(messageId)
+	else next.add(messageId)
+	expandedMessageIds.value = next
+}
+
+const messageGroups = computed(() => {
+	const groups: { key: string, label: string, messages: Message[] }[] = []
+	for (const msg of messages.value) {
+		const key = msg.received_at ? dayKey(msg.received_at) : 'unknown'
+		let group = groups.at(-1)
+		if (!group || group.key !== key) {
+			group = {
+				key,
+				label: msg.received_at ? dayLabel(msg.received_at) : 'Без даты',
+				messages: [],
+			}
+			groups.push(group)
+		}
+		group.messages.push(msg)
+	}
+	return groups
+})
+
+const threadStatsLabel = computed(() => {
+	if (!messages.value.length) return ''
+	const letters = messages.value.length
+	const files = messages.value.reduce((n, m) => n + (m.attachments?.length ?? 0), 0)
+	const parts = [`${letters} ${pluralizeLetters(letters)}`]
+	if (files) parts.push(`${files} ${pluralizeRu(files, 'файл', 'файла', 'файлов')}`)
+	return parts.join(' · ')
+})
+
+function showAnalysedLetter() {
+	const msgId = latestIncomingId.value
+	if (!msgId) return
+	if (isMobile.value) showParamsPanel.value = false
+	expandedMessageIds.value = new Set([...expandedMessageIds.value, msgId])
+	nextTick(() => scrollToMessage(msgId))
+}
 
 async function fetchMessages(rsId: string, options?: { silent?: boolean }): Promise<boolean> {
 	const silent = options?.silent ?? false
 	if (!silent) {
 		loadingMessages.value = true
 		messages.value = []
+		newDividerMessageId.value = null
+		expandedMessageIds.value = new Set()
 	}
+	const knownIds = new Set(messages.value.map(m => m.id))
 	try {
-		messages.value = await get<Message[]>(`/requests/${id}/suppliers/${rsId}/messages`)
+		const list = await get<Message[]>(`/requests/${id}/suppliers/${rsId}/messages`)
+		if (selectedRsId.value !== rsId) return false
+		messages.value = list
+		if (silent) {
+			// letters that arrived while the thread was open stay open
+			const fresh = list.filter(m => !knownIds.has(m.id)).map(m => m.id)
+			if (fresh.length) expandedMessageIds.value = new Set([...expandedMessageIds.value, ...fresh])
+		} else {
+			newDividerMessageId.value = openedUnread.value ? firstUnansweredIncomingId(list) : null
+			expandedMessageIds.value = defaultExpandedIds(list, [pendingScrollMessageId.value])
+		}
 		return true
 	} catch {
 		if (!silent) messages.value = []
@@ -1221,12 +1357,8 @@ async function fetchMessages(rsId: string, options?: { silent?: boolean }): Prom
 }
 
 function resolveDefaultScrollMessageId(): string | null {
-	const lastIncoming = [...messages.value]
-		.reverse()
-		.find(m => m.direction === 'incoming')
-	if (lastIncoming) return lastIncoming.id
-	const firstOutgoing = messages.value.find(m => m.direction === 'outgoing')
-	return firstOutgoing?.id ?? messages.value[0]?.id ?? null
+	// start of the new letters, otherwise the latest letter (shown in full at the bottom)
+	return newDividerMessageId.value ?? lastMessageId.value
 }
 
 function scrollToMessage(messageId?: string | null) {
@@ -1902,9 +2034,14 @@ async function downloadAttachment(att: Attachment) {
 	}
 }
 
+// The threads list is re-fetched every 45 s; open the thread from the hash
+// once per hash value, so a poll does not reload the open thread and fold
+// the letters the user expanded.
+let handledHash: string | null = null
 watch(threads, () => {
 	const hash = window.location.hash.replace(/^#/, '')
-	if (!hash) return
+	if (!hash || hash === handledHash) return
+	handledHash = hash
 	const [rsId, messageId] = hash.split('/')
 	if (rsId && threads.value.find(t => t.rs_id === rsId)) {
 		selectThread(rsId, messageId || null)
@@ -1927,12 +2064,19 @@ function incomingCountLabel(count: number) {
 	return t('inbox.incomingCountLabel').replace('{count}', String(count))
 }
 
-function fileIcon(t: string | null) {
-	if (!t) return 'i-lucide-file'
-	if (t.includes('pdf')) return 'i-lucide-file-text'
-	if (t.includes('image')) return 'i-lucide-image'
-	if (t.includes('sheet') || t.includes('excel')) return 'i-lucide-table'
-	if (t.includes('word')) return 'i-lucide-file-text'
-	return 'i-lucide-file'
+function incomingLettersLabel(count: number) {
+	return `${count} ${pluralizeRu(count, 'входящее', 'входящих', 'входящих')}`
+}
+
+function threadPreview(thread: ThreadSummary) {
+	const last = thread.last_message
+	if (!last) return 'Нет сообщений'
+	return letterPreview(last.body, 120) || last.subject || 'Письмо без текста'
+}
+
+function threadStateClass(state: ThreadState) {
+	if (state === 'new') return 'bg-primary/10 text-primary'
+	if (state === 'replied') return 'bg-success/10 text-success'
+	return 'bg-elevated text-muted'
 }
 </script>
