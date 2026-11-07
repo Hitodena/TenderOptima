@@ -212,6 +212,21 @@ describe('threadState', () => {
 	it('empty thread', () => {
 		assert.equal(threadState({ unread: false, message_count: 0, last_message: null }), 'empty')
 	})
+	it('delivery failure wins over everything', () => {
+		assert.equal(threadState({ unread: true, message_count: 0, last_message: { direction: 'incoming', kind: 'bounce' }, delivery_failed: true }), 'failed')
+	})
+	it('an unread auto reply is not a new answer', () => {
+		assert.equal(threadState({ unread: true, message_count: 1, last_message: { direction: 'incoming', kind: 'auto_reply' } }), 'awaiting')
+	})
+	it('a bounce after a real reply keeps waiting, not "replied"', () => {
+		assert.equal(threadState({ unread: false, message_count: 1, last_message: { direction: 'incoming', kind: 'bounce' } }), 'awaiting')
+	})
+	it('refusal hint', () => {
+		assert.equal(threadState({ unread: false, message_count: 1, last_message: inc, declined: true }), 'declined')
+	})
+	it('a new unread refusal is first of all new', () => {
+		assert.equal(threadState({ unread: true, message_count: 1, last_message: inc, declined: true }), 'new')
+	})
 })
 
 describe('firstUnansweredIncomingId', () => {

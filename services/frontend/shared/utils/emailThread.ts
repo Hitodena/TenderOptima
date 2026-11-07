@@ -144,29 +144,38 @@ export function companyInitials(name: string): string {
 	return (words[0]![0]! + words[1]![0]!).toUpperCase()
 }
 
-export type ThreadState = 'new' | 'replied' | 'awaiting' | 'empty'
+export type ThreadState = 'failed' | 'new' | 'declined' | 'replied' | 'awaiting' | 'empty'
 
 export interface ThreadLike {
 	unread: boolean
 	message_count: number
-	last_message: { direction: 'incoming' | 'outgoing' } | null
+	last_message: { direction: 'incoming' | 'outgoing', kind?: string | null } | null
+	delivery_failed?: boolean
+	declined?: boolean
 }
 
 /**
+ * failed   — our letter did not reach the supplier
  * new      — supplier wrote and the letter is not read yet
+ * declined — the supplier's latest letter reads like a refusal
  * replied  — the last letter is from the supplier (your move)
- * awaiting — the last letter is ours, waiting for the supplier
+ * awaiting — the last letter is ours (or a robot's), waiting for the supplier
  * empty    — nothing in the thread
  */
 export function threadState(t: ThreadLike): ThreadState {
 	if (!t.last_message) return 'empty'
-	if (t.unread && t.message_count > 0) return 'new'
-	if (t.last_message.direction === 'incoming') return 'replied'
+	if (t.delivery_failed) return 'failed'
+	const robot = t.last_message.kind === 'auto_reply' || t.last_message.kind === 'bounce'
+	if (t.unread && t.message_count > 0 && !robot) return 'new'
+	if (t.declined) return 'declined'
+	if (t.last_message.direction === 'incoming' && !robot) return 'replied'
 	return 'awaiting'
 }
 
 export const THREAD_STATE_LABEL: Record<ThreadState, string> = {
+	failed: 'Не доставлено',
 	new: 'Новый ответ',
+	declined: 'Похоже на отказ',
 	replied: 'Ответил',
 	awaiting: 'Ждём ответа',
 	empty: 'Нет писем',

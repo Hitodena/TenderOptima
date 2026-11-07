@@ -6,7 +6,12 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 from backend.db.models import EmailMessage
-from backend.enums import EmailMessageDirection
+from backend.enums import EmailMessageDirection, RequestSupplierStatus
+from backend.utils.email_content import (
+    letter_text,
+    looks_like_decline,
+    split_quoted_reply,
+)
 
 PREVIEW_BODY_MAX_LEN = 280
 
@@ -54,10 +59,17 @@ class LastMessagePreviewRow(BaseModel):
     subject: str | None = None
     body: str | None = None
     received_at: datetime | None = None
+    kind: str | None = None
 
     @classmethod
     def from_message(cls, message: EmailMessage) -> "LastMessagePreviewRow":
-        raw = message.raw_body or message.subject or ""
+        # the new text only: the list shows what the supplier just said
+        raw = (
+            split_quoted_reply(letter_text(message)).main
+            or message.raw_body
+            or message.subject
+            or ""
+        )
         preview = raw[:PREVIEW_BODY_MAX_LEN]
         if len(raw) > PREVIEW_BODY_MAX_LEN:
             preview += "..."
@@ -67,6 +79,7 @@ class LastMessagePreviewRow(BaseModel):
             subject=message.subject,
             body=preview or None,
             received_at=message.received_at,
+            kind=message.kind,
         )
 
 
@@ -81,6 +94,10 @@ class ThreadSummaryRow(BaseModel):
     message_count: int
     unread: bool
     has_outgoing: bool = False
+    # the letter did not reach the supplier (SMTP error or a failure report)
+    delivery_failed: bool = False
+    # the supplier's latest letter reads like a refusal (a hint, not a fact)
+    declined: bool = False
 
     @classmethod
     def from_message(
@@ -90,6 +107,7 @@ class ThreadSummaryRow(BaseModel):
         *,
         has_outgoing: bool = False,
         unread: bool | None = None,
+        latest_incoming: EmailMessage | None = None,
     ) -> "ThreadSummaryRow":
         """Build a row from the latest message (must have request_supplier.supplier loaded)."""
         rs = message.request_supplier
@@ -107,4 +125,13 @@ class ThreadSummaryRow(BaseModel):
                 else is_thread_unread(message, rs.thread_read_at)
             ),
             has_outgoing=has_outgoing,
+            delivery_failed=rs.sent_status
+            == RequestSupplierStatus.FAILED.value,
+            declined=bool(
+                latest_incoming is not None
+                and latest_incoming.kind is None
+                and looks_like_decline(
+                    split_quoted_reply(letter_text(latest_incoming)).main
+                )
+            ),
         )

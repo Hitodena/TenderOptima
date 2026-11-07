@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from backend.api.suppliers.schemas import SupplierResponse
 from backend.db.models import EmailMessage as EmailMessageDB
@@ -51,6 +51,7 @@ class LastMessagePreview(BaseModel):
     subject: str | None = None
     body: str | None = None
     received_at: str | None = None
+    kind: str | None = None
 
     @classmethod
     def from_row(cls, row: LastMessagePreviewRow) -> "LastMessagePreview":
@@ -62,6 +63,7 @@ class LastMessagePreview(BaseModel):
             received_at=row.received_at.isoformat()
             if row.received_at
             else None,
+            kind=row.kind,
         )
 
 
@@ -134,6 +136,8 @@ class ThreadSummary(BaseModel):
     message_count: int
     unread: bool
     has_outgoing: bool = False
+    delivery_failed: bool = False
+    declined: bool = False
 
     @classmethod
     def from_row(cls, row: ThreadSummaryRow) -> "ThreadSummary":
@@ -144,7 +148,41 @@ class ThreadSummary(BaseModel):
             message_count=row.message_count,
             unread=row.unread,
             has_outgoing=row.has_outgoing,
+            delivery_failed=row.delivery_failed,
+            declined=row.declined,
         )
+
+
+class ThreadAttachment(Attachment):
+    """Attachment in the correspondence feed: document type and version."""
+
+    doc_type: str = "other"
+    doc_label: str = "Файл"
+    version: int | None = Field(
+        default=None,
+        description="1, 2, … when the supplier sent this type of document "
+        "in several letters (offers, price lists)",
+    )
+    is_latest: bool = True
+    replaced_by_message_id: str | None = None
+
+
+class SummaryFactOut(BaseModel):
+    requirement: str
+    value: str
+    status: str
+    previous: str | None = None
+    changed: bool = False
+
+
+class LetterSummaryOut(BaseModel):
+    """Digest of the AI analysis of one incoming letter."""
+
+    status: str
+    facts: list[SummaryFactOut] = []
+    met: int = 0
+    total: int = 0
+    changed: int = 0
 
 
 class Message(BaseModel):
@@ -156,8 +194,29 @@ class Message(BaseModel):
     direction: EmailMessageDirection
     subject: str | None = None
     raw_body: str | None = Field(default=None)
-    attachments: list[Attachment] | None = None
+    attachments: list[ThreadAttachment] | None = None
     received_at: datetime | None = None
+    kind: str | None = Field(
+        default=None,
+        description="null — ordinary letter; bounce, auto_reply or forward",
+    )
+    body_text: str | None = Field(
+        default=None, description="What the sender wrote, without the quote"
+    )
+    quoted_text: str | None = Field(
+        default=None, description="Quoted history below the new text"
+    )
+    to_email: str | None = None
+    is_decline: bool = False
+    summary: LetterSummaryOut | None = None
+
+
+class ForwardPayload(BaseModel):
+    """Forward one supplier letter to a colleague."""
+
+    to_email: EmailStr
+    comment: Annotated[str | None, Field(max_length=5000)] = None
+    include_attachments: bool = True
 
 
 class ReplyPayload(BaseModel):

@@ -1,7 +1,47 @@
 <template>
+	<!-- robot letters and our forwards: one quiet line, details on demand -->
+	<div
+		v-if="systemKind"
+		class="min-w-0 rounded-lg border px-3 py-2 text-xs"
+		:class="[
+			systemKind === 'bounce' ? 'border-error/30 bg-error/5' : 'border-default bg-default/60',
+			highlighted ? 'ring-2 ring-primary/60' : '',
+		]"
+	>
+		<div class="flex items-center gap-2 min-w-0">
+			<UIcon
+				:name="systemIcon"
+				class="w-4 h-4 shrink-0"
+				:class="systemKind === 'bounce' ? 'text-error' : 'text-muted'"
+			/>
+			<span class="min-w-0 flex-1 truncate" :class="systemKind === 'bounce' ? 'text-error font-medium' : 'text-muted'">
+				{{ systemTitle }}
+			</span>
+			<span class="text-[11px] text-dimmed whitespace-nowrap tabular-nums">{{ fullTimeLabel }}</span>
+			<UButton
+				size="xs"
+				color="neutral"
+				variant="link"
+				class="px-0"
+				:aria-expanded="expanded"
+				@click="emit('toggle')"
+			>
+				{{ expanded ? 'Скрыть' : 'Подробнее' }}
+			</UButton>
+		</div>
+		<template v-if="expanded">
+			<p class="mt-2 whitespace-pre-wrap wrap-break-word text-muted leading-relaxed max-w-[75ch]">{{ mainText || 'Текста нет' }}</p>
+			<div v-if="systemKind === 'bounce'" class="mt-2 flex flex-wrap gap-2">
+				<UButton size="xs" color="error" variant="soft" leading-icon="i-lucide-at-sign" @click="emit('fix-address')">
+					Проверить адрес поставщика
+				</UButton>
+			</div>
+		</template>
+	</div>
+
 	<!-- collapsed: one line, like an older letter in a mail client -->
 	<button
-		v-if="!expanded"
+		v-else-if="!expanded"
 		type="button"
 		class="group w-full min-w-0 grid grid-cols-[1.75rem_minmax(0,1fr)_auto] items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
 		:class="[
@@ -22,6 +62,7 @@
 			<span class="text-xs text-muted truncate min-w-0">{{ preview || message.subject || 'Без текста' }}</span>
 		</span>
 		<span class="flex items-center gap-2.5 text-[11px] text-dimmed whitespace-nowrap">
+			<span v-if="offerVersionLabel" class="font-semibold text-primary">{{ offerVersionLabel }}</span>
 			<span v-if="attachments.length" class="inline-flex items-center gap-0.5" :title="`Вложений: ${attachments.length}`">
 				<UIcon name="i-lucide-paperclip" class="w-3 h-3" />{{ attachments.length }}
 			</span>
@@ -71,12 +112,56 @@
 			</div>
 		</header>
 
+		<!-- AI digest of this letter -->
+		<div v-if="summary" class="mx-4 mb-2">
+			<div
+				v-if="summary.status === 'processing'"
+				class="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary"
+			>
+				<UIcon name="i-lucide-loader" class="w-3.5 h-3.5 animate-spin" />
+				ИИ разбирает письмо. Его уже можно читать.
+			</div>
+			<div
+				v-else-if="summary.status === 'ready' && summary.facts.length"
+				class="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2"
+			>
+				<p class="flex flex-wrap items-center gap-x-2 text-[11px] font-semibold uppercase tracking-wider text-primary">
+					<UIcon name="i-lucide-sparkles" class="w-3.5 h-3.5" />
+					<span>Главное из письма</span>
+					<span v-if="summary.total" class="normal-case tracking-normal font-medium text-muted tabular-nums">
+						· {{ summary.met }} из {{ summary.total }} требований
+					</span>
+					<span v-if="summary.changed" class="normal-case tracking-normal font-medium text-muted">
+						· изменилось: {{ summary.changed }}
+					</span>
+				</p>
+				<dl class="mt-1.5 grid gap-x-5 gap-y-1 grid-cols-[repeat(auto-fill,minmax(min(100%,13rem),1fr))]">
+					<div v-for="fact in summary.facts" :key="fact.requirement" class="min-w-0">
+						<dt class="text-[11px] text-muted truncate" :title="fact.requirement">{{ fact.requirement }}</dt>
+						<dd class="text-[13px] font-medium leading-snug wrap-break-word">
+							{{ fact.value }}
+							<span
+								v-if="fact.changed"
+								class="ml-1 inline-block rounded px-1 text-[10.5px] font-semibold bg-warning/10 text-warning"
+								:title="`В прошлом письме: ${fact.previous}`"
+							>было {{ fact.previous }}</span>
+						</dd>
+					</div>
+				</dl>
+			</div>
+		</div>
+
+		<div v-if="message.is_decline" class="mx-4 mb-2 flex items-center gap-2 rounded-lg bg-elevated px-3 py-1.5 text-xs text-muted">
+			<UIcon name="i-lucide-circle-slash" class="w-3.5 h-3.5" />
+			Похоже на отказ от поставки. Это подсказка: проверьте текст письма.
+		</div>
+
 		<div class="px-4 pb-1 max-w-[75ch]">
 			<p
-				v-if="split.main"
+				v-if="mainText"
 				class="whitespace-pre-wrap wrap-break-word font-sans text-[13px] md:text-sm leading-relaxed"
 			>
-				<template v-for="(segment, segIdx) in splitTextWithLinks(split.main)" :key="`${message.id}-m-${segIdx}`">
+				<template v-for="(segment, segIdx) in splitTextWithLinks(mainText)" :key="`${message.id}-m-${segIdx}`">
 					<a
 						v-if="segment.type === 'link'"
 						:href="segment.href"
@@ -91,7 +176,7 @@
 			<p v-else class="text-sm text-muted italic">Письмо без текста</p>
 		</div>
 
-		<div v-if="split.quoted" class="px-4 pt-1.5">
+		<div v-if="quotedText" class="px-4 pt-1.5">
 			<button
 				type="button"
 				class="text-[11px] text-muted bg-elevated border border-default rounded-md px-2 py-0.5 hover:text-default cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
@@ -103,7 +188,7 @@
 			<p
 				v-if="showQuote"
 				class="mt-2 border-l-2 border-accented pl-3 whitespace-pre-wrap wrap-break-word text-xs text-muted leading-relaxed max-w-[75ch]"
-			>{{ split.quoted }}</p>
+			>{{ quotedText }}</p>
 		</div>
 
 		<div
@@ -111,38 +196,81 @@
 			class="grid gap-2 px-4 pt-3 grid-cols-[repeat(auto-fill,minmax(min(100%,15rem),1fr))]"
 			:class="attachments.length === 1 ? 'max-w-80' : ''"
 		>
-			<button
+			<div
 				v-for="(att, idx) in attachments"
 				:key="`${att.filename}-${idx}`"
-				type="button"
-				class="group/att min-w-0 flex items-center gap-2.5 rounded-lg border border-default bg-default px-2.5 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-				:class="att.path ? 'hover:bg-elevated hover:border-accented cursor-pointer' : 'opacity-50 cursor-not-allowed'"
-				:disabled="!att.path"
-				:title="att.path ? `Скачать ${att.filename}` : 'Файл недоступен для скачивания'"
-				@click="emit('download', att)"
+				class="min-w-0 flex items-center gap-2.5 rounded-lg border border-default bg-default px-2.5 py-2"
+				:class="[att.path ? '' : 'opacity-50', att.is_latest === false ? 'bg-elevated/50' : '']"
 			>
 				<span
 					class="w-9 h-11 rounded-md grid place-items-end justify-center pb-1 text-[9px] font-bold text-white shrink-0 font-mono"
 					:class="toneClass(kind(att).tone)"
 				>{{ kind(att).label }}</span>
 				<span class="min-w-0 flex-1">
-					<span class="block text-xs font-medium leading-snug line-clamp-2 [overflow-wrap:anywhere]">{{ att.filename }}</span>
-					<span class="block text-[11px] text-muted mt-0.5">{{ att.size ? formatBytes(att.size) : 'размер неизвестен' }}</span>
+					<span class="block text-xs font-medium leading-snug line-clamp-2 [overflow-wrap:anywhere]" :title="att.filename">{{ att.filename }}</span>
+					<span class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted mt-0.5">
+						<span
+							v-if="att.doc_label && att.doc_type !== 'other' && att.doc_type !== 'image'"
+							class="font-semibold rounded px-1"
+							:class="att.doc_type === 'offer' ? 'bg-primary/10 text-primary' : 'bg-elevated text-muted'"
+						>{{ att.doc_label }}<template v-if="att.version"> · v{{ att.version }}</template></span>
+						<span v-if="att.is_latest === false" class="text-warning">есть новее</span>
+						<span>{{ att.size ? formatBytes(att.size) : '' }}</span>
+					</span>
 				</span>
-				<UIcon
-					v-if="att.path"
-					name="i-lucide-download"
-					class="w-4 h-4 text-muted group-hover/att:text-primary shrink-0"
-				/>
-			</button>
+				<span class="flex items-center shrink-0">
+					<UButton
+						v-if="att.path && canPreview(att)"
+						size="xs"
+						color="neutral"
+						variant="ghost"
+						icon="i-lucide-eye"
+						:aria-label="`Посмотреть ${att.filename}`"
+						title="Посмотреть"
+						@click="emit('preview', att)"
+					/>
+					<UButton
+						v-if="att.path"
+						size="xs"
+						color="neutral"
+						variant="ghost"
+						icon="i-lucide-download"
+						:aria-label="`Скачать ${att.filename}`"
+						title="Скачать"
+						@click="emit('download', att)"
+					/>
+					<span v-else class="text-[11px] text-muted px-1" title="Файл не сохранился на сервере">недоступен</span>
+				</span>
+			</div>
 		</div>
 
-		<div class="h-3.5" />
+		<div class="flex flex-wrap gap-1.5 px-4 pt-3 pb-3.5">
+			<UButton
+				v-if="!isOutgoing"
+				size="xs"
+				color="neutral"
+				variant="outline"
+				leading-icon="i-lucide-forward"
+				@click="emit('forward')"
+			>
+				Переслать коллеге
+			</UButton>
+			<UButton
+				v-if="downloadableCount > 1"
+				size="xs"
+				color="neutral"
+				variant="ghost"
+				leading-icon="i-lucide-archive"
+				@click="emit('zip')"
+			>
+				Скачать все файлы письма · ZIP
+			</UButton>
+		</div>
 	</article>
 </template>
 
 <script lang="ts" setup>
-import type { Attachment, Message } from '#shared/types'
+import type { Message, ThreadAttachment } from '#shared/types'
 import { fileKind, letterPreview, splitQuotedReply, type FileTone } from '#shared/utils/emailThread'
 import { splitTextWithLinks } from '#shared/utils/url'
 
@@ -162,17 +290,53 @@ const props = withDefaults(defineProps<{
 })
 
 const emit = defineEmits<{
-	toggle: []
-	download: [att: Attachment]
+	'toggle': []
+	'download': [att: ThreadAttachment]
+	'preview': [att: ThreadAttachment]
+	'forward': []
+	'zip': []
+	'fix-address': []
 }>()
 
 const showQuote = ref(false)
 
 const isOutgoing = computed(() => props.message.direction === 'outgoing')
 const senderLabel = computed(() => (isOutgoing.value ? 'Вы' : props.senderName))
-const split = computed(() => splitQuotedReply(props.message.raw_body))
-const preview = computed(() => letterPreview(props.message.raw_body, 160))
-const attachments = computed(() => props.message.attachments ?? [])
+const systemKind = computed(() => props.message.kind ?? null)
+
+// The server splits the letter (it sees the full original text); older
+// servers send only raw_body, then the browser splits it the same way.
+const split = computed(() => {
+	if (typeof props.message.body_text === 'string') {
+		return { main: props.message.body_text, quoted: props.message.quoted_text ?? '' }
+	}
+	return splitQuotedReply(props.message.raw_body)
+})
+const mainText = computed(() => split.value.main)
+const quotedText = computed(() => split.value.quoted)
+const preview = computed(() => letterPreview(mainText.value, 160))
+const attachments = computed<ThreadAttachment[]>(() => props.message.attachments ?? [])
+const downloadableCount = computed(() => attachments.value.filter(a => a.path).length)
+const summary = computed(() => (isOutgoing.value ? null : props.message.summary ?? null))
+
+const offerVersionLabel = computed(() => {
+	const offer = attachments.value.find(a => a.doc_type === 'offer' && a.version)
+	return offer ? `КП v${offer.version}` : ''
+})
+
+const systemIcon = computed(() => {
+	if (systemKind.value === 'bounce') return 'i-lucide-mail-x'
+	if (systemKind.value === 'forward') return 'i-lucide-forward'
+	return 'i-lucide-bot'
+})
+
+const systemTitle = computed(() => {
+	if (systemKind.value === 'bounce') return 'Письмо не доставлено: почтовый сервер вернул его обратно'
+	if (systemKind.value === 'forward') {
+		return `Вы переслали письмо${props.message.to_email ? ` на ${props.message.to_email}` : ''}`
+	}
+	return `Автоответ: ${preview.value || props.message.subject || 'без текста'}`
+})
 
 const timeLabel = computed(() => {
 	const iso = props.message.received_at
@@ -191,8 +355,13 @@ const fullTimeLabel = computed(() => {
 	})
 })
 
-function kind(att: Attachment) {
+function kind(att: ThreadAttachment) {
 	return fileKind(att.filename, att.content_type)
+}
+
+function canPreview(att: ThreadAttachment) {
+	const tone = kind(att).tone
+	return tone === 'pdf' || tone === 'image'
 }
 
 function toneClass(tone: FileTone) {

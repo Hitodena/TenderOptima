@@ -25,6 +25,8 @@ class EmailMessage(IDMixinUUID, TimestampMixin, Base):
     )
 
     direction: Mapped[str] = mapped_column(nullable=False, default="incoming")
+    # NULL — ordinary letter; see backend.utils.email_content.MessageKind
+    kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
     message_id: Mapped[str | None] = mapped_column()
     in_reply_to: Mapped[str | None] = mapped_column()
 

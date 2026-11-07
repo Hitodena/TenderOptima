@@ -1,24 +1,46 @@
+import io
 import uuid
+import zipfile
+from dataclasses import asdict
+from pathlib import Path
 from typing import Annotated
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import get_current_user, get_request_or_404, get_session
+from backend.api.deps import (
+    get_config_instance,
+    get_current_user,
+    get_request_or_404,
+    get_session,
+)
 from backend.api.responses.schemas import (
     ComparisonResponse,
     ComparisonSupplier,
     CustomEmailPayload,
     EmailMessageResponse,
+    ForwardPayload,
+    LetterSummaryOut,
     Message,
     RefreshAllResponse,
     ReplyPayload,
+    SummaryFactOut,
+    ThreadAttachment,
     ThreadSummary,
 )
 from backend.api.subscriptions.enforcement import ensure_can_send_emails
-from backend.celery_app.tasks.email_tasks import send_custom_email, send_reply
+from backend.api.user_requests.router import (
+    _resolve_and_validate_attachment_path,
+)
+from backend.celery_app.tasks.email_tasks import (
+    send_custom_email,
+    send_forward,
+    send_reply,
+)
+from backend.core.config import Config
 from backend.db.dao import (
     EmailMessageDAO,
     RequestSupplierDAO,
@@ -27,6 +49,7 @@ from backend.db.models import Request, User
 from backend.enums import TZAnalysisRunStatus
 from backend.schemas.analysis import EmailAnalysisResult
 from backend.services.analysis.email_queue import queue_email_analysis
+from backend.services.correspondence import MessageView, build_thread
 from backend.utils.comparison_price import (
     apply_delivery_total,
     compute_percent_vs_min,
@@ -34,6 +57,7 @@ from backend.utils.comparison_price import (
     is_price_requirement,
     resolve_numeric_value,
 )
+from backend.utils.email_content import MessageKind
 from backend.utils.xlsx_export import (
     build_comparison_workbook,
     workbook_to_bytes,
@@ -316,9 +340,45 @@ async def list_thread_messages(
         )
     await get_request_or_404(request_id, session, current_user)
     messages = await EmailMessageDAO.get_thread_by_request_supplier_id(
-        session, rs_id
+        session, rs_id, with_analysis=True
     )
-    return [Message.model_validate(message) for message in messages]
+    return [_message_out(view) for view in build_thread(messages)]
+
+
+def _message_out(view: MessageView) -> Message:
+    summary = None
+    if view.summary is not None:
+        summary = LetterSummaryOut(
+            status=view.summary.status,
+            facts=[
+                SummaryFactOut(
+                    requirement=f.requirement,
+                    value=f.value,
+                    status=f.status,
+                    previous=f.previous,
+                    changed=f.changed,
+                )
+                for f in view.summary.facts
+            ],
+            met=view.summary.met,
+            total=view.summary.total,
+            changed=view.summary.changed,
+        )
+    return Message(
+        id=view.id,
+        direction=view.direction,
+        subject=view.subject,
+        raw_body=view.raw_body,
+        attachments=[ThreadAttachment(**asdict(a)) for a in view.attachments]
+        or None,
+        received_at=view.received_at,
+        kind=view.kind,
+        body_text=view.body_text,
+        quoted_text=view.quoted_text,
+        to_email=view.to_email,
+        is_decline=view.is_decline,
+        summary=summary,
+    )
 
 
 @router.post(
@@ -381,6 +441,158 @@ async def post_reply(
         payload.attachment_paths,
     )  # type: ignore
     return {"status": "queued", "rs_id": str(rs_id)}
+
+
+ZIP_MAX_BYTES = 200 * 1024 * 1024
+
+
+async def _thread_for_user(
+    request_id: uuid.UUID,
+    rs_id: uuid.UUID,
+    session: AsyncSession,
+    current_user: User,
+):
+    rs = await RequestSupplierDAO.get_by_id(session, rs_id)
+    if not rs or str(rs.request_id) != str(request_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Request supplier not found for this request",
+        )
+    await get_request_or_404(request_id, session, current_user)
+    return rs
+
+
+def _zip_name(used: set[str], received_at, filename: str) -> str:
+    """Unique name inside the archive: date prefix, then a counter."""
+    prefix = received_at.strftime("%Y-%m-%d") if received_at else "без даты"
+    base = f"{prefix} {filename}"
+    name = base
+    n = 2
+    while name.lower() in used:
+        stem, dot, ext = base.rpartition(".")
+        name = f"{stem} ({n}).{ext}" if dot else f"{base} ({n})"
+        n += 1
+    used.add(name.lower())
+    return name
+
+
+@router.get(
+    "/{request_id}/suppliers/{rs_id}/attachments.zip",
+    summary="All files of one supplier thread as a ZIP archive",
+)
+async def download_thread_attachments(
+    request_id: uuid.UUID,
+    rs_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    config: Annotated[Config, Depends(get_config_instance)],
+    message_id: Annotated[
+        uuid.UUID | None,
+        Query(description="Only the files of this letter"),
+    ] = None,
+) -> Response:
+    rs = await _thread_for_user(request_id, rs_id, session, current_user)
+    messages = await EmailMessageDAO.get_thread_by_request_supplier_id(
+        session, rs_id
+    )
+    if message_id is not None:
+        messages = [m for m in messages if m.id == message_id]
+        if not messages:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Message not found in this thread",
+            )
+
+    files: list[tuple[str, Path]] = []
+    used: set[str] = set()
+    total = 0
+    for message in messages:
+        if (
+            message.kind
+        ):  # robot notices and forwards carry copies, not new files
+            continue
+        for att in message.attachments or []:
+            if not isinstance(att, dict) or not att.get("path"):
+                continue
+            candidate = _resolve_and_validate_attachment_path(
+                str(att["path"]), config.upload_dir
+            )
+            if candidate is None:
+                continue
+            total += candidate.stat().st_size
+            if total > ZIP_MAX_BYTES:
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail="Files are too large for one archive; download them one by one",
+                )
+            name = _zip_name(
+                used,
+                message.received_at,
+                str(att.get("filename") or candidate.name),
+            )
+            files.append((name, candidate))
+    if not files:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No downloadable files in this thread",
+        )
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for name, path in files:
+            archive.write(path, arcname=name)
+    company = rs.supplier.company_name if rs.supplier else "поставщик"
+    archive_name = f"Файлы — {company}.zip"
+    ascii_fallback = "attachments.zip"
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{ascii_fallback}"; '
+                f"filename*=UTF-8''{quote(archive_name)}"
+            )
+        },
+    )
+
+
+@router.post(
+    "/{request_id}/suppliers/{rs_id}/messages/{message_id}/forward",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Forward one supplier letter to a colleague",
+)
+async def forward_message(
+    request_id: uuid.UUID,
+    rs_id: uuid.UUID,
+    message_id: uuid.UUID,
+    payload: ForwardPayload,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """Send a copy of a supplier letter from the user's mailbox.
+
+    The copy is a sent email and counts towards the monthly email limit.
+    """
+    await _thread_for_user(request_id, rs_id, session, current_user)
+    message = await EmailMessageDAO.get_by_id(session, message_id)
+    if not message or message.request_supplier_id != rs_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Message not found in this thread",
+        )
+    if message.kind == MessageKind.FORWARD.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A forward cannot be forwarded again",
+        )
+    await ensure_can_send_emails(session, current_user, pending_count=1)
+    send_forward.delay(  # type: ignore[attr-defined]
+        str(message_id),
+        str(payload.to_email),
+        (payload.comment or "").strip(),
+        payload.include_attachments,
+    )
+    return {"status": "queued", "message_id": str(message_id)}
 
 
 async def _queue_custom_supplier_email(

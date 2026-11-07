@@ -142,6 +142,10 @@ class CeleryConfig:
             "queue": "mail_reply",
             "routing_key": "mail.reply",
         },
+        "mail.forward": {
+            "queue": "mail_reply",
+            "routing_key": "mail.reply",
+        },
         "parser.search": {
             "queue": "parser_search",
             "routing_key": "parser.search",

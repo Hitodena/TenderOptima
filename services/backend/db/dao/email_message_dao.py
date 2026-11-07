@@ -16,6 +16,7 @@ from backend.db.models import (
 )
 from backend.enums import EmailMessageDirection
 from backend.schemas.thread import ThreadSummaryRow, is_thread_unread
+from backend.utils.email_content import MessageKind
 
 
 class EmailMessageDAO(BaseDAO[EmailMessage]):
@@ -68,9 +69,18 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
 
     @classmethod
     async def get_thread_by_request_supplier_id(
-        cls, session: AsyncSession, request_supplier_id: uuid.UUID
+        cls,
+        session: AsyncSession,
+        request_supplier_id: uuid.UUID,
+        *,
+        dialogue_only: bool = False,
+        with_analysis: bool = False,
     ) -> list[EmailMessage]:
-        """Return all messages for a request-supplier link, oldest first."""
+        """Return all messages for a request-supplier link, oldest first.
+
+        dialogue_only drops our forwards to colleagues: they must not set the
+        subject or the In-Reply-To of the next letter to the supplier.
+        """
         logger.debug(
             "Getting email messages by request-supplier id",
             model=cls.model,
@@ -83,6 +93,15 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
             )
             .order_by(cls.model.received_at.asc())
         )
+        if dialogue_only:
+            stmt = stmt.where(
+                or_(
+                    cls.model.kind.is_(None),
+                    cls.model.kind != MessageKind.FORWARD.value,
+                )
+            )
+        if with_analysis:
+            stmt = stmt.options(selectinload(cls.model.analysis))
         result = await session.execute(stmt)
         messages = list(result.scalars().all())
         logger.info(
@@ -108,6 +127,7 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
             .where(
                 cls.model.request_supplier_id == request_supplier_id,
                 cls.model.direction == EmailMessageDirection.INCOMING.value,
+                cls.model.kind.is_(None),
             )
             .order_by(cls.model.received_at.desc())
             .limit(1)
@@ -119,6 +139,22 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
             request_supplier_id=request_supplier_id,
         )
         return result.scalar_one_or_none()
+
+    @classmethod
+    async def has_supplier_reply(
+        cls, session: AsyncSession, request_supplier_id: uuid.UUID
+    ) -> bool:
+        """True when the supplier wrote at least one ordinary letter."""
+        stmt = (
+            select(cls.model.id)
+            .where(
+                cls.model.request_supplier_id == request_supplier_id,
+                cls.model.direction == EmailMessageDirection.INCOMING.value,
+                cls.model.kind.is_(None),
+            )
+            .limit(1)
+        )
+        return (await session.execute(stmt)).first() is not None
 
     @classmethod
     async def get_incoming_before(
@@ -134,6 +170,7 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
             .where(
                 cls.model.request_supplier_id == request_supplier_id,
                 cls.model.direction == EmailMessageDirection.INCOMING.value,
+                cls.model.kind.is_(None),
             )
             .options(selectinload(cls.model.analysis))
             .order_by(cls.model.received_at.asc().nulls_last())
@@ -371,6 +408,8 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
                 RequestSupplier.request_id == request_id,
                 RequestSupplier.is_enabled.is_(True),
                 cls.model.direction == EmailMessageDirection.INCOMING.value,
+                # supplier letters only: no delivery reports or auto replies
+                cls.model.kind.is_(None),
             )
             .group_by(cls.model.request_supplier_id)
         )
@@ -409,6 +448,11 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
         conditions = [
             RequestSupplier.request_id == request_id,
             RequestSupplier.is_enabled.is_(True),
+            # a forward to a colleague is not part of the supplier dialogue
+            or_(
+                cls.model.kind.is_(None),
+                cls.model.kind != MessageKind.FORWARD.value,
+            ),
         ]
         if incoming_only:
             conditions.append(
@@ -485,6 +529,7 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
                             incoming_counts.get(rs_id, 0),
                             has_outgoing=rs_id in outgoing_ids,
                             unread=unread,
+                            latest_incoming=incoming_msg,
                         )
                     )
                 except ValueError:

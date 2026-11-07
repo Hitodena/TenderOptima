@@ -36,9 +36,19 @@ from backend.enums import (
     SupplierEmailPreferenceStatus,
 )
 from backend.services.analysis.email_queue import queue_email_analysis
+from backend.utils.email_content import (
+    MessageKind,
+    classify_message,
+    letter_text,
+)
 from backend.utils.email_matching import (
     match_incoming_email,
     parse_email_address,
+)
+from backend.utils.email_outgoing import (
+    attachment_records,
+    build_forward_text,
+    forward_subject,
 )
 from backend.utils.email_preference_footer import (
     append_plain_footer,
@@ -248,7 +258,9 @@ def _prepare_attachments(attachment_paths: list[str] | None) -> list[dict]:
                         c in "0123456789abcdefABCDEF" for c in pref
                     ):
                         filename = rest
-                data_list.append({"filename": filename, "data": raw})
+                data_list.append(
+                    {"filename": filename, "data": raw, "path": str(p)}
+                )
             except Exception as exc:
                 logger.warning(
                     "Failed to read attachment",
@@ -354,7 +366,7 @@ async def send_reply(
 
     async with db_manager.session() as session:
         thread = await EmailMessageDAO.get_thread_by_request_supplier_id(
-            session, rs_uuid
+            session, rs_uuid, dialogue_only=True
         )
 
     subject = resolve_reply_subject(request, rs.tracking_id, thread)
@@ -390,7 +402,7 @@ async def send_reply(
             in_reply_to=in_reply_to,
             subject=subject,
             raw_body=body,
-            attachments=att_data or None,
+            attachments=attachment_records(att_data),
             received_at=datetime.now(UTC),
             from_email=smtp_creds.user,
             to_email=recipient,
@@ -484,7 +496,7 @@ async def send_custom_email(
 
     async with db_manager.session() as session:
         thread = await EmailMessageDAO.get_thread_by_request_supplier_id(
-            session, rs_uuid
+            session, rs_uuid, dialogue_only=True
         )
 
     resolved_subject = resolve_reply_subject(request, rs.tracking_id, thread)
@@ -524,7 +536,7 @@ async def send_custom_email(
             in_reply_to=in_reply_to,
             subject=resolved_subject,
             raw_body=body,
-            attachments=att_data or None,
+            attachments=attachment_records(att_data),
             received_at=datetime.now(UTC),
             from_email=smtp_creds.user,
             to_email=recipient,
@@ -542,6 +554,122 @@ async def send_custom_email(
         "message_id": outbound_message_id,
         "subject": resolved_subject,
     }
+
+
+@app.task(
+    name="mail.forward", bind=True, max_retries=3, default_retry_delay=60
+)
+@async_task
+async def send_forward(
+    self,
+    message_id: str,
+    to_email: str,
+    comment: str = "",
+    include_attachments: bool = True,
+) -> dict:
+    """Forward a supplier letter to a colleague from the user's mailbox.
+
+    The copy is stored in the thread as an outgoing letter of kind
+    "forward" without a Message-ID, so it never takes part in threading.
+    """
+    db_manager = get_db_manager()
+    async with db_manager.session() as session:
+        original = await EmailMessageDAO.get_by_id(
+            session, uuid.UUID(message_id)
+        )
+        if not original:
+            logger.error("Message to forward not found", message_id=message_id)
+            return {"status": "error", "reason": "message_not_found"}
+        rs = await RequestSupplierDAO.get_by_id(
+            session, original.request_supplier_id
+        )
+        if not rs:
+            return {"status": "error", "reason": "rs_not_found"}
+
+    user = rs.request.user
+    async with db_manager.session() as session:
+        from backend.api.subscriptions.enforcement import (
+            worker_can_send_emails,
+        )
+
+        if not await worker_can_send_emails(session, user, count=1):
+            logger.warning(
+                "Email quota exhausted for forward", message_id=message_id
+            )
+            return {"status": "error", "reason": "subscription_limit"}
+        account = await MailAccountDAO.get_by_id(session, user.mail_account_id)
+    try:
+        smtp_creds = resolve_smtp_credentials(account)
+    except MailAccountUnavailableError as exc:
+        logger.warning("Forward mail account unavailable", reason=exc.reason)
+        return {"status": "error", "reason": exc.reason}
+
+    incoming = original.direction == EmailMessageDirection.INCOMING.value
+    sender_name = (
+        rs.supplier.company_name
+        if incoming and rs.supplier
+        else (user.company_name or "Вы")
+    )
+    body = build_forward_text(
+        comment=comment,
+        sender_name=sender_name,
+        sender_email=original.from_email,
+        received_at=original.received_at,
+        subject=original.subject,
+        body=letter_text(original),
+    )
+    paths = [
+        str(a["path"])
+        for a in (original.attachments or [])
+        if include_attachments and isinstance(a, dict) and a.get("path")
+    ]
+    att_data = _prepare_attachments(paths)
+    if att_data:
+        msg = MIMEMultipart()
+        msg.attach(MIMEText(body, "plain", "utf-8"))
+        for att in att_data:
+            part = MIMEBase("application", "octet-stream")
+            part.set_payload(att["data"])
+            encoders.encode_base64(part)
+            part.add_header(
+                "Content-Disposition",
+                "attachment",
+                filename=("utf-8", "", att["filename"]),
+            )
+            msg.attach(part)
+    else:
+        msg = MIMEText(body, "plain", "utf-8")
+
+    subject = forward_subject(original.subject)
+    msg["From"] = f"{user.company_name or 'TenderOptima'} <{smtp_creds.user}>"
+    msg["To"] = to_email
+    msg["Subject"] = subject
+    msg["Message-ID"] = make_message_id(smtp_creds.user)
+
+    try:
+        _send_mime(msg, to_email, smtp_creds)
+        logger.info("Forward sent via SMTP", message_id=message_id)
+    except (smtplib.SMTPException, UnicodeEncodeError, ValueError) as exc:
+        logger.exception("SMTP send failed for forward", error=str(exc))
+        raise self.retry(exc=exc) from exc  # type: ignore[attr-defined]
+
+    async with db_manager.session() as session:
+        await EmailMessageDAO.create(
+            session,
+            request_supplier_id=rs.id,
+            mail_account_id=account.id,
+            direction=EmailMessageDirection.OUTGOING,
+            kind=MessageKind.FORWARD.value,
+            message_id=None,
+            subject=subject,
+            raw_body=body,
+            attachments=attachment_records(att_data),
+            received_at=datetime.now(UTC),
+            from_email=smtp_creds.user,
+            to_email=to_email,
+            mailbox_email=smtp_creds.user,
+        )
+    return {"status": "sent", "message_id": message_id, "to": to_email}
 
 
 @app.task(name="mail.send", bind=True, max_retries=3, default_retry_delay=60)
@@ -903,6 +1031,11 @@ async def poll_imap(self) -> dict:
                             "references": msg.get("References"),
                             "from_email": from_email,
                             "to_email": to_email,
+                            "kind": classify_message(
+                                subject=subject,
+                                from_email=from_email,
+                                headers=msg,
+                            ),
                         }
                     )
 
@@ -1050,6 +1183,9 @@ async def poll_imap(self) -> dict:
                             request_supplier_id=rs.id,
                             mail_account_id=mailbox.account_id,
                             direction=EmailMessageDirection.INCOMING,
+                            kind=item["kind"].value
+                            if item.get("kind")
+                            else None,
                             message_id=item.get("message_id"),
                             in_reply_to=item.get("in_reply_to"),
                             imap_id=item["imap_id"],
@@ -1064,19 +1200,34 @@ async def poll_imap(self) -> dict:
                             matched_by=match.matched_by,
                             match_confidence=match.match_confidence,
                         )
-                        request = await RequestDAO.get_by_id(
-                            session, rs.request_id
-                        )
-                        if request:
-                            await queue_email_analysis(
-                                session,
-                                email_msg.id,
-                                request,
-                                reanalyze=False,
+                        kind = item.get("kind")
+                        if kind is None:
+                            request = await RequestDAO.get_by_id(
+                                session, rs.request_id
                             )
-                        await _mark_rs_status(
-                            session, rs.id, RequestSupplierStatus.REPLIED
-                        )
+                            if request:
+                                await queue_email_analysis(
+                                    session,
+                                    email_msg.id,
+                                    request,
+                                    reanalyze=False,
+                                )
+                            await _mark_rs_status(
+                                session, rs.id, RequestSupplierStatus.REPLIED
+                            )
+                        elif kind == MessageKind.BOUNCE:
+                            # Robot letters are kept in the thread but are not
+                            # an answer: no analysis, no "replied" status. A
+                            # failure report marks the supplier "failed"
+                            # unless the supplier has already written back.
+                            if not await EmailMessageDAO.has_supplier_reply(
+                                session, rs.id
+                            ):
+                                await _mark_rs_status(
+                                    session,
+                                    rs.id,
+                                    RequestSupplierStatus.FAILED,
+                                )
                         seen_uids.append(item["uid"])
 
                         processed += 1

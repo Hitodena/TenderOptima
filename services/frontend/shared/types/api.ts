@@ -753,6 +753,38 @@ export interface Attachment {
 	path: string | null;
 }
 
+/** Attachment in the supplier correspondence feed. */
+export interface ThreadAttachment extends Attachment {
+	/** offer | price | certificate | invoice | contract | company_card | tech_spec | image | other */
+	doc_type?: string;
+	/** КП, Прайс, Сертификат… */
+	doc_label?: string;
+	/** 1, 2… when the supplier sent this type of document in several letters */
+	version?: number | null;
+	is_latest?: boolean;
+	replaced_by_message_id?: string | null;
+}
+
+export interface LetterSummaryFact {
+	requirement: string;
+	value: string;
+	status: string;
+	previous?: string | null;
+	changed?: boolean;
+}
+
+/** Digest of the AI analysis of one incoming letter. */
+export interface LetterSummary {
+	status: 'ready' | 'processing' | 'failed' | string;
+	facts: LetterSummaryFact[];
+	met: number;
+	total: number;
+	changed: number;
+}
+
+/** null — ordinary letter */
+export type MessageKind = 'bounce' | 'auto_reply' | 'forward';
+
 export interface SupplierCreate {
 	domain?: string | null;
 	company_name: string;
@@ -828,10 +860,15 @@ export interface ThreadSummary {
 		received_at: string | null;
 		direction: 'incoming' | 'outgoing';
 		subject?: string | null;
+		kind?: MessageKind | null;
 	} | null;
 	message_count: number;
 	unread: boolean;
 	has_outgoing?: boolean;
+	/** the letter did not reach the supplier */
+	delivery_failed?: boolean;
+	/** the supplier's latest letter reads like a refusal (a hint) */
+	declined?: boolean;
 }
 
 export interface Message {
@@ -839,8 +876,21 @@ export interface Message {
 	direction: 'incoming' | 'outgoing';
 	subject: string | null;
 	raw_body: string | null;
-	attachments: Attachment[] | null;
+	attachments: ThreadAttachment[] | null;
 	received_at: string | null;
+	kind?: MessageKind | null;
+	/** what the sender wrote, without the quote (server-side split) */
+	body_text?: string | null;
+	quoted_text?: string | null;
+	to_email?: string | null;
+	is_decline?: boolean;
+	summary?: LetterSummary | null;
+}
+
+export interface ForwardPayload {
+	to_email: string;
+	comment?: string | null;
+	include_attachments: boolean;
 }
 
 export interface ReplyPayload {

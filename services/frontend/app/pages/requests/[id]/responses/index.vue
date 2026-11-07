@@ -527,6 +527,17 @@ size="sm" variant="outline" leading-icon="i-lucide-download"
 							</div>
 							<div class="flex items-center gap-1.5 shrink-0">
 								<UButton
+									v-if="threadFileCount"
+									size="xs"
+									variant="outline"
+									color="neutral"
+									icon="i-lucide-paperclip"
+									@click="() => { filesOpen = true }"
+								>
+									<span class="hidden md:inline">Все файлы · {{ threadFileCount }}</span>
+									<span class="md:hidden tabular-nums">{{ threadFileCount }}</span>
+								</UButton>
+								<UButton
 									v-if="!showParamsPanel"
 									size="xs"
 									variant="outline"
@@ -571,11 +582,15 @@ size="sm" variant="outline" leading-icon="i-lucide-download"
 												:sender-name="selectedThread?.supplier.company_name || 'Поставщик'"
 												:sender-initials="companyInitials(selectedThread?.supplier.company_name || '')"
 												:sender-email="selectedThread?.supplier.main_email"
-												:expanded="isMessageExpanded(msg.id)"
-												:collapsible="msg.id !== lastMessageId"
+												:expanded="isMessageExpanded(msg)"
+												:collapsible="msg.id !== lastLetterId"
 												:highlighted="highlightedMessageId === msg.id"
 												@toggle="toggleMessage(msg.id)"
 												@download="downloadAttachment"
+												@preview="openPreview"
+												@forward="openForward(msg)"
+												@zip="downloadZip(msg.id)"
+												@fix-address="goFixAddress"
 											/>
 										</div>
 									</template>
@@ -845,6 +860,30 @@ block size="sm" variant="outline" leading-icon="i-lucide-mail"
 			</UContainer>
 		</div>
 
+		<InboxFilesSlideover
+			v-model:open="filesOpen"
+			:messages="messages"
+			:supplier-name="selectedThread?.supplier.company_name || 'поставщик'"
+			:zipping="zipping"
+			@preview="openPreview"
+			@download="downloadAttachment"
+			@zip="downloadZip()"
+			@show-message="showMessageFromFiles"
+		/>
+		<InboxFilePreviewModal
+			v-model:open="previewOpen"
+			:attachment="previewAttachment"
+			@download="downloadAttachment"
+		/>
+		<InboxForwardModal
+			v-model:open="forwardOpen"
+			:request-id="id"
+			:rs-id="selectedRsId"
+			:message="forwardMessage"
+			:supplier-name="selectedThread?.supplier.company_name || 'поставщика'"
+			:quota-message="canSendReplyEmail ? null : replyQuotaMessage"
+			@sent="onForwardSent"
+		/>
 		<AddSupplierModal
 			v-model:open="showSaveToBookmarkModal"
 			:source-supplier="saveToBookmarkSupplier"
@@ -902,6 +941,7 @@ import type {
 	EmailAnalysisResponse,
 	Message,
 	RefreshAllResponse,
+	ThreadAttachment,
 	RequestResponse,
 	RequirementMatch,
 	SubscriptionResponse,
@@ -934,6 +974,9 @@ import {
 	THREAD_STATE_LABEL,
 	type ThreadState,
 } from '#shared/utils/emailThread'
+import InboxFilePreviewModal from '~/components/inbox/InboxFilePreviewModal.vue'
+import InboxFilesSlideover from '~/components/inbox/InboxFilesSlideover.vue'
+import InboxForwardModal from '~/components/inbox/InboxForwardModal.vue'
 import InboxMessageCard from '~/components/inbox/InboxMessageCard.vue'
 import ImproveConditionsModal from '~/components/ImproveConditionsModal.vue'
 import AddSupplierModal from '~/components/AddSupplierModal.vue'
@@ -1100,13 +1143,14 @@ onUnmounted(() => {
 	pauseThreadPoll()
 })
 
-type ThreadFilter = 'all' | 'new' | 'replied' | 'awaiting'
+type ThreadFilter = 'all' | 'new' | 'replied' | 'awaiting' | 'problems'
 const threadFilter = ref<ThreadFilter>('all')
 const threadFilterOptions: { value: ThreadFilter, label: string }[] = [
 	{ value: 'all', label: 'Все' },
 	{ value: 'new', label: 'Новые' },
 	{ value: 'replied', label: 'Ответили' },
 	{ value: 'awaiting', label: 'Ждём ответа' },
+	{ value: 'problems', label: 'Проблемы' },
 ]
 
 function matchesThreadFilter(thread: ThreadSummary, filter: ThreadFilter) {
@@ -1114,11 +1158,13 @@ function matchesThreadFilter(thread: ThreadSummary, filter: ThreadFilter) {
 	if (filter === 'new') return threadState(thread) === 'new'
 	// "Ответили" — every supplier who wrote at least once
 	if (filter === 'replied') return thread.message_count > 0
+	// "Проблемы": the letter did not arrive, or the supplier seems to refuse
+	if (filter === 'problems') return Boolean(thread.delivery_failed || thread.declined)
 	return threadState(thread) === 'awaiting'
 }
 
 const threadFilterCounts = computed(() => {
-	const counts: Record<ThreadFilter, number> = { all: 0, new: 0, replied: 0, awaiting: 0 }
+	const counts: Record<ThreadFilter, number> = { all: 0, new: 0, replied: 0, awaiting: 0, problems: 0 }
 	for (const thread of threads.value) {
 		for (const f of threadFilterOptions) {
 			if (matchesThreadFilter(thread, f.value)) counts[f.value]++
@@ -1240,11 +1286,14 @@ const messages = ref<Message[]>([])
 const loadingMessages = ref(false)
 const messagesContainer = ref<HTMLElement | null>(null)
 
+// the supplier's latest real letter: delivery reports and auto replies are not analysed
 const latestIncomingMessage = computed(() =>
-	[...messages.value].reverse().find(m => m.direction === 'incoming') ?? null,
+	[...messages.value].reverse().find(m => m.direction === 'incoming' && !m.kind) ?? null,
 )
 const latestIncomingId = computed(() => latestIncomingMessage.value?.id ?? null)
 const lastMessageId = computed(() => messages.value.at(-1)?.id ?? null)
+/** latest letter that is not a robot notice or a forward: always shown in full */
+const lastLetterId = computed(() => [...messages.value].reverse().find(m => !m.kind)?.id ?? null)
 
 /** Letters shown in full; the rest are one-line rows. */
 const expandedMessageIds = ref<Set<string>>(new Set())
@@ -1261,21 +1310,23 @@ const newDividerLabel = computed(() => {
 
 function defaultExpandedIds(list: Message[], extra: (string | null | undefined)[] = []) {
 	const ids = new Set<string>()
-	const last = list.at(-1)
+	const last = [...list].reverse().find(m => !m.kind)
 	if (last) ids.add(last.id)
-	const lastIncoming = [...list].reverse().find(m => m.direction === 'incoming')
+	const lastIncoming = [...list].reverse().find(m => m.direction === 'incoming' && !m.kind)
 	if (lastIncoming) ids.add(lastIncoming.id)
 	// everything that arrived since our last letter, when it was unread
 	if (newDividerMessageId.value) {
 		const from = list.findIndex(m => m.id === newDividerMessageId.value)
-		if (from >= 0) for (const m of list.slice(from)) ids.add(m.id)
+		// robot notices stay folded: they are one-line lines
+		if (from >= 0) for (const m of list.slice(from)) if (!m.kind) ids.add(m.id)
 	}
 	for (const id of extra) if (id) ids.add(id)
 	return ids
 }
 
-function isMessageExpanded(messageId: string) {
-	return messageId === lastMessageId.value || expandedMessageIds.value.has(messageId)
+function isMessageExpanded(msg: Message) {
+	if (msg.kind) return expandedMessageIds.value.has(msg.id)
+	return msg.id === lastLetterId.value || expandedMessageIds.value.has(msg.id)
 }
 
 function toggleMessage(messageId: string) {
@@ -1303,10 +1354,15 @@ const messageGroups = computed(() => {
 	return groups
 })
 
+const threadFileCount = computed(() =>
+	messages.value.reduce((n, m) => n + (m.kind ? 0 : (m.attachments?.length ?? 0)), 0),
+)
+
 const threadStatsLabel = computed(() => {
 	if (!messages.value.length) return ''
-	const letters = messages.value.length
-	const files = messages.value.reduce((n, m) => n + (m.attachments?.length ?? 0), 0)
+	// letters of the dialogue only: robot notices and forwards are not counted
+	const letters = messages.value.filter(m => !m.kind).length
+	const files = threadFileCount.value
 	const parts = [`${letters} ${pluralizeLetters(letters)}`]
 	if (files) parts.push(`${files} ${pluralizeRu(files, 'файл', 'файла', 'файлов')}`)
 	return parts.join(' · ')
@@ -2071,12 +2127,91 @@ function incomingLettersLabel(count: number) {
 function threadPreview(thread: ThreadSummary) {
 	const last = thread.last_message
 	if (!last) return 'Нет сообщений'
+	// a robot letter says nothing useful: tell what it means instead
+	if (last.kind === 'bounce') return 'Письмо не дошло до поставщика: почтовый сервер вернул его'
+	if (last.kind === 'auto_reply') return `Автоответ: ${letterPreview(last.body, 100) || 'без текста'}`
 	return letterPreview(last.body, 120) || last.subject || 'Письмо без текста'
 }
 
 function threadStateClass(state: ThreadState) {
+	if (state === 'failed') return 'bg-error/10 text-error'
 	if (state === 'new') return 'bg-primary/10 text-primary'
 	if (state === 'replied') return 'bg-success/10 text-success'
+	if (state === 'declined') return 'bg-warning/10 text-warning'
 	return 'bg-elevated text-muted'
+}
+
+const filesOpen = ref(false)
+const previewOpen = ref(false)
+const previewAttachment = ref<ThreadAttachment | null>(null)
+const forwardOpen = ref(false)
+const forwardMessage = ref<Message | null>(null)
+const zipping = ref(false)
+
+function openPreview(att: ThreadAttachment) {
+	previewAttachment.value = att
+	previewOpen.value = true
+}
+
+function openForward(msg: Message) {
+	forwardMessage.value = msg
+	forwardOpen.value = true
+}
+
+function onForwardSent(toEmail: string) {
+	toast.add({
+		title: 'Письмо отправляется',
+		description: `Пересылаем на ${toEmail}. Отметка появится в переписке через минуту.`,
+		color: 'success',
+		icon: 'i-lucide-forward',
+	})
+	const rsId = selectedRsId.value
+	// the copy is sent in the background; pick up the "переслано" line
+	setTimeout(() => {
+		if (rsId && selectedRsId.value === rsId) void fetchMessages(rsId, { silent: true })
+	}, 8000)
+	void fetchSubscription()
+}
+
+function goFixAddress() {
+	void navigateTo(`/requests/${id}`)
+}
+
+function showMessageFromFiles(messageId: string) {
+	filesOpen.value = false
+	expandedMessageIds.value = new Set([...expandedMessageIds.value, messageId])
+	nextTick(() => scrollToMessage(messageId))
+}
+
+async function downloadZip(messageId?: string) {
+	const rsId = selectedRsId.value
+	if (!rsId) return
+	zipping.value = true
+	try {
+		const query = messageId ? `?message_id=${encodeURIComponent(messageId)}` : ''
+		const res = await $axios.get(
+			`/requests/${id}/suppliers/${rsId}/attachments.zip${query}`,
+			{ responseType: 'blob' },
+		)
+		const url = URL.createObjectURL(res.data as Blob)
+		const a = document.createElement('a')
+		a.href = url
+		const company = selectedThread.value?.supplier.company_name || 'поставщик'
+		a.download = `Файлы — ${company}.zip`
+		document.body.appendChild(a)
+		a.click()
+		a.remove()
+		URL.revokeObjectURL(url)
+	} catch (e: unknown) {
+		const status = (e as { response?: { status?: number } })?.response?.status
+		toast.add({
+			title: status === 413
+				? 'Файлы слишком большие для одного архива: скачайте их по одному'
+				: 'Не удалось собрать архив',
+			color: 'error',
+		})
+	} finally {
+		zipping.value = false
+	}
 }
 </script>
