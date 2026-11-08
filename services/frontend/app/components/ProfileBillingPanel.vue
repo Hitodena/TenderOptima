@@ -76,7 +76,48 @@ function formatDocumentStatus(doc: BillingDocumentResponse) {
 		<template v-else>
 			<div v-if="billingDocuments.length > 0" class="space-y-3">
 				<p class="text-sm font-semibold">История документов</p>
-				<div class="overflow-x-auto rounded-lg border border-default">
+
+				<!-- Телефон: каждый документ — карточка вместо строки таблицы -->
+				<div class="space-y-2 sm:hidden">
+					<div
+						v-for="doc in billingDocuments"
+						:key="`m-${doc.id}`"
+						class="rounded-lg border border-default p-3 space-y-2 text-sm"
+					>
+						<div class="flex items-start justify-between gap-3">
+							<p class="font-medium break-all">{{ doc.receipt_id }}</p>
+							<p class="tabular-nums shrink-0">
+								{{ doc.total_amount }} {{ doc.currency_code }}
+							</p>
+						</div>
+						<div class="flex flex-wrap justify-between gap-x-3 gap-y-1 text-muted">
+							<span>{{ formatDocumentPeriod(doc) }}</span>
+							<span>{{ formatDocumentStatus(doc) }}</span>
+						</div>
+						<div class="flex gap-2">
+							<UButton
+								size="sm"
+								variant="soft"
+								color="neutral"
+								label="Счёт"
+								icon="i-lucide-download"
+								class="flex-1 justify-center"
+								@click="downloadBillingDocument(doc, 'invoice')"
+							/>
+							<UButton
+								size="sm"
+								variant="soft"
+								color="neutral"
+								label="Акт"
+								icon="i-lucide-download"
+								class="flex-1 justify-center"
+								@click="downloadBillingDocument(doc, 'act')"
+							/>
+						</div>
+					</div>
+				</div>
+
+				<div class="hidden sm:block overflow-x-auto rounded-lg border border-default">
 					<table class="min-w-full text-sm">
 						<thead class="bg-elevated/50 text-muted">
 							<tr>

@@ -138,6 +138,17 @@ color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 				</UCard>
 			</template>
 
+			<template v-else-if="isMobileView && (isTzReviewPhase || isTzConfirmed || kpAnalysisStarted)">
+				<TzAnalysisMobileSummary
+					:stage="mobileSummaryStage"
+					:requirements-count="displayedTzCount"
+					:suppliers="mobileSupplierSummaries"
+					:processing="showKpProcessingBanner"
+					:has-results="hasComparisonResults"
+					@export="exportTzXlsx"
+				/>
+			</template>
+
 			<template v-else-if="isTzReviewPhase || isTzConfirmed || kpAnalysisStarted">
 				<UAlert
 					v-if="isCompleted && hasKpContent && !hasSuppliersProcessing"
@@ -846,6 +857,9 @@ import { subscriptionPlansPath } from '#shared/utils/subscriptionDisplay'
 import RequirementResultsTree from '~/components/tz-analysis/RequirementResultsTree.vue'
 import RequirementTreeEditor from '~/components/tz-analysis/RequirementTreeEditor.vue'
 import TzAnalysisSuppliersPanel from '~/components/tz-analysis/TzAnalysisSuppliersPanel.vue'
+import TzAnalysisMobileSummary from '~/components/tz-analysis/TzAnalysisMobileSummary.vue'
+import type { MobileSupplierSummary } from '~/components/tz-analysis/TzAnalysisMobileSummary.vue'
+import { useMediaQuery } from '@vueuse/core'
 import TzOriginalTzHint from '~/components/tz-analysis/TzOriginalTzHint.vue'
 import { useRunStatusPolling } from '~/composables/useRunStatusPolling'
 import { useTzAnalysisFiles } from '~/composables/useTzAnalysisFiles'
@@ -1183,8 +1197,39 @@ const hasKpContent = computed(() => {
 const isAnalysisClosed = computed(() =>
 	isCompleted.value && !hasKpContent.value,
 )
+// Телефон: полный разбор ТЗ↔КП не адаптируется, показываем краткие итоги
+const isMounted = ref(false)
+onMounted(() => { isMounted.value = true })
+const narrowScreen = useMediaQuery('(max-width: 767px)')
+const isMobileView = computed(() => isMounted.value && narrowScreen.value)
+
+const mobileSummaryStage = computed((): 'review' | 'confirmed' | 'closed' => {
+	if (isAnalysisClosed.value) return 'closed'
+	if (isTzReviewPhase.value && !isTzConfirmed.value) return 'review'
+	return 'confirmed'
+})
+
+const mobileSupplierSummaries = computed((): MobileSupplierSummary[] =>
+	suppliers.value.map((supplier) => {
+		const primaryFilename = selectedSupplierRawPrimaryFilename(supplier)
+		let items = itemsForSupplier(supplier)
+		if (supplier.kp_filenames.length > 1 && primaryFilename) {
+			const primaryKey = scopedKpDisplayName(supplier.name, primaryFilename)
+			items = items.filter((item) => resolveItemKpKey(item, supplier.name) === primaryKey)
+		}
+		return {
+			id: supplier.id,
+			name: supplier.name,
+			status: supplier.status,
+			primaryKp: primaryFilename,
+			stats: items.length > 0 ? computeStatsFromItems(items) : null,
+		}
+	}),
+)
+
 const showTzConfirmBar = computed(() =>
-	isTzReviewPhase.value
+	!isMobileView.value
+	&& isTzReviewPhase.value
 	&& !isAnalysisClosed.value
 	&& !isTzConfirmed.value
 	&& !isCompleted.value

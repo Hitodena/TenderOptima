@@ -17,7 +17,17 @@
 					</div>
 				</template>
 
-				<UTabs v-model="activeTab" :items="tabs" :ui="{ list: 'mb-6' }">
+				<!-- Телефон: шесть вкладок не влезают в строку — выбор раздела списком -->
+				<USelect
+					v-model="activeTab"
+					:items="tabSelectItems"
+					:icon="activeTabIcon"
+					size="lg"
+					class="w-full mb-5 sm:hidden"
+					aria-label="Раздел настроек"
+				/>
+
+				<UTabs v-model="activeTab" :items="tabs" :ui="{ list: 'mb-6 hidden sm:flex' }">
 
 				<template #acts>
 					<div class="space-y-8">
@@ -403,6 +413,14 @@ const tabs = computed(() => [
 	{ label: t('profile.contactTab'), slot: 'contact', value: 'contact', icon: 'i-lucide-headphones' },
 	{ label: t('profile.accountTab'), slot: 'account', value: 'account', icon: 'i-lucide-user-cog', class: 'text-muted' },
 ])
+
+const tabSelectItems = computed(() =>
+	tabs.value.map(({ label, value, icon }) => ({ label, value, icon })),
+)
+
+const activeTabIcon = computed(() =>
+	tabs.value.find((item) => item.value === activeTab.value)?.icon,
+)
 
 const tabFromQuery = computed(() => {
 	const raw = route.query.tab
