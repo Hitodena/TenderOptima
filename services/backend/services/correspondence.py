@@ -65,6 +65,7 @@ class LetterSummary:
     met: int = 0
     total: int = 0
     changed: int = 0
+    unread_files: list[str] = field(default_factory=list)
 
 
 def build_summary(analysis: _AnalysisLike | None) -> LetterSummary | None:
@@ -120,6 +121,7 @@ def build_summary(analysis: _AnalysisLike | None) -> LetterSummary | None:
         met=met,
         total=total,
         changed=sum(1 for f in facts if f.changed),
+        unread_files=list(result.unread_files),
     )
 
 

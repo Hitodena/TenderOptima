@@ -335,6 +335,10 @@ def build_comparison_workbook(
                 ):
                     sign = "+" if pct > 0 else ""
                     current = f"{current} ({sign}{pct:g}%)"
+                # why a price is not compared, or how it was converted
+                note = (getattr(supplier, "price_notes", None) or {}).get(req)
+                if is_price_requirement(req) and note and current != "—":
+                    current = f"{current}\n{note}"
                 # Empty offer shows as "—"; omit "Выполнено" on a dash.
                 if status_key == "met" and current == "—":
                     status_label = ""

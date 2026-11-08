@@ -214,23 +214,48 @@ def apply_delivery_total_to_matches(matches: list) -> list:
     return normalized
 
 
+# one amount: 1 250,50 · 1250.5 · 1,250.50 (US) · 1.250,50 (EU) · 1.250.000
+_AMOUNT = (
+    r"\d{1,3}(?:[   ]\d{3})+(?:[.,]\d+)?"
+    r"|\d{1,3}(?:,\d{3})+\.\d+"
+    r"|\d{1,3}(?:\.\d{3})+,\d+"
+    r"|\d{1,3}(?:\.\d{3}){2,}"
+    r"|\d+(?:[.,]\d+)?"
+)
+# not a part of a code («М12», «2-45/120») and not a percent («скидка 2,5%»)
 _NUMBER_TOKEN_RE = re.compile(
-    r"-?(?:\d{1,3}(?:[ \u00a0\u202f]\d{3})+|\d+)(?:[.,]\d+)?"
+    rf"(?<![\w.,/-])-?(?:{_AMOUNT})(?![\d.,]*\d)(?!\s*%)(?![/-]\d)"
 )
 _UNIT_HINT_RE = re.compile(
-    r"(?:×|x|за\s*(?:ед\.?|шт\.?)|=)\s*"
-    r"(-?(?:\d{1,3}(?:[ \u00a0\u202f]\d{3})+|\d+)(?:[.,]\d+)?)",
+    rf"(?:\s[×x]\s|за\s*(?:ед\.?|шт\.?)|=)\s*(-?(?:{_AMOUNT}))(?!\s*%)",
+    re.IGNORECASE,
+)
+_CURRENCY_AFTER_RE = re.compile(
+    r"^\s*(?:руб|р\.|бел|рос|byn|byr|br\b|rub|rur|₽|usd|\$|долл|eur|€|евро"
+    r"|cny|юан|kzt|тенге|₸|pln|злот|коп)",
+    re.IGNORECASE,
+)
+_CURRENCY_BEFORE_RE = re.compile(
+    r"(?:\$|€|₽|£|\bbyn|\busd|\beur|\brub|\bcny)\s*$", re.IGNORECASE
+)
+_RANGE_RE = re.compile(
+    rf"(?:\bот\s*(?:{_AMOUNT})\s*(?:\S+\s*)?до\s*(?:{_AMOUNT}))"
+    rf"|(?:(?<![\w.,/×-])(?:{_AMOUNT})[-–](?:{_AMOUNT})\s*"
+    r"(?:руб|р\.|byn|rub|₽|usd|\$|eur|€|коп))",
     re.IGNORECASE,
 )
 
 
 def _token_to_float(token: str) -> float | None:
-    cleaned = (
-        token.replace("\u00a0", "")
-        .replace("\u202f", "")
-        .replace(" ", "")
-        .replace(",", ".")
-    )
+    raw = token.replace(" ", " ").replace(" ", " ").replace(" ", "").strip()
+    if re.fullmatch(r"-?\d{1,3}(?:,\d{3})+\.\d+", raw):  # 1,250.50
+        cleaned = raw.replace(",", "")
+    elif re.fullmatch(r"-?\d{1,3}(?:\.\d{3})+,\d+", raw):  # 1.250,50
+        cleaned = raw.replace(".", "").replace(",", ".")
+    elif re.fullmatch(r"-?\d{1,3}(?:\.\d{3}){2,}", raw):  # 1.250.000
+        cleaned = raw.replace(".", "")
+    else:
+        cleaned = raw.replace(",", ".")
     try:
         num = float(cleaned)
     except ValueError:
@@ -239,10 +264,31 @@ def _token_to_float(token: str) -> float | None:
 
 
 def parse_offer_numeric(value: str | None) -> float | None:
-    """Extract a numeric amount from free-text (handles spaced thousands)."""
+    """The price amount in a free-text value; None when it is not one number.
+
+    Order: a range («от 79,90 до 85,00», «79–85 руб.») gives None — the
+    price is not decided; then the number next to the currency
+    («срок 14 дней, цена 82 руб.» → 82); then «600 × 0,43» / «за ед.»;
+    then the first fractional number, then the first whole one. Percents
+    («скидка 2,5%») and numbers inside codes («М12», «2-45/120») are skipped.
+    """
     if not value or not str(value).strip():
         return None
-    text = str(value).replace("\u00a0", " ").replace("\u202f", " ")
+    text = str(value).replace(" ", " ").replace(" ", " ")
+    if _RANGE_RE.search(text):
+        return None
+
+    tokens = list(_NUMBER_TOKEN_RE.finditer(text))
+    for match in tokens:
+        after = text[match.end() :]
+        before = text[: match.start()]
+        if _CURRENCY_AFTER_RE.match(after) or _CURRENCY_BEFORE_RE.search(
+            before
+        ):
+            num = _token_to_float(match.group(0))
+            if num is not None:
+                return num
+
     # Prefer amount after × / x / за ед. (unit price in "600 × 0.43").
     hint = _UNIT_HINT_RE.search(text)
     if hint:
@@ -250,10 +296,8 @@ def parse_offer_numeric(value: str | None) -> float | None:
         if hinted is not None:
             return hinted
 
-    tokens = list(_NUMBER_TOKEN_RE.finditer(text))
     if not tokens:
         return None
-
     # Prefer a fractional amount when several numbers are present
     # (qty often integer, unit price often decimal).
     decimals: list[float] = []
@@ -262,7 +306,7 @@ def parse_offer_numeric(value: str | None) -> float | None:
         num = _token_to_float(match.group(0))
         if num is None:
             continue
-        if "." in match.group(0).replace(",", ".") or "," in match.group(0):
+        if "." in match.group(0) or "," in match.group(0):
             decimals.append(num)
         else:
             integers.append(num)

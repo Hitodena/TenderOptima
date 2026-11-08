@@ -183,6 +183,8 @@ class LetterSummaryOut(BaseModel):
     met: int = 0
     total: int = 0
     changed: int = 0
+    # attached files the analysis could not read («name — reason»)
+    unread_files: list[str] = []
 
 
 class Message(BaseModel):
@@ -247,8 +249,11 @@ class ComparisonSupplier(BaseModel):
     explanations: dict[str, str | None] = {}
     corrected_from: dict[str, str | None] = {}
     statuses: dict[str, str | None]
+    # price rows: the comparable value (None when it cannot be compared)
     numeric_values: dict[str, float | None] = {}
     percent_vs_min: dict[str, float | None] = {}
+    # price rows: why a price is not compared or how it was converted
+    price_notes: dict[str, str | None] = {}
     value_origins: dict[str, str | None] = {}
     source_message_ids: dict[str, str | None] = {}
 
@@ -258,6 +263,8 @@ class ComparisonResponse(BaseModel):
 
     requirements: list[str]
     price_requirements: list[str] = []
+    # price row → unit its prices are compared in («м»), None for totals
+    price_units: dict[str, str | None] = {}
     suppliers: list[ComparisonSupplier]
 
 

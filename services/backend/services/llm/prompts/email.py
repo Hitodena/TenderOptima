@@ -8,8 +8,29 @@ def build_email_prompt(
     email_text: str,
     baseline_matches: dict[str, str] | None = None,
     prior_matches: dict[str, RequirementMatch] | None = None,
+    request_context: str | None = None,
 ) -> tuple[str, str]:
     has_prior = bool(prior_matches)
+    order_block = ""
+    if request_context and request_context.strip():
+        order_block = f"""
+Что заказчик запросил у поставщика (товар/услуга, марка, количество). \
+Это текст заказчика, а НЕ ответ поставщика — значения отсюда никогда не \
+переноси в offer_value:
+<<<
+{request_context.strip()[:4000]}
+>>>
+
+Как пользоваться описанием заказа:
+1. Если в КП или счёте несколько позиций (строк таблицы) — для ценовых \
+требований бери строку, которая соответствует запрошенному товару \
+(по наименованию, марке, сечению, размеру), а не первую строку таблицы
+2. Если поставщик предлагает другой товар или марку, чем запрошено \
+(аналог, замена, другое сечение) — для «Описание товара» status = \
+"partial" или "missing" и в explanation коротко: что запрошено и что предложено
+3. Количество из заказа используй только чтобы понять, к чему относится \
+цена (за единицу или за весь объём); не выдавай его за ответ поставщика
+"""
     baseline_block = ""
     if baseline_matches:
         baseline_json = json.dumps(baseline_matches, ensure_ascii=False)
@@ -26,6 +47,7 @@ def build_email_prompt(
                 "offer_value": match.offer_value,
                 "numeric_value": match.numeric_value,
                 "currency": match.currency,
+                "unit": match.unit,
                 "status": match.status.value,
                 "explanation": match.explanation,
             }
@@ -96,7 +118,7 @@ def build_email_prompt(
 
 Изначальное ТЗ заказчика (эталон для оценки соответствия; формулировки использовать дословно в поле requirement):
 {user_requirements}
-{baseline_block}{prior_block}
+{order_block}{baseline_block}{prior_block}
 {repeat_rules}{first_letter_rules}
 Общие правила:
 1. В "matches" — ровно одна запись на КАЖДОЕ требование из списка заказчика
@@ -105,6 +127,10 @@ def build_email_prompt(
 4. "explanation" — только при status "partial" или "missing"; для "met" и "not_found" — null
 5. Не пиши в explanation фразы вроде «сохранено из предыдущего» или «как в первом письме»
 6. Поле "parameters" всегда возвращай как пустой объект {{}}
+7. Текст после пометки «[Цитата предыдущей переписки …]» — старые письма \
+(наш запрос, прежние предложения). Значения оттуда НЕ бери в offer_value. \
+Исключение — поставщик в новом тексте прямо пишет, что ответы даны ниже \
+в тексте письма или что условия прежние
 
 Семантическое сопоставление требований и ответа поставщика:
 1. Сначала прочитай требование заказчика и определи его смысл: объект, \
@@ -139,6 +165,11 @@ def build_email_prompt(
 если цены нет — null
    - "currency" — код или символ валюты, если явно указан (BYN, USD, ₽, коп.); \
 иначе null
+   - "unit" — за что именно эта цена, как написал поставщик: «м», «м²», «шт», \
+«кг», «т», «л», «100 м», «1000 шт», «бухта 100 м», «рулон 50 м», \
+«упаковка 10 шт». Если цена за упаковку (бухту, рулон, коробку) и размер \
+упаковки указан — пиши его. Не пересчитывай цену в другую единицу сам. \
+Для итоговых сумм и если единица не указана — null
    - "offer_value" — человекочитаемый текст как в письме/таблице \
 (например «14 рублей без НДС» или «1250 коп.»); для итога поставки \
 включай валюту, если она известна (например «1.52 BYN»), не оставляй \
@@ -189,6 +220,7 @@ currency указывай валюту позиций, если она одна 
       "offer_value": "значение или null",
       "numeric_value": null,
       "currency": null,
+      "unit": null,
       "explanation": "пояснение или null",
       "status": "met|partial|missing|not_found"
     }}

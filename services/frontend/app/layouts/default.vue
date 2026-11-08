@@ -3,8 +3,9 @@
 		<UHeader
 		mode="slideover"
 		:menu="{ side: 'right' }"
-		:toggle="auth.isAuthenticated.value || isLandingPage"
-		class="sticky top-0 z-50 h-20 border-b border-default bg-default/95 backdrop-blur supports-backdrop-filter:bg-default/80"
+		:toggle="!auth.isAuthenticated.value && isLandingPage"
+		class="sticky top-0 z-50 h-14 lg:h-20 border-b border-default bg-default/95 backdrop-blur supports-backdrop-filter:bg-default/80"
+		:class="showAppFooter ? '' : 'max-md:hidden'"
 		:ui="headerUi"
 	>
 		<template #left>
@@ -67,7 +68,10 @@
 		</template>
 
 		<template #right>
-			<div class="flex shrink-0 items-center justify-end gap-1 sm:gap-1.5 lg:gap-2">
+			<div
+				class="shrink-0 items-center justify-end gap-1 sm:gap-1.5 lg:gap-2"
+				:class="auth.isAuthenticated.value ? 'hidden lg:flex' : 'flex'"
+			>
 				<UColorModeButton />
 				<UButton
 					v-if="auth.isAuthenticated.value"
@@ -112,12 +116,14 @@
 		</template>
 	</UHeader>
 
-		<div class="flex-1">
+		<div class="flex-1" :class="showTabBar ? 'pb-16 lg:pb-0' : ''">
 			<SystemNewsNotices v-if="auth.isAuthenticated.value" />
 			<slot />
 		</div>
-		<AppFooter v-if="showAppFooter" />
+		<AppFooter v-if="showAppFooter" :class="showTabBar ? 'hidden lg:block' : ''" />
+		<AppMobileTabBar v-if="showTabBar" @idea="ideaModalOpen = true" />
 		<IdeaSuggestionModal v-model:open="ideaModalOpen" />
+		<OnboardingTour v-if="auth.isAuthenticated.value" />
 	</div>
 </template>
 
@@ -150,6 +156,15 @@ const MARKETING_ROUTES = new Set(['/', '/product', '/security', '/contacts', '/f
 const isLandingPage = computed(() =>
 	MARKETING_ROUTES.has(route.path) || route.path.startsWith('/s/'),
 )
+// phones: bottom tab bar on the main screens; a request's own screens keep
+// the whole height for their content and a back button
+const showTabBar = computed(() =>
+	auth.isAuthenticated.value
+	&& !route.params.id
+	&& route.path !== '/auth',
+)
+// the supplier replies screen hides the footer everywhere and, on phones,
+// the site header too: it has its own back button and needs the height
 const showAppFooter = computed(
 	() => !/^\/requests\/[^/]+\/responses(?:\/|$)/.test(route.path),
 )

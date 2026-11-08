@@ -207,6 +207,10 @@ export interface SubscriptionResponse {
 	expires_at: string | null;
 	auto_renew?: boolean;
 	bepaid_renew_at?: string | null;
+	/** test plan: real mailing works only while the 14-day trial is active */
+	trial_started_at?: string | null;
+	trial_ends_at?: string | null;
+	trial_state?: 'not_started' | 'active' | 'ended';
 	searches_used_this_month?: number;
 	emails_sent_this_month?: number;
 	kp_processed_this_month?: number;
@@ -702,6 +706,8 @@ export interface RequestResponse {
 	query: string;
 	is_multi_position?: boolean;
 	status: RequestStatus;
+	/** sample request of the onboarding tour: nothing is sent */
+	is_demo?: boolean;
 	delivery_region: string;
 	description: string;
 	created_at: string;
@@ -780,6 +786,8 @@ export interface LetterSummary {
 	met: number;
 	total: number;
 	changed: number;
+	/** attached files the AI could not read: «name — reason» */
+	unread_files?: string[];
 }
 
 /** null — ordinary letter */
@@ -957,8 +965,11 @@ export interface ComparisonSupplier {
 	explanations?: Record<string, string | null>;
 	corrected_from?: Record<string, string | null>;
 	statuses: Record<string, string | null>;
+	/** price rows: the comparable value; null when it cannot be compared */
 	numeric_values?: Record<string, number | null>;
 	percent_vs_min?: Record<string, number | null>;
+	/** price rows: why a price is not compared, or how it was converted */
+	price_notes?: Record<string, string | null>;
 	value_origins?: Record<string, string | null>;
 	source_message_ids?: Record<string, string | null>;
 }
@@ -966,6 +977,8 @@ export interface ComparisonSupplier {
 export interface ComparisonResponse {
 	requirements: string[];
 	price_requirements?: string[];
+	/** price row → unit its prices are compared in («м»); null for totals */
+	price_units?: Record<string, string | null>;
 	suppliers: ComparisonSupplier[];
 }
 

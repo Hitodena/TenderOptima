@@ -100,6 +100,12 @@ async function onSettingsSelect(template: EmailTemplate) {
 	await insertTemplate(template)
 }
 
+// the phone reply box calls these from its «+» sheet
+defineExpose({
+	insertDefault: insertDefaultQuickReply,
+	openSettings: () => { settingsOpen.value = true },
+})
+
 watch(settingsOpen, (open) => {
 	if (open) {
 		void fetchTemplates(true)

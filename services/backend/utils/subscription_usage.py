@@ -104,6 +104,7 @@ class SubscriptionUsageDAO:
             .join(Request, RequestSupplier.request_id == Request.id)
             .where(
                 Request.user_id == user_id,
+                Request.is_demo.is_(False),
                 EmailMessage.direction == EmailMessageDirection.OUTGOING.value,
                 EmailMessage.received_at.is_not(None),
                 EmailMessage.received_at >= month_start,

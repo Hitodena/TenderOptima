@@ -1,8 +1,64 @@
 <template>
 	<div class="w-full">
-		<div class="fixed inset-x-0 bottom-0 top-20 z-10 flex flex-col overflow-hidden bg-default">
+		<div class="fixed inset-x-0 bottom-0 top-0 md:top-14 lg:top-20 z-10 flex flex-col overflow-hidden bg-default">
 			<UContainer class="max-w-[1600px] py-0 flex flex-1 flex-col min-h-0 h-full w-full">
 				<div
+					v-if="isMobile && !(selectedRsId && mainTab === 'thread')"
+					class="shrink-0 space-y-2.5 border-b border-default bg-default px-2 pt-1 pb-3"
+				>
+					<div class="flex items-center gap-1">
+						<UButton
+							variant="ghost"
+							color="neutral"
+							size="xl"
+							icon="i-lucide-chevron-left"
+							class="shrink-0"
+							:to="`/requests/${id}`"
+							aria-label="К заявке"
+						/>
+						<div class="min-w-0 flex-1">
+							<p class="truncate font-semibold">
+								{{ requestQuery || 'Ответы поставщиков' }}
+								<UBadge v-if="isDemo" color="warning" variant="subtle" size="sm" class="ml-1 align-middle">Пример запроса</UBadge>
+							</p>
+							<p class="truncate text-xs text-muted">{{ mobileThreadsSummary }}</p>
+						</div>
+						<UButton
+							variant="ghost"
+							color="neutral"
+							size="xl"
+							icon="i-lucide-refresh-cw"
+							class="shrink-0"
+							:loading="refreshingAll"
+							aria-label="Обновить анализ по всем поставщикам"
+							@click="refreshAll"
+						/>
+					</div>
+					<div role="tablist" class="mx-2 grid grid-cols-2 gap-1 rounded-xl bg-elevated p-1">
+						<button
+							type="button"
+							role="tab"
+							:aria-selected="mainTab === 'thread'"
+							class="h-9 rounded-lg text-sm transition-colors"
+							:class="mainTab === 'thread' ? 'bg-default font-semibold shadow-sm' : 'font-medium text-muted'"
+							@click="mainTab = 'thread'"
+						>
+							{{ t('inbox.threadTab') }}
+						</button>
+						<button
+							type="button"
+							role="tab"
+							:aria-selected="mainTab === 'comparison'"
+							class="h-9 rounded-lg text-sm transition-colors"
+							:class="mainTab === 'comparison' ? 'bg-default font-semibold shadow-sm' : 'font-medium text-muted'"
+							@click="mainTab = 'comparison'"
+						>
+							{{ t('inbox.comparisonTab') }}
+						</button>
+					</div>
+				</div>
+				<div
+					v-if="!isMobile"
 					class="shrink-0 flex items-center justify-between gap-2 px-3 md:px-4 py-2 border-b border-default bg-default/95 backdrop-blur supports-backdrop-filter:bg-default/80"
 				>
 					<div class="flex items-center gap-1 min-w-0">
@@ -33,6 +89,7 @@
 						>
 							<span class="hidden sm:inline">К запросу</span>
 						</UButton>
+						<UBadge v-if="isDemo" color="warning" variant="subtle" size="sm" class="ml-1">Пример запроса</UBadge>
 					</div>
 
 					<div class="flex gap-1 rounded-xl bg-elevated p-1 shadow-inner shrink-0">
@@ -79,14 +136,14 @@
 
 				<div class="px-3 py-2 border-b border-default space-y-2 shrink-0">
 					<UInput
-v-model="threadSearch" placeholder="Поиск по поставщику или email" icon="i-lucide-search" size="sm"
+v-model="threadSearch" placeholder="Поиск по поставщику или email" icon="i-lucide-search" :size="isMobile ? 'lg' : 'sm'"
 						class="w-full" />
-					<div class="flex flex-wrap gap-1" role="group" aria-label="Фильтр поставщиков">
+					<div class="-mx-3 flex gap-1.5 overflow-x-auto px-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:mx-0 md:flex-wrap md:gap-1 md:px-0" role="group" aria-label="Фильтр поставщиков">
 						<button
 							v-for="f in threadFilterOptions"
 							:key="f.value"
 							type="button"
-							class="text-[11px] px-2 py-0.5 rounded-full border transition-colors cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+							class="shrink-0 text-sm px-3 py-1.5 md:text-[11px] md:px-2 md:py-0.5 rounded-full border transition-colors cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
 							:class="threadFilter === f.value
 								? 'bg-inverted text-inverted border-inverted'
 								: 'border-default text-muted hover:text-default hover:border-accented'"
@@ -96,7 +153,7 @@ v-model="threadSearch" placeholder="Поиск по поставщику или 
 							{{ f.label }} <span class="font-semibold tabular-nums">{{ threadFilterCounts[f.value] }}</span>
 						</button>
 					</div>
-					<USelect v-model="threadSort" :items="threadSortOptions" size="sm" class="w-full" />
+					<USelect v-model="threadSort" :items="threadSortOptions" :size="isMobile ? 'md' : 'sm'" class="w-full" />
 				</div>
 
 				<div class="flex-1 overflow-y-auto">
@@ -138,23 +195,25 @@ v-else-if="sortedThreads.length === 0"
 								<div class="flex items-center gap-1.5 min-w-0">
 									<span v-if="thread.unread" class="w-2 h-2 rounded-full bg-primary shrink-0" aria-label="Не прочитано" />
 									<p
-										class="text-[13px] leading-snug truncate min-w-0"
+										class="text-[15px] md:text-[13px] leading-snug truncate min-w-0"
 										:class="thread.unread ? 'font-bold' : 'font-semibold'"
 										:title="thread.supplier.company_name"
 									>
 										{{ thread.supplier.company_name }}
 									</p>
+									<UBadge v-if="isDemo" color="warning" variant="subtle" size="sm" class="shrink-0">Пример ответа</UBadge>
 									<span class="ml-auto text-[11px] text-dimmed whitespace-nowrap shrink-0 tabular-nums">
 										{{ thread.last_message?.received_at
 											? formatDateShort(thread.last_message.received_at)
 											: '' }}
 									</span>
 								</div>
-								<p class="text-xs mt-0.5 line-clamp-2 break-words" :class="thread.last_message ? 'text-default' : 'text-muted'">
+								<p class="text-sm md:text-xs mt-0.5 line-clamp-2 break-words" :class="thread.last_message ? 'text-default' : 'text-muted'">
 									<span v-if="thread.last_message?.direction === 'outgoing'" class="text-muted">Вы: </span>{{ threadPreview(thread) }}
 								</p>
 								<div class="flex items-center gap-2 mt-1.5 text-[11px] text-muted">
 									<span
+										v-if="threadState(thread) !== 'awaiting'"
 										class="font-semibold px-1.5 py-px rounded"
 										:class="threadStateClass(threadState(thread))"
 									>{{ THREAD_STATE_LABEL[threadState(thread)] }}</span>
@@ -167,7 +226,7 @@ v-else-if="sortedThreads.length === 0"
 							</div>
 						</div>
 						</button>
-						<div class="flex items-center px-2 shrink-0">
+						<div class="hidden md:flex items-center px-2 shrink-0">
 							<UButton
 								size="xs"
 								color="neutral"
@@ -204,8 +263,32 @@ v-else-if="comparison.suppliers.length === 0"
 								<UIcon name="i-lucide-users" class="w-10 h-10 opacity-20" />
 								<p class="text-sm">Нет проанализированных ответов</p>
 							</div>
+							<InboxComparisonMobile
+								v-else-if="isMobile"
+								data-tour="comparison"
+								class="-mx-3 -my-4"
+								:requirements="comparison.requirements"
+								:price-requirements="priceRequirements"
+								:price-units="comparison.price_units ?? {}"
+								:suppliers="comparison.suppliers"
+								:has-confirmed-winner="hasConfirmedWinner"
+								:exporting="exportingComparison"
+								:unit-price-label="UNIT_PRICE_REQUIREMENT"
+								:position-title="positionPriceTitle"
+								:display-value="comparisonDisplayValue"
+								:percent="formatPercentVsMin"
+								:compliance="complianceForSupplier"
+								:has-mismatches="supplierHasLetterMismatches"
+								@open-thread="(s) => { mainTab = 'thread'; selectThread(s.rs_id) }"
+								@letter="openLetterModal"
+								@improve="openImproveModal"
+								@winner="openWinnerModal"
+								@clear-winner="openClearWinnerConfirm"
+								@export="exportComparisonXlsx"
+							/>
 							<div
 								v-else
+								data-tour="comparison"
 								class="min-w-0 flex-1 min-h-0 flex flex-col rounded-xl border border-default overflow-hidden"
 							>
 								<div
@@ -252,7 +335,7 @@ v-else-if="comparison.suppliers.length === 0"
 									<thead>
 										<tr class="border-b border-default bg-elevated/50">
 											<th
-												class="sticky left-0 z-10 bg-elevated/95 px-3 py-2.5 text-left text-xs font-semibold min-w-40 max-w-56 wrap-break-word whitespace-normal align-top">
+												class="sticky left-0 z-10 bg-elevated/95 px-2 sm:px-3 py-2.5 text-left text-xs font-semibold w-28 min-w-28 max-w-28 sm:w-auto sm:min-w-40 sm:max-w-56 wrap-break-word whitespace-normal align-top">
 												Требование
 											</th>
 											<th
@@ -277,7 +360,7 @@ v-for="supplier in sortedComparisonSuppliers" :key="supplier.rs_id"
 v-for="req in comparison.requirements" :key="req"
 											class="border-b border-default/50 last:border-0">
 											<td
-												class="sticky left-0 z-10 bg-default px-3 py-2.5 text-xs font-medium align-top wrap-break-word whitespace-normal max-w-56">
+												class="sticky left-0 z-10 bg-default px-2 sm:px-3 py-2.5 text-xs font-medium align-top wrap-break-word whitespace-normal w-28 min-w-28 max-w-28 sm:w-auto sm:min-w-0 sm:max-w-56">
 												<button
 													v-if="isPriceRequirement(req)"
 													type="button"
@@ -300,7 +383,15 @@ v-for="req in comparison.requirements" :key="req"
 														{{ positionPriceTitle(req) }}
 													</span>
 												</template>
+												<template v-else-if="shortRequirement(req) !== req">
+													<span class="sm:hidden">{{ shortRequirement(req) }}</span>
+													<span class="hidden sm:inline">{{ req }}</span>
+												</template>
 												<span v-else>{{ req }}</span>
+												<span
+													v-if="comparison.price_units?.[req]"
+													class="block text-[10px] font-normal text-muted mt-0.5"
+												>сравниваем за {{ comparison.price_units[req] }}</span>
 											</td>
 											<td
 v-for="supplier in sortedComparisonSuppliers" :key="supplier.rs_id"
@@ -321,6 +412,13 @@ v-for="supplier in sortedComparisonSuppliers" :key="supplier.rs_id"
 															class="text-xs wrap-break-word whitespace-normal"
 														>
 															—
+														</p>
+														<p
+															v-if="supplier.price_notes?.[req]"
+															class="text-[10px] leading-snug wrap-break-word whitespace-normal"
+															:class="supplier.percent_vs_min?.[req] == null ? 'text-warning' : 'text-muted'"
+														>
+															{{ supplier.price_notes[req] }}
 														</p>
 														<p
 															v-if="formatPercentVsMin(supplier, req)"
@@ -405,7 +503,8 @@ v-for="supplier in sortedComparisonSuppliers"
 										<tr class="border-t border-default/50 bg-elevated/20">
 											<td
 												class="sticky left-0 z-10 bg-elevated/95 px-3 py-3 text-xs font-semibold align-middle">
-												Запросить отсутствующие параметры
+												<span class="sm:hidden">Запрос параметров</span>
+												<span class="hidden sm:inline">Запросить отсутствующие параметры</span>
 											</td>
 											<td
 v-for="supplier in sortedComparisonSuppliers"
@@ -483,7 +582,7 @@ v-for="supplier in sortedComparisonSuppliers"
 							</div>
 						</div>
 						<div
-v-if="comparison?.requirements.length && comparison?.suppliers.length"
+v-if="!isMobile && comparison?.requirements.length && comparison?.suppliers.length"
 							class="shrink-0 border-t border-default px-3 md:px-5 py-3 flex justify-end">
 							<UButton
 size="sm" variant="outline" leading-icon="i-lucide-download"
@@ -501,13 +600,17 @@ size="sm" variant="outline" leading-icon="i-lucide-download"
 					</div>
 
 					<template v-else>
-						<div class="px-3 md:px-5 py-2.5 border-b border-default flex items-center gap-3 shrink-0">
+						<div
+							class="px-3 md:px-5 py-2.5 flex items-center gap-3 shrink-0"
+							:class="isMobile ? '' : 'border-b border-default'"
+						>
 							<UButton
 								v-if="isMobile"
-								size="xs"
+								size="xl"
 								color="neutral"
 								variant="ghost"
-								icon="i-lucide-arrow-left"
+								icon="i-lucide-chevron-left"
+								class="-ml-2 shrink-0"
 								aria-label="К списку поставщиков"
 								@click="() => { selectedRsId = null }"
 							/>
@@ -516,10 +619,10 @@ size="sm" variant="outline" leading-icon="i-lucide-download"
 								aria-hidden="true"
 							>{{ companyInitials(selectedThread?.supplier.company_name || '') }}</span>
 							<div class="min-w-0 flex-1">
-								<p class="font-semibold truncate text-sm">
+								<p class="font-semibold truncate text-[15px] md:text-sm">
 									{{ selectedThread?.supplier.company_name }}
 								</p>
-								<p class="text-[11px] md:text-xs text-muted truncate">
+								<p class="text-xs text-muted truncate">
 									<span v-if="selectedThread?.supplier.main_email">{{ selectedThread.supplier.main_email }}</span>
 									<span v-if="selectedThread?.supplier.main_email && threadStatsLabel"> · </span>
 									<span class="tabular-nums">{{ threadStatsLabel }}</span>
@@ -528,26 +631,44 @@ size="sm" variant="outline" leading-icon="i-lucide-download"
 							<div class="flex items-center gap-1.5 shrink-0">
 								<UButton
 									v-if="threadFileCount"
-									size="xs"
-									variant="outline"
+									:size="isMobile ? 'xl' : 'xs'"
+									:variant="isMobile ? 'ghost' : 'outline'"
 									color="neutral"
 									icon="i-lucide-paperclip"
+									:aria-label="`Все файлы: ${threadFileCount}`"
 									@click="() => { filesOpen = true }"
 								>
 									<span class="hidden md:inline">Все файлы · {{ threadFileCount }}</span>
-									<span class="md:hidden tabular-nums">{{ threadFileCount }}</span>
+
 								</UButton>
 								<UButton
 									v-if="!showParamsPanel"
-									size="xs"
-									variant="outline"
+									:size="isMobile ? 'xl' : 'xs'"
+									:variant="isMobile ? 'ghost' : 'outline'"
 									color="neutral"
 									icon="i-lucide-list-checks"
+									aria-label="Соответствие ТЗ"
 									:disabled="!latestIncomingId"
 									@click="showParamsPanel = true"
 								>
 									<span class="hidden md:inline">Соответствие ТЗ</span>
 								</UButton>
+							</div>
+						</div>
+						<div v-if="isMobile" class="shrink-0 border-b border-default px-3 pb-2.5">
+							<div role="tablist" class="grid grid-cols-2 gap-1 rounded-xl bg-elevated p-1">
+								<button
+									v-for="tab in mainTabs"
+									:key="tab.value"
+									type="button"
+									role="tab"
+									:aria-selected="mainTab === tab.value"
+									class="h-9 rounded-lg text-sm transition-colors"
+									:class="mainTab === tab.value ? 'bg-default font-semibold shadow-sm' : 'font-medium text-muted'"
+									@click="mainTab = tab.value"
+								>
+									{{ tab.label }}
+								</button>
 							</div>
 						</div>
 
@@ -575,6 +696,8 @@ size="sm" variant="outline" leading-icon="i-lucide-download"
 										</div>
 										<div
 											:data-message-id="msg.id"
+											:data-tour="msg.id === latestIncomingId ? 'latest-letter' : undefined"
+											:data-ready="msg.id === latestIncomingId ? String(tourLetterReady) : undefined"
 											:class="msg.id === newDividerMessageId ? 'scroll-mt-10' : 'scroll-mt-3'"
 										>
 											<InboxMessageCard
@@ -603,14 +726,176 @@ size="sm" variant="outline" leading-icon="i-lucide-download"
 							</div>
 						</div>
 
-						<div class="border-t border-default px-3 md:px-5 py-4 shrink-0 min-w-0">
+						<input
+							ref="replyFileInput"
+							type="file"
+							class="hidden"
+							multiple
+							accept=".pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp"
+							@change="onReplyFilesSelected"
+						>
+						<!-- phones: one line [+] [text] [send]; the rest of the actions live behind «+» -->
+						<div
+							v-if="isMobile"
+							class="shrink-0 min-w-0 space-y-2 border-t border-default px-3 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+						>
+							<UButton
+								v-if="mismatchChip === 'request'"
+								data-tour="request-missing"
+								color="primary"
+								variant="soft"
+								size="md"
+								leading-icon="i-lucide-mail-question"
+								class="rounded-full"
+								@click="openThreadLetterModal"
+							>
+								Запросить недостающее
+								<template #trailing>
+									<span class="grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-inverted tabular-nums">
+										{{ threadLetterMismatches.length }}
+									</span>
+								</template>
+							</UButton>
+							<p
+								v-else-if="mismatchChip === 'waiting'"
+								class="inline-flex h-8 items-center gap-1.5 rounded-full bg-elevated px-3 text-sm text-muted"
+							>
+								<UIcon name="i-lucide-clock" class="size-4 shrink-0" />
+								Запрошено · ждём ответа
+							</p>
+							<div v-if="replyFiles.length" class="flex flex-wrap gap-2 min-w-0">
+								<div
+									v-for="(file, idx) in replyFiles"
+									:key="`${file.name}-${file.size}-${file.lastModified}`"
+									class="flex h-9 max-w-full items-center gap-1.5 rounded-full bg-elevated pl-3 pr-1 text-sm"
+								>
+									<UIcon name="i-lucide-paperclip" class="size-4 shrink-0 text-primary" />
+									<span class="min-w-0 truncate" :title="file.name">{{ file.name }}</span>
+									<UButton
+										size="sm"
+										color="neutral"
+										variant="ghost"
+										icon="i-lucide-x"
+										class="rounded-full"
+										:aria-label="`${t('inbox.attachFileRemove')}: ${file.name}`"
+										:disabled="sendingReply"
+										@click="removeReplyFile(idx)"
+									/>
+								</div>
+							</div>
+							<div class="flex items-end gap-2">
+								<UButton
+									color="neutral"
+									variant="outline"
+									size="xl"
+									icon="i-lucide-plus"
+									class="shrink-0 rounded-full"
+									aria-label="Действия: быстрые ответы, реквизиты, файл"
+									@click="replyActionsOpen = true"
+								/>
+								<UTextarea
+									v-model="replyBody"
+									placeholder="Ответ поставщику…"
+									aria-label="Текст ответа поставщику"
+									:rows="1"
+									autoresize
+									:maxrows="6"
+									class="min-w-0 flex-1"
+									:ui="{ base: 'min-h-11 resize-none rounded-3xl px-4 py-2.5 text-base' }"
+								/>
+								<UButton
+									icon="i-lucide-send"
+									size="xl"
+									class="shrink-0 rounded-full"
+									aria-label="Отправить ответ"
+									:loading="sendingReply"
+									:disabled="!replyBody.trim() || !canSendReplyEmail"
+									@click="sendReply"
+								/>
+							</div>
+							<UAlert
+								v-if="replyQuotaMessage && !canSendReplyEmail"
+								color="warning" variant="soft" icon="i-lucide-mail" :description="replyQuotaMessage" />
+							<UAlert
+								v-if="replyError" color="error" variant="soft" icon="i-lucide-circle-alert"
+								:description="replyError" />
+							<!-- the existing buttons keep their logic; the «+» sheet calls them -->
+							<span class="hidden">
+								<ReceiptAcknowledgementButton
+									ref="quickReplyButton"
+									v-model="replyBody"
+									:company-name="selectedThread?.supplier.company_name"
+								/>
+								<InsertBusinessInfoButton ref="businessInfoButton" v-model="replyBody" />
+							</span>
+							<UDrawer v-model:open="replyActionsOpen" title="Ответ поставщику">
+								<template #body>
+									<div class="flex flex-col overflow-hidden rounded-2xl border border-default mb-4">
+										<button
+											v-if="threadLetterMismatches.length"
+											type="button"
+											class="flex min-h-14 items-center gap-3 px-4 text-left"
+											@click="runReplyAction(openThreadLetterModal)"
+										>
+											<UIcon name="i-lucide-mail-question" class="size-5 text-primary" />
+											<span class="flex-1">Запросить недостающее</span>
+											<span class="grid h-6 min-w-6 place-items-center rounded-full bg-primary px-1.5 text-xs font-semibold text-inverted tabular-nums">
+												{{ threadLetterMismatches.length }}
+											</span>
+										</button>
+										<button
+											type="button"
+											class="flex min-h-14 items-center gap-3 border-t border-default/60 px-4 text-left first:border-t-0"
+											@click="runReplyAction(() => quickReplyButton?.insertDefault())"
+										>
+											<UIcon name="i-lucide-mail-check" class="size-5 text-primary" />
+											<span class="flex-1">{{ t('inbox.quickReplyTemplates') }}</span>
+										</button>
+										<button
+											type="button"
+											class="flex min-h-14 items-center gap-3 border-t border-default/60 px-4 text-left"
+											@click="runReplyAction(() => businessInfoButton?.insert())"
+										>
+											<UIcon name="i-lucide-id-card" class="size-5 text-primary" />
+											<span class="flex-1">{{ t('inbox.insertBusinessInfo') }}</span>
+										</button>
+										<button
+											type="button"
+											class="flex min-h-14 items-center gap-3 border-t border-default/60 px-4 text-left disabled:opacity-50"
+											:disabled="sendingReply || replyFiles.length >= maxReplyUploadFiles"
+											@click="runReplyAction(() => replyFileInput?.click())"
+										>
+											<UIcon name="i-lucide-paperclip" class="size-5 text-primary" />
+											<span class="flex min-w-0 flex-1 flex-col">
+												<span>{{ t('inbox.attachFile') }}</span>
+												<span class="text-sm text-muted">Файлы, камера, галерея</span>
+											</span>
+										</button>
+									</div>
+									<div class="flex flex-col overflow-hidden rounded-2xl border border-default mb-4">
+										<button
+											type="button"
+											class="flex min-h-13 items-center gap-3 px-4 text-left"
+											@click="runReplyAction(() => quickReplyButton?.openSettings())"
+										>
+											<UIcon name="i-lucide-settings" class="size-5 text-muted" />
+											<span class="flex-1">{{ t('inbox.quickReplyTemplatesSettings') }}</span>
+										</button>
+									</div>
+								</template>
+							</UDrawer>
+						</div>
+						<div v-else class="border-t border-default px-3 md:px-5 py-4 shrink-0 min-w-0">
 							<div class="flex flex-col gap-2 mb-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-								<p class="text-xs text-muted font-medium sm:mr-auto">
-									Ответить {{ selectedThread?.supplier.company_name }}
-								</p>
+								<div class="flex items-center gap-2 sm:mr-auto">
+									<p class="min-w-0 flex-1 truncate text-xs text-muted font-medium">
+										Ответить {{ selectedThread?.supplier.company_name }}
+									</p>
+								</div>
 								<div class="flex flex-wrap items-center gap-2 min-w-0">
 									<UButton
 										v-if="threadLetterMismatches.length"
+										data-tour="request-missing"
 										size="xs"
 										variant="outline"
 										color="primary"
@@ -662,14 +947,6 @@ size="sm" variant="outline" leading-icon="i-lucide-download"
 							<div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between min-w-0">
 								<p class="text-xs text-muted hidden md:block">Ответ придёт поставщику на его email</p>
 								<div class="flex items-center gap-1.5 w-full sm:w-auto justify-end min-w-0">
-									<input
-										ref="replyFileInput"
-										type="file"
-										class="hidden"
-										multiple
-										accept=".pdf,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.webp"
-										@change="onReplyFilesSelected"
-									>
 									<UButton
 										size="sm"
 										color="neutral"
@@ -705,6 +982,7 @@ v-if="replyError" color="error" variant="soft" icon="i-lucide-circle-alert"
 
 			<div
 v-if="showParamsPanel && mainTab === 'thread'" class="shrink-0 border-l border-default flex flex-col"
+				data-tour="compliance" :data-ready="String(requirementMatches.length > 0)"
 				:class="isMobile
 					? 'absolute inset-0 z-20 w-full bg-default'
 					: 'w-72 md:w-80 lg:w-96'">
@@ -890,16 +1168,18 @@ block size="sm" variant="outline" leading-icon="i-lucide-mail"
 		/>
 		<ImproveConditionsModal
 v-if="modalSupplier" v-model:open="improveModalOpen" :request-id="id"
-			:supplier="modalSupplier" :subscription="subscription" />
+			:supplier="modalSupplier" :subscription="subscription" :demo="isDemo" />
 		<ResponseMismatchLetterModal
 v-if="letterModalSupplier" v-model:open="letterModalOpen" :request-id="id"
-			:supplier="letterModalSupplier" :initial-body="letterModalBody" :subscription="subscription" />
+			:supplier="letterModalSupplier" :initial-body="letterModalBody" :subscription="subscription"
+			:demo="isDemo" @sent="onLetterSent" />
 		<WinnerNotificationModal
 			v-if="winnerModalSupplier"
 			v-model:open="winnerModalOpen"
 			:request-id="id"
 			:supplier="winnerModalSupplier"
 			:subscription="subscription"
+			:demo="isDemo"
 			@sent="fetchComparison"
 		/>
 
@@ -960,8 +1240,8 @@ import {
 import { getApiErrorDetail } from '#shared/utils/apiError'
 import { pluralizeLetters, pluralizeRu, pluralizeSuppliersGenitive } from '#shared/utils/textFormat'
 import {
-	canSendEmail,
-	emailQuotaBlockMessage,
+	canSendMail,
+	mailingBlockMessage,
 } from '#shared/utils/subscriptionAccess'
 import { useIntervalFn } from '@vueuse/core'
 import {
@@ -995,10 +1275,23 @@ const toast = useToast()
 const { formatDateTime, formatDateShort } = useFormatDate()
 
 const subscription = ref<SubscriptionResponse | null>(null)
-const canSendReplyEmail = computed(() => canSendEmail(subscription.value, 1))
-const replyQuotaMessage = computed(() => emailQuotaBlockMessage(subscription.value, 1))
+// sample request: letters stay inside the service, limits and trial do not apply
+const isDemo = ref(false)
+const canSendReplyEmail = computed(() => isDemo.value || canSendMail(subscription.value, 1))
+const replyQuotaMessage = computed(() => (isDemo.value ? null : mailingBlockMessage(subscription.value, 1)))
 
 const isMobile = ref(false)
+
+// phones: quick replies, business card and files sit behind «+»
+const replyActionsOpen = ref(false)
+const quickReplyButton = ref<{ insertDefault: () => Promise<void>, openSettings: () => void } | null>(null)
+const businessInfoButton = ref<{ insert: () => Promise<void> } | null>(null)
+function runReplyAction(action: () => unknown) {
+	replyActionsOpen.value = false
+	void action()
+}
+
+const requestQuery = ref('')
 onMounted(() => {
 	const update = () => { isMobile.value = window.innerWidth < 768 }
 	update()
@@ -1029,6 +1322,10 @@ function openSaveToBookmarkModal(supplier: Supplier) {
 
 const showParamsPanel = ref(true)
 const mainTab = ref<'thread' | 'comparison'>('thread')
+const mainTabs = [
+	{ value: 'thread', label: t('inbox.threadTab') },
+	{ value: 'comparison', label: t('inbox.comparisonTab') },
+] as const
 const showSaveToBookmarkModal = ref(false)
 const saveToBookmarkSupplier = ref<Supplier | null>(null)
 
@@ -1058,7 +1355,8 @@ async function fetchThreads(silent = false) {
 }
 
 function selectDefaultThread() {
-	if (selectedRsId.value) return
+	// phones open on the list: the user picks whom to read
+	if (selectedRsId.value || isMobile.value) return
 	const first = sortedThreads.value[0]
 	if (first) selectThread(first.rs_id)
 }
@@ -1123,6 +1421,8 @@ const hasRequirements = computed(
 async function fetchRequestParams() {
 	try {
 		const request = await get<RequestResponse>(`/requests/${id}`)
+		requestQuery.value = request.query
+		isDemo.value = Boolean(request.is_demo)
 		const params = request.additional_params
 		requestParams.value = Array.isArray(params)
 			? params.filter(p => typeof p === 'string' && p.trim())
@@ -1143,15 +1443,19 @@ onUnmounted(() => {
 	pauseThreadPoll()
 })
 
-type ThreadFilter = 'all' | 'new' | 'replied' | 'awaiting' | 'problems'
+type ThreadFilter = 'all' | 'new' | 'replied' | 'problems'
 const threadFilter = ref<ThreadFilter>('all')
 const threadFilterOptions: { value: ThreadFilter, label: string }[] = [
 	{ value: 'all', label: 'Все' },
 	{ value: 'new', label: 'Новые' },
 	{ value: 'replied', label: 'Ответили' },
-	{ value: 'awaiting', label: 'Ждём ответа' },
 	{ value: 'problems', label: 'Проблемы' },
 ]
+
+// phones: the first column is narrow, long requirement names get a short form
+function shortRequirement(req: string) {
+	return req.replace(/\s*\(страна\)\s*$/i, '')
+}
 
 function matchesThreadFilter(thread: ThreadSummary, filter: ThreadFilter) {
 	if (filter === 'all') return true
@@ -1159,12 +1463,26 @@ function matchesThreadFilter(thread: ThreadSummary, filter: ThreadFilter) {
 	// "Ответили" — every supplier who wrote at least once
 	if (filter === 'replied') return thread.message_count > 0
 	// "Проблемы": the letter did not arrive, or the supplier seems to refuse
-	if (filter === 'problems') return Boolean(thread.delivery_failed || thread.declined)
-	return threadState(thread) === 'awaiting'
+	return Boolean(thread.delivery_failed || thread.declined)
 }
 
+const mobileThreadsSummary = computed(() => {
+	const total = threads.value.length
+	const replied = threads.value.filter(t => t.message_count > 0).length
+	return `${total} ${pluralRu(total, 'поставщик', 'поставщика', 'поставщиков')} · ответили ${replied}`
+})
+
+function pluralRu(n: number, one: string, few: string, many: string): string {
+	const m10 = n % 10
+	const m100 = n % 100
+	if (m10 === 1 && m100 !== 11) return one
+	if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few
+	return many
+}
+
+
 const threadFilterCounts = computed(() => {
-	const counts: Record<ThreadFilter, number> = { all: 0, new: 0, replied: 0, awaiting: 0, problems: 0 }
+	const counts: Record<ThreadFilter, number> = { all: 0, new: 0, replied: 0, problems: 0 }
 	for (const thread of threads.value) {
 		for (const f of threadFilterOptions) {
 			if (matchesThreadFilter(thread, f.value)) counts[f.value]++
@@ -1692,6 +2010,22 @@ const threadLetterMismatches = computed(() =>
 	filterNonMatching(requirementMatches.value),
 )
 
+/**
+ * Phones: the "request missing" chip above the reply box.
+ * request — the offer came and has gaps; waiting — we already wrote after
+ * that letter; null — nothing to ask (no gaps, refusal, winner chosen).
+ * The action itself stays in the «+» sheet in every case.
+ */
+const mismatchChip = computed((): 'request' | 'waiting' | null => {
+	if (!threadLetterMismatches.value.length) return null
+	if (selectedThread.value?.declined || hasConfirmedWinner.value) return null
+	const incoming = latestIncomingMessage.value
+	if (!incoming) return null
+	const list = messages.value
+	const after = list.slice(list.findIndex(m => m.id === incoming.id) + 1)
+	return after.some(m => m.direction === 'outgoing' && !m.kind) ? 'waiting' : 'request'
+})
+
 const selectedThreadAsComparisonSupplier = computed((): ComparisonSupplier | null => {
 	const thread = selectedThread.value
 	if (!thread) return null
@@ -2214,4 +2548,76 @@ async function downloadZip(messageId?: string) {
 		zipping.value = false
 	}
 }
+
+// ── onboarding tour on the sample request ──────────────────────────────────
+const tour = useOnboardingTour()
+const tourHere = computed(() => isDemo.value && tour.isRunning.value && tour.state.value.demoRequestId === id)
+
+/** the sample supplier answered the user's letter (step 4) */
+const demoReplyArrived = computed(() => {
+	const outgoing = messages.value.filter(m => m.direction === 'outgoing').length
+	const last = [...messages.value].reverse().find(m => !m.kind)
+	return outgoing >= 2 && last?.direction === 'incoming'
+})
+
+/** is the latest letter ready to be shown by the current step */
+const tourLetterReady = computed(() => {
+	if (!tourHere.value) return true
+	if (tour.step.value === 2) return requirementMatches.value.length > 0
+	if (tour.step.value === 4) return demoReplyArrived.value
+	return true
+})
+
+const TOUR_SUPPLIER: Record<number, string> = {
+	2: 'Поставщик А',
+	3: 'Поставщик Б',
+	4: 'Поставщик Б',
+}
+
+function followTourStep() {
+	if (!tourHere.value) return
+	const n = tour.step.value
+	const name = TOUR_SUPPLIER[n]
+	if (name) {
+		const thread = threads.value.find(t => t.supplier.company_name === name)
+		if (thread && selectedRsId.value !== thread.rs_id) selectThread(thread.rs_id)
+		if (mainTab.value !== 'thread') mainTab.value = 'thread'
+		// step 2 on a computer lights up the compliance panel
+		if (n === 2 && !isMobile.value) showParamsPanel.value = true
+	} else if (n === 5 && mainTab.value !== 'comparison') {
+		mainTab.value = 'comparison'
+		void fetchComparison()
+	}
+}
+
+watch(() => [tour.step.value, isDemo.value, threads.value.length] as const, followTourStep)
+
+// the tour runs again on another device: the supplier has already answered,
+// so there is nothing left to ask — go straight to the answer
+watch(() => [tour.step.value, demoReplyArrived.value, selectedThread.value?.supplier.company_name] as const,
+	([n, arrived, name]) => {
+		if (tourHere.value && n === 3 && arrived && name === TOUR_SUPPLIER[3]) tour.goto(4)
+	})
+
+// letters of the sample arrive in seconds: refresh fast while the tour waits
+useIntervalFn(async () => {
+	if (!tourHere.value || ![2, 3, 4].includes(tour.step.value)) return
+	await fetchThreads(true)
+	if (selectedRsId.value) {
+		await fetchMessages(selectedRsId.value, { silent: true })
+		await fetchAnalysis()
+	}
+}, 3000)
+
+async function onLetterSent() {
+	if (selectedRsId.value) await fetchMessages(selectedRsId.value, { silent: true })
+	if (tourHere.value && tour.step.value === 3) tour.goto(4)
+}
+
+// the letter dialog closed without sending: bring the tour back
+watch(letterModalOpen, (open) => {
+	if (!open && tourHere.value && tour.step.value === 3 && tour.paused.value) {
+		tour.paused.value = false
+	}
+})
 </script>

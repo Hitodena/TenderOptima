@@ -71,6 +71,9 @@ class RequirementMatch(BaseModel):
     offer_value: str | None = None
     numeric_value: float | None = None
     currency: str | None = None
+    # price rows: what the price is for, as the supplier wrote it («м»,
+    # «шт», «100 м», «бухта 100 м»); None when not stated
+    unit: str | None = None
     explanation: str | None = None
     status: TZAnalysisStatus
     corrected_from: str | None = None
@@ -81,6 +84,9 @@ class RequirementMatch(BaseModel):
 class EmailAnalysisResult(BaseModel):
     parameters: dict[str, str]
     matches: list[RequirementMatch]
+    # attached files that gave no text: «name — reason»; the letter tells the
+    # buyer to look at them by hand
+    unread_files: list[str] = []
 
 
 def compute_tz_stats(items: list[TZAnalysisItem]) -> dict[str, int]:

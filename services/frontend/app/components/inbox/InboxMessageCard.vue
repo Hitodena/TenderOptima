@@ -151,6 +151,19 @@
 			</div>
 		</div>
 
+		<div
+			v-if="summary?.unread_files?.length"
+			class="mx-4 mb-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs"
+		>
+			<p class="flex items-center gap-1.5 font-semibold text-warning">
+				<UIcon name="i-lucide-file-warning" class="w-3.5 h-3.5 shrink-0" />
+				ИИ не смог прочитать {{ summary.unread_files.length === 1 ? 'файл' : 'файлы' }} — проверьте вручную
+			</p>
+			<ul class="mt-1 space-y-0.5 text-default">
+				<li v-for="item in summary.unread_files" :key="item" class="wrap-break-word">{{ item }}</li>
+			</ul>
+		</div>
+
 		<div v-if="message.is_decline" class="mx-4 mb-2 flex items-center gap-2 rounded-lg bg-elevated px-3 py-1.5 text-xs text-muted">
 			<UIcon name="i-lucide-circle-slash" class="w-3.5 h-3.5" />
 			Похоже на отказ от поставки. Это подсказка: проверьте текст письма.

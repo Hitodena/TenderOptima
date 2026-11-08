@@ -17,6 +17,7 @@ from backend.utils.subscription_carryover import (
 )
 from backend.utils.subscription_catalog import catalog_for_plan
 from backend.utils.subscription_usage import SubscriptionUsageDAO
+from backend.utils.trial import TrialState, trial_state, trial_window
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -93,5 +94,51 @@ async def change_my_plan(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to load updated subscription",
+        )
+    return response
+
+
+@router.post(
+    "/me/trial",
+    response_model=SubscriptionResponse,
+    summary="Start the 14-day trial of the test plan",
+)
+async def start_my_trial(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> SubscriptionResponse:
+    """Open real mailing on the test plan for 14 days. Once per account."""
+    subscription = await SubscriptionDAO.get_by_user_id(
+        session, current_user.id
+    )
+    if subscription is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Subscription is not configured for this account",
+        )
+    if subscription.plan != SubscriptionPlan.TEST.value:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Пробный период доступен только на тестовом тарифе",
+        )
+    if trial_state(subscription) == TrialState.NOT_STARTED:
+        started_at, ends_at = trial_window()
+        subscription = await SubscriptionDAO.update_fields(
+            session,
+            subscription.id,
+            trial_started_at=started_at,
+            trial_ends_at=ends_at,
+        )
+    elif trial_state(subscription) == TrialState.ENDED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Пробный период уже использован",
+        )
+    usage = await SubscriptionUsageDAO.get_for_user(session, current_user.id)
+    response = subscription_to_response(subscription, usage=usage)
+    if response is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to load subscription",
         )
     return response

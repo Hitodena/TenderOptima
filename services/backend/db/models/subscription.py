@@ -60,6 +60,14 @@ class Subscription(IDMixinUUID, TimestampMixin, Base):
         DateTime(timezone=True)
     )
 
+    # Test plan: real mailing works only inside this window (onboarding trial).
+    trial_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    trial_ends_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+
     auto_renew: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False
     )

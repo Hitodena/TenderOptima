@@ -39,6 +39,7 @@
 				<LetterAttachmentsField
 					ref="attachmentsField"
 					v-model="filesToUpload"
+					hide-mobile-button
 				/>
 
 				<UAlert
@@ -84,8 +85,8 @@ import {
 } from '#shared/constants/emailModal'
 import { getApiErrorDetail } from '#shared/utils/apiError'
 import {
-	canSendEmail,
-	emailQuotaBlockMessage,
+	canSendMail,
+	mailingBlockMessage,
 } from '#shared/utils/subscriptionAccess'
 import LetterAttachButton from '~/components/LetterAttachButton.vue'
 import LetterAttachmentsField from '~/components/LetterAttachmentsField.vue'
@@ -94,6 +95,8 @@ const props = defineProps<{
 	requestId: string
 	supplier: ComparisonSupplier
 	subscription?: SubscriptionResponse | null
+	/** sample request of the onboarding tour: the letter stays inside */
+	demo?: boolean
 }>()
 
 const isOpen = defineModel<boolean>('open', { default: false })
@@ -109,8 +112,8 @@ const attachmentsField = ref<{ open: () => void } | null>(null)
 const sending = ref(false)
 const error = ref('')
 
-const canSend = computed(() => canSendEmail(props.subscription, 1))
-const quotaMessage = computed(() => emailQuotaBlockMessage(props.subscription, 1))
+const canSend = computed(() => Boolean(props.demo) || canSendMail(props.subscription, 1))
+const quotaMessage = computed(() => (props.demo ? null : mailingBlockMessage(props.subscription, 1)))
 
 function defaultSubject() {
 	return 'Поздравляем! Ваше предложение признано лучшим'

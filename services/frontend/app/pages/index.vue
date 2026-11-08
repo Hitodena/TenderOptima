@@ -2,7 +2,9 @@
 	<div>
 		<!-- Authenticated: dashboard -->
 		<template v-if="auth.isAuthenticated.value && user">
-			<div class="dashboard-page">
+			<!-- phones: "what to do now" instead of the welcome banner -->
+			<HomeMobileHome :user="user" class="lg:hidden" />
+			<div class="dashboard-page hidden lg:block">
 			<!-- Hero -->
 			<section class="landing-hero px-4 pb-16 pt-14 sm:px-6 sm:pb-20 sm:pt-18 lg:px-8 lg:pb-24 lg:pt-20">
 				<div class="relative z-10 mx-auto max-w-4xl text-center">

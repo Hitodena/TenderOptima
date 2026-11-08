@@ -207,3 +207,121 @@ def test_stamp_source_message_ids_preserves_prior() -> None:
     by_req = {m.requirement: m for m in stamped.matches}
     assert by_req["Цена за единицу без НДС"].source_message_id == "prior-id"
     assert by_req["Общая стоимость без НДС"].source_message_id == "new-id"
+
+
+# ---------------------------------------------------------- several goods rows
+
+TWO_CABLES = """
+| № | Наименование | Ед. | Кол-во | Цена, руб. | Сумма, руб. |
+|---|---|---|---|---|---|
+| 1 | Кабель ВВГнг 3х1,5 | м | 12000 | 55,10 | 661200,00 |
+| 2 | Кабель ВВГнг 3х2,5 | м | 12000 | 82,36 | 988320,00 |
+| | Итого | | | | 1649520,00 |
+"""
+
+
+def _two_matches(unit, total):
+    return EmailAnalysisResult(
+        parameters={},
+        matches=[
+            _match(
+                "Цена за единицу без НДС",
+                f"{unit} руб./м" if unit else None,
+                unit,
+            ),
+            _match(
+                "Общая стоимость без НДС",
+                f"{total} руб." if total else None,
+                total,
+            ),
+        ],
+    )
+
+
+def test_several_rows_keep_model_price_and_total() -> None:
+    """The second row is the requested cable: the first row must not win."""
+    out = reconcile_price_matches(_two_matches(82.36, 988320), TWO_CABLES)
+    unit, total = out.matches
+    assert unit.numeric_value == 82.36
+    assert total.numeric_value == 988320
+
+
+def test_several_rows_model_price_matches_a_row() -> None:
+    out = reconcile_price_matches(_two_matches(55.10, 661200), TWO_CABLES)
+    unit, total = out.matches
+    assert unit.numeric_value == 55.10
+    assert unit.value_origin == ValueOrigin.EXTRACTED
+    assert total.numeric_value == 661200
+
+
+def test_several_rows_no_model_price_no_guess() -> None:
+    out = reconcile_price_matches(_two_matches(None, None), TWO_CABLES)
+    unit, total = out.matches
+    assert unit.numeric_value is None
+    assert total.numeric_value is None
+
+
+def test_several_rows_model_price_not_in_table_kept() -> None:
+    out = reconcile_price_matches(_two_matches(80.0, 960000), TWO_CABLES)
+    assert out.matches[0].numeric_value == 80.0
+    assert out.matches[1].numeric_value == 960000
+
+
+def test_summary_row_does_not_count_as_item() -> None:
+    one_row = """
+| Наименование | Кол-во | Цена, руб. | Сумма, руб. |
+|---|---|---|---|
+| Кабель ВВГнг 3х2,5 | 12000 | 82,36 | 988320,00 |
+| Итого | | | 988320,00 |
+"""
+    out = reconcile_price_matches(_two_matches(None, None), one_row)
+    assert out.matches[0].numeric_value == 82.36
+    assert out.matches[1].numeric_value == 988320
+
+
+def test_several_rows_plain_ocr() -> None:
+    text = (
+        "Кабель 3х1,5 м 12000 55.10 661200.00 20 132240.00 793440.00\n"
+        "Кабель 3х2,5 м 12000 82.36 988320.00 20 197664.00 1185984.00\n"
+    )
+    out = reconcile_price_matches(_two_matches(82.36, 988320), text)
+    assert out.matches[0].numeric_value == 82.36
+    assert out.matches[1].numeric_value == 988320
+
+
+# ------------------------------------------------------------ number parsing
+
+import pytest  # noqa: E402
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("1 200 руб., скидка 2,5%", 1200.0),
+        ("НДС 20%: 98,40", 98.4),
+        ("Срок 14 дней, цена 82 руб.", 82.0),
+        ("1,250.50 USD", 1250.5),
+        ("1.250,50 EUR", 1250.5),
+        ("1.250.000 руб.", 1250000.0),
+        ("1 250,50 BYN", 1250.5),
+        ("$12.50", 12.5),
+        ("2 400 BYN за 1 000 шт", 2400.0),
+        ("ВВГнг 3×2,5 — 82 руб./м", 82.0),
+        ("Болт М12 — 5,20 руб.", 5.2),
+        ("ПИ-2-45/120 0,43", 0.43),
+        ("0.43 (рассчитано: 258 / 600)", 0.43),
+        ("600 м2 × 0.43", 0.43),
+        ("82,36", 82.36),
+        ("1,25", 1.25),
+        ("дешевле от 100 руб", 100.0),
+        # a range is not one price
+        ("от 79,90 до 85,00 руб.", None),
+        ("79–85 руб.", None),
+        ("Цена 79-85 руб.", None),
+        ("по запросу", None),
+        ("", None),
+        (None, None),
+    ],
+)
+def test_parse_offer_numeric_cases(text, expected) -> None:
+    assert parse_offer_numeric(text) == expected

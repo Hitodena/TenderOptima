@@ -1,14 +1,31 @@
 <template>
 	<UContainer class="py-8 lg:py-12">
 		<div class="max-w-3xl mx-auto">
-			<div class="flex items-center justify-between mb-6">
+			<div class="mb-4 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
 				<div>
-					<h1 class="text-3xl font-bold text-highlighted">История запросов</h1>
-					<p class="text-muted text-sm mt-1">Все ваши поисковые запросы и статусы</p>
+					<h1 class="text-2xl font-bold text-highlighted sm:text-3xl">
+						<span class="lg:hidden">Запросы</span>
+						<span class="hidden lg:inline">История запросов</span>
+					</h1>
+					<p class="mt-1 hidden text-sm text-muted sm:block">Все ваши поисковые запросы и статусы</p>
 				</div>
 				<div class="flex items-center gap-3">
-					<UInput v-model="search" placeholder="Поиск в истории..." icon="i-lucide-search" class="w-56" size="lg" />
-					<UButton to="/requests" variant="outline" color="neutral" leading-icon="i-lucide-search" size="lg">
+					<UInput
+						v-model="search"
+						placeholder="Поиск по запросам"
+						icon="i-lucide-search"
+						class="w-full sm:w-56"
+						size="xl"
+						type="search"
+					/>
+					<UButton
+						to="/requests"
+						variant="outline"
+						color="neutral"
+						leading-icon="i-lucide-search"
+						size="lg"
+						class="hidden shrink-0 lg:inline-flex"
+					>
 						Новый поиск
 					</UButton>
 				</div>
@@ -28,9 +45,9 @@
 						class="group cursor-pointer hover:shadow-md transition-all hover:-translate-y-px"
 						@click="openRequest(req)"
 					>
-						<div class="flex items-center gap-4">
+						<div class="flex items-center gap-3 sm:gap-4">
 							<div
-								class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 relative"
+								class="w-10 h-10 rounded-xl bg-primary/10 hidden sm:flex items-center justify-center shrink-0 relative"
 							>
 								<UIcon name="i-lucide-package-search" class="w-5 h-5 text-primary" />
 								<span
@@ -39,17 +56,29 @@
 								/>
 							</div>
 							<div class="flex-1 min-w-0">
-								<div class="flex items-center gap-2 mb-0.5">
-									<p class="font-semibold truncate">{{ req.query }}</p>
+								<div class="mb-1 flex items-start gap-2 sm:mb-0.5 sm:items-center">
+									<p class="min-w-0 flex-1 font-semibold leading-snug line-clamp-2 sm:flex-none sm:truncate">{{ req.query }}</p>
+									<span
+										v-if="hasUnreadMessages(req)"
+										class="shrink-0 rounded-full bg-orange-700 px-2 py-0.5 text-xs font-bold text-white sm:hidden"
+									>{{ unreadLabel(req) }}</span>
 									<UBadge
 										:color="getRequestStatusColor(req.status)"
 										variant="subtle"
 										size="sm"
-										class="shrink-0"
+										class="hidden shrink-0 sm:inline-flex"
 									>
 										{{ getRequestStatusLabel(req.status) }}
 									</UBadge>
 								</div>
+								<UBadge
+									:color="getRequestStatusColor(req.status)"
+									variant="subtle"
+									size="sm"
+									class="mb-1 sm:hidden"
+								>
+									{{ getRequestStatusLabel(req.status) }}
+								</UBadge>
 								<p class="text-xs text-muted flex items-center gap-2 flex-wrap">
 									<span class="flex items-center gap-1">
 										<UIcon name="i-lucide-map-pin" class="w-3 h-3" />
@@ -69,7 +98,24 @@
 									</template>
 								</p>
 							</div>
-							<div class="flex items-center gap-1 shrink-0">
+							<!-- phones: no hover, so "Завершить" lives in an always visible menu -->
+							<UDropdownMenu
+								v-if="req.status !== RequestStatus.CLOSED"
+								:items="mobileCardMenu(req)"
+								class="sm:hidden"
+							>
+								<UButton
+									color="neutral"
+									variant="ghost"
+									icon="i-lucide-ellipsis-vertical"
+									size="lg"
+									class="-mr-2 sm:hidden"
+									aria-label="Действия с запросом"
+									:loading="closingId === req.id"
+									@click.stop
+								/>
+							</UDropdownMenu>
+							<div class="hidden items-center gap-1 shrink-0 sm:flex">
 								<template v-if="req.status !== RequestStatus.CLOSED">
 									<UButton
 										:color="confirmCloseId === req.id ? 'warning' : 'neutral'"
@@ -107,6 +153,14 @@
 				<div v-if="loadingMore" class="flex justify-center py-4">
 					<UIcon name="i-lucide-loader" class="w-5 h-5 text-muted animate-spin" />
 				</div>
+
+				<UButton
+					to="/requests"
+					size="xl"
+					leading-icon="i-lucide-plus"
+					label="Новый поиск"
+					class="fixed right-4 bottom-20 z-30 rounded-full shadow-lg lg:hidden"
+				/>
 
 				<p v-if="!hasMore && items.length > PAGE_SIZE" class="text-center text-xs text-muted py-4">
 					Все запросы загружены
@@ -157,6 +211,36 @@ function requestMessageStatsLabel(req: RequestResponse): string {
 		.replace('{sentLabel}', pluralizeLetters(sent))
 		.replace('{suppliers}', String(suppliers))
 		.replace('{suppliersLabel}', pluralizeSuppliersGenitive(suppliers))
+}
+
+function unreadLabel(req: RequestResponse): string {
+	const n = req.supplier_messages_unread ?? 0
+	return `${n} ${pluralRu(n, 'новый', 'новых', 'новых')}`
+}
+
+function pluralRu(n: number, one: string, few: string, many: string): string {
+	const m10 = n % 10
+	const m100 = n % 100
+	if (m10 === 1 && m100 !== 11) return one
+	if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few
+	return many
+}
+
+function mobileCardMenu(req: RequestResponse) {
+	return [[
+		{
+			label: 'Открыть',
+			icon: 'i-lucide-arrow-right',
+			onSelect: () => openRequest(req),
+		},
+	], [
+		{
+			label: 'Завершить запрос',
+			icon: 'i-lucide-lock',
+			color: 'warning' as const,
+			onSelect: () => closeRequest(req.id),
+		},
+	]]
 }
 
 function hasUnreadMessages(req: RequestResponse): boolean {
@@ -291,6 +375,10 @@ async function handleCloseClick(id: string) {
 		confirmCloseId.value = id
 		return
 	}
+	await closeRequest(id)
+}
+
+async function closeRequest(id: string) {
 	closingId.value = id
 	confirmCloseId.value = null
 	try {

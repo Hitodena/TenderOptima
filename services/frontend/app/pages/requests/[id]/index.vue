@@ -1,5 +1,5 @@
 <template>
-	<UContainer class="py-8">
+	<UContainer class="py-4 sm:py-8" :class="mobileBarVisible ? 'pb-28 sm:pb-8' : ''">
 
 		<template v-if="loading">
 			<div class="space-y-4">
@@ -11,15 +11,15 @@
 
 		<template v-else-if="request">
 
-			<div class="flex items-start justify-between mb-6 gap-4">
+			<div class="mb-5 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
 				<div class="min-w-0">
 					<UButton
 to="/requests/history" variant="ghost" color="neutral" size="sm"
 						leading-icon="i-lucide-arrow-left" class="-ml-1 mb-2">
 						К запросам
 					</UButton>
-					<div class="flex items-center gap-3 mb-1 flex-wrap">
-						<h1 class="text-2xl font-bold text-highlighted truncate">{{ request.query }}</h1>
+					<div class="flex items-center gap-x-3 gap-y-1.5 mb-1 flex-wrap">
+						<h1 class="text-xl font-bold leading-tight text-highlighted break-words sm:text-2xl sm:truncate">{{ request.query }}</h1>
 						<UBadge :color="statusColor" variant="subtle" size="lg">{{ statusLabel }}</UBadge>
 					</div>
 					<div class="flex items-center gap-3 text-sm text-muted flex-wrap">
@@ -37,7 +37,7 @@ to="/requests/history" variant="ghost" color="neutral" size="sm"
 				<UButton
 					v-if="request.status === RequestStatus.QUEUED || request.status === RequestStatus.COMPLETED || request.status === RequestStatus.CLOSED"
 					variant="outline" color="neutral" leading-icon="i-lucide-inbox" :to="`/requests/${id}/responses`"
-					size="lg" class="shrink-0">
+					size="lg" class="shrink-0 justify-center max-sm:min-h-12">
 					Ответы поставщиков
 				</UButton>
 			</div>
@@ -71,12 +71,13 @@ v-if="actionError" color="error" variant="soft" icon="i-lucide-circle-alert"
 					<h2 class="text-lg font-semibold">Найденные поставщики</h2>
 					<p
 						v-if="supplierActionHint"
-						class="text-sm text-muted mt-0.5">
+						class="text-sm text-muted mt-0.5"
+						:class="isCompletedStatus ? 'hidden sm:block' : ''">
 						{{ supplierActionHint }}
 					</p>
 				</div>
 
-				<div class="flex items-center gap-2 shrink-0">
+				<div class="hidden items-center gap-2 shrink-0 sm:flex">
 					<UButton
 v-if="request.status == RequestStatus.DRAFT" size="lg" variant="outline" color="neutral"
 						leading-icon="i-lucide-search" :loading="searching" :disabled="!canStartModule1"
@@ -94,7 +95,7 @@ v-if="request.status == RequestStatus.DRAFT" size="lg" variant="outline" color="
 								size="lg"
 								leading-icon="i-lucide-send"
 								:disabled="!canLaunchMailing"
-								@click="showParamsModal = true">
+								@click="openMailing">
 								Сформировать запрос поставщикам
 							</UButton>
 						</span>
@@ -207,7 +208,62 @@ color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 					:description="testPlanLockedMessage"
 				/>
 
-				<div class="border border-default rounded-md overflow-hidden">
+				<!-- phones: one card per supplier instead of a five-column table -->
+				<div class="sm:hidden" data-tour="suppliers" :data-ready="String(!loadingSuppliers)">
+					<div v-if="loadingSuppliers" class="space-y-2">
+						<USkeleton v-for="i in 4" :key="i" class="h-16 w-full rounded-xl" />
+					</div>
+					<div v-else-if="!filteredSuppliers.length" class="flex flex-col items-center justify-center gap-3 py-10">
+						<UIcon name="i-lucide-users" class="w-10 h-10 text-muted" />
+						<p class="text-muted">Поставщики не найдены</p>
+					</div>
+					<ul v-else class="-mx-4 divide-y divide-default/70 border-y border-default/70">
+						<li
+							v-for="rs in filteredSuppliers"
+							:key="rs.id"
+							class="flex items-center gap-2 px-4 py-2.5"
+						>
+							<button
+								type="button"
+								class="min-w-0 flex-1 text-left"
+								:class="lockedRowContentClass(rs)"
+								:disabled="rs.sent_status !== RequestSupplierStatus.REPLIED"
+								@click="openSupplierThread(rs)"
+							>
+								<span class="supplier-company-title block text-[15px] font-semibold leading-snug">
+									{{ rs.supplier?.company_name }}
+								</span>
+								<span class="mt-0.5 flex items-center gap-1.5 text-sm text-muted">
+									<span class="size-2 shrink-0 rounded-full" :class="statusDotClass(rs.sent_status)" />
+									<span class="shrink-0">{{ getSupplierStatusLabel(rs.sent_status) }}</span>
+									<span v-if="rs.supplier?.main_email" class="truncate">· {{ rs.supplier.main_email }}</span>
+								</span>
+							</button>
+							<UDropdownMenu
+								v-if="supplierCardMenu(rs).length"
+								:items="supplierCardMenu(rs)"
+							>
+								<UButton
+									color="neutral"
+									variant="ghost"
+									icon="i-lucide-ellipsis-vertical"
+									size="lg"
+									aria-label="Действия с поставщиком"
+									:loading="deletingSupplierIds.has(rs.id)"
+								/>
+							</UDropdownMenu>
+							<USwitch
+								v-if="canManageMailingSelection"
+								:model-value="rs.is_enabled"
+								:disabled="updatingToggle || !canToggleSupplier(rs) || isSupplierRowLocked(rs)"
+								:aria-label="`Включить в рассылку: ${rs.supplier?.company_name}`"
+								@update:model-value="(val: any) => handleToggle(rs, Boolean(val))"
+							/>
+						</li>
+					</ul>
+				</div>
+
+				<div class="hidden border border-default rounded-md overflow-hidden sm:block" data-tour="suppliers" :data-ready="String(!loadingSuppliers)">
 					<div class="max-h-105 overflow-auto">
 						<UTable
 :data="filteredSuppliers" :columns="supplierColumns" :loading="loadingSuppliers"
@@ -360,6 +416,47 @@ v-else size="sm" color="error" variant="ghost" icon="i-lucide-trash-2"
 			</div>
 			</UCard>
 
+			<!-- phones: the main action is always at hand -->
+			<div
+				v-if="mobileBarVisible"
+				class="fixed inset-x-0 bottom-0 z-30 flex items-center gap-2.5 border-t border-default bg-default/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:hidden"
+			>
+				<UDropdownMenu v-if="canManageSuppliers" :items="addSupplierMenu">
+					<UButton
+						color="neutral"
+						variant="outline"
+						icon="i-lucide-user-plus"
+						size="xl"
+						class="size-13 justify-center rounded-xl"
+						aria-label="Добавить поставщика"
+						:disabled="!canStartModule1"
+					/>
+				</UDropdownMenu>
+				<UButton
+					v-if="request.status == RequestStatus.DRAFT"
+					size="xl"
+					leading-icon="i-lucide-search"
+					block
+					class="min-h-13 flex-1 justify-center rounded-xl"
+					:loading="searching"
+					:disabled="!canStartModule1"
+					@click="runSearch"
+				>
+					Найти поставщиков
+				</UButton>
+				<UButton
+					v-else-if="showSendButton"
+					size="xl"
+					leading-icon="i-lucide-send"
+					block
+					class="min-h-13 flex-1 justify-center rounded-xl"
+					:disabled="!canLaunchMailing"
+					@click="openMailing"
+				>
+					Отправить запрос{{ pendingEnabledCount ? ` · ${pendingEnabledCount}` : '' }}
+				</UButton>
+			</div>
+
 			<RequestParamsModal
 				v-model:open="showParamsModal"
 				:request="request"
@@ -417,6 +514,9 @@ import {
 	emailQuotaRemaining,
 	isManualSupplierSource,
 	isTestPlan,
+	canStartTrial,
+	mailingBlockMessage,
+	mailingNeedsTrial,
 	module1WorkBlockMessage,
 	testPlanLockedSuppliersMessage,
 	testPlanMaxSelectableSuppliers,
@@ -527,8 +627,11 @@ const showSendButton = computed(() => {
 })
 
 const sendButtonTooltip = computed(() => {
-	if (pendingEnabledCount.value > 0) return ''
-	return 'Выберите хотя бы одного поставщика для отправки'
+	if (pendingEnabledCount.value === 0) return 'Выберите хотя бы одного поставщика для отправки'
+	if (mailingNeedsTrial(subscription.value) && !canStartTrial(subscription.value)) {
+		return mailingBlockMessage(subscription.value, pendingEnabledCount.value) ?? ''
+	}
+	return ''
 })
 
 const filteredSuppliers = computed(() => {
@@ -545,7 +648,30 @@ const enabledCount = computed(() => suppliers.value.filter(s => s.is_enabled).le
 const emailRemaining = computed(() => emailQuotaRemaining(subscription.value))
 const canLaunchMailing = computed(() =>
 	pendingEnabledCount.value > 0
-		&& canSendEmail(subscription.value, pendingEnabledCount.value),
+		&& canSendEmail(subscription.value, pendingEnabledCount.value)
+		// the test plan sends during the trial; before it the button offers the trial
+		&& (!mailingNeedsTrial(subscription.value) || canStartTrial(subscription.value)),
+)
+
+const tour = useOnboardingTour()
+
+function openMailing() {
+	if (mailingNeedsTrial(subscription.value) && canStartTrial(subscription.value)) {
+		tour.offerTrial(id)
+		return
+	}
+	showParamsModal.value = true
+}
+
+// first finished search of a new account: walk through the onboarding tour
+watch(
+	() => [request.value?.status, loadingSuppliers.value, suppliers.value.length, subscription.value?.trial_state] as const,
+	([status, busy, count]) => {
+		if (busy || !count || !request.value || request.value.is_demo) return
+		if (status !== RequestStatus.ACTIVE && status !== RequestStatus.COMPLETED) return
+		if (!canStartTrial(subscription.value)) return
+		tour.start(id)
+	},
 )
 const manualSupplierCount = computed(() =>
 	suppliers.value.filter((s) => isManualSupplierSource(s.supplier?.from_source)).length,
@@ -849,6 +975,60 @@ function lockedRowContentClass(rs: RequestSupplierResponse): string {
 	return isSupplierRowLocked(rs)
 		? 'blur-[2px] opacity-60 select-none pointer-events-none'
 		: ''
+}
+
+const mobileBarVisible = computed(() =>
+	Boolean(request.value)
+	&& !isLockedStatus.value
+	&& (request.value?.status === RequestStatus.DRAFT || showSendButton.value || canManageSuppliers.value),
+)
+
+const addSupplierMenu = computed(() => {
+	const items = [{
+		label: 'Добавить вручную',
+		icon: 'i-lucide-user-plus',
+		onSelect: () => { showAddSupplier.value = true },
+	}]
+	if (!isTestPlan(subscription.value)) {
+		items.push({
+			label: 'Из базы поставщиков',
+			icon: 'i-lucide-database',
+			onSelect: () => { showBookmarkModal.value = true },
+		})
+	}
+	return [items]
+})
+
+function statusDotClass(status: RequestSupplierStatus): string {
+	switch (status) {
+		case RequestSupplierStatus.REPLIED: return 'bg-success'
+		case RequestSupplierStatus.FAILED: return 'bg-error'
+		case RequestSupplierStatus.SENT: return 'bg-info'
+		default: return 'bg-(--ui-text-dimmed)'
+	}
+}
+
+function supplierCardMenu(rs: RequestSupplierResponse) {
+	const items: { label: string, icon: string, color?: 'error', onSelect: () => void }[] = []
+	if (rs.sent_status === RequestSupplierStatus.REPLIED) {
+		items.push({ label: 'Открыть переписку', icon: 'i-lucide-messages-square', onSelect: () => openSupplierThread(rs) })
+	}
+	if (rs.supplier && !isSupplierRowLocked(rs)) {
+		items.push({ label: t('inbox.saveToDatabase'), icon: 'i-lucide-database', onSelect: () => openSaveToBookmarkModal(rs.supplier) })
+		if (canManageSuppliers.value && (rs.supplier.extra_emails?.length ?? 0) > 1) {
+			items.push({ label: 'Сменить адрес', icon: 'i-lucide-pencil', onSelect: () => openEditEmailModal(rs.supplier) })
+		}
+	}
+	if (canDeleteSupplier(rs)) {
+		items.push({ label: 'Убрать из списка', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => confirmDeleteSupplier(rs.id) })
+	}
+	return items.length ? [items] : []
+}
+
+function openSupplierThread(rs: RequestSupplierResponse) {
+	if (rs.sent_status === RequestSupplierStatus.REPLIED) {
+		navigateTo(`/requests/${id}/responses#${rs.id}`)
+	}
 }
 
 function onRowSelect(e: Event, row: TableRow<RequestSupplierResponse>) {

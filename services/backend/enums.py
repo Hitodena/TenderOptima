@@ -28,6 +28,7 @@ class SupplierSource(StrEnum):
     PARSER = "parser"  # discovered via Google parser
     ADMIN = "admin"  # reserved for future bulk admin import
     IMPORT = "import"  # reserved for CSV/Excel bulk
+    DEMO = "demo"  # fictional supplier of the onboarding sample request
 
 
 class SupplierEmailPreferenceStatus(StrEnum):

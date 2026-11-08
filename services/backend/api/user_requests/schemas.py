@@ -102,6 +102,13 @@ class RequestResponse(BaseModel):
             examples=[RequestStatus.ACTIVE],
         ),
     ]
+    is_demo: Annotated[
+        bool,
+        Field(
+            default=False,
+            description="Sample request of the onboarding tour",
+        ),
+    ] = False
     delivery_region: Annotated[
         str | None,
         Field(description="Requested delivery region", examples=["Minsk"]),

@@ -13,6 +13,7 @@ from backend.utils.subscription_usage import (
     SubscriptionUsageDAO,
     pages_analysis_remaining_for_user,
 )
+from backend.utils.trial import mailing_needs_trial
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -165,6 +166,17 @@ async def ensure_can_send_emails(
         return
     subscription = await _get_subscription_or_raise(session, user)
     _ensure_module_enabled(subscription, module=1)
+    if mailing_needs_trial(subscription):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "trial_required",
+                "message": (
+                    "Отправка писем поставщикам доступна в пробном периоде. "
+                    "Начните 14 дней бесплатно."
+                ),
+            },
+        )
     _, max_emails, _, _ = _resolved_limits(subscription)
     usage = await SubscriptionUsageDAO.get_for_user(session, user.id)
     _ensure_quota(
@@ -184,6 +196,8 @@ async def outbound_email_remaining(
     if subscription is None or not _subscription_is_usable(subscription):
         return 0
     if not subscription.module_1_enabled:
+        return 0
+    if mailing_needs_trial(subscription):
         return 0
     _, max_emails, _, _ = _resolved_limits(subscription)
     if max_emails is None:

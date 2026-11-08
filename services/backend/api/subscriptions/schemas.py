@@ -31,6 +31,10 @@ class SubscriptionResponse(BaseModel):
     expires_at: datetime | None = None
     auto_renew: bool = False
     bepaid_renew_at: datetime | None = None
+    trial_started_at: datetime | None = None
+    trial_ends_at: datetime | None = None
+    # not_started | active | ended — real mailing on the test plan needs active
+    trial_state: str = "not_started"
     searches_used_this_month: int = 0
     emails_sent_this_month: int = 0
     kp_processed_this_month: int = 0

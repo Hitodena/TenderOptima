@@ -27,6 +27,7 @@ class RequestDAO(BaseDAO[Request]):
                 .where(
                     cls.model.user_id == user_id,
                     cls.model.status != RequestStatus.CLOSED.value,
+                    cls.model.is_demo.is_(False),
                 )
                 .order_by(cls.model.created_at.desc())
             )
@@ -90,6 +91,7 @@ class RequestDAO(BaseDAO[Request]):
                 .where(
                     cls.model.user_id == user_id,
                     status_filter,
+                    cls.model.is_demo.is_(False),
                 )
                 .order_by(cls.model.created_at.desc())
                 .offset(offset)

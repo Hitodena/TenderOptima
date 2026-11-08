@@ -81,6 +81,119 @@ def _quote_start(lines: list[str]) -> int:
     return start
 
 
+_BLOCK_TAGS = (
+    "p",
+    "div",
+    "tr",
+    "li",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "table",
+    "blockquote",
+    "section",
+    "article",
+)
+
+
+def _table_to_markdown(table: Any) -> str | None:
+    """A data table as «| a | b |» rows (the price checks read these).
+
+    Layout tables (one cell per row, used by mail clients to position the
+    text) are left alone and read as plain text.
+    """
+    rows: list[list[str]] = []
+    for tr in table.find_all("tr"):
+        cells = [
+            " ".join(cell.get_text(" ", strip=True).split()).replace("|", "/")
+            for cell in tr.find_all(["td", "th"], recursive=False)
+        ]
+        if any(cells):
+            rows.append(cells)
+    if len(rows) < 2 or max(len(r) for r in rows) < 2:
+        return None
+    width = max(len(r) for r in rows)
+    lines = [
+        "| " + " | ".join(r + [""] * (width - len(r))) + " |" for r in rows
+    ]
+    lines.insert(1, "|" + " --- |" * width)
+    return "\n".join(lines)
+
+
+def html_to_text(html: str) -> str:
+    """Readable text of an HTML-only letter; data tables become markdown."""
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(html, "lxml")
+    for tag in soup(["script", "style", "head", "title", "meta"]):
+        tag.decompose()
+    # innermost tables first: a layout table often wraps the data table
+    for table in reversed(soup.find_all("table")):
+        md = _table_to_markdown(table)
+        if md is not None:
+            table.replace_with(f"\n{md}\n")
+    for br in soup.find_all("br"):
+        br.replace_with("\n")
+    for block in soup.find_all(_BLOCK_TAGS):
+        block.append("\n")
+    text = soup.get_text()
+    out: list[str] = []
+    for raw in text.splitlines():
+        line = (
+            raw.strip()
+            if raw.lstrip().startswith("|")
+            else " ".join(raw.split())
+        )
+        if line or (out and out[-1]):
+            out.append(line)
+    return "\n".join(out).strip()
+
+
+def _decode_part(part: MimeMessage) -> str:
+    payload = part.get_payload(decode=True)
+    if not isinstance(payload, bytes):
+        return ""
+    charset = part.get_content_charset() or "utf-8"
+    try:
+        return payload.decode(charset, errors="replace")
+    except LookupError:  # unknown charset name in the header
+        return payload.decode("utf-8", errors="replace")
+
+
+def extract_letter_body(msg: MimeMessage) -> str:
+    """Text of the letter: the plain part, else the HTML part as text.
+
+    Letters sent only as HTML (web mail, 1С, CRM) used to come out empty, and
+    the analysis saw only the attachments. Attached .txt / .html files are
+    not the body.
+    """
+    plain: str | None = None
+    html: str | None = None
+    parts = msg.walk() if msg.is_multipart() else [msg]
+    for part in parts:
+        if part.is_multipart():
+            continue
+        if (part.get_content_disposition() or "") == "attachment":
+            continue
+        ctype = part.get_content_type()
+        if ctype == "text/plain" and plain is None:
+            text = _decode_part(part)
+            if text.strip():
+                plain = text
+        elif ctype == "text/html" and html is None:
+            text = _decode_part(part)
+            if text.strip():
+                html = text
+    if plain is not None:
+        return plain
+    if html is not None:
+        return html_to_text(html)
+    return ""
+
+
 def split_quoted_reply(body: str | None) -> SplitLetter:
     """Split a plain-text letter into what the sender wrote and the quote.
 

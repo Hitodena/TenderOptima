@@ -1,13 +1,13 @@
 <template>
 	<footer class="app-footer shrink-0 border-t border-default bg-default px-4 py-3 sm:px-6 lg:px-8">
 		<div
-			class="mx-auto flex max-w-7xl items-center justify-between gap-4 overflow-x-auto text-xs text-muted whitespace-nowrap sm:text-sm"
+			class="mx-auto flex max-w-7xl flex-col items-start gap-2 text-xs text-muted lg:flex-row lg:items-center lg:justify-between lg:gap-4 lg:whitespace-nowrap sm:text-sm"
 		>
 			<p class="shrink-0">
 				&copy; TenderOptima, {{ currentYear }}. Все права защищены
 			</p>
 
-			<nav class="flex shrink-0 items-center gap-x-1.5 sm:gap-x-2">
+			<nav class="flex flex-wrap items-center gap-x-1.5 gap-y-1 sm:gap-x-2 lg:shrink-0 lg:flex-nowrap">
 				<template
 					v-for="(link, index) in legalLinks"
 					:key="link.href"

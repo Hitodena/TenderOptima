@@ -34,6 +34,22 @@ export function effectiveEmailLimit(
 	return subscription.max_emails_per_month
 }
 
+export const TRIAL_DAYS = 14
+
+/** Test plan: real letters go out only during the 14-day trial. */
+export function mailingNeedsTrial(
+	subscription: SubscriptionResponse | null | undefined,
+): boolean {
+	return isTestPlan(subscription) && subscription?.trial_state !== 'active'
+}
+
+/** The trial can still be started (test plan, never started). */
+export function canStartTrial(
+	subscription: SubscriptionResponse | null | undefined,
+): boolean {
+	return isTestPlan(subscription) && (subscription?.trial_state ?? 'not_started') === 'not_started'
+}
+
 export function emailQuotaRemaining(
 	subscription: SubscriptionResponse | null | undefined,
 ): number | null {
@@ -68,6 +84,30 @@ export function emailQuotaBlockMessage(
 	const used = subscription.emails_sent_this_month ?? 0
 	if (limit == null) return null
 	return `Лимит подписки: ${used.toLocaleString('ru-RU')} из ${limit.toLocaleString('ru-RU')} писем в этом месяце`
+}
+
+/**
+ * Real letters to suppliers: monthly quota plus, on the test plan, the
+ * 14-day trial. Selecting suppliers is a quota question only — use
+ * canSendEmail for that.
+ */
+export function canSendMail(
+	subscription: SubscriptionResponse | null | undefined,
+	count = 1,
+): boolean {
+	return !mailingNeedsTrial(subscription) && canSendEmail(subscription, count)
+}
+
+export function mailingBlockMessage(
+	subscription: SubscriptionResponse | null | undefined,
+	count = 1,
+): string | null {
+	if (subscription && mailingNeedsTrial(subscription)) {
+		return subscription.trial_state === 'ended'
+			? 'Пробный период закончился. Чтобы отправлять письма, подключите тариф'
+			: `Отправка писем поставщикам — в пробном периоде: ${TRIAL_DAYS} дней бесплатно`
+	}
+	return emailQuotaBlockMessage(subscription, count)
 }
 
 export function testPlanVisibleSupplierLimit(

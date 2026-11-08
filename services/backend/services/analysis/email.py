@@ -5,14 +5,10 @@ from loguru import logger
 from backend.core.config import get_config
 from backend.enums import TZAnalysisStatus
 from backend.schemas.analysis import EmailAnalysisResult, RequirementMatch
-from backend.services.extraction.assembler import TextAssembler
-from backend.services.extraction.router import (
-    ExtractorRouter,
-    UnsupportedFileTypeError,
-)
+from backend.services.analysis.email_attachments import read_attachments
 from backend.services.llm.client import llm_client
 from backend.services.llm.prompts.email import build_email_prompt
-from backend.utils.ocr import OcrNotAvailableError
+from backend.utils.email_content import split_quoted_reply
 from backend.utils.price_reconcile import (
     reconcile_price_matches,
     stamp_source_message_ids,
@@ -20,8 +16,11 @@ from backend.utils.price_reconcile import (
 
 config = get_config()
 
-_router = ExtractorRouter()
-_assembler = TextAssembler()
+QUOTE_MARKER = (
+    "[Цитата предыдущей переписки — это НЕ новый ответ поставщика, "
+    "только контекст]"
+)
+QUOTE_MAX_CHARS = 3000
 
 
 def _merge_email_with_prior(
@@ -60,45 +59,6 @@ def _merge_email_with_prior(
     return result.model_copy(update={"matches": merged})
 
 
-def _extract_attachment_text(path: Path) -> str | None:
-    """Extract text from an email attachment; OCR for images when needed."""
-    if not path.is_file():
-        logger.warning("Email attachment missing on disk", path=str(path))
-        return None
-
-    try:
-        doc = _router.get(path).extract(path)
-    except UnsupportedFileTypeError:
-        logger.warning(
-            "Unsupported email attachment type",
-            path=str(path),
-            suffix=path.suffix.lower(),
-        )
-        return None
-    except OcrNotAvailableError as exc:
-        logger.warning(
-            "OCR unavailable for email attachment",
-            path=str(path),
-            error=str(exc),
-        )
-        return None
-    except Exception as exc:
-        logger.warning(
-            "Email attachment extraction failed",
-            path=str(path),
-            error=str(exc),
-        )
-        return None
-
-    text = _assembler.assemble(doc).strip()
-    if not text:
-        logger.info(
-            "Email attachment produced empty text",
-            path=str(path),
-        )
-    return text or None
-
-
 async def analyze_email(
     user_requirements: str,
     email_body: str,
@@ -106,29 +66,39 @@ async def analyze_email(
     baseline_matches: dict[str, str] | None = None,
     prior_matches: dict[str, RequirementMatch] | None = None,
     source_message_id: str | None = None,
+    request_context: str | None = None,
 ) -> EmailAnalysisResult:
+    # the quote of earlier letters (our request, old offers) is context only:
+    # its numbers must not become the supplier's answer
+    split = split_quoted_reply(email_body)
     parts: list[str] = []
-    if email_body.strip():
-        parts.append(email_body.strip())
+    if split.main.strip():
+        parts.append(split.main.strip())
 
-    for path in attachment_paths or []:
-        text = _extract_attachment_text(path)
-        if text:
-            display_name = path.name
-            if "_" in display_name:
-                prefix, rest = display_name.split("_", 1)
-                if len(prefix) == 32 and all(
-                    ch in "0123456789abcdefABCDEF" for ch in prefix
-                ):
-                    display_name = rest
-            parts.append(f"[Вложение: {display_name}]\n{text}")
+    unread: list[str] = []
+    for item in read_attachments(attachment_paths or []):
+        if item.text:
+            parts.append(f"[Вложение: {item.name}]\n{item.text}")
+        else:
+            unread.append(f"{item.name} — {item.reason}")
+            logger.info(
+                "Email attachment not read",
+                attachment=item.name,
+                reason=item.reason,
+            )
 
-    full_text = "\n\n".join(parts)
+    answer_text = "\n\n".join(parts)
+    full_text = answer_text
+    if split.quoted.strip():
+        full_text += (
+            f"\n\n{QUOTE_MARKER}\n" + split.quoted.strip()[:QUOTE_MAX_CHARS]
+        )
     system, user = build_email_prompt(
         user_requirements,
         full_text,
         baseline_matches=baseline_matches,
         prior_matches=prior_matches,
+        request_context=request_context,
     )
     raw = await llm_client.complete(
         system,
@@ -139,7 +109,7 @@ async def analyze_email(
     result = EmailAnalysisResult(**raw)
     if prior_matches:
         result = _merge_email_with_prior(result, prior_matches)
-    result = reconcile_price_matches(result, full_text)
+    result = reconcile_price_matches(result, answer_text)
     if source_message_id:
         result = stamp_source_message_ids(result, source_message_id)
-    return result
+    return result.model_copy(update={"unread_files": unread})

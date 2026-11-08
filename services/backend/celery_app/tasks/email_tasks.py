@@ -39,6 +39,7 @@ from backend.services.analysis.email_queue import queue_email_analysis
 from backend.utils.email_content import (
     MessageKind,
     classify_message,
+    extract_letter_body,
     letter_text,
 )
 from backend.utils.email_matching import (
@@ -147,17 +148,7 @@ def _decode_header_value(value: str) -> str:
 
 
 def _extract_body(msg: email.message.Message) -> str:
-    if msg.is_multipart():
-        for part in msg.walk():
-            if part.get_content_type() == "text/plain":
-                charset = part.get_content_charset() or "utf-8"
-                return part.get_payload(decode=True).decode(  # type: ignore
-                    charset, errors="replace"
-                )
-    else:
-        charset = msg.get_content_charset() or "utf-8"
-        return msg.get_payload(decode=True).decode(charset, errors="replace")  # type: ignore
-    return ""
+    return extract_letter_body(msg)
 
 
 _CONTENT_TYPE_EXT = {

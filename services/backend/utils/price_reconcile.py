@@ -308,6 +308,119 @@ def extract_table_line_amounts(text: str) -> TableLineAmounts:
     return from_md
 
 
+def _item_rows_markdown(text: str) -> list[TableLineAmounts]:
+    """Every goods row of every price table (a row with a price or a qty)."""
+    rows: list[TableLineAmounts] = []
+    for table in _parse_markdown_tables(text):
+        if len(table) < 2:
+            continue
+        roles: dict[int, str] = {}
+        for idx, cell in enumerate(table[0]):
+            role = _classify_header(cell)
+            if role:
+                roles[idx] = role
+        if "unit_price" not in roles.values() and "qty" not in roles.values():
+            continue
+        for row in table[1:]:
+            amounts: dict[str, float] = {}
+            for idx, role in roles.items():
+                if idx < len(row):
+                    num = _cell_number(row[idx])
+                    if num is not None:
+                        amounts[role] = num
+            if "unit_price" not in amounts and "qty" not in amounts:
+                continue  # «Итого» and other summary rows
+            rows.append(
+                TableLineAmounts(
+                    qty=amounts.get("qty"),
+                    unit_price=amounts.get("unit_price"),
+                    sum_without_vat=amounts.get("sum_without_vat"),
+                    sum_with_vat=amounts.get("sum_with_vat"),
+                    vat_amount=amounts.get("vat_amount"),
+                )
+            )
+    return rows
+
+
+def _item_rows_plain(text: str) -> list[TableLineAmounts]:
+    """Validated invoice rows found in OCR / plain text, one per line."""
+    rows: list[TableLineAmounts] = []
+    for line in (text or "").splitlines():
+        nums = _plain_line_numbers(line)
+        if len(nums) < 5:
+            continue
+        best: TableLineAmounts | None = None
+        best_score = -1
+        for start in range(0, len(nums) - 4):
+            for width in (6, 5):
+                if start + width > len(nums):
+                    continue
+                candidate = _candidate_from_number_window(
+                    nums[start : start + width]
+                )
+                if candidate is None:
+                    continue
+                score = _score_line_amounts(candidate)
+                if score > best_score:
+                    best, best_score = candidate, score
+        if best is not None:
+            rows.append(best)
+    return rows
+
+
+def _distinct(rows: list[TableLineAmounts]) -> list[TableLineAmounts]:
+    seen: list[TableLineAmounts] = []
+    for row in rows:
+        if not any(
+            _same(row.unit_price, s.unit_price)
+            and _same(row.qty, s.qty)
+            and _same(row.sum_without_vat, s.sum_without_vat)
+            for s in seen
+        ):
+            seen.append(row)
+    return seen
+
+
+def _same(a: float | None, b: float | None) -> bool:
+    if a is None or b is None:
+        return a is b
+    return _almost_equal(a, b, rel=1e-6)
+
+
+@dataclass(frozen=True)
+class TableChoice:
+    """The table row the price checks may rely on."""
+
+    line: TableLineAmounts
+    several_items: bool  # the letter lists more than one goods row
+
+
+def choose_table_line(text: str, unit_llm: float | None) -> TableChoice:
+    """Pick the row of a commercial table that the price belongs to.
+
+    One goods row → that row. Several rows (cable 3×1,5 and 3×2,5 …): the
+    table cannot tell which one is the requested item, so only a row whose
+    price equals the model's own answer is used; otherwise none — the
+    model's answer stays as it is.
+    """
+    md_rows = _distinct(_item_rows_markdown(text or ""))
+    rows = md_rows or _distinct(_item_rows_plain(text or ""))
+    if not rows:
+        return TableChoice(extract_table_line_amounts(text or ""), False)
+    if len(rows) == 1:
+        return TableChoice(rows[0], False)
+    if unit_llm is not None:
+        same = [
+            r
+            for r in rows
+            if r.unit_price is not None
+            and _almost_equal(r.unit_price, unit_llm)
+        ]
+        if len(same) == 1:
+            return TableChoice(same[0], True)
+    return TableChoice(TableLineAmounts(), True)
+
+
 def _infer_qty(
     table: TableLineAmounts,
     unit: float | None,
@@ -500,11 +613,15 @@ def reconcile_price_matches(
     if not result.matches:
         return result
 
-    table = extract_table_line_amounts(email_text or "")
     by_req = _by_requirement(result.matches)
     updated: dict[str, RequirementMatch] = dict(by_req)
 
     unit_match = by_req.get(UNIT_PRICE_LABEL)
+    choice = choose_table_line(
+        email_text or "",
+        _match_numeric(unit_match) if unit_match is not None else None,
+    )
+    table = choice.line
     if unit_match is not None:
         updated[UNIT_PRICE_LABEL] = _reconcile_unit_total_pair(
             unit_match,
@@ -524,11 +641,14 @@ def reconcile_price_matches(
     )
     if len(position_keys) == 1:
         key = position_keys[0]
+        position_table = choose_table_line(
+            email_text or "", _match_numeric(by_req[key])
+        ).line
         updated[key] = _reconcile_unit_total_pair(
             by_req[key],
             by_req.get(delivery_key) if delivery_key else None,
             by_req.get(TOTAL_WITH_VAT_LABEL),
-            table,
+            position_table,
         )
     else:
         for key in position_keys:
@@ -563,9 +683,11 @@ def reconcile_price_matches(
 
     # Optionally correct total-without-VAT from table when LLM used with-VAT.
     total_match = updated.get(TOTAL_WITHOUT_VAT_LABEL)
+    # a row sum is the order total only when the table has one goods row
     if (
         total_match is not None
         and not total_match.corrected_from
+        and not choice.several_items
         and table.sum_without_vat is not None
     ):
         current = _match_numeric(total_match)

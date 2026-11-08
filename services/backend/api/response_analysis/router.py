@@ -239,6 +239,10 @@ async def patch_response_analysis(
             entry["offer_value"] = new_value
             if is_price_requirement(req):
                 entry["numeric_value"] = parse_offer_numeric(new_value)
+                # the corrected text is the source now: unit and currency
+                # are read from it, not from the old model answer
+                entry["unit"] = None
+                entry["currency"] = None
             entry["value_origin"] = None
             if new_value is not None and str(new_value).strip():
                 entry["status"] = TZAnalysisStatus.MET.value

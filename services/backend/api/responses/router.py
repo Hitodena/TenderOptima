@@ -50,14 +50,26 @@ from backend.enums import TZAnalysisRunStatus
 from backend.schemas.analysis import EmailAnalysisResult
 from backend.services.analysis.email_queue import queue_email_analysis
 from backend.services.correspondence import MessageView, build_thread
+from backend.services.onboarding_demo import (
+    deliver_due_follow_ups,
+    record_demo_outgoing,
+)
 from backend.utils.comparison_price import (
+    DELIVERY_TOTAL_ALIASES,
+    POSITION_PRICE_PREFIX,
     apply_delivery_total,
-    compute_percent_vs_min,
-    compute_row_minima,
+    is_position_price_requirement,
     is_price_requirement,
     resolve_numeric_value,
 )
 from backend.utils.email_content import MessageKind
+from backend.utils.price_units import (
+    PriceCell,
+    compare_prices,
+    parse_request_quantity,
+    percent_vs_min,
+    position_quantities,
+)
 from backend.utils.xlsx_export import (
     build_comparison_workbook,
     workbook_to_bytes,
@@ -78,6 +90,126 @@ def _requirements_list(request: Request) -> list[str]:
     if not params or not isinstance(params, list):
         return []
     return [str(p).strip() for p in params if str(p).strip()]
+
+
+def _match_units_from_analysis(raw: dict | None) -> dict[str, str | None]:
+    """Unit the supplier quoted each price for («м», «бухта 100 м»)."""
+    if not raw:
+        return {}
+    units: dict[str, str | None] = {}
+    for match in raw.get("matches") or []:
+        if not isinstance(match, dict):
+            continue
+        req = str(match.get("requirement") or "").strip()
+        unit = match.get("unit")
+        if req:
+            units[req] = (
+                str(unit).strip() if unit and str(unit).strip() else None
+            )
+    return units
+
+
+UNIT_PRICE_REQUIREMENT = "Цена за единицу без НДС"
+DESCRIPTION_REQUIREMENT = "Описание товара"
+TOTAL_WITHOUT_VAT_REQUIREMENT = "Общая стоимость без НДС"
+
+
+def _apply_price_checks(
+    request: Request,
+    price_requirements: list[str],
+    suppliers_rows: list[ComparisonSupplier],
+    currencies_by_rs: dict[str, dict[str, str | None]],
+    units_by_rs: dict[str, dict[str, str | None]],
+) -> dict[str, str | None]:
+    """Rank only prices that are the same thing; explain the rest.
+
+    Sets ``numeric_values`` of price rows to the comparable value (None when
+    a price cannot be compared), ``percent_vs_min`` and ``price_notes``.
+    Returns the unit each price row is compared in.
+    """
+    region = request.delivery_region
+    request_text = "\n".join(
+        part for part in (request.query, request.description) if part
+    )
+    whole_quantity = (
+        None
+        if request.is_multi_position
+        else parse_request_quantity(request_text)
+    )
+    per_position = position_quantities(request.description)
+    units_out: dict[str, str | None] = {}
+    for supplier in suppliers_rows:
+        supplier.percent_vs_min = {}
+        supplier.price_notes = {}
+
+    for req in price_requirements:
+        unit_price = (
+            req == UNIT_PRICE_REQUIREMENT or is_position_price_requirement(req)
+        )
+        if req == UNIT_PRICE_REQUIREMENT:
+            quantity = whole_quantity
+        elif is_position_price_requirement(req):
+            title = req.strip()[len(POSITION_PRICE_PREFIX) :].strip()
+            quantity = per_position.get(title)
+        else:
+            quantity = None
+        cells: dict[str, PriceCell] = {}
+        for supplier in suppliers_rows:
+            # «Описание товара» not met: the price is for something else
+            description_status = supplier.statuses.get(DESCRIPTION_REQUIREMENT)
+            other_product = (
+                (
+                    supplier.explanations.get(DESCRIPTION_REQUIREMENT)
+                    or "см. «Описание товара»"
+                )
+                if description_status in {"partial", "missing"}
+                else None
+            )
+            currencies = currencies_by_rs.get(supplier.rs_id, {})
+            units = units_by_rs.get(supplier.rs_id, {})
+            # the supplier's own total checks the unit of a single-position price
+            with_total = req == UNIT_PRICE_REQUIREMENT
+            cells[supplier.rs_id] = PriceCell(
+                numeric=supplier.numeric_values.get(req),
+                offer_value=supplier.values.get(req),
+                currency=currencies.get(req),
+                unit=units.get(req),
+                total_without_vat=(
+                    supplier.numeric_values.get(TOTAL_WITHOUT_VAT_REQUIREMENT)
+                    if with_total
+                    else None
+                ),
+                total_currency=(
+                    currencies.get(TOTAL_WITHOUT_VAT_REQUIREMENT)
+                    if with_total
+                    else None
+                ),
+                total_offer_value=(
+                    supplier.values.get(TOTAL_WITHOUT_VAT_REQUIREMENT)
+                    if with_total
+                    else None
+                ),
+                other_product=other_product,
+            )
+        row = compare_prices(
+            cells,
+            unit_price=unit_price,
+            without_vat="без ндс" in req.lower()
+            or req.strip() in DELIVERY_TOTAL_ALIASES
+            or is_position_price_requirement(req),
+            region=region,
+            request_quantity=quantity,
+        )
+        percents = percent_vs_min(row)
+        units_out[req] = row.reference_unit
+        for supplier in suppliers_rows:
+            verdict = row.verdicts.get(supplier.rs_id)
+            supplier.numeric_values[req] = (
+                verdict.normalized if verdict and verdict.comparable else None
+            )
+            supplier.percent_vs_min[req] = percents.get(supplier.rs_id)
+            supplier.price_notes[req] = verdict.note if verdict else None
+    return units_out
 
 
 def _match_maps_from_analysis(
@@ -173,6 +305,8 @@ async def _build_comparison(
             ]
             break
     suppliers_rows: list[ComparisonSupplier] = []
+    currencies_by_rs: dict[str, dict[str, str | None]] = {}
+    units_by_rs: dict[str, dict[str, str | None]] = {}
     enabled = await RequestSupplierDAO.get_enabled_by_request(
         session, request.id
     )
@@ -215,6 +349,9 @@ async def _build_comparison(
                 match_origins,
                 match_source_ids,
             ) = _match_maps_from_analysis(analysis.raw_llm_response)
+            units_by_rs[str(rs.id)] = _match_units_from_analysis(
+                analysis.raw_llm_response
+            )
             prev = analysis.previous_parameters
             prev_map = prev if isinstance(prev, dict) else {}
             for req in requirements:
@@ -250,6 +387,7 @@ async def _build_comparison(
         )
         if not has_extracted:
             continue
+        currencies_by_rs[str(rs.id)] = currencies
         suppliers_rows.append(
             ComparisonSupplier(
                 rs_id=str(rs.id),
@@ -268,22 +406,18 @@ async def _build_comparison(
             )
         )
 
-    row_minima = compute_row_minima(
-        requirements,
-        [dict(s.numeric_values) for s in suppliers_rows],
+    price_units = _apply_price_checks(
+        request,
+        price_requirements,
+        suppliers_rows,
+        currencies_by_rs,
+        units_by_rs,
     )
-    for supplier in suppliers_rows:
-        percent_vs_min: dict[str, float | None] = {}
-        for req in price_requirements:
-            percent_vs_min[req] = compute_percent_vs_min(
-                supplier.numeric_values.get(req),
-                row_minima.get(req),
-            )
-        supplier.percent_vs_min = percent_vs_min
 
     return ComparisonResponse(
         requirements=requirements,
         price_requirements=price_requirements,
+        price_units=price_units,
         suppliers=suppliers_rows,
     )
 
@@ -315,7 +449,12 @@ async def list_threads(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[ThreadSummary]:
     """Return thread summaries for suppliers that have at least one message."""
-    await get_request_or_404(request_id, session, current_user)
+    request = await get_request_or_404(request_id, session, current_user)
+    if request.is_demo:
+        for message in await deliver_due_follow_ups(session, request):
+            await queue_email_analysis(
+                session, message.id, request, reanalyze=False
+            )
     rows = await EmailMessageDAO.get_threads_summary(session, request_id)
     return [ThreadSummary.from_row(row) for row in rows]
 
@@ -363,6 +502,7 @@ def _message_out(view: MessageView) -> Message:
             met=view.summary.met,
             total=view.summary.total,
             changed=view.summary.changed,
+            unread_files=view.summary.unread_files,
         )
     return Message(
         id=view.id,
@@ -407,6 +547,22 @@ async def mark_supplier_thread_read(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+async def _store_demo_letter(
+    rs,
+    *,
+    subject: str | None,
+    body: str,
+    session: AsyncSession,
+) -> dict:
+    """Sample request: keep the letter in the thread, send nothing.
+
+    The sample supplier's answer is delivered by the feed refresh after a
+    short pause (see deliver_due_follow_ups).
+    """
+    await record_demo_outgoing(session, rs, subject=subject, body=body)
+    return {"status": "queued", "rs_id": str(rs.id), "demo": True}
+
+
 @router.post(
     "/{request_id}/suppliers/{rs_id}/reply",
     status_code=status.HTTP_202_ACCEPTED,
@@ -431,6 +587,11 @@ async def post_reply(
     if not payload.body or not payload.body.strip():
         raise HTTPException(
             status_code=400, detail="Reply body cannot be empty"
+        )
+
+    if rs.request.is_demo:
+        return await _store_demo_letter(
+            rs, subject=None, body=payload.body.strip(), session=session
         )
 
     await ensure_can_send_emails(session, current_user, pending_count=1)
@@ -573,7 +734,7 @@ async def forward_message(
 
     The copy is a sent email and counts towards the monthly email limit.
     """
-    await _thread_for_user(request_id, rs_id, session, current_user)
+    rs = await _thread_for_user(request_id, rs_id, session, current_user)
     message = await EmailMessageDAO.get_by_id(session, message_id)
     if not message or message.request_supplier_id != rs_id:
         raise HTTPException(
@@ -584,6 +745,11 @@ async def forward_message(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="A forward cannot be forwarded again",
+        )
+    if rs.request.is_demo:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Это пример: пересылать его письма нельзя",
         )
     await ensure_can_send_emails(session, current_user, pending_count=1)
     send_forward.delay(  # type: ignore[attr-defined]
@@ -614,6 +780,14 @@ async def _queue_custom_supplier_email(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Subject and body cannot be empty",
+        )
+
+    if rs.request.is_demo:
+        return await _store_demo_letter(
+            rs,
+            subject=payload.subject.strip(),
+            body=payload.body.strip(),
+            session=session,
         )
 
     await ensure_can_send_emails(session, current_user, pending_count=1)

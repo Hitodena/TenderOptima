@@ -6,6 +6,7 @@ from backend.utils.subscription_catalog import (
     resolve_tz_kp_upload_limit,
 )
 from backend.utils.subscription_usage import SubscriptionUsage
+from backend.utils.trial import trial_state
 
 from .schemas import SubscriptionResponse
 
@@ -58,6 +59,9 @@ def subscription_to_response(
         expires_at=row.expires_at,
         auto_renew=bool(row.auto_renew),
         bepaid_renew_at=row.bepaid_renew_at,
+        trial_started_at=row.trial_started_at,
+        trial_ends_at=row.trial_ends_at,
+        trial_state=trial_state(row).value,
         searches_used_this_month=(
             usage.searches_used if usage is not None else 0
         ),

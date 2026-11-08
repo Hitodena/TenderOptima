@@ -51,6 +51,8 @@ from backend.db.dao import (
 )
 from backend.db.models import User
 from backend.enums import RequestHistoryGroup, RequestStatus
+from backend.services.analysis.email_queue import queue_email_analysis
+from backend.services.onboarding_demo import create_demo_request
 from backend.services.request_from_bookmarks import attach_bookmark_item
 from backend.utils import attachment_thumbnail as thumbs
 from backend.utils.comparison_price import merge_multi_position_price_params
@@ -246,6 +248,11 @@ async def launch_mailing(
 ) -> LaunchMailingResponse:
     """Queue Celery task to email all pending enabled suppliers for the request."""
     request = await get_request_or_404(request_id, session, current_user)
+    if request.is_demo:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Это пример запроса: из него письма не отправляются",
+        )
 
     pending_count = await RequestSupplierDAO.count_pending(session, request.id)
     if pending_count == 0:
@@ -300,6 +307,7 @@ async def get_requests(
     requests = await RequestDAO.get_all(
         session,
         user_id=current_user.id,
+        is_demo=False,
         order_by=RequestDAO.model.created_at.desc(),
     )
     return await _request_responses_with_stats(
@@ -360,10 +368,42 @@ async def get_request(
 ) -> RequestResponse:
     """Return one request by id if it belongs to the current user."""
     request = await get_request_or_404(request_id, session, current_user)
-    all_requests = await RequestDAO.get_all(session, user_id=current_user.id)
+    all_requests = await RequestDAO.get_all(
+        session, user_id=current_user.id, is_demo=False
+    )
     rows = await _request_responses_with_stats(
         session, [request], total_count=len(all_requests)
     )
+    return rows[0]
+
+
+@router.post(
+    "/{request_id}/demo",
+    response_model=RequestResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create the onboarding sample request from this request",
+)
+async def create_demo_from_request(
+    request_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> RequestResponse:
+    """Sample request with fictional suppliers and their letters.
+
+    The letters are generated; analysis and comparison are the real ones.
+    Nothing is sent. One sample per account — repeated calls return it.
+    """
+    source = await get_request_or_404(request_id, session, current_user)
+    if source.is_demo:
+        demo = source
+        to_analyze: list[uuid.UUID] = []
+    else:
+        demo, to_analyze = await create_demo_request(
+            session, current_user, source
+        )
+    for message_id in to_analyze:
+        await queue_email_analysis(session, message_id, demo, reanalyze=False)
+    rows = await _request_responses_with_stats(session, [demo])
     return rows[0]
 
 

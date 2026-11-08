@@ -26,6 +26,17 @@
 										:count="filesToUpload.length"
 										@click="attachmentsField?.open()"
 									/>
+									<UButton
+										type="button"
+										color="neutral"
+										variant="outline"
+										size="sm"
+										leading-icon="i-lucide-file-text"
+										class="md:hidden"
+										@click="templatesOpen = true"
+									>
+										Шаблоны
+									</UButton>
 								</div>
 								<UTextarea
 									v-model="body"
@@ -39,15 +50,28 @@
 						<LetterAttachmentsField
 							ref="attachmentsField"
 							v-model="filesToUpload"
+							hide-mobile-button
 						/>
 					</div>
-					<div class="w-full md:w-72 shrink-0 min-h-64 md:min-h-0">
+					<div class="w-full md:w-72 shrink-0 min-h-64 md:min-h-0 max-md:hidden">
 						<EmailTemplateSidebar
 							:category="EmailTemplateCategory.LETTER"
 							mode="manage"
 							@select="applyTemplate"
 						/>
 					</div>
+					<!-- phones: templates open on demand instead of a list under the letter -->
+					<UDrawer v-model:open="templatesOpen" title="Шаблоны писем" :ui="{ content: 'md:hidden', header: 'sr-only' }">
+						<template #body>
+							<div class="min-h-[50vh] pb-4">
+								<EmailTemplateSidebar
+									:category="EmailTemplateCategory.LETTER"
+									mode="manage"
+									@select="onTemplatePicked"
+								/>
+							</div>
+						</template>
+					</UDrawer>
 				</div>
 
 				<UAlert
@@ -93,8 +117,8 @@ import {
 } from '#shared/constants/emailModal'
 import { getApiErrorDetail } from '#shared/utils/apiError'
 import {
-	canSendEmail,
-	emailQuotaBlockMessage,
+	canSendMail,
+	mailingBlockMessage,
 } from '#shared/utils/subscriptionAccess'
 import EmailTemplateSidebar from '~/components/EmailTemplateSidebar.vue'
 import LetterAttachButton from '~/components/LetterAttachButton.vue'
@@ -106,9 +130,12 @@ const props = defineProps<{
 	supplier: ComparisonSupplier
 	initialBody: string
 	subscription?: SubscriptionResponse | null
+	/** sample request of the onboarding tour: the letter stays inside */
+	demo?: boolean
 }>()
 
 const isOpen = defineModel<boolean>('open', { default: false })
+const emit = defineEmits<{ sent: [] }>()
 
 const { post } = useApi()
 const toast = useToast()
@@ -120,8 +147,8 @@ const attachmentsField = ref<{ open: () => void } | null>(null)
 const sending = ref(false)
 const error = ref('')
 
-const canSend = computed(() => canSendEmail(props.subscription, 1))
-const quotaMessage = computed(() => emailQuotaBlockMessage(props.subscription, 1))
+const canSend = computed(() => Boolean(props.demo) || canSendMail(props.subscription, 1))
+const quotaMessage = computed(() => (props.demo ? null : mailingBlockMessage(props.subscription, 1)))
 
 function resetForm() {
 	subject.value = 'Уточнение коммерческого предложения'
@@ -136,6 +163,12 @@ function applyTemplate(template: EmailTemplate) {
 		/\{company_name\}/g,
 		props.supplier.company_name,
 	)
+}
+
+const templatesOpen = ref(false)
+function onTemplatePicked(template: EmailTemplate) {
+	applyTemplate(template)
+	templatesOpen.value = false
 }
 
 function close() {
@@ -178,6 +211,7 @@ async function send() {
 			color: 'success',
 			icon: 'i-lucide-check',
 		})
+		emit('sent')
 		close()
 	} catch (e: unknown) {
 		error.value = getApiErrorDetail(e) ?? 'Не удалось отправить письмо'

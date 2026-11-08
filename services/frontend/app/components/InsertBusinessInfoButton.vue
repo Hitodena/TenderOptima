@@ -31,4 +31,7 @@ async function handleInsert() {
 		loading.value = false
 	}
 }
+
+// the phone reply box calls this from its «+» sheet
+defineExpose({ insert: handleInsert })
 </script>

@@ -182,6 +182,7 @@ async def _load_email_analysis_context(
         list[Path] | None,
         dict[str, str],
         dict[str, RequirementMatch],
+        str,
     ]
     | None
 ):
@@ -229,12 +230,20 @@ async def _load_email_analysis_context(
             exclude_id=message.id,
             before_dt=message.received_at,
         )
+        # what was ordered: the model picks the right row of a multi-item
+        # offer and notices another product; never a supplier answer itself
+        request_context = "\n".join(
+            part.strip()
+            for part in (request.query, request.description)
+            if part and part.strip()
+        )
         return (
             requirements,
             message.raw_body or "",
             paths or None,
             baseline_matches,
             prior_matches,
+            request_context,
         )
 
 
@@ -890,6 +899,7 @@ async def run_email_analysis(self, message_id: str) -> dict:
         attachment_paths,
         baseline_matches,
         prior_matches,
+        request_context,
     ) = ctx
     if not requirements:
         async with db_manager.session() as session:
@@ -910,6 +920,7 @@ async def run_email_analysis(self, message_id: str) -> dict:
             baseline_matches=baseline_matches or None,
             prior_matches=prior_matches or None,
             source_message_id=message_id,
+            request_context=request_context,
         )
     except (UnsupportedFileTypeError, OcrNotAvailableError, ValueError) as exc:
         logger.warning(
