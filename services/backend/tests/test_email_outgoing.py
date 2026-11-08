@@ -12,13 +12,18 @@ from backend.utils.email_outgoing import (
 
 
 def test_strip_tracking_removes_every_token():
-    assert strip_tracking("Запрос КП [TID-ABC123] и [tid-zz99yy88]") == "Запрос КП и"
+    assert (
+        strip_tracking("Запрос КП [TID-ABC123] и [tid-zz99yy88]")
+        == "Запрос КП и"
+    )
     assert strip_tracking(None) == ""
     assert strip_tracking("без метки") == "без метки"
 
 
 def test_forward_subject():
-    assert forward_subject("Re: Запрос КП [TID-ABC123]") == "Fwd: Re: Запрос КП"
+    assert (
+        forward_subject("Re: Запрос КП [TID-ABC123]") == "Fwd: Re: Запрос КП"
+    )
     assert forward_subject(None) == "Fwd: письмо поставщика"
     assert forward_subject(" [TID-ABC123] ") == "Fwd: письмо поставщика"
 
@@ -32,7 +37,9 @@ def test_forward_text_layout_and_no_tracking_token():
         subject="Re: КП [TID-ABC123]",
         body="Цена 82,36 руб.\n> Запрос [TID-ABC123]",
     )
-    assert text.startswith("Посмотри условия оплаты\n\n---------- Пересланное сообщение")
+    assert text.startswith(
+        "Посмотри условия оплаты\n\n---------- Пересланное сообщение"
+    )
     assert "От: ООО «ЭлектроКомплект» <sales@x.example.com>" in text
     assert "Дата: 06.11.2026 14:32" in text
     assert "Тема: Re: КП\n" in text
