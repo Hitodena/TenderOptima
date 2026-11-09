@@ -81,6 +81,10 @@ export default defineNuxtConfig({
 		],
 	},
 
+	// The production server has little memory: source maps for the server
+	// bundle made the Nitro step run out of memory (SIGKILL) during deploy.
+	sourcemap: { server: false, client: false },
+
 	vite: {
 		optimizeDeps: {
 			include: ['@vue/devtools-core', '@vue/devtools-kit', 'axios', 'zod'],
