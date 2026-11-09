@@ -516,6 +516,7 @@ def _message_out(view: MessageView) -> Message:
         body_text=view.body_text,
         quoted_text=view.quoted_text,
         to_email=view.to_email,
+        from_email=view.from_email,
         is_decline=view.is_decline,
         summary=summary,
     )
@@ -741,7 +742,10 @@ async def forward_message(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Message not found in this thread",
         )
-    if message.kind == MessageKind.FORWARD.value:
+    if message.kind in (
+        MessageKind.FORWARD.value,
+        MessageKind.COLLEAGUE_REPLY.value,
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="A forward cannot be forwarded again",

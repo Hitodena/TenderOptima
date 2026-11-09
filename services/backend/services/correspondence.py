@@ -152,6 +152,8 @@ class MessageView:
     is_decline: bool
     summary: LetterSummary | None
     attachments: list[AttachmentView]
+    # shown for a colleague's answer, whose sender is not the supplier
+    from_email: str | None = None
 
 
 def build_thread(messages: list[_MessageLike]) -> list[MessageView]:
@@ -194,6 +196,7 @@ def build_thread(messages: list[_MessageLike]) -> list[MessageView]:
                 quoted_text=split.quoted,
                 received_at=message.received_at,
                 to_email=message.to_email,
+                from_email=getattr(message, "from_email", None),
                 is_decline=incoming
                 and ordinary
                 and looks_like_decline(split.main),

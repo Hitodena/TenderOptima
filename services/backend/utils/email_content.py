@@ -244,6 +244,17 @@ class MessageKind(StrEnum):
     BOUNCE = "bounce"  # delivery failure report from a mail server
     AUTO_REPLY = "auto_reply"  # out-of-office and other robot replies
     FORWARD = "forward"  # our forward of a supplier letter to a colleague
+    # a colleague's answer to that forward: an internal note in the thread,
+    # never the supplier's letter (no AI analysis, no status change)
+    COLLEAGUE_REPLY = "colleague_reply"
+
+
+# Letters that live in a supplier thread but are not part of the dialogue
+# with the supplier: they never set the subject, In-Reply-To or status.
+NOT_DIALOGUE_KINDS = (
+    MessageKind.FORWARD.value,
+    MessageKind.COLLEAGUE_REPLY.value,
+)
 
 
 _BOUNCE_SENDER = re.compile(

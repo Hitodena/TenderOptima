@@ -200,7 +200,10 @@ class Message(BaseModel):
     received_at: datetime | None = None
     kind: str | None = Field(
         default=None,
-        description="null — ordinary letter; bounce, auto_reply or forward",
+        description=(
+            "null — ordinary letter; bounce, auto_reply, forward or "
+            "colleague_reply (a colleague's answer to our forward)"
+        ),
     )
     body_text: str | None = Field(
         default=None, description="What the sender wrote, without the quote"
@@ -209,6 +212,7 @@ class Message(BaseModel):
         default=None, description="Quoted history below the new text"
     )
     to_email: str | None = None
+    from_email: str | None = None
     is_decline: bool = False
     summary: LetterSummaryOut | None = None
 

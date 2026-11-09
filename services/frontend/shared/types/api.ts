@@ -791,7 +791,7 @@ export interface LetterSummary {
 }
 
 /** null — ordinary letter */
-export type MessageKind = 'bounce' | 'auto_reply' | 'forward';
+export type MessageKind = 'bounce' | 'auto_reply' | 'forward' | 'colleague_reply';
 
 export interface SupplierCreate {
 	domain?: string | null;
@@ -891,6 +891,8 @@ export interface Message {
 	body_text?: string | null;
 	quoted_text?: string | null;
 	to_email?: string | null;
+	/** sender address; shown for a colleague's answer */
+	from_email?: string | null;
 	is_decline?: boolean;
 	summary?: LetterSummary | null;
 }

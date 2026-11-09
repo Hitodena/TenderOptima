@@ -16,7 +16,7 @@ from backend.db.models import (
 )
 from backend.enums import EmailMessageDirection
 from backend.schemas.thread import ThreadSummaryRow, is_thread_unread
-from backend.utils.email_content import MessageKind
+from backend.utils.email_content import NOT_DIALOGUE_KINDS
 
 
 class EmailMessageDAO(BaseDAO[EmailMessage]):
@@ -78,7 +78,8 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
     ) -> list[EmailMessage]:
         """Return all messages for a request-supplier link, oldest first.
 
-        dialogue_only drops our forwards to colleagues: they must not set the
+        dialogue_only drops forwards to colleagues and their answers: they must
+        not set the
         subject or the In-Reply-To of the next letter to the supplier.
         """
         logger.debug(
@@ -97,7 +98,7 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
             stmt = stmt.where(
                 or_(
                     cls.model.kind.is_(None),
-                    cls.model.kind != MessageKind.FORWARD.value,
+                    cls.model.kind.not_in(NOT_DIALOGUE_KINDS),
                 )
             )
         if with_analysis:
@@ -456,7 +457,7 @@ class EmailMessageDAO(BaseDAO[EmailMessage]):
             # a forward to a colleague is not part of the supplier dialogue
             or_(
                 cls.model.kind.is_(None),
-                cls.model.kind != MessageKind.FORWARD.value,
+                cls.model.kind.not_in(NOT_DIALOGUE_KINDS),
             ),
         ]
         if incoming_only:

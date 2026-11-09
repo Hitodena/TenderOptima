@@ -6,6 +6,10 @@
 					Письмо {{ supplierName }}<template v-if="receivedLabel"> от {{ receivedLabel }}</template>
 					уйдёт с вашего почтового ящика. Пересылка считается отправленным письмом в лимите тарифа.
 				</p>
+				<p class="text-sm text-muted">
+					Когда коллега ответит, его ответ появится здесь, в переписке с поставщиком, как комментарий коллеги.
+					Поставщик его не увидит.
+				</p>
 				<UFormField label="Кому" required :error="emailError || undefined">
 					<UInput
 						id="forward-to"

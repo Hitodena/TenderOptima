@@ -47,7 +47,9 @@
 		:class="[
 			isOutgoing
 				? 'bg-primary/5 border-primary/15 hover:border-primary/30'
-				: 'bg-default border-default hover:border-accented',
+				: isColleague
+					? 'bg-warning/5 border-warning/25 border-dashed hover:border-warning/50'
+					: 'bg-default border-default hover:border-accented',
 			highlighted ? 'ring-2 ring-primary/60' : '',
 		]"
 		:aria-label="`Развернуть письмо: ${senderLabel}, ${timeLabel}`"
@@ -55,8 +57,8 @@
 	>
 		<span
 			class="w-7 h-7 rounded-full grid place-items-center text-[10px] font-bold shrink-0"
-			:class="isOutgoing ? 'bg-primary text-inverted' : 'bg-primary/10 text-primary'"
-		>{{ isOutgoing ? 'Вы' : senderInitials }}</span>
+			:class="isOutgoing ? 'bg-primary text-inverted' : isColleague ? 'bg-warning/15 text-warning' : 'bg-primary/10 text-primary'"
+		>{{ avatarText }}</span>
 		<span class="flex items-baseline gap-2 min-w-0">
 			<span class="text-xs font-semibold whitespace-nowrap">{{ senderLabel }}</span>
 			<span class="text-xs text-muted truncate min-w-0">{{ preview || message.subject || 'Без текста' }}</span>
@@ -75,7 +77,9 @@
 		v-else
 		class="min-w-0 rounded-xl border shadow-sm transition-shadow duration-500"
 		:class="[
-			isOutgoing ? 'bg-primary/5 border-primary/20' : 'bg-default border-accented',
+			isOutgoing
+				? 'bg-primary/5 border-primary/20'
+				: isColleague ? 'bg-warning/5 border-warning/30 border-dashed' : 'bg-default border-accented',
 			highlighted ? 'ring-2 ring-primary/60 ring-offset-2 ring-offset-default' : '',
 		]"
 	>
@@ -86,12 +90,12 @@
 		>
 			<span
 				class="w-9 h-9 rounded-full grid place-items-center text-xs font-bold shrink-0"
-				:class="isOutgoing ? 'bg-primary text-inverted' : 'bg-primary/10 text-primary'"
-			>{{ isOutgoing ? 'Вы' : senderInitials }}</span>
+				:class="isOutgoing ? 'bg-primary text-inverted' : isColleague ? 'bg-warning/15 text-warning' : 'bg-primary/10 text-primary'"
+			>{{ avatarText }}</span>
 			<div class="min-w-0">
 				<p class="text-sm font-semibold leading-snug">
 					{{ senderLabel }}
-					<span v-if="!isOutgoing && senderEmail" class="hidden sm:inline font-normal text-xs text-muted">&lt;{{ senderEmail }}&gt;</span>
+					<span v-if="!isOutgoing && shownEmail" class="hidden sm:inline font-normal text-xs text-muted">&lt;{{ shownEmail }}&gt;</span>
 				</p>
 				<p v-if="message.subject" class="text-[13px] text-default leading-snug wrap-break-word">
 					{{ message.subject }}
@@ -256,7 +260,7 @@
 
 		<div class="flex flex-wrap gap-1.5 px-4 pt-3 pb-3.5">
 			<UButton
-				v-if="!isOutgoing"
+				v-if="!isOutgoing && !isColleague"
 				size="xs"
 				color="neutral"
 				variant="outline"
@@ -312,8 +316,22 @@ const emit = defineEmits<{
 const showQuote = ref(false)
 
 const isOutgoing = computed(() => props.message.direction === 'outgoing')
-const senderLabel = computed(() => (isOutgoing.value ? 'Вы' : props.senderName))
-const systemKind = computed(() => props.message.kind ?? null)
+const senderLabel = computed(() => {
+	if (isOutgoing.value) return 'Вы'
+	if (props.message.kind === 'colleague_reply') return 'Комментарий коллеги'
+	return props.senderName
+})
+const shownEmail = computed(() =>
+	props.message.kind === 'colleague_reply' ? props.message.from_email ?? null : props.senderEmail,
+)
+const avatarText = computed(() => {
+	if (isOutgoing.value) return 'Вы'
+	return props.message.kind === 'colleague_reply' ? 'К' : props.senderInitials
+})
+// a colleague's answer to our forward is a full card (an internal note),
+// robot letters and our forwards are one quiet line
+const isColleague = computed(() => props.message.kind === 'colleague_reply')
+const systemKind = computed(() => (isColleague.value ? null : props.message.kind ?? null))
 
 // The server splits the letter (it sees the full original text); older
 // servers send only raw_body, then the browser splits it the same way.

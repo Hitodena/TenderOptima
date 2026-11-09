@@ -43,6 +43,7 @@ from backend.utils.email_content import (
     letter_text,
 )
 from backend.utils.email_matching import (
+    COLLEAGUE_MATCH,
     match_incoming_email,
     parse_email_address,
 )
@@ -561,7 +562,9 @@ async def send_forward(
     """Forward a supplier letter to a colleague from the user's mailbox.
 
     The copy is stored in the thread as an outgoing letter of kind
-    "forward" without a Message-ID, so it never takes part in threading.
+    "forward" with its Message-ID: the colleague's answer refers to it and
+    is filed as a colleague note. Forwards never take part in the threading
+    of letters to the supplier (dialogue_only).
     """
     db_manager = get_db_manager()
     async with db_manager.session() as session:
@@ -635,7 +638,8 @@ async def send_forward(
     msg["From"] = f"{user.company_name or 'TenderOptima'} <{smtp_creds.user}>"
     msg["To"] = to_email
     msg["Subject"] = subject
-    msg["Message-ID"] = make_message_id(smtp_creds.user)
+    forward_message_id = make_message_id(smtp_creds.user)
+    msg["Message-ID"] = forward_message_id
 
     try:
         _send_mime(msg, to_email, smtp_creds)
@@ -651,7 +655,9 @@ async def send_forward(
             mail_account_id=account.id,
             direction=EmailMessageDirection.OUTGOING,
             kind=MessageKind.FORWARD.value,
-            message_id=None,
+            # kept so the colleague's answer (In-Reply-To) finds this forward;
+            # dialogue_only keeps it out of the supplier thread headers
+            message_id=normalize_message_id(forward_message_id),
             subject=subject,
             raw_body=body,
             attachments=attachment_records(att_data),
@@ -1075,6 +1081,19 @@ async def poll_imap(self) -> dict:
                             )
                             skipped += 1
                             continue
+
+                        if match.matched_by == COLLEAGUE_MATCH:
+                            if item.get("kind") is not None:
+                                # out-of-office or bounce for our forward:
+                                # not the supplier's business, keep it out
+                                logger.info(
+                                    "Robot answer to a forward skipped",
+                                    imap_id=item["imap_id"],
+                                )
+                                seen_uids.append(item["uid"])
+                                skipped += 1
+                                continue
+                            item["kind"] = MessageKind.COLLEAGUE_REPLY
 
                         rs = match.request_supplier
                         email_body_text = _parse_email_body(item["body"])

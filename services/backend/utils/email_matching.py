@@ -3,18 +3,30 @@
 import re
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from email.utils import parseaddr
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.db.dao import EmailMessageDAO, RequestSupplierDAO
-from backend.db.models import Request, RequestSupplier
+from backend.db.models import EmailMessage, Request, RequestSupplier
 from backend.enums import RequestSupplierStatus
+from backend.utils.email_content import MessageKind
 from backend.utils.email_utils import normalize_message_id
 
 TRACKING_ID_RE = re.compile(r"\[TID-([A-Za-z0-9]{6,12})\]", re.IGNORECASE)
+
+# matched_by for a colleague's answer to our forward of a supplier letter
+COLLEAGUE_MATCH = "forward"
+# how long after a forward an answer from that address without threading
+# headers is still taken for the colleague's answer
+_FORWARD_FALLBACK_DAYS = 60
+_SUBJECT_PREFIX_RE = re.compile(
+    r"^\s*((re|fwd?|fw|отв|пер|ответ|переслать)\s*(\[\d+\])?\s*:\s*)+",
+    re.IGNORECASE,
+)
 
 _ACTIVE_RS_STATUSES = (
     RequestSupplierStatus.SENT.value,
@@ -90,6 +102,12 @@ async def match_incoming_email(
         if msg and msg.request_supplier:
             rs = msg.request_supplier
             if _owner_ok(mailbox_owner_id, rs):
+                if msg.kind in (
+                    MessageKind.FORWARD.value,
+                    MessageKind.COLLEAGUE_REPLY.value,
+                ):
+                    # an answer to our forward: the colleague, not the supplier
+                    return EmailMatchResult(rs, COLLEAGUE_MATCH, "high")
                 return EmailMatchResult(rs, "message_id", "high")
 
     if from_email:
@@ -115,6 +133,75 @@ async def match_incoming_email(
             if supplier_email and supplier_email == from_email.lower():
                 return EmailMatchResult(rs, "sender_recipient", "medium")
 
+        forward = await _recent_forward_to(
+            session,
+            colleague_email=from_email,
+            our_mailbox=to_email,
+            subject=subject,
+            mailbox_owner_id=mailbox_owner_id,
+        )
+        if forward is not None and forward.request_supplier is not None:
+            return EmailMatchResult(
+                forward.request_supplier, COLLEAGUE_MATCH, "medium"
+            )
+
+    return None
+
+
+def subject_core(subject: str | None) -> str:
+    """Subject without Re:/Fwd:/Отв: prefixes, case and extra spaces."""
+    text = _SUBJECT_PREFIX_RE.sub("", subject or "")
+    return " ".join(text.split()).casefold()
+
+
+async def _recent_forward_to(
+    session: AsyncSession,
+    *,
+    colleague_email: str,
+    our_mailbox: str | None = None,
+    subject: str | None,
+    mailbox_owner_id: uuid.UUID | None,
+) -> EmailMessage | None:
+    """Our latest forward to this address with the same subject.
+
+    Fallback for mail clients that drop In-Reply-To: an answer counts as the
+    colleague's only when it comes from the address we forwarded to, about
+    the same letter (same subject), to the mailbox the forward left from,
+    within _FORWARD_FALLBACK_DAYS.
+    """
+    core = subject_core(subject)
+    if not core:
+        return None
+    since = datetime.now(UTC) - timedelta(days=_FORWARD_FALLBACK_DAYS)
+    stmt = (
+        select(EmailMessage)
+        .join(
+            RequestSupplier,
+            EmailMessage.request_supplier_id == RequestSupplier.id,
+        )
+        .join(Request, RequestSupplier.request_id == Request.id)
+        .where(
+            EmailMessage.kind == MessageKind.FORWARD.value,
+            func.lower(EmailMessage.to_email) == colleague_email.lower(),
+            EmailMessage.received_at >= since,
+        )
+        .options(
+            selectinload(EmailMessage.request_supplier).selectinload(
+                RequestSupplier.request
+            )
+        )
+        .order_by(EmailMessage.received_at.desc())
+    )
+    if mailbox_owner_id is not None:
+        stmt = stmt.where(Request.user_id == mailbox_owner_id)
+    if our_mailbox:
+        # the answer goes back to the mailbox the forward was sent from
+        stmt = stmt.where(
+            func.lower(EmailMessage.from_email) == our_mailbox.lower()
+        )
+    for forward in (await session.execute(stmt)).scalars().all():
+        if subject_core(forward.subject) == core:
+            return forward
     return None
 
 
