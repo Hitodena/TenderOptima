@@ -25,3 +25,6 @@ logs
 
 .codegraph
 uploads
+
+# Site build uploaded by CI
+services/frontend/prebuilt/

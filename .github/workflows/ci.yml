@@ -90,6 +90,30 @@ jobs:
     timeout-minutes: 60
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: services/frontend/package-lock.json
+
+      - name: Build site
+        working-directory: services/frontend
+        run: |
+          npm ci
+          npm run build
+          tar -czf ../../frontend-output.tgz .output
+
+      - name: Upload site build to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: frontend-output.tgz
+          target: /tmp/tenderoptima-deploy
+
       - name: Deploy on server
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -101,4 +125,8 @@ jobs:
             set -e
             cd ${{ secrets.DEPLOY_PATH }}
             git pull origin main
+            rm -rf services/frontend/prebuilt
+            mkdir -p services/frontend/prebuilt
+            tar -xzf /tmp/tenderoptima-deploy/frontend-output.tgz -C services/frontend/prebuilt
+            rm -f /tmp/tenderoptima-deploy/frontend-output.tgz
             docker compose up -d --build
