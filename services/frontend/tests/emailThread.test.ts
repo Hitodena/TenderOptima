@@ -202,9 +202,9 @@ describe('threadState', () => {
 	it('replied when the last letter is from the supplier', () => {
 		assert.equal(threadState({ unread: false, message_count: 1, last_message: inc }), 'replied')
 	})
-	it('awaiting when the last letter is ours', () => {
+	it('awaiting until the supplier writes; our later letter keeps "replied"', () => {
 		assert.equal(threadState({ unread: false, message_count: 0, last_message: out }), 'awaiting')
-		assert.equal(threadState({ unread: false, message_count: 3, last_message: out }), 'awaiting')
+		assert.equal(threadState({ unread: false, message_count: 3, last_message: out }), 'replied')
 	})
 	it('unread flag without incoming letters is not "new"', () => {
 		assert.equal(threadState({ unread: true, message_count: 0, last_message: out }), 'awaiting')
@@ -216,10 +216,11 @@ describe('threadState', () => {
 		assert.equal(threadState({ unread: true, message_count: 0, last_message: { direction: 'incoming', kind: 'bounce' }, delivery_failed: true }), 'failed')
 	})
 	it('an unread auto reply is not a new answer', () => {
-		assert.equal(threadState({ unread: true, message_count: 1, last_message: { direction: 'incoming', kind: 'auto_reply' } }), 'awaiting')
+		assert.equal(threadState({ unread: true, message_count: 0, last_message: { direction: 'incoming', kind: 'auto_reply' } }), 'awaiting')
+		assert.equal(threadState({ unread: true, message_count: 1, last_message: { direction: 'incoming', kind: 'auto_reply' } }), 'replied')
 	})
-	it('a bounce after a real reply keeps waiting, not "replied"', () => {
-		assert.equal(threadState({ unread: false, message_count: 1, last_message: { direction: 'incoming', kind: 'bounce' } }), 'awaiting')
+	it('a bounce after a real reply keeps "replied"', () => {
+		assert.equal(threadState({ unread: false, message_count: 1, last_message: { direction: 'incoming', kind: 'bounce' } }), 'replied')
 	})
 	it('refusal hint', () => {
 		assert.equal(threadState({ unread: false, message_count: 1, last_message: inc, declined: true }), 'declined')

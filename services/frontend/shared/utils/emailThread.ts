@@ -158,8 +158,9 @@ export interface ThreadLike {
  * failed   — our letter did not reach the supplier
  * new      — supplier wrote and the letter is not read yet
  * declined — the supplier's latest letter reads like a refusal
- * replied  — the last letter is from the supplier (your move)
- * awaiting — the last letter is ours (or a robot's), waiting for the supplier
+ * replied  — the supplier has written at least once (robots don't count),
+ *            even if our letter came after
+ * awaiting — no letter from the supplier yet
  * empty    — nothing in the thread
  */
 export function threadState(t: ThreadLike): ThreadState {
@@ -168,7 +169,7 @@ export function threadState(t: ThreadLike): ThreadState {
 	const robot = t.last_message.kind === 'auto_reply' || t.last_message.kind === 'bounce'
 	if (t.unread && t.message_count > 0 && !robot) return 'new'
 	if (t.declined) return 'declined'
-	if (t.last_message.direction === 'incoming' && !robot) return 'replied'
+	if (t.message_count > 0) return 'replied'
 	return 'awaiting'
 }
 
@@ -176,7 +177,7 @@ export const THREAD_STATE_LABEL: Record<ThreadState, string> = {
 	failed: 'Не доставлено',
 	new: 'Новый ответ',
 	declined: 'Похоже на отказ',
-	replied: 'Ответил',
+	replied: 'Есть ответ',
 	awaiting: 'Ждём ответа',
 	empty: 'Нет писем',
 }
