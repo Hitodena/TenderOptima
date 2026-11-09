@@ -94,15 +94,19 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
           cache: npm
           cache-dependency-path: services/frontend/package-lock.json
 
       - name: Build site
         working-directory: services/frontend
+        env:
+          # same as the server image: IPv6 lookups have broken font downloads
+          NODE_OPTIONS: --dns-result-order=ipv4first
         run: |
           npm ci
-          npm run build
+          # font downloads from Google/Fontshare fail now and then: retry
+          for i in 1 2 3; do npm run build && break; [ $i = 3 ] && exit 1; sleep 20; done
           tar -czf ../../frontend-output.tgz .output
 
       - name: Upload site build to server
