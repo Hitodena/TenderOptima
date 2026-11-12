@@ -877,6 +877,8 @@ export interface ThreadSummary {
 	delivery_failed?: boolean;
 	/** the supplier's latest letter reads like a refusal (a hint) */
 	declined?: boolean;
+	/** the buyer marked this thread with a star */
+	starred?: boolean;
 }
 
 export interface Message {

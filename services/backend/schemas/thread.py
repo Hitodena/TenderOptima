@@ -98,6 +98,8 @@ class ThreadSummaryRow(BaseModel):
     delivery_failed: bool = False
     # the supplier's latest letter reads like a refusal (a hint, not a fact)
     declined: bool = False
+    # the buyer marked this thread with a star
+    starred: bool = False
 
     @classmethod
     def from_message(
@@ -127,6 +129,7 @@ class ThreadSummaryRow(BaseModel):
             has_outgoing=has_outgoing,
             delivery_failed=rs.sent_status
             == RequestSupplierStatus.FAILED.value,
+            starred=bool(rs.is_starred),
             declined=bool(
                 latest_incoming is not None
                 and latest_incoming.kind is None

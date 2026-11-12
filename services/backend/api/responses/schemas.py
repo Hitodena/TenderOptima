@@ -138,6 +138,7 @@ class ThreadSummary(BaseModel):
     has_outgoing: bool = False
     delivery_failed: bool = False
     declined: bool = False
+    starred: bool = False
 
     @classmethod
     def from_row(cls, row: ThreadSummaryRow) -> "ThreadSummary":
@@ -150,6 +151,7 @@ class ThreadSummary(BaseModel):
             has_outgoing=row.has_outgoing,
             delivery_failed=row.delivery_failed,
             declined=row.declined,
+            starred=row.starred,
         )
 
 
@@ -274,3 +276,9 @@ class ComparisonResponse(BaseModel):
 
 class RefreshAllResponse(BaseModel):
     queued: int
+
+
+class StarPayload(BaseModel):
+    """Put or take off the buyer's star on a supplier thread."""
+
+    starred: bool

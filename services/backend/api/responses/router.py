@@ -27,6 +27,7 @@ from backend.api.responses.schemas import (
     Message,
     RefreshAllResponse,
     ReplyPayload,
+    StarPayload,
     SummaryFactOut,
     ThreadAttachment,
     ThreadSummary,
@@ -539,6 +540,31 @@ async def mark_supplier_thread_read(
         session,
         request_id,
         rs_id,
+    )
+    if updated is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Request supplier not found for this request",
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/{request_id}/suppliers/{rs_id}/star",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Put or take off the star on a supplier thread",
+)
+async def set_supplier_thread_star(
+    request_id: uuid.UUID,
+    rs_id: uuid.UUID,
+    payload: StarPayload,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> Response:
+    """The buyer's own mark on a thread; changes nothing for the supplier."""
+    await get_request_or_404(request_id, session, current_user)
+    updated = await RequestSupplierDAO.set_starred(
+        session, request_id, rs_id, payload.starred
     )
     if updated is None:
         raise HTTPException(

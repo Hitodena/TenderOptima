@@ -1,90 +1,80 @@
 <template>
-	<div class="flex flex-col gap-4 px-4 pt-4 pb-6">
-		<div>
-			<p class="text-sm text-muted">{{ greeting }}</p>
-			<h1 class="text-2xl font-bold tracking-tight text-highlighted">{{ displayName }}</h1>
+	<div class="flex flex-col gap-5 px-4 pt-3 pb-6">
+		<div class="flex h-12 items-center gap-3">
+			<div class="min-w-0 flex-1">
+				<p class="text-[13px] text-muted">{{ greeting }}</p>
+				<p class="truncate text-xl leading-tight font-bold tracking-tight text-highlighted">{{ displayName }}</p>
+			</div>
+			<NuxtLink
+				v-if="user?.subscription"
+				:to="subscriptionPath"
+				class="shrink-0 rounded-full bg-elevated px-2.5 py-1 text-xs font-medium text-muted"
+			>{{ subscriptionLabel }}</NuxtLink>
 		</div>
 
 		<!-- the one thing to do first: new supplier answers -->
-		<USkeleton v-if="loading" class="h-20 w-full rounded-2xl" />
+		<USkeleton v-if="loading" class="h-16 w-full rounded-2xl" />
 		<NuxtLink
 			v-else-if="unreadTotal > 0"
 			:to="unreadTarget"
-			class="flex items-center gap-3.5 rounded-2xl bg-primary p-4 text-inverted"
+			class="flex items-center gap-3 rounded-2xl bg-primary px-4 py-3 text-inverted"
 		>
-			<span class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-white/15">
-				<UIcon name="i-lucide-inbox" class="size-6" />
-			</span>
+			<UIcon name="i-lucide-inbox" class="size-6 shrink-0" />
 			<span class="min-w-0 flex-1">
-				<span class="block text-[17px] font-semibold">{{ unreadTitle }}</span>
-				<span class="block truncate text-sm opacity-85">{{ unreadSubtitle }}</span>
+				<span class="block font-semibold">{{ unreadTitle }}</span>
+				<span class="block truncate text-[13px] opacity-85">{{ unreadSubtitle }}</span>
 			</span>
-			<UIcon name="i-lucide-chevron-right" class="size-5" />
+			<UIcon name="i-lucide-chevron-right" class="size-5 shrink-0" />
 		</NuxtLink>
-		<div
-			v-else
-			class="flex items-center gap-3.5 rounded-2xl border border-default bg-default p-4"
-		>
-			<span class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-success/10">
-				<UIcon name="i-lucide-check" class="size-6 text-success" />
-			</span>
-			<span class="min-w-0 flex-1">
-				<span class="block font-semibold">Новых ответов нет</span>
-				<span class="block text-sm text-muted">Мы сообщим, когда поставщики ответят</span>
-			</span>
-		</div>
-
-		<div v-if="!loading && recent.length" class="flex flex-col overflow-hidden rounded-2xl border border-default bg-default">
-			<div class="flex items-center justify-between px-4 pt-3.5 pb-1.5">
-				<p class="text-xs font-semibold uppercase tracking-wide text-muted">Последние запросы</p>
-				<NuxtLink to="/requests/history" class="flex min-h-11 items-center text-sm font-medium text-primary">Все</NuxtLink>
-			</div>
-			<NuxtLink
-				v-for="req in recent"
-				:key="req.id"
-				:to="requestLink(req)"
-				class="flex items-center gap-3 border-t border-default/60 px-4 py-3"
-			>
-				<span class="min-w-0 flex-1">
-					<span class="block font-medium leading-snug line-clamp-2">{{ req.query }}</span>
-					<span class="block text-sm text-muted">{{ requestMeta(req) }}</span>
-				</span>
-				<span
-					v-if="(req.supplier_messages_unread ?? 0) > 0"
-					class="shrink-0 rounded-full bg-orange-700 px-2 py-0.5 text-xs font-bold text-white"
-				>{{ req.supplier_messages_unread }}</span>
-				<UIcon name="i-lucide-chevron-right" class="size-4 shrink-0 text-dimmed" />
-			</NuxtLink>
-		</div>
+		<p v-else class="-mt-2 flex items-center gap-1.5 text-[13px] text-muted">
+			<UIcon name="i-lucide-check-circle-2" class="size-4 text-success" />
+			Новых ответов нет, мы сообщим, когда поставщики ответят
+		</p>
 
 		<UButton
 			to="/requests"
-			size="xl"
+			size="lg"
 			color="neutral"
 			leading-icon="i-lucide-search"
 			label="Найти поставщиков"
 			block
-			class="min-h-13 rounded-2xl"
+			class="min-h-12 rounded-xl"
 		/>
 
-		<NuxtLink
-			v-if="user?.subscription"
-			:to="subscriptionPath"
-			class="flex min-h-11 items-center justify-center gap-1 text-center text-sm text-muted"
-		>
-			Тариф «{{ subscriptionLabel }}» · подробнее
-		</NuxtLink>
+		<section v-if="!loading && recent.length">
+			<div class="mb-1 flex items-center justify-between">
+				<h2 class="text-[15px] font-semibold text-highlighted">Последние запросы</h2>
+				<NuxtLink to="/requests/history" class="flex min-h-9 items-center text-sm font-medium text-primary">Все</NuxtLink>
+			</div>
+			<ul class="-mx-4 divide-y divide-default/60 border-y border-default/60">
+				<li v-for="req in recent" :key="req.id">
+					<NuxtLink :to="requestLink(req)" class="flex items-center gap-2 px-4 py-2.5 active:bg-elevated/60">
+						<span class="min-w-0 flex-1">
+							<span
+								class="block truncate text-[15px] leading-snug"
+								:class="(req.supplier_messages_unread ?? 0) > 0 ? 'font-semibold text-highlighted' : 'font-medium'"
+							>{{ req.query }}</span>
+							<span class="block truncate text-[13px] text-muted">{{ requestMeta(req) }}</span>
+						</span>
+						<span
+							v-if="(req.supplier_messages_unread ?? 0) > 0"
+							class="shrink-0 rounded-full bg-orange-700 px-1.5 text-[11px] leading-[18px] font-bold text-white"
+						>{{ req.supplier_messages_unread }}</span>
+						<UIcon name="i-lucide-chevron-right" class="size-4 shrink-0 text-dimmed" />
+					</NuxtLink>
+				</li>
+			</ul>
+		</section>
 	</div>
 </template>
 
 <script lang="ts" setup>
 import type { RequestHistoryPageResponse, RequestResponse, UserResponse } from '#shared/types'
-import { RequestHistoryGroup, RequestStatus } from '#shared/types'
+import { getRequestStatusLabel, RequestHistoryGroup, RequestStatus } from '#shared/types'
 import {
 	subscriptionNavBadge,
 	subscriptionPlansPath,
 } from '#shared/utils/subscriptionDisplay'
-import { titleCaseWords } from '#shared/utils/textFormat'
 
 const props = defineProps<{ user: UserResponse | null }>()
 
@@ -123,7 +113,7 @@ const unreadTarget = computed(() =>
 	withUnread.value.length === 1 ? `/requests/${withUnread.value[0]!.id}/responses` : '/requests/history',
 )
 
-const recent = computed(() => active.value.slice(0, 3))
+const recent = computed(() => active.value.slice(0, 5))
 
 function pluralRu(n: number, one: string, few: string, many: string): string {
 	const m10 = n % 10
@@ -141,14 +131,12 @@ function requestLink(req: RequestResponse): string {
 		: `/requests/${req.id}`
 }
 
+// no country here: almost every request goes to the same one
 function requestMeta(req: RequestResponse): string {
-	const parts = [titleCaseWords(req.delivery_region)]
 	const sent = req.supplier_messages_sent ?? 0
-	if (sent > 0) {
-		parts.push(`писем ${sent}`)
-		parts.push(`ответили ${req.supplier_messages_incoming_suppliers ?? 0}`)
-	}
-	return parts.filter(Boolean).join(' · ')
+	if (sent === 0) return getRequestStatusLabel(req.status)
+	const answered = req.supplier_messages_incoming_suppliers ?? 0
+	return answered > 0 ? `писем ${sent} · ответили ${answered}` : `писем ${sent} · ответов пока нет`
 }
 
 onMounted(async () => {

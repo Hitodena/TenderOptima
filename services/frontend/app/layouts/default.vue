@@ -5,7 +5,7 @@
 		:menu="{ side: 'right' }"
 		:toggle="!auth.isAuthenticated.value && isLandingPage"
 		class="sticky top-0 z-50 h-14 lg:h-20 border-b border-default bg-default/95 backdrop-blur supports-backdrop-filter:bg-default/80"
-		:class="showAppFooter ? '' : 'max-md:hidden'"
+		:class="showAppFooter && !auth.isAuthenticated.value ? '' : 'max-md:hidden'"
 		:ui="headerUi"
 	>
 		<template #left>
@@ -163,8 +163,9 @@ const showTabBar = computed(() =>
 	&& !route.params.id
 	&& route.path !== '/auth',
 )
-// the supplier replies screen hides the footer everywhere and, on phones,
-// the site header too: it has its own back button and needs the height
+// the supplier replies screen hides the footer everywhere; on phones a
+// signed-in user never sees the site header: the tab bar is the navigation
+// and each screen has its own compact title bar (AppMobileBar)
 const showAppFooter = computed(
 	() => !/^\/requests\/[^/]+\/responses(?:\/|$)/.test(route.path),
 )

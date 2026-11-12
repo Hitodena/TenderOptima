@@ -11,7 +11,39 @@
 
 		<template v-else-if="request">
 
-			<div class="mb-5 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+			<!-- phones: back arrow + title in one row, status · date · region under it -->
+			<div class="sticky top-0 z-30 -mx-4 -mt-4 mb-3 flex items-start gap-0.5 border-b border-default/70 bg-default/90 px-2 py-1.5 backdrop-blur sm:hidden">
+				<UButton
+					to="/requests/history"
+					color="neutral"
+					variant="ghost"
+					size="lg"
+					icon="i-lucide-chevron-left"
+					class="shrink-0"
+					aria-label="К запросам"
+				/>
+				<div class="min-w-0 flex-1 py-0.5">
+					<h1 class="line-clamp-2 text-[17px] leading-tight font-semibold text-highlighted">{{ request.query }}</h1>
+					<p class="mt-0.5 flex items-center gap-1.5 truncate text-xs text-muted">
+						<span class="size-1.5 shrink-0 rounded-full" :class="statusDotClass" />
+						<span class="shrink-0">{{ statusLabel }}</span>
+						<span class="shrink-0">· {{ formatDate(request.created_at) }}</span>
+						<span v-if="request.delivery_region" class="truncate">· {{ titleCaseWords(request.delivery_region) }}</span>
+					</p>
+				</div>
+				<UButton
+					v-if="request.status === RequestStatus.QUEUED || request.status === RequestStatus.COMPLETED || request.status === RequestStatus.CLOSED"
+					:to="`/requests/${id}/responses`"
+					color="primary"
+					variant="soft"
+					size="md"
+					leading-icon="i-lucide-inbox"
+					label="Ответы"
+					class="mt-0.5 shrink-0 rounded-full"
+				/>
+			</div>
+
+			<div class="mb-5 hidden flex-row items-start justify-between gap-4 sm:mb-6 sm:flex">
 				<div class="min-w-0">
 					<UButton
 to="/requests/history" variant="ghost" color="neutral" size="sm"
@@ -66,7 +98,47 @@ v-if="actionError" color="error" variant="soft" icon="i-lucide-circle-alert"
 				</template>
 			</UAlert>
 
-			<div class="flex items-start justify-between mb-4 gap-4 flex-wrap">
+			<div class="mb-1 flex min-h-10 items-center gap-1 sm:hidden">
+				<template v-if="!mobileSupplierSearchOpen">
+					<h2 class="flex-1 text-[15px] font-semibold text-highlighted">
+						Поставщики <span class="font-normal text-muted tabular-nums">{{ suppliers.length }}</span>
+					</h2>
+					<UButton
+						v-if="canManageMailingSelection"
+						size="sm"
+						variant="ghost"
+						:color="enabledCount === 0 ? 'primary' : 'neutral'"
+						:disabled="updatingToggle || (enabledCount === 0 ? !canSelectMoreSuppliers : false)"
+						:label="enabledCount === 0 ? 'Выбрать все' : 'Снять все'"
+						@click="enabledCount === 0 ? selectAll() : deselectAll()"
+					/>
+					<UButton
+						color="neutral"
+						variant="ghost"
+						size="lg"
+						icon="i-lucide-search"
+						aria-label="Поиск поставщиков"
+						@click="openMobileSupplierSearch"
+					/>
+				</template>
+				<template v-else>
+					<UInput
+						ref="mobileSupplierSearchInput"
+						v-model="supplierSearch"
+						placeholder="Поиск поставщиков"
+						icon="i-lucide-search"
+						size="lg"
+						type="search"
+						class="min-w-0 flex-1"
+						:ui="{ base: 'rounded-xl bg-elevated ring-0' }"
+					/>
+					<button type="button" class="shrink-0 px-1 text-[15px] font-medium text-primary" @click="closeMobileSupplierSearch">
+						Отмена
+					</button>
+				</template>
+			</div>
+
+			<div class="mb-4 hidden flex-wrap items-start justify-between gap-4 sm:flex">
 				<div>
 					<h2 class="text-lg font-semibold">Найденные поставщики</h2>
 					<p
@@ -138,14 +210,14 @@ size="sm" variant="ghost" :to="`/requests/${id}/responses`" class="ml-auto" colo
 						color="primary"
 						variant="soft"
 						icon="i-lucide-check"
-						class="mb-4"
+						class="mb-4 max-sm:hidden"
 						:title="t('requests.mailingCompletedHint')"
 						:description="t('requests.mailingCompletedSubhint')"
 					/>
 				</div>
 				<div v-else-if="request.status === RequestStatus.CLOSED">
 					<UAlert
-color="neutral" variant="soft" icon="i-lucide-lock" class="mb-4"
+color="neutral" variant="soft" icon="i-lucide-lock" class="mb-4 max-sm:hidden"
 						description="Запрос закрыт" />
 				</div>
 				<div v-else-if="request.status === RequestStatus.DRAFT || request.status === RequestStatus.ACTIVE">
@@ -168,13 +240,17 @@ color="info" variant="soft" icon="i-lucide-info" class="mb-4"
 				</div>
 			</UCard>
 
-		<UCard v-else class="mb-4 mt-4">
-			<div class="flex items-center gap-2 mb-3 flex-wrap">
+		<UCard
+			v-else
+			class="mb-4 sm:mt-4"
+			:ui="{ root: 'max-sm:ring-0 max-sm:bg-transparent max-sm:shadow-none max-sm:rounded-none', body: 'max-sm:p-0' }"
+		>
+			<div class="mb-3 hidden flex-wrap items-center gap-2 sm:flex">
 				<UInput
 					v-model="supplierSearch"
 					placeholder="Поиск поставщиков..."
 					icon="i-lucide-search"
-					class="flex-1 min-w-40 sm:max-w-64"
+					class="flex-1 min-w-40 max-w-64"
 					size="lg"
 				/>
 				<template v-if="canManageMailingSelection">
@@ -397,7 +473,7 @@ v-else size="sm" color="error" variant="ghost" icon="i-lucide-trash-2"
 
 			<div
 				v-if="canManageMailingSelection"
-				class="px-4 py-3 border-t border-default">
+				class="px-4 py-3 border-t border-default max-sm:border-t-0 max-sm:px-0 max-sm:py-2">
 				<p class="text-sm text-muted">
 					<template v-if="isCompletedStatus">
 						К отправке
@@ -573,6 +649,18 @@ const showSaveToBookmarkModal = ref(false)
 const saveToBookmarkSupplier = ref<Supplier | null>(null)
 const emailSupplier = ref<Supplier | null>(null)
 const supplierSearch = ref('')
+// phones: the search field opens from the magnifier next to the heading
+const mobileSupplierSearchOpen = ref(false)
+const mobileSupplierSearchInput = ref<{ inputRef?: HTMLInputElement } | null>(null)
+async function openMobileSupplierSearch() {
+	mobileSupplierSearchOpen.value = true
+	await nextTick()
+	mobileSupplierSearchInput.value?.inputRef?.focus()
+}
+function closeMobileSupplierSearch() {
+	mobileSupplierSearchOpen.value = false
+	supplierSearch.value = ''
+}
 const confirmDeleteSupplierId = ref<string | null>(null)
 const deletingSupplierIds = reactive(new Set<string>())
 
@@ -727,6 +815,13 @@ const testPlanLockedMessage = computed(() =>
 )
 const statusColor = computed(() => getRequestStatusColor(request.value?.status ?? ''))
 const statusLabel = computed(() => getRequestStatusLabel(request.value?.status ?? ''))
+const statusDotClass = computed(() => ({
+	success: 'bg-success',
+	warning: 'bg-warning',
+	error: 'bg-error',
+	primary: 'bg-primary',
+	info: 'bg-info',
+} as Record<string, string>)[statusColor.value] ?? 'bg-dimmed')
 
 const supplierColumns = computed<TableColumn<RequestSupplierResponse>[]>(() => {
 	const cols: TableColumn<RequestSupplierResponse>[] = []

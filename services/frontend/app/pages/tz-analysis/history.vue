@@ -1,7 +1,26 @@
 <template>
-	<UContainer class="py-8 lg:py-12">
+	<UContainer class="pb-6 md:py-8 lg:py-12">
 		<div class="max-w-4xl mx-auto">
-			<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+			<AppMobileBar
+				v-model:search="search"
+				title="Анализ предложений"
+				searchable
+				search-placeholder="Поиск по анализам"
+			>
+				<template #actions>
+					<UButton
+						to="/tz-analysis"
+						color="neutral"
+						variant="ghost"
+						size="lg"
+						icon="i-lucide-plus"
+						class="shrink-0"
+						aria-label="Новый анализ"
+					/>
+				</template>
+			</AppMobileBar>
+
+			<div class="mb-6 hidden flex-row items-center justify-between gap-4 md:flex">
 				<div>
 					<h1 class="text-3xl font-bold text-highlighted">История анализа технических предложений</h1>
 					<p class="text-muted text-sm mt-1">
@@ -13,7 +32,7 @@
 						v-model="search"
 						placeholder="Поиск по анализам..."
 						icon="i-lucide-search"
-						class="w-full sm:w-56"
+						class="w-56"
 						size="lg"
 					/>
 					<UButton
@@ -29,14 +48,53 @@
 				</div>
 			</div>
 
-			<UTabs v-model="activeTab" :items="tabs" :content="false" :ui="{ list: 'mb-4' }" />
+			<UTabs v-model="activeTab" :items="tabs" :content="false" class="hidden md:block" :ui="{ list: 'mb-4' }" />
+			<AppSegmented v-model="activeTab" :items="mobileTabs" class="mb-3 md:hidden" />
 
 			<div v-if="loadingHistory" class="space-y-3">
 				<USkeleton v-for="i in 8" :key="i" class="h-18 w-full rounded-xl" />
 			</div>
 
 			<template v-else-if="items.length">
-				<div class="space-y-2">
+				<!-- phones: a compact grouped list -->
+				<ul class="-mx-4 divide-y divide-default/60 border-y border-default/60 md:hidden">
+					<li
+						v-for="item in items"
+						:key="item.id"
+						class="flex items-center gap-1 active:bg-elevated/60"
+					>
+						<button type="button" class="min-w-0 flex-1 py-2.5 pl-4 text-left" @click="openAnalysis(item)">
+							<span class="flex items-center gap-2">
+								<span class="min-w-0 flex-1 truncate text-[15px] leading-snug font-medium">
+									{{ item.title || item.tz_filename || 'Анализ ТЗ' }}
+								</span>
+								<span class="shrink-0 text-xs text-dimmed tabular-nums">{{ formatDate(item.created_at) }}</span>
+							</span>
+							<span class="mt-0.5 flex items-center gap-1.5 text-[13px] text-muted">
+								<span class="size-1.5 shrink-0 rounded-full" :class="statusDotClass(item.status)" />
+								<span class="shrink-0" :class="getTzRunStatusColor(item.status) === 'error' ? 'text-error' : ''">
+									{{ getTzRunStatusLabel(item.status) }}
+								</span>
+								<span class="truncate">· {{ displayFilesLabel(item) || 'файлы не загружены' }}</span>
+							</span>
+						</button>
+						<UDropdownMenu v-if="canComplete(item.status)" :items="mobileMenu(item)">
+							<UButton
+								color="neutral"
+								variant="ghost"
+								icon="i-lucide-ellipsis-vertical"
+								size="md"
+								class="mr-1 shrink-0 text-dimmed"
+								aria-label="Действия с анализом"
+								:loading="completingId === item.id"
+								@click.stop
+							/>
+						</UDropdownMenu>
+						<UIcon v-else name="i-lucide-chevron-right" class="mr-3 size-4 shrink-0 text-dimmed" />
+					</li>
+				</ul>
+
+				<div class="hidden space-y-2 md:block">
 					<UCard
 						v-for="item in items"
 						:key="item.id"
@@ -161,6 +219,28 @@ const tabs = [
 	{ label: 'Активный', icon: 'i-lucide-activity', value: TZAnalysisHistoryGroup.ACTIVE },
 	{ label: 'Завершен', icon: 'i-lucide-archive', value: TZAnalysisHistoryGroup.COMPLETED },
 ]
+const mobileTabs = [
+	{ label: 'Активные', value: TZAnalysisHistoryGroup.ACTIVE },
+	{ label: 'Завершённые', value: TZAnalysisHistoryGroup.COMPLETED },
+]
+
+function statusDotClass(status: string): string {
+	return ({
+		success: 'bg-success',
+		warning: 'bg-warning',
+		error: 'bg-error',
+		primary: 'bg-primary',
+		info: 'bg-info',
+	} as Record<string, string>)[getTzRunStatusColor(status)] ?? 'bg-dimmed'
+}
+
+function mobileMenu(item: TZAnalysisListItem) {
+	return [[
+		{ label: 'Открыть', icon: 'i-lucide-arrow-right', onSelect: () => openAnalysis(item) },
+	], [
+		{ label: 'Завершить анализ', icon: 'i-lucide-archive', color: 'warning' as const, onSelect: () => completeAnalysis(item.id) },
+	]]
+}
 
 const emptyMessage = computed(() => {
 	if (searchQuery.value.trim()) return 'Ничего не найдено'
@@ -276,6 +356,10 @@ async function handleCompleteClick(id: string) {
 		confirmCompleteId.value = id
 		return
 	}
+	await completeAnalysis(id)
+}
+
+async function completeAnalysis(id: string) {
 	completingId.value = id
 	confirmCompleteId.value = null
 	try {

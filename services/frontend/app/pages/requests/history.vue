@@ -1,20 +1,39 @@
 <template>
-	<UContainer class="py-8 lg:py-12">
+	<UContainer class="pb-6 md:py-8 lg:py-12">
 		<div class="max-w-3xl mx-auto">
-			<div class="mb-4 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
+			<AppMobileBar
+				v-model:search="search"
+				title="Запросы"
+				searchable
+				search-placeholder="Поиск по запросам"
+			>
+				<template #actions>
+					<UButton
+						to="/requests"
+						color="neutral"
+						variant="ghost"
+						size="lg"
+						icon="i-lucide-plus"
+						class="shrink-0"
+						aria-label="Новый поиск"
+					/>
+				</template>
+			</AppMobileBar>
+
+			<div class="mb-4 hidden flex-row items-center justify-between gap-3 sm:mb-6 md:flex">
 				<div>
 					<h1 class="text-2xl font-bold text-highlighted sm:text-3xl">
 						<span class="lg:hidden">Запросы</span>
 						<span class="hidden lg:inline">История запросов</span>
 					</h1>
-					<p class="mt-1 hidden text-sm text-muted sm:block">Все ваши поисковые запросы и статусы</p>
+					<p class="mt-1 text-sm text-muted">Все ваши поисковые запросы и статусы</p>
 				</div>
 				<div class="flex items-center gap-3">
 					<UInput
 						v-model="search"
 						placeholder="Поиск по запросам"
 						icon="i-lucide-search"
-						class="w-full sm:w-56"
+						class="w-56"
 						size="xl"
 						type="search"
 					/>
@@ -31,14 +50,59 @@
 				</div>
 			</div>
 
-			<UTabs v-model="activeTab" :items="tabs" :content="false" :ui="{ list: 'mb-4' }" />
+			<UTabs v-model="activeTab" :items="tabs" :content="false" class="hidden md:block" :ui="{ list: 'mb-4' }" />
+			<AppSegmented v-model="activeTab" :items="mobileTabs" class="mb-3 md:hidden" />
 
 			<div v-if="loadingHistory" class="space-y-3">
 				<USkeleton v-for="i in 8" :key="i" class="h-18 w-full rounded-xl" />
 			</div>
 
 			<template v-else-if="items.length">
-				<div class="space-y-2">
+				<!-- phones: a compact grouped list, two lines per request -->
+				<ul class="-mx-4 divide-y divide-default/60 border-y border-default/60 md:hidden">
+					<li
+						v-for="req in items"
+						:key="req.id"
+						class="flex items-center gap-1 active:bg-elevated/60"
+					>
+						<button type="button" class="min-w-0 flex-1 py-2.5 pl-4 text-left" @click="openRequest(req)">
+							<span class="flex items-center gap-2">
+								<span
+									class="min-w-0 flex-1 truncate text-[15px] leading-snug"
+									:class="hasUnreadMessages(req) ? 'font-semibold text-highlighted' : 'font-medium'"
+								>{{ req.query }}</span>
+								<span class="shrink-0 text-xs text-dimmed tabular-nums">{{ formatShortDate(req.created_at) }}</span>
+							</span>
+							<span class="mt-0.5 flex items-center gap-1.5 text-[13px] text-muted">
+								<span class="size-1.5 shrink-0 rounded-full" :class="statusDotClass(req.status)" />
+								<span class="shrink-0">{{ getRequestStatusLabel(req.status) }}</span>
+								<span v-if="showMessageStats(req)" class="truncate">· {{ compactStatsLabel(req) }}</span>
+								<span
+									v-if="hasUnreadMessages(req)"
+									class="ml-auto shrink-0 rounded-full bg-orange-700 px-1.5 text-[11px] leading-[18px] font-bold text-white"
+								>{{ unreadLabel(req) }}</span>
+							</span>
+						</button>
+						<UDropdownMenu
+							v-if="req.status !== RequestStatus.CLOSED"
+							:items="mobileCardMenu(req)"
+						>
+							<UButton
+								color="neutral"
+								variant="ghost"
+								icon="i-lucide-ellipsis-vertical"
+								size="md"
+								class="mr-1 shrink-0 text-dimmed"
+								aria-label="Действия с запросом"
+								:loading="closingId === req.id"
+								@click.stop
+							/>
+						</UDropdownMenu>
+						<UIcon v-else name="i-lucide-chevron-right" class="mr-3 size-4 shrink-0 text-dimmed" />
+					</li>
+				</ul>
+
+				<div class="hidden space-y-2 md:block">
 					<UCard
 						v-for="req in items"
 						:key="req.id"
@@ -154,13 +218,6 @@
 					<UIcon name="i-lucide-loader" class="w-5 h-5 text-muted animate-spin" />
 				</div>
 
-				<UButton
-					to="/requests"
-					size="xl"
-					leading-icon="i-lucide-plus"
-					label="Новый поиск"
-					class="fixed right-4 bottom-20 z-30 rounded-full shadow-lg lg:hidden"
-				/>
 
 				<p v-if="!hasMore && items.length > PAGE_SIZE" class="text-center text-xs text-muted py-4">
 					Все запросы загружены
@@ -279,6 +336,39 @@ const tabs = [
 	{ label: 'Активные', icon: 'i-lucide-activity', value: RequestHistoryGroup.ACTIVE },
 	{ label: 'Завершённые', icon: 'i-lucide-archive', value: RequestHistoryGroup.CLOSED },
 ]
+const mobileTabs = [
+	{ label: 'Активные', value: RequestHistoryGroup.ACTIVE },
+	{ label: 'Завершённые', value: RequestHistoryGroup.CLOSED },
+]
+
+// phones: "12.11" this year, "12.11.25" otherwise
+function formatShortDate(value: string): string {
+	const d = new Date(value)
+	if (Number.isNaN(d.getTime())) return ''
+	const dd = String(d.getDate()).padStart(2, '0')
+	const mm = String(d.getMonth() + 1).padStart(2, '0')
+	return d.getFullYear() === new Date().getFullYear()
+		? `${dd}.${mm}`
+		: `${dd}.${mm}.${String(d.getFullYear()).slice(2)}`
+}
+
+function statusDotClass(status: string): string {
+	const color = getRequestStatusColor(status)
+	return ({
+		success: 'bg-success',
+		warning: 'bg-warning',
+		error: 'bg-error',
+		primary: 'bg-primary',
+		info: 'bg-info',
+	} as Record<string, string>)[color] ?? 'bg-dimmed'
+}
+
+// phones: "писем 3 · ответили 2" in one short line
+function compactStatsLabel(req: RequestResponse): string {
+	const sent = req.supplier_messages_sent ?? 0
+	const answered = req.supplier_messages_incoming_suppliers ?? 0
+	return answered > 0 ? `писем ${sent} · ответили ${answered}` : `писем ${sent} · ответов нет`
+}
 
 const emptyMessage = computed(() => {
 	if (searchQuery.value.trim()) return 'Ничего не найдено'

@@ -2,59 +2,87 @@
 	<div class="w-full">
 		<div class="fixed inset-x-0 bottom-0 top-0 md:top-14 lg:top-20 z-10 flex flex-col overflow-hidden bg-default">
 			<UContainer class="max-w-[1600px] py-0 flex flex-1 flex-col min-h-0 h-full w-full">
+				<!-- phones: one compact bar — back, title, search/Excel and «⋯»;
+				     under it the section switch, with the comparison view toggle
+				     on the same row -->
 				<div
 					v-if="isMobile && !(selectedRsId && mainTab === 'thread')"
-					class="shrink-0 space-y-2.5 border-b border-default bg-default px-2 pt-1 pb-3"
+					class="shrink-0 border-b border-default bg-default px-2 pb-2"
 				>
-					<div class="flex items-center gap-1">
+					<div v-if="!mobileSearchOpen" class="flex h-13 items-center gap-0.5">
 						<UButton
 							variant="ghost"
 							color="neutral"
-							size="xl"
+							size="lg"
 							icon="i-lucide-chevron-left"
 							class="shrink-0"
 							:to="`/requests/${id}`"
 							aria-label="К заявке"
 						/>
 						<div class="min-w-0 flex-1">
-							<p class="truncate font-semibold">
+							<p class="truncate text-[15px] leading-tight font-semibold text-highlighted">
 								{{ requestQuery || 'Ответы поставщиков' }}
-								<UBadge v-if="isDemo" color="warning" variant="subtle" size="sm" class="ml-1 align-middle">Пример запроса</UBadge>
 							</p>
-							<p class="truncate text-xs text-muted">{{ mobileThreadsSummary }}</p>
+							<p class="truncate text-xs text-muted">
+								<UBadge v-if="isDemo" color="warning" variant="subtle" size="sm" class="mr-1 align-middle">Пример запроса</UBadge>{{ mobileThreadsSummary }}
+							</p>
 						</div>
 						<UButton
+							v-if="mainTab === 'thread'"
 							variant="ghost"
 							color="neutral"
-							size="xl"
-							icon="i-lucide-refresh-cw"
+							size="lg"
+							icon="i-lucide-search"
 							class="shrink-0"
-							:loading="refreshingAll"
-							aria-label="Обновить анализ по всем поставщикам"
-							@click="refreshAll"
+							aria-label="Поиск по поставщику или email"
+							@click="openMobileSearch"
 						/>
+						<UButton
+							v-else
+							variant="ghost"
+							color="neutral"
+							size="lg"
+							icon="i-lucide-file-down"
+							class="shrink-0"
+							:loading="exportingComparison"
+							aria-label="Выгрузить в Excel"
+							@click="exportComparisonXlsx"
+						/>
+						<UDropdownMenu :items="mobileMenuItems" :content="{ align: 'end' }">
+							<UButton
+								variant="ghost"
+								color="neutral"
+								size="lg"
+								icon="i-lucide-ellipsis"
+								class="shrink-0"
+								:loading="refreshingAll"
+								aria-label="Ещё"
+							/>
+						</UDropdownMenu>
 					</div>
-					<div role="tablist" class="mx-2 grid grid-cols-2 gap-1 rounded-xl bg-elevated p-1">
-						<button
-							type="button"
-							role="tab"
-							:aria-selected="mainTab === 'thread'"
-							class="h-9 rounded-lg text-sm transition-colors"
-							:class="mainTab === 'thread' ? 'bg-default font-semibold shadow-sm' : 'font-medium text-muted'"
-							@click="mainTab = 'thread'"
-						>
-							{{ t('inbox.threadTab') }}
+					<div v-else class="flex h-13 items-center gap-2 px-2">
+						<UInput
+							ref="mobileSearchInput"
+							v-model="threadSearch"
+							placeholder="Поставщик или email"
+							icon="i-lucide-search"
+							size="lg"
+							type="search"
+							class="min-w-0 flex-1"
+							:ui="{ base: 'rounded-xl bg-elevated ring-0' }"
+						/>
+						<button type="button" class="shrink-0 px-1 text-[15px] font-medium text-primary" @click="closeMobileSearch">
+							Отмена
 						</button>
-						<button
-							type="button"
-							role="tab"
-							:aria-selected="mainTab === 'comparison'"
-							class="h-9 rounded-lg text-sm transition-colors"
-							:class="mainTab === 'comparison' ? 'bg-default font-semibold shadow-sm' : 'font-medium text-muted'"
-							@click="mainTab = 'comparison'"
-						>
-							{{ t('inbox.comparisonTab') }}
-						</button>
+					</div>
+					<div class="flex items-center gap-2 px-2">
+						<AppSegmented v-model="mainTab" :items="mobileMainTabs" class="min-w-0 flex-1" />
+						<AppSegmented
+							v-if="mainTab === 'comparison'"
+							v-model="comparisonView"
+							:items="comparisonViewItems"
+							class="w-[84px] shrink-0"
+						/>
 					</div>
 				</div>
 				<div
@@ -134,26 +162,28 @@
 						:class="[isMobile && selectedRsId ? 'hidden' : 'flex', 'w-full md:w-72 lg:w-80 xl:w-96']"
 					>
 
-				<div class="px-3 py-2 border-b border-default space-y-2 shrink-0">
+				<div class="shrink-0 space-y-2 border-b border-default px-3 py-2 max-md:border-b-0 max-md:pb-1">
 					<UInput
-v-model="threadSearch" placeholder="Поиск по поставщику или email" icon="i-lucide-search" :size="isMobile ? 'lg' : 'sm'"
+						v-if="!isMobile"
+						v-model="threadSearch" placeholder="Поиск по поставщику или email" icon="i-lucide-search" size="sm"
 						class="w-full" />
 					<div class="-mx-3 flex gap-1.5 overflow-x-auto px-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:mx-0 md:flex-wrap md:gap-1 md:px-0" role="group" aria-label="Фильтр поставщиков">
 						<button
 							v-for="f in threadFilterOptions"
 							:key="f.value"
 							type="button"
-							class="shrink-0 text-sm px-3 py-1.5 md:text-[11px] md:px-2 md:py-0.5 rounded-full border transition-colors cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+							class="flex shrink-0 items-center gap-1 text-[13px] h-8 px-3 md:h-auto md:text-[11px] md:px-2 md:py-0.5 rounded-full border transition-colors cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
 							:class="threadFilter === f.value
 								? 'bg-inverted text-inverted border-inverted'
 								: 'border-default text-muted hover:text-default hover:border-accented'"
 							:aria-pressed="threadFilter === f.value"
 							@click="threadFilter = f.value"
 						>
+							<UIcon v-if="f.value === 'starred'" name="i-lucide-star" class="size-3.5" />
 							{{ f.label }} <span class="font-semibold tabular-nums">{{ threadFilterCounts[f.value] }}</span>
 						</button>
 					</div>
-					<USelect v-model="threadSort" :items="threadSortOptions" :size="isMobile ? 'md' : 'sm'" class="w-full" />
+					<USelect v-if="!isMobile" v-model="threadSort" :items="threadSortOptions" size="sm" class="w-full" />
 				</div>
 
 				<div class="flex-1 overflow-y-auto">
@@ -182,12 +212,12 @@ v-else-if="sortedThreads.length === 0"
 						/>
 						<button
 							type="button"
-							class="flex-1 min-w-0 text-left pl-4 pr-1 py-3 hover:bg-elevated/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50"
+							class="flex-1 min-w-0 text-left pl-3 md:pl-4 pr-1 py-2.5 md:py-3 hover:bg-elevated/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50"
 							:aria-current="selectedRsId === thread.rs_id ? 'true' : undefined"
 							@click="selectThread(thread.rs_id)">
-						<div class="flex items-start gap-3">
+						<div class="flex items-start gap-2.5 md:gap-3">
 							<span
-								class="w-9 h-9 rounded-lg grid place-items-center shrink-0 text-xs font-bold"
+								class="mt-0.5 size-7 rounded-full md:mt-0 md:size-9 md:rounded-lg grid place-items-center shrink-0 text-[10px] md:text-xs font-bold"
 								:class="thread.message_count > 0 ? 'bg-primary/10 text-primary' : 'bg-elevated text-muted'"
 								aria-hidden="true"
 							>{{ companyInitials(thread.supplier.company_name) }}</span>
@@ -226,8 +256,20 @@ v-else-if="sortedThreads.length === 0"
 							</div>
 						</div>
 						</button>
-						<div class="hidden md:flex items-center px-2 shrink-0">
+						<div class="flex shrink-0 items-center pr-1 md:px-2">
 							<UButton
+								size="sm"
+								color="neutral"
+								variant="ghost"
+								icon="i-lucide-star"
+								:class="thread.starred ? 'text-amber-500 [&_svg]:fill-current' : 'text-dimmed'"
+								:aria-pressed="Boolean(thread.starred)"
+								:aria-label="thread.starred ? 'Убрать из избранного' : 'В избранное'"
+								:title="thread.starred ? 'Убрать из избранного' : 'В избранное'"
+								@click.stop="toggleStar(thread)"
+							/>
+							<UButton
+								class="max-md:hidden"
 								size="xs"
 								color="neutral"
 								variant="ghost"
@@ -265,6 +307,7 @@ v-else-if="comparison.suppliers.length === 0"
 							</div>
 							<InboxComparisonMobile
 								v-else-if="isMobile"
+								v-model:view="comparisonView"
 								data-tour="comparison"
 								class="-mx-3 -my-4"
 								:requirements="comparison.requirements"
@@ -272,7 +315,6 @@ v-else-if="comparison.suppliers.length === 0"
 								:price-units="comparison.price_units ?? {}"
 								:suppliers="comparison.suppliers"
 								:has-confirmed-winner="hasConfirmedWinner"
-								:exporting="exportingComparison"
 								:unit-price-label="UNIT_PRICE_REQUIREMENT"
 								:position-title="positionPriceTitle"
 								:display-value="comparisonDisplayValue"
@@ -284,7 +326,6 @@ v-else-if="comparison.suppliers.length === 0"
 								@improve="openImproveModal"
 								@winner="openWinnerModal"
 								@clear-winner="openClearWinnerConfirm"
-								@export="exportComparisonXlsx"
 							/>
 							<div
 								v-else
@@ -1343,6 +1384,63 @@ const threadSortOptions = [
 	{ label: 'Непрочитанные сначала', value: 'unread_first' },
 ]
 
+// phones: the section switch and the comparison view sit in the top bar
+const mobileMainTabs = [
+	{ value: 'thread' as const, label: t('inbox.threadTab') },
+	{ value: 'comparison' as const, label: t('inbox.comparisonTab') },
+]
+const comparisonView = ref<'param' | 'card'>('param')
+const comparisonViewItems = [
+	{ value: 'param' as const, icon: 'i-lucide-list-ordered', ariaLabel: 'По параметру' },
+	{ value: 'card' as const, icon: 'i-lucide-gallery-horizontal', ariaLabel: 'По поставщикам' },
+]
+const mobileSearchOpen = ref(false)
+const mobileSearchInput = ref<{ inputRef?: HTMLInputElement } | null>(null)
+async function openMobileSearch() {
+	mobileSearchOpen.value = true
+	await nextTick()
+	mobileSearchInput.value?.inputRef?.focus()
+}
+function closeMobileSearch() {
+	mobileSearchOpen.value = false
+	threadSearch.value = ''
+}
+watch(mainTab, (tab) => {
+	if (tab !== 'thread') closeMobileSearch()
+})
+
+const mobileMenuItems = computed(() => {
+	const groups: Record<string, unknown>[][] = []
+	if (mainTab.value === 'thread') {
+		groups.push([
+			{ label: 'Сортировка', type: 'label' },
+			...threadSortOptions.map(o => ({
+				label: o.label,
+				type: 'checkbox',
+				checked: threadSort.value === o.value,
+				onSelect: () => { threadSort.value = o.value },
+			})),
+		])
+	}
+	groups.push([
+		{ label: 'Обновить анализ', icon: 'i-lucide-refresh-cw', onSelect: () => { void refreshAll() } },
+		{ label: 'Поставщики запроса', icon: 'i-lucide-users', onSelect: () => { void navigateTo(`/requests/${id}`) } },
+	])
+	return groups
+})
+
+// the buyer's own star on a thread: shown at once, saved in the background
+async function toggleStar(thread: ThreadSummary) {
+	const next = !thread.starred
+	thread.starred = next
+	try {
+		await post(`/requests/${id}/suppliers/${thread.rs_id}/star`, { starred: next })
+	} catch {
+		thread.starred = !next
+		toast.add({ title: 'Не удалось сохранить отметку', color: 'error' })
+	}
+}
+
 async function fetchThreads(silent = false) {
 	if (!silent) loadingThreads.value = true
 	try {
@@ -1443,12 +1541,13 @@ onUnmounted(() => {
 	pauseThreadPoll()
 })
 
-type ThreadFilter = 'all' | 'new' | 'replied' | 'problems'
+type ThreadFilter = 'all' | 'new' | 'replied' | 'starred' | 'problems'
 const threadFilter = ref<ThreadFilter>('all')
 const threadFilterOptions: { value: ThreadFilter, label: string }[] = [
 	{ value: 'all', label: 'Все' },
 	{ value: 'new', label: 'Новые' },
 	{ value: 'replied', label: 'Ответили' },
+	{ value: 'starred', label: 'Избранные' },
 	{ value: 'problems', label: 'Проблемы' },
 ]
 
@@ -1462,6 +1561,7 @@ function matchesThreadFilter(thread: ThreadSummary, filter: ThreadFilter) {
 	if (filter === 'new') return threadState(thread) === 'new'
 	// "Ответили" — every supplier who wrote at least once
 	if (filter === 'replied') return thread.message_count > 0
+	if (filter === 'starred') return Boolean(thread.starred)
 	// "Проблемы": the letter did not arrive, or the supplier seems to refuse
 	return Boolean(thread.delivery_failed || thread.declined)
 }
@@ -1482,7 +1582,7 @@ function pluralRu(n: number, one: string, few: string, many: string): string {
 
 
 const threadFilterCounts = computed(() => {
-	const counts: Record<ThreadFilter, number> = { all: 0, new: 0, replied: 0, problems: 0 }
+	const counts: Record<ThreadFilter, number> = { all: 0, new: 0, replied: 0, starred: 0, problems: 0 }
 	for (const thread of threads.value) {
 		for (const f of threadFilterOptions) {
 			if (matchesThreadFilter(thread, f.value)) counts[f.value]++

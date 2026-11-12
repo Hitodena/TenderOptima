@@ -458,6 +458,27 @@ class RequestSupplierDAO(BaseDAO[RequestSupplier]):
             raise
 
     @classmethod
+    async def set_starred(
+        cls,
+        session: AsyncSession,
+        request_id: uuid.UUID,
+        rs_id: uuid.UUID,
+        starred: bool,
+    ) -> RequestSupplier | None:
+        """Put or take off the buyer's star on a request-supplier thread."""
+        stmt = select(cls.model).where(
+            cls.model.id == rs_id,
+            cls.model.request_id == request_id,
+        )
+        instance = (await session.execute(stmt)).scalar_one_or_none()
+        if instance is None:
+            return None
+        instance.is_starred = starred
+        await session.flush()
+        await session.commit()
+        return instance
+
+    @classmethod
     async def mark_thread_read(
         cls,
         session: AsyncSession,

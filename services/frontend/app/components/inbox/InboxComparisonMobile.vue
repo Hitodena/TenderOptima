@@ -1,198 +1,204 @@
 <template>
 	<div class="flex min-h-0 flex-1 flex-col">
-		<div class="shrink-0 space-y-2.5 border-b border-default px-4 py-3">
-			<div role="tablist" class="grid grid-cols-2 gap-1 rounded-xl bg-elevated p-1">
-				<button
-					v-for="v in views"
-					:key="v.value"
-					type="button"
-					role="tab"
-					:aria-selected="view === v.value"
-					class="h-9 rounded-lg text-sm transition-colors"
-					:class="view === v.value ? 'bg-default font-semibold shadow-sm' : 'font-medium text-muted'"
-					@click="view = v.value"
-				>
-					{{ v.label }}
-				</button>
-			</div>
-			<div
-				v-if="view === 'param'"
-				class="-mx-4 flex gap-2 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-				role="group"
-				aria-label="Параметр сравнения"
+		<!-- the view switch (by parameter / by supplier) lives in the page's top bar -->
+		<div
+			v-if="view === 'param'"
+			class="flex shrink-0 gap-1.5 overflow-x-auto px-4 pt-2.5 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+			role="group"
+			aria-label="Параметр сравнения"
+		>
+			<button
+				v-for="req in orderedRequirements"
+				:key="req"
+				type="button"
+				class="h-8 shrink-0 rounded-full border px-3 text-[13px] whitespace-nowrap transition-colors"
+				:class="activeReq === req
+					? 'border-inverted bg-inverted font-semibold text-inverted'
+					: 'border-default text-muted'"
+				:aria-pressed="activeReq === req"
+				@click="activeReq = req"
 			>
-				<button
-					v-for="req in orderedRequirements"
-					:key="req"
-					type="button"
-					class="h-9 shrink-0 rounded-full border px-3.5 text-sm whitespace-nowrap transition-colors"
-					:class="activeReq === req
-						? 'border-primary bg-primary font-semibold text-inverted'
-						: 'border-default text-default'"
-					:aria-pressed="activeReq === req"
-					@click="activeReq = req"
-				>
-					{{ shortLabel(req) }}
-				</button>
-			</div>
+				{{ shortLabel(req) }}
+			</button>
 		</div>
 
-		<!-- one parameter: suppliers from best to worst -->
-		<div v-if="view === 'param'" class="flex-1 space-y-2.5 overflow-y-auto px-4 py-3">
-			<p class="text-sm text-muted">
+		<!-- one parameter: suppliers from best to worst, one compact row each -->
+		<div v-if="view === 'param'" class="flex-1 overflow-y-auto pb-3">
+			<p class="px-4 pb-1.5 text-xs text-muted">
 				{{ fullLabel(activeReq) }}<template v-if="priceUnits[activeReq]"> · за {{ priceUnits[activeReq] }}</template><template v-if="isPrice(activeReq)"> · от меньшей</template>
 			</p>
-			<button
-				v-for="row in rankedRows"
-				:key="row.supplier.rs_id"
-				type="button"
-				class="flex w-full flex-col gap-1.5 rounded-2xl border bg-default p-4 text-left"
-				:class="row.best ? 'border-2 border-success' : 'border-default'"
-				@click="openCard(row.supplier)"
-			>
-				<span class="flex items-start justify-between gap-2">
-					<span class="min-w-0 font-semibold leading-snug">{{ row.supplier.company_name }}</span>
-					<span
-						v-if="row.best"
-						class="shrink-0 rounded-md bg-success/15 px-2 py-0.5 text-xs font-bold text-success"
-					>Лучшая</span>
-					<span
-						v-else-if="row.supplier.is_winner"
-						class="shrink-0 rounded-md bg-primary/15 px-2 py-0.5 text-xs font-bold text-primary"
-					>Победитель</span>
-				</span>
-				<span v-if="row.value" class="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
-					<span
-						class="font-bold tracking-tight"
-						:class="isPrice(activeReq) ? 'text-2xl' : 'text-base'"
-					>{{ row.value }}</span>
-					<span
-						v-if="row.previous"
-						class="text-sm text-muted line-through"
-					>{{ row.previous }}</span>
-					<span
-						v-if="row.percent && !row.best"
-						class="text-sm font-semibold"
-						:class="(row.supplier.percent_vs_min?.[activeReq] ?? 0) > 0 ? 'text-warning' : 'text-success'"
-					>{{ row.percent }}</span>
-				</span>
-				<span v-else class="text-sm text-muted">Не указано</span>
-				<span
-					v-if="row.note"
-					class="text-sm"
-					:class="row.percent == null && row.value ? 'text-warning' : 'text-muted'"
-				>{{ row.note }}</span>
-			</button>
+			<ul class="divide-y divide-default/60 border-y border-default/60">
+				<li v-for="(row, i) in rankedRows" :key="row.supplier.rs_id">
+					<button
+						type="button"
+						class="relative flex w-full items-center gap-3 px-4 py-2.5 text-left active:bg-elevated/60"
+						:class="row.best ? 'bg-success/5' : ''"
+						@click="openCard(row.supplier)"
+					>
+						<span
+							v-if="row.best"
+							class="absolute inset-y-0 left-0 w-[3px] bg-success"
+							aria-hidden="true"
+						/>
+						<span
+							v-if="isPrice(activeReq)"
+							class="w-4 shrink-0 text-center text-xs font-semibold tabular-nums"
+							:class="row.best ? 'text-success' : 'text-dimmed'"
+						>{{ row.value ? i + 1 : '' }}</span>
+						<span class="min-w-0 flex-1">
+							<span class="line-clamp-2 text-sm leading-snug font-medium">{{ row.supplier.company_name }}</span>
+							<span
+								v-if="row.note"
+								class="mt-0.5 block truncate text-xs"
+								:class="row.percent == null && row.value ? 'text-warning' : 'text-muted'"
+							>{{ row.note }}</span>
+							<span
+								v-else-if="row.best || row.supplier.is_winner"
+								class="mt-0.5 block text-xs font-semibold"
+								:class="row.best ? 'text-success' : 'text-primary'"
+							>{{ row.best ? 'Лучшая цена' : 'Победитель' }}</span>
+						</span>
+						<span class="flex shrink-0 flex-col items-end text-right">
+							<span
+								v-if="row.value"
+								class="max-w-36 leading-tight tabular-nums"
+								:class="isPrice(activeReq) ? 'text-[15px] font-semibold' : 'line-clamp-2 text-sm font-medium'"
+							>{{ row.value }}</span>
+							<span v-else class="text-sm text-dimmed">не указано</span>
+							<span class="flex items-center gap-1.5 text-xs">
+								<span v-if="row.previous" class="text-muted line-through">{{ row.previous }}</span>
+								<span
+									v-if="row.percent && !row.best"
+									class="font-semibold tabular-nums"
+									:class="(row.supplier.percent_vs_min?.[activeReq] ?? 0) > 0 ? 'text-warning' : 'text-success'"
+								>{{ row.percent }}</span>
+							</span>
+						</span>
+					</button>
+				</li>
+			</ul>
 			<p v-if="!rankedRows.length" class="py-10 text-center text-sm text-muted">Нет ответов для сравнения</p>
 		</div>
 
-		<!-- one supplier per card, swipe sideways -->
-		<div v-else class="flex min-h-0 flex-1 flex-col py-3">
+		<!-- one supplier per screen, swipe sideways -->
+		<div v-else class="flex min-h-0 flex-1 flex-col pt-3">
 			<div
 				ref="cardStrip"
-				class="flex min-h-0 flex-1 snap-x snap-mandatory gap-3 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+				class="flex min-h-0 flex-1 snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
 				@scroll.passive="onStripScroll"
 			>
-				<article
+				<div
 					v-for="supplier in suppliers"
 					:key="supplier.rs_id"
-					class="flex w-[86%] shrink-0 snap-center flex-col overflow-hidden rounded-2xl border border-default bg-default"
+					class="flex w-full shrink-0 snap-center px-4"
 				>
-					<header class="shrink-0 px-4 pt-4 pb-3">
-						<p class="text-lg font-bold leading-snug">{{ supplier.company_name }}</p>
-						<p class="truncate text-sm text-muted">{{ supplier.main_email }}</p>
-					</header>
-					<dl class="min-h-0 flex-1 overflow-y-auto">
-						<div
-							v-for="req in orderedRequirements"
-							:key="req"
-							class="flex items-start justify-between gap-3 border-t border-default/60 px-4 py-3"
-						>
-							<dt class="text-sm text-muted">{{ shortLabel(req) }}</dt>
-							<dd class="flex flex-col items-end gap-0.5 text-right">
-								<span class="text-[15px] font-semibold" :class="displayValue(supplier, req) === '—' ? 'font-normal text-muted' : ''">
-									{{ displayValue(supplier, req) === '—' ? 'не указано' : displayValue(supplier, req) }}
-								</span>
-								<span
-									v-if="supplier.previous_values?.[req] && supplier.previous_values[req] !== supplier.values[req]"
-									class="text-xs text-muted line-through"
-								>{{ supplier.previous_values[req] }}</span>
-								<span
-									v-if="supplier.price_notes?.[req]"
-									class="max-w-44 text-xs"
-									:class="supplier.percent_vs_min?.[req] == null ? 'text-warning' : 'text-muted'"
-								>{{ supplier.price_notes[req] }}</span>
-								<span
-									v-if="percent(supplier, req)"
-									class="text-xs font-semibold"
-									:class="(supplier.percent_vs_min?.[req] ?? 0) > 0 ? 'text-warning' : 'text-success'"
-								>{{ percent(supplier, req) === 'мин.' ? 'лучшая' : percent(supplier, req) }}</span>
-							</dd>
-						</div>
-						<div class="flex items-center justify-between gap-3 border-t border-default/60 px-4 py-3">
-							<dt class="text-sm text-muted">Соответствие ТЗ</dt>
-							<dd
-								class="flex items-center gap-1.5 text-[15px] font-semibold"
-								:class="compliance(supplier).passed ? 'text-success' : 'text-error'"
+					<article class="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-default bg-default">
+						<header class="flex shrink-0 items-start gap-2 px-4 pt-3.5 pb-3">
+							<div class="min-w-0 flex-1">
+								<p class="line-clamp-2 text-base leading-snug font-semibold text-highlighted">{{ supplier.company_name }}</p>
+								<p class="truncate text-xs text-muted">{{ supplier.main_email }}</p>
+							</div>
+							<span
+								class="mt-0.5 flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold"
+								:class="compliance(supplier).passed ? 'bg-success/10 text-success' : 'bg-error/10 text-error'"
 							>
-								<UIcon
-									:name="compliance(supplier).passed ? 'i-lucide-circle-check' : 'i-lucide-circle-x'"
-									class="size-5"
+								<UIcon :name="compliance(supplier).passed ? 'i-lucide-circle-check' : 'i-lucide-circle-alert'" class="size-3.5" />
+								{{ compliance(supplier).passed ? 'по ТЗ' : 'расхождения' }}
+							</span>
+						</header>
+						<dl class="min-h-0 flex-1 overflow-y-auto">
+							<div
+								v-for="req in orderedRequirements"
+								:key="req"
+								class="flex items-start justify-between gap-3 border-t border-default/60 px-4 py-2.5"
+							>
+								<dt class="min-w-0 text-[13px] text-muted">{{ shortLabel(req) }}</dt>
+								<dd class="flex max-w-[60%] flex-col items-end gap-0.5 text-right">
+									<span class="text-sm break-words" :class="displayValue(supplier, req) === '—' ? 'text-dimmed' : 'font-semibold'">
+										{{ displayValue(supplier, req) === '—' ? 'не указано' : displayValue(supplier, req) }}
+									</span>
+									<span
+										v-if="supplier.previous_values?.[req] && supplier.previous_values[req] !== supplier.values[req]"
+										class="text-xs text-muted line-through"
+									>{{ supplier.previous_values[req] }}</span>
+									<span
+										v-if="supplier.price_notes?.[req]"
+										class="text-xs"
+										:class="supplier.percent_vs_min?.[req] == null ? 'text-warning' : 'text-muted'"
+									>{{ supplier.price_notes[req] }}</span>
+									<span
+										v-if="percent(supplier, req)"
+										class="text-xs font-semibold"
+										:class="(supplier.percent_vs_min?.[req] ?? 0) > 0 ? 'text-warning' : 'text-success'"
+									>{{ percent(supplier, req) === 'мин.' ? 'лучшая' : percent(supplier, req) }}</span>
+								</dd>
+							</div>
+						</dl>
+						<footer class="flex shrink-0 items-center gap-2 border-t border-default p-2.5">
+							<template v-if="hasMismatches(supplier)">
+								<UButton
+									color="neutral"
+									variant="outline"
+									size="lg"
+									icon="i-lucide-messages-square"
+									class="shrink-0"
+									aria-label="Переписка"
+									title="Переписка"
+									@click="emit('open-thread', supplier)"
 								/>
-								{{ compliance(supplier).passed ? 'да' : 'есть расхождения' }}
-							</dd>
-						</div>
-					</dl>
-					<footer class="flex shrink-0 items-center gap-2 border-t border-default p-3">
-						<UButton
-							color="neutral"
-							variant="outline"
-							size="lg"
-							class="min-w-0 flex-1 justify-center"
-							label="Переписка"
-							@click="emit('open-thread', supplier)"
-						/>
-						<UButton
-							v-if="hasMismatches(supplier)"
-							size="lg"
-							class="min-w-0 flex-1 justify-center"
-							leading-icon="i-lucide-mail"
-							label="Запросить"
-							@click="emit('letter', supplier)"
-						/>
-						<UDropdownMenu :items="cardMenu(supplier)">
+								<UButton
+									size="lg"
+									class="min-w-0 flex-1 justify-center"
+									leading-icon="i-lucide-mail"
+									label="Запросить данные"
+									@click="emit('letter', supplier)"
+								/>
+							</template>
 							<UButton
+								v-else
 								color="neutral"
-								variant="ghost"
+								variant="outline"
 								size="lg"
-								icon="i-lucide-ellipsis-vertical"
-								aria-label="Ещё действия"
+								class="min-w-0 flex-1 justify-center"
+								leading-icon="i-lucide-messages-square"
+								label="Переписка"
+								@click="emit('open-thread', supplier)"
 							/>
-						</UDropdownMenu>
-					</footer>
-				</article>
+							<UDropdownMenu :items="cardMenu(supplier)" :content="{ align: 'end' }">
+								<UButton
+									color="neutral"
+									variant="ghost"
+									size="lg"
+									icon="i-lucide-ellipsis"
+									class="shrink-0"
+									aria-label="Ещё действия"
+								/>
+							</UDropdownMenu>
+						</footer>
+					</article>
+				</div>
 			</div>
-			<div class="flex shrink-0 justify-center gap-1.5 pt-3" :aria-label="`Поставщик ${cardIndex + 1} из ${suppliers.length}`">
-				<span
-					v-for="(s, i) in suppliers"
-					:key="s.rs_id"
-					class="h-1.5 rounded-full transition-all"
-					:class="i === cardIndex ? 'w-5 bg-primary' : 'w-1.5 bg-accented'"
+			<div class="flex shrink-0 items-center justify-center gap-3 py-2">
+				<UButton
+					color="neutral"
+					variant="ghost"
+					size="sm"
+					icon="i-lucide-chevron-left"
+					:disabled="cardIndex === 0"
+					aria-label="Предыдущий поставщик"
+					@click="scrollToCard(cardIndex - 1)"
+				/>
+				<span class="text-xs text-muted tabular-nums">{{ cardIndex + 1 }} из {{ suppliers.length }}</span>
+				<UButton
+					color="neutral"
+					variant="ghost"
+					size="sm"
+					icon="i-lucide-chevron-right"
+					:disabled="cardIndex >= suppliers.length - 1"
+					aria-label="Следующий поставщик"
+					@click="scrollToCard(cardIndex + 1)"
 				/>
 			</div>
-		</div>
-
-		<div class="shrink-0 border-t border-default px-4 py-2.5">
-			<UButton
-				color="neutral"
-				variant="ghost"
-				size="lg"
-				block
-				leading-icon="i-lucide-download"
-				:loading="exporting"
-				label="Выгрузить в Excel"
-				@click="emit('export')"
-			/>
 		</div>
 	</div>
 </template>
@@ -206,7 +212,6 @@ const props = defineProps<{
 	priceUnits: Record<string, string | null>
 	suppliers: ComparisonSupplier[]
 	hasConfirmedWinner: boolean
-	exporting: boolean
 	unitPriceLabel: string
 	positionTitle: (req: string) => string | null
 	displayValue: (supplier: ComparisonSupplier, req: string) => string
@@ -221,15 +226,10 @@ const emit = defineEmits<{
 	'improve': [supplier: ComparisonSupplier]
 	'winner': [supplier: ComparisonSupplier]
 	'clear-winner': []
-	'export': []
 }>()
 
 type View = 'param' | 'card'
-const views: { value: View, label: string }[] = [
-	{ value: 'param', label: 'По параметру' },
-	{ value: 'card', label: 'По поставщикам' },
-]
-const view = ref<View>('param')
+const view = defineModel<View>('view', { default: 'param' })
 
 // price first, then the rest in the request's order
 const orderedRequirements = computed(() => [
@@ -301,22 +301,21 @@ const cardIndex = ref(0)
 
 function onStripScroll() {
 	const el = cardStrip.value
-	const first = el?.firstElementChild as HTMLElement | null
-	if (!el || !first) return
-	const step = first.offsetWidth + 12
-	cardIndex.value = Math.max(0, Math.min(props.suppliers.length - 1, Math.round(el.scrollLeft / step)))
+	if (!el || !el.clientWidth) return
+	cardIndex.value = Math.max(0, Math.min(props.suppliers.length - 1, Math.round(el.scrollLeft / el.clientWidth)))
+}
+
+function scrollToCard(idx: number, behavior: ScrollBehavior = 'smooth') {
+	const el = cardStrip.value
+	if (!el || idx < 0 || idx >= props.suppliers.length) return
+	el.scrollTo({ left: idx * el.clientWidth, behavior })
+	cardIndex.value = idx
 }
 
 async function openCard(supplier: ComparisonSupplier) {
 	view.value = 'card'
 	await nextTick()
-	const idx = props.suppliers.findIndex(s => s.rs_id === supplier.rs_id)
-	const el = cardStrip.value
-	const card = el?.children[idx] as HTMLElement | undefined
-	if (el && card) {
-		el.scrollTo({ left: card.offsetLeft - 16, behavior: 'instant' as ScrollBehavior })
-		cardIndex.value = idx
-	}
+	scrollToCard(props.suppliers.findIndex(s => s.rs_id === supplier.rs_id), 'instant' as ScrollBehavior)
 }
 
 function cardMenu(supplier: ComparisonSupplier) {
