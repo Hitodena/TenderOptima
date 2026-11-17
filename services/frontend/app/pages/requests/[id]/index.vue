@@ -25,7 +25,7 @@
 				<div class="min-w-0 flex-1 py-0.5">
 					<h1 class="line-clamp-2 text-[17px] leading-tight font-semibold text-highlighted">{{ request.query }}</h1>
 					<p class="mt-0.5 flex items-center gap-1.5 truncate text-xs text-muted">
-						<span class="size-1.5 shrink-0 rounded-full" :class="statusDotClass" />
+						<span class="size-1.5 shrink-0 rounded-full" :class="requestStatusDotClass" />
 						<span class="shrink-0">{{ statusLabel }}</span>
 						<span class="shrink-0">· {{ formatDate(request.created_at) }}</span>
 						<span v-if="request.delivery_region" class="truncate">· {{ titleCaseWords(request.delivery_region) }}</span>
@@ -815,7 +815,7 @@ const testPlanLockedMessage = computed(() =>
 )
 const statusColor = computed(() => getRequestStatusColor(request.value?.status ?? ''))
 const statusLabel = computed(() => getRequestStatusLabel(request.value?.status ?? ''))
-const statusDotClass = computed(() => ({
+const requestStatusDotClass = computed(() => ({
 	success: 'bg-success',
 	warning: 'bg-warning',
 	error: 'bg-error',
