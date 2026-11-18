@@ -6,17 +6,22 @@ No service account files, no JWT, no IAM token exchange.
 import asyncio
 import base64
 import math
+import os
 import xml.etree.ElementTree as ET
 
 import aiohttp
+from dotenv import load_dotenv
 from loguru import logger
+
+# main.py calls load_dotenv() only after importing this module.
+load_dotenv()
 
 API_URL_POST = "https://searchapi.api.cloud.yandex.net/v2/web/searchAsync"
 API_URL_GET = "https://operation.api.cloud.yandex.net/operations/{}"
 
-POLL_INTERVAL = 5  # seconds between polls
-MAX_RETRIES = 5
-RETRY_DELAY = 10  # seconds between retry attempts
+POLL_INTERVAL = int(os.getenv("YANDEX_POLL_INTERVAL", "5"))  # seconds
+MAX_RETRIES = int(os.getenv("YANDEX_MAX_RETRIES", "5"))
+RETRY_DELAY = int(os.getenv("YANDEX_RETRY_DELAY", "10"))  # seconds
 REQUEST_TIMEOUT = 60  # seconds per HTTP call
 POLL_TIMEOUT = 30  # seconds per poll call
 
